@@ -61,7 +61,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import heroImage from "@/assets/system-preview-crm-kanban.png";
-import gleegoLogo from "@/assets/gleego-logo.png";
+import ayratechLogo from "@/assets/ayratech_logo.jpg";
 
 const featureCategories = [
   {
