@@ -47,11 +47,17 @@ export function CRMAlerts() {
   const notifyRef = useRef(notify);
   notifyRef.current = notify;
 
+  const failCountRef = useRef(0);
+
   const fetchAlerts = useCallback(async () => {
+    // Stop polling after 3 consecutive failures to avoid spamming
+    if (failCountRef.current >= 3) return;
+    
     try {
       const data = await api<CRMAlert[]>("/api/chat/alerts");
       if (!Array.isArray(data)) return;
       
+      failCountRef.current = 0; // Reset on success
       const crmAlerts = data.filter(a => a.type === 'new_lead' || a.type === 'task_reminder');
       
       if (crmAlerts.length > previousCountRef.current && previousCountRef.current > 0) {
@@ -70,7 +76,7 @@ export function CRMAlerts() {
       previousCountRef.current = crmAlerts.length;
       setAlerts(crmAlerts);
     } catch (error) {
-      // Silently ignore - backend may be temporarily unavailable
+      failCountRef.current += 1;
     }
   }, []);
 
