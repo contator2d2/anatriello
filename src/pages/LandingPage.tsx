@@ -568,19 +568,19 @@ export default function LandingPage() {
           <div className="text-center max-w-4xl mx-auto">
             <Badge className="mb-6 px-4 py-1.5" variant="secondary">
               <Building2 className="h-3 w-3 mr-1" />
-              Plataforma completa para empresas
+              Plataforma completa para gestão de promotores
             </Badge>
 
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight mb-6">
-              Organize seu{" "}
-              <span className="bg-gradient-to-r from-[hsl(217,75%,55%)] via-[hsl(152,55%,48%)] to-[hsl(24,92%,55%)] bg-clip-text text-transparent">WhatsApp comercial</span>{" "}
-              com CRM e IA{" "}
+              Gerencie seus{" "}
+              <span className="bg-gradient-to-r from-[hsl(217,75%,55%)] via-[hsl(152,55%,48%)] to-[hsl(24,92%,55%)] bg-clip-text text-transparent">Promotores e Merchandising</span>{" "}
+              com IA{" "}
               <span className="bg-gradient-to-r from-[hsl(24,92%,55%)] via-[hsl(340,70%,55%)] to-[hsl(217,75%,55%)] bg-clip-text text-transparent">inteligente</span>
             </h1>
 
             <p className="text-lg sm:text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
-              Centralize conversas, gerencie seu funil de vendas, transfira atendimentos para agentes de IA,
-              organize sua equipe comercial e use inteligência artificial com base de conhecimento da sua empresa.
+              Centralize a comunicação com promotores via WhatsApp, acompanhe roteiros, gerencie tarefas de merchandising,
+              e use inteligência artificial para otimizar a operação da sua equipe em campo.
             </p>
 
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
