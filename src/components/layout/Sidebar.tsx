@@ -41,7 +41,7 @@ import {
   BarChart4,
 } from "lucide-react";
 import { API_URL, getAuthToken } from "@/lib/api";
-import gleegoLogo from "@/assets/gleego-logo.png";
+import ayratechLogo from "@/assets/ayratech_logo.jpg";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBranding } from "@/hooks/use-branding";
 import { Button } from "@/components/ui/button";
@@ -268,12 +268,12 @@ function SidebarContentComponent({ isExpanded, isSuperadmin, onNavigate }: Sideb
             className="h-10 w-10 object-contain shrink-0 rounded-xl"
           />
         ) : (
-          <img src={gleegoLogo} alt="Glee-go Whats" className="h-10 w-10 object-contain shrink-0 rounded-xl" />
+          <img src={ayratechLogo} alt="Ayratech" className="h-10 w-10 object-contain shrink-0 rounded-xl" />
         )}
         {isExpanded && (
           <div className="overflow-hidden">
-            <h1 className="text-lg font-bold text-foreground whitespace-nowrap">Glee-go Whats</h1>
-            <p className="text-xs text-muted-foreground whitespace-nowrap">Gestão Comercial</p>
+            <h1 className="text-lg font-bold text-foreground whitespace-nowrap">Ayratech</h1>
+            <p className="text-xs text-muted-foreground whitespace-nowrap">Gestão de Promotores</p>
           </div>
         )}
       </div>

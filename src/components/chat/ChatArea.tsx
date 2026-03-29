@@ -698,8 +698,8 @@ export function ChatArea({
       <div className="flex-1 flex flex-col items-center justify-center bg-muted/30 text-muted-foreground h-full min-h-0">
         <div className="flex flex-col items-center justify-center text-center -mt-12">
           <img 
-            src="/icons/gleego-logo.png" 
-            alt="Logo" 
+            src="/icons/ayratech-logo.jpg" 
+            alt="Ayratech" 
             className="h-32 w-auto mb-8 opacity-80"
           />
           <h3 className="text-xl font-semibold text-foreground mb-3">Selecione uma conversa</h3>

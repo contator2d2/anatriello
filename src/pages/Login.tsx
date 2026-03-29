@@ -98,8 +98,7 @@ const Login = () => {
               </div>
               
               <CardDescription>
-                Plataforma completa de CRM e automação de WhatsApp para gerenciar contatos, 
-                campanhas e atendimento ao cliente
+                Plataforma completa de gestão de promotores, merchandising e comunicação via WhatsApp
               </CardDescription>
             </CardHeader>
             <form onSubmit={handleSubmit}>
@@ -170,7 +169,7 @@ const Login = () => {
       <footer className="py-4 px-4 border-t">
         <div className="max-w-md mx-auto text-center space-y-2">
           <p className="text-xs text-muted-foreground">
-            {branding.company_name || 'Glee-go Whats'} - CRM e Automação de WhatsApp
+            {branding.company_name || 'Ayratech'} - Gestão de Promotores e Merchandising
           </p>
           <div className="flex items-center justify-center gap-4 text-xs">
             <Link 
@@ -181,7 +180,7 @@ const Login = () => {
             </Link>
           </div>
           <p className="text-xs text-muted-foreground">
-            © {new Date().getFullYear()} {branding.company_name || 'Glee-go Whats'}. Todos os direitos reservados.
+            © {new Date().getFullYear()} {branding.company_name || 'Ayratech'}. Todos os direitos reservados.
           </p>
         </div>
       </footer>

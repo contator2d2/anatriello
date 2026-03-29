@@ -61,7 +61,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import heroImage from "@/assets/system-preview-crm-kanban.png";
-import gleegoLogo from "@/assets/gleego-logo.png";
+import ayratechLogo from "@/assets/ayratech_logo.jpg";
 
 const featureCategories = [
   {
@@ -524,8 +524,8 @@ export default function LandingPage() {
 
             {/* Center - Logo */}
             <div className="flex items-center justify-center gap-2">
-              <img src={branding.logo_topbar || gleegoLogo} alt={branding.company_name || "Glee-go Whats"} className="h-10 w-10 object-contain" />
-              <span className="font-bold text-lg">{branding.company_name || "Glee-go Whats"}</span>
+              <img src={branding.logo_topbar || ayratechLogo} alt={branding.company_name || "Ayratech"} className="h-10 w-10 object-contain" />
+              <span className="font-bold text-lg">{branding.company_name || "Ayratech"}</span>
             </div>
 
             {/* Right - Buttons */}
@@ -568,19 +568,19 @@ export default function LandingPage() {
           <div className="text-center max-w-4xl mx-auto">
             <Badge className="mb-6 px-4 py-1.5" variant="secondary">
               <Building2 className="h-3 w-3 mr-1" />
-              Plataforma completa para empresas
+              Plataforma completa para gestão de promotores
             </Badge>
 
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight mb-6">
-              Organize seu{" "}
-              <span className="bg-gradient-to-r from-[hsl(217,75%,55%)] via-[hsl(152,55%,48%)] to-[hsl(24,92%,55%)] bg-clip-text text-transparent">WhatsApp comercial</span>{" "}
-              com CRM e IA{" "}
+              Gerencie seus{" "}
+              <span className="bg-gradient-to-r from-[hsl(217,75%,55%)] via-[hsl(152,55%,48%)] to-[hsl(24,92%,55%)] bg-clip-text text-transparent">Promotores e Merchandising</span>{" "}
+              com IA{" "}
               <span className="bg-gradient-to-r from-[hsl(24,92%,55%)] via-[hsl(340,70%,55%)] to-[hsl(217,75%,55%)] bg-clip-text text-transparent">inteligente</span>
             </h1>
 
             <p className="text-lg sm:text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
-              Centralize conversas, gerencie seu funil de vendas, transfira atendimentos para agentes de IA,
-              organize sua equipe comercial e use inteligência artificial com base de conhecimento da sua empresa.
+              Centralize a comunicação com promotores via WhatsApp, acompanhe roteiros, gerencie tarefas de merchandising,
+              e use inteligência artificial para otimizar a operação da sua equipe em campo.
             </p>
 
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -629,7 +629,7 @@ export default function LandingPage() {
                   <div className="w-3 h-3 rounded-full bg-green-500" />
                 </div>
                 <div className="flex-1 text-center text-xs text-muted-foreground">
-                  {branding.company_name || "Glee-go Whats"} — Gestão Comercial Inteligente
+                  {branding.company_name || "Ayratech"} — Gestão de Promotores
                 </div>
               </div>
               <img src={heroImage} alt="Plataforma de gestão comercial com WhatsApp e CRM integrado" className="w-full h-auto" />
@@ -742,9 +742,9 @@ export default function LandingPage() {
               A solução
             </Badge>
             <h2 className="text-3xl sm:text-4xl font-bold mb-4">
-              Como o{" "}
+              Como a{" "}
               <span className="bg-gradient-to-r from-[hsl(217,75%,55%)] via-[hsl(152,55%,48%)] to-[hsl(24,92%,55%)] bg-clip-text text-transparent">
-                Glee-go Whats
+                Ayratech
               </span>{" "}
               resolve cada problema
             </h2>
@@ -1113,8 +1113,8 @@ export default function LandingPage() {
                 <img src={branding.logo_topbar} alt={branding.company_name || "Logo"} className="h-8 object-contain" />
               ) : (
                 <>
-                  <img src={gleegoLogo} alt="Glee-go Whats" className="h-8 w-8 object-contain" />
-                  <span className="font-semibold text-lg">{branding.company_name || "Glee-go Whats"}</span>
+                  <img src={ayratechLogo} alt="Ayratech" className="h-8 w-8 object-contain" />
+                  <span className="font-semibold text-lg">{branding.company_name || "Ayratech"}</span>
                 </>
               )}
             </div>
@@ -1129,7 +1129,7 @@ export default function LandingPage() {
               <Building2 className="h-4 w-4" />
               <span>CNPJ: 04.609.030/0001-29</span>
             </div>
-            <span>© {new Date().getFullYear()} {branding.company_name || "Glee-go Whats"}. Todos os direitos reservados.</span>
+            <span>© {new Date().getFullYear()} {branding.company_name || "Ayratech"}. Todos os direitos reservados.</span>
           </div>
         </div>
       </footer>
