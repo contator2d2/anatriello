@@ -152,7 +152,8 @@ function SidebarContentComponent({ isExpanded, isSuperadmin, onNavigate }: Sideb
   const navigate = useNavigate();
   const { logout, user, modulesEnabled, pagePermissions } = useAuth();
   const { branding } = useBranding();
-  const [openSections, setOpenSections] = useState<string[]>(["Atendimento"]);
+  // Start all sections collapsed; auto-open only the one with the active route
+  const [openSections, setOpenSections] = useState<string[]>([]);
 
   // Helper to check if user has admin-level role
   const isAdminRole = (role?: string) => ['owner', 'admin', 'manager'].includes(role || '');
