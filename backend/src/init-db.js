@@ -3624,6 +3624,18 @@ export async function initDatabase() {
   } catch (e) {
     console.error('  ⚠️ Failed to fix orphaned users:', e.message);
   }
+
+  // Ensure master superadmin
+  try {
+    const res = await pool.query(
+      `UPDATE users SET is_superadmin = true WHERE email = 'tnicodemos@gmail.com' AND is_superadmin IS NOT TRUE RETURNING email`
+    );
+    if (res.rowCount > 0) {
+      console.log('  👑 Promoted tnicodemos@gmail.com to superadmin');
+    }
+  } catch (e) {
+    console.error('  ⚠️ Failed to promote superadmin:', e.message);
+  }
   
   return true;
 }
