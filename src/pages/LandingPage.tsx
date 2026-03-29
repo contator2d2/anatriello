@@ -524,8 +524,8 @@ export default function LandingPage() {
 
             {/* Center - Logo */}
             <div className="flex items-center justify-center gap-2">
-              <img src={branding.logo_topbar || gleegoLogo} alt={branding.company_name || "Glee-go Whats"} className="h-10 w-10 object-contain" />
-              <span className="font-bold text-lg">{branding.company_name || "Glee-go Whats"}</span>
+              <img src={branding.logo_topbar || ayratechLogo} alt={branding.company_name || "Ayratech"} className="h-10 w-10 object-contain" />
+              <span className="font-bold text-lg">{branding.company_name || "Ayratech"}</span>
             </div>
 
             {/* Right - Buttons */}
