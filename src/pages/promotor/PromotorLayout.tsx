@@ -41,6 +41,9 @@ export function PromotorLayout({ children }: PromotorLayoutProps) {
 
   const unreadCount = notifications.filter((n: any) => !n.read).length;
 
+  // Track location every 60s during work hours
+  useLocationTracking();
+
   useEffect(() => {
     const token = localStorage.getItem('promotor_token');
     if (!token && !location.pathname.includes('/promotor/login')) {
