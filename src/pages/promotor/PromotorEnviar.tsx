@@ -37,6 +37,7 @@ export default function PromotorEnviar() {
   const sendDoc = usePromotorSendDocument();
   const { data: history, isLoading } = usePromotorInboundDocuments();
   const { toast } = useToast();
+  const promotorTokenGetter = useCallback(() => localStorage.getItem('promotor_token'), []);
 
   const handleSend = async () => {
     if (!category) { toast({ title: 'Selecione a categoria', variant: 'destructive' }); return; }
