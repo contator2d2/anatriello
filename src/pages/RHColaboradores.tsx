@@ -42,12 +42,53 @@ const BENEFIT_TYPES = [
   "Cesta Básica", "Auxílio Home Office", "Outro"
 ];
 
+const WEEKDAYS = [
+  { key: "seg", label: "Seg" },
+  { key: "ter", label: "Ter" },
+  { key: "qua", label: "Qua" },
+  { key: "qui", label: "Qui" },
+  { key: "sex", label: "Sex" },
+  { key: "sab", label: "Sáb" },
+  { key: "dom", label: "Dom" },
+];
+
+const DEFAULT_SCHEDULE = {
+  days: { seg: true, ter: true, qua: true, qui: true, sex: true, sab: false, dom: false },
+  entry: "08:00",
+  exit: "17:00",
+  lunch_start: "12:00",
+  lunch_end: "13:00",
+};
+
+function parseSchedule(ws: any) {
+  if (!ws) return { ...DEFAULT_SCHEDULE, days: { ...DEFAULT_SCHEDULE.days } };
+  if (typeof ws === "object" && ws.days) return ws;
+  // Legacy "08:00-17:00" format
+  const match = typeof ws === "string" && ws.match(/^(\d{2}:\d{2})\s*-\s*(\d{2}:\d{2})$/);
+  if (match) return { ...DEFAULT_SCHEDULE, days: { ...DEFAULT_SCHEDULE.days }, entry: match[1], exit: match[2] };
+  try { return JSON.parse(ws); } catch { return { ...DEFAULT_SCHEDULE, days: { ...DEFAULT_SCHEDULE.days } }; }
+}
+
+function calcScheduleHours(sched: any) {
+  const [eh, em] = sched.entry.split(":").map(Number);
+  const [xh, xm] = sched.exit.split(":").map(Number);
+  const [lsh, lsm] = sched.lunch_start.split(":").map(Number);
+  const [leh, lem] = sched.lunch_end.split(":").map(Number);
+  const totalMin = (xh * 60 + xm) - (eh * 60 + em);
+  const lunchMin = (leh * 60 + lem) - (lsh * 60 + lsm);
+  const dailyHours = Math.max(0, totalMin - lunchMin) / 60;
+  const workDays = Object.values(sched.days).filter(Boolean).length;
+  const monthlyWorkDays = Math.round(workDays * 4.33);
+  return { dailyHours, workDays, monthlyWorkDays, monthlyHours: dailyHours * monthlyWorkDays };
+}
+
 const EMPTY_FORM = {
   full_name: "", social_name: "", cpf: "", rg: "", birth_date: "", gender: "", email: "", phone: "",
   address: "", address_number: "", complement: "", neighborhood: "", city: "", state: "", zip_code: "",
   registration_number: "",
   worker_profile: "operacional", employment_type: "clt", position: "", salary: "",
-  admission_date: "", department_id: "", branch_id: "", direct_manager_id: "", work_schedule: "08:00-17:00",
+  admission_date: "", department_id: "", branch_id: "", direct_manager_id: "",
+  work_schedule: { ...DEFAULT_SCHEDULE, days: { ...DEFAULT_SCHEDULE.days } },
   bank_name: "", bank_agency: "", bank_account: "", bank_account_type: "",
   ctps_number: "", pis_pasep: "", cnpj: "", company_name: "", status: "ativo",
   salary_items: [] as { type: string; description: string; value: string }[],
@@ -195,6 +236,7 @@ export default function RHColaboradores() {
       salary: emp.salary || "",
       birth_date: emp.birth_date?.slice(0, 10) || "",
       admission_date: emp.admission_date?.slice(0, 10) || "",
+      work_schedule: parseSchedule(emp.work_schedule),
       salary_items: emp.salary_items || [],
       benefits: emp.benefits || [],
     });
@@ -582,30 +624,70 @@ export default function RHColaboradores() {
                   )}
                 </div>
                 <div><Label>Salário Mensal (R$)</Label><Input type="number" value={form.salary} onChange={e => setField("salary", e.target.value)} /></div>
-                <div><Label>Jornada</Label><Input value={form.work_schedule} onChange={e => setField("work_schedule", e.target.value)} placeholder="08:00-17:00" /></div>
-                {form.salary && form.work_schedule && (() => {
-                  const match = form.work_schedule.match(/^(\d{2}):(\d{2})\s*-\s*(\d{2}):(\d{2})$/);
-                  if (!match) return null;
-                  const dailyHours = (parseInt(match[3]) * 60 + parseInt(match[4]) - parseInt(match[1]) * 60 - parseInt(match[2])) / 60 - 1; // -1h almoço
-                  const monthlyHours = dailyHours * 22;
-                  const hourlyRate = monthlyHours > 0 ? parseFloat(form.salary) / monthlyHours : 0;
-                  return (
-                    <div className="col-span-2 grid grid-cols-3 gap-3 p-3 rounded-lg bg-muted/50 border">
-                      <div className="text-center">
-                        <p className="text-xs text-muted-foreground">Horas/Dia</p>
-                        <p className="text-sm font-semibold">{dailyHours.toFixed(1)}h</p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-xs text-muted-foreground">Horas/Mês (22d)</p>
-                        <p className="text-sm font-semibold">{monthlyHours.toFixed(0)}h</p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-xs text-muted-foreground">Valor/Hora</p>
-                        <p className="text-sm font-semibold text-primary">R$ {hourlyRate.toFixed(2)}</p>
-                      </div>
-                    </div>
-                  );
-                })()}
+
+                {/* ====== JORNADA DE TRABALHO DETALHADA ====== */}
+                <div className="col-span-2 space-y-3 p-4 rounded-lg border bg-muted/30">
+                  <Label className="text-sm font-semibold flex items-center gap-2"><Calendar className="h-4 w-4" /> Jornada de Trabalho</Label>
+                  {(() => {
+                    const sched = form.work_schedule && typeof form.work_schedule === "object" ? form.work_schedule : parseSchedule(form.work_schedule);
+                    const updateSched = (patch: any) => setField("work_schedule", { ...sched, ...patch });
+                    const toggleDay = (day: string) => updateSched({ days: { ...sched.days, [day]: !sched.days[day] } });
+
+                    const stats = calcScheduleHours(sched);
+                    const hourlyRate = stats.monthlyHours > 0 && form.salary ? parseFloat(form.salary) / stats.monthlyHours : 0;
+
+                    return (
+                      <>
+                        {/* Days of week toggles */}
+                        <div className="flex flex-wrap gap-2">
+                          {WEEKDAYS.map(wd => (
+                            <button key={wd.key} type="button" onClick={() => toggleDay(wd.key)}
+                              className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
+                                sched.days[wd.key]
+                                  ? "bg-primary text-primary-foreground border-primary"
+                                  : "bg-muted text-muted-foreground border-border hover:bg-accent"
+                              }`}>
+                              {wd.label}
+                            </button>
+                          ))}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Dias trabalhados: {Object.entries(sched.days).filter(([,v]) => v).map(([k]) => WEEKDAYS.find(w => w.key === k)?.label).join(", ") || "Nenhum"}
+                          {" · "}Folga: {Object.entries(sched.days).filter(([,v]) => !v).map(([k]) => WEEKDAYS.find(w => w.key === k)?.label).join(", ") || "Nenhuma"}
+                        </p>
+
+                        {/* Time inputs */}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                          <div><Label className="text-xs">Entrada</Label><Input type="time" value={sched.entry} onChange={e => updateSched({ entry: e.target.value })} /></div>
+                          <div><Label className="text-xs">Saída</Label><Input type="time" value={sched.exit} onChange={e => updateSched({ exit: e.target.value })} /></div>
+                          <div><Label className="text-xs">Início Almoço</Label><Input type="time" value={sched.lunch_start} onChange={e => updateSched({ lunch_start: e.target.value })} /></div>
+                          <div><Label className="text-xs">Fim Almoço</Label><Input type="time" value={sched.lunch_end} onChange={e => updateSched({ lunch_end: e.target.value })} /></div>
+                        </div>
+
+                        {/* Calculated stats */}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3 rounded-lg bg-background border">
+                          <div className="text-center">
+                            <p className="text-xs text-muted-foreground">Horas/Dia</p>
+                            <p className="text-sm font-semibold">{stats.dailyHours.toFixed(1)}h</p>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-xs text-muted-foreground">Dias/Semana</p>
+                            <p className="text-sm font-semibold">{stats.workDays}</p>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-xs text-muted-foreground">Horas/Mês ({stats.monthlyWorkDays}d)</p>
+                            <p className="text-sm font-semibold">{stats.monthlyHours.toFixed(0)}h</p>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-xs text-muted-foreground">Valor/Hora</p>
+                            <p className="text-sm font-semibold text-primary">R$ {hourlyRate.toFixed(2)}</p>
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+
                 <div><Label>Data de Admissão</Label><Input type="date" value={form.admission_date} onChange={e => setField("admission_date", e.target.value)} /></div>
                 <div><Label>Supervisor / Responsável</Label>
                   <Select value={form.direct_manager_id || "__none__"} onValueChange={v => setField("direct_manager_id", v === "__none__" ? "" : v)}>
