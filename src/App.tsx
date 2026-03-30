@@ -67,6 +67,8 @@ import RHDashboard from "./pages/RHDashboard";
 import RHDocumentos from "./pages/RHDocumentos";
 import RHPontoMonitor from "./pages/RHPontoMonitor";
 import RHPDVs from "./pages/RHPDVs";
+import RHFeriados from "./pages/RHFeriados";
+import RHMapaOperacional from "./pages/RHMapaOperacional";
 import PromotorLogin from "./pages/promotor/PromotorLogin";
 import PromotorHome from "./pages/promotor/PromotorHome";
 import PromotorDocumentos from "./pages/promotor/PromotorDocumentos";
