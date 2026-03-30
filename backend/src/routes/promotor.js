@@ -552,6 +552,31 @@ router.post('/rh/document-deliveries', async (req, res) => {
   }
 });
 
+// =============================================
+// RH: ENVIAR RECADO / NOTIFICAÇÃO PARA COLABORADOR
+// =============================================
+router.post('/rh/send-notice', async (req, res) => {
+  try {
+    const orgId = req.body.organization_id || (await query(`SELECT organization_id FROM organization_members WHERE user_id = $1 LIMIT 1`, [req.userId])).rows[0]?.organization_id;
+    const { title, message, employee_ids, type } = req.body;
+    if (!title || !employee_ids?.length) return res.status(400).json({ error: 'Título e colaboradores obrigatórios' });
+
+    const results = [];
+    for (const empId of employee_ids) {
+      const result = await query(
+        `INSERT INTO collaborator_notifications (organization_id, employee_id, title, message, type, reference_type)
+         VALUES ($1,$2,$3,$4,$5,'notice') RETURNING *`,
+        [orgId, empId, title, message || '', type || 'info']
+      );
+      results.push(result.rows[0]);
+    }
+    res.json(results);
+  } catch (err) {
+    logError('promotor.send-notice', err);
+    res.status(500).json({ error: 'Erro ao enviar recado' });
+  }
+});
+
 router.get('/rh/document-deliveries', async (req, res) => {
   try {
     const orgId = req.query.org_id || (await query(`SELECT organization_id FROM organization_members WHERE user_id = $1 LIMIT 1`, [req.userId])).rows[0]?.organization_id;
