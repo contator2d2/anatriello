@@ -178,18 +178,43 @@ router.post('/employees', async (req, res) => {
 // Update employee
 router.put('/employees/:id', async (req, res) => {
   try {
-    const d = normalizeEmployeePayload(req.body);
-    // Get old values for audit
+    // Only process fields actually sent in the request body
+    const allowedCols = new Set([
+      'full_name','social_name','cpf','rg','rg_issuer','birth_date','gender','marital_status',
+      'email','phone','phone2','address','address_number','complement','neighborhood','city',
+      'state','zip_code','registration_number','worker_profile','employment_type','position',
+      'role_level','branch_id','department_id','cost_center_id','direct_manager_id',
+      'admission_date','contract_end_date','salary','work_schedule','bank_name','bank_agency',
+      'bank_account','bank_account_type','ctps_number','ctps_series','pis_pasep','cnpj',
+      'company_name','status','photo_url','salary_items','benefits'
+    ]);
+
+    const sentKeys = Object.keys(req.body).filter(k => allowedCols.has(k));
+    if (!sentKeys.length) {
+      const existing = await query(`SELECT * FROM employees WHERE id = $1`, [req.params.id]);
+      return existing.rows[0] ? res.json(existing.rows[0]) : res.status(404).json({ error: 'Não encontrado' });
+    }
+
+    // Normalize only sent fields
+    const d = {};
+    const jsonbFields = ['salary_items', 'benefits'];
+    for (const k of sentKeys) {
+      if (k === 'work_schedule') {
+        d[k] = typeof req.body[k] === 'object' ? JSON.stringify(req.body[k]) : String(req.body[k] || '08:00-17:00');
+      } else if (jsonbFields.includes(k)) {
+        d[k] = JSON.stringify(Array.isArray(req.body[k]) ? req.body[k] : []);
+      } else {
+        d[k] = emptyToNull(req.body[k]);
+      }
+    }
+
     const old = await query(`SELECT * FROM employees WHERE id = $1`, [req.params.id]);
     if (!old.rows[0]) return res.status(404).json({ error: 'Não encontrado' });
 
-    const fields = Object.keys(d).filter(k => k !== 'id' && k !== 'organization_id' && k !== 'created_at');
-    if (!fields.length) return res.json(old.rows[0]);
-
+    const fields = Object.keys(d);
     const sets = fields.map((f, i) => `${f} = $${i + 2}`);
     sets.push(`updated_at = NOW()`);
-    const jsonbFields = ['salary_items', 'benefits'];
-    const vals = fields.map((f) => jsonbFields.includes(f) ? JSON.stringify(d[f] || []) : d[f]);
+    const vals = fields.map(f => d[f]);
 
     const result = await query(
       `UPDATE employees SET ${sets.join(', ')} WHERE id = $1 RETURNING *`,
@@ -207,7 +232,7 @@ router.put('/employees/:id', async (req, res) => {
   } catch (err) {
     logError('rh.employees.update', err, { body: req.body, employee_id: req.params.id });
     const message = err?.detail || err?.message || 'Erro ao atualizar colaborador';
-    res.status(400).json({ error: message });
+    res.status(400).json({ error: message, details: err?.detail || err?.hint || '' });
   }
 });
 
