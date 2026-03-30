@@ -1272,15 +1272,28 @@ router.get('/holidays', async (req, res) => {
   try {
     const orgId = req.query.org_id || await getUserOrgId(req.userId);
     if (!orgId) return res.json([]);
+
     const { year, type } = req.query;
-    let sql = `SELECT * FROM holidays WHERE organization_id = $1`;
     const params = [orgId];
-    if (year) { sql += ` AND EXTRACT(YEAR FROM holiday_date) = $${params.length + 1}`; params.push(year); }
-    if (type) { sql += ` AND type = $${params.length + 1}`; params.push(type); }
-    sql += ` ORDER BY holiday_date ASC`;
+    let sql = `SELECT * FROM holidays WHERE organization_id = $1 AND active = true`;
+
+    if (year) {
+      sql += ` AND EXTRACT(YEAR FROM holiday_date) = $${params.length + 1}`;
+      params.push(Number(year));
+    }
+
+    if (type) {
+      sql += ` AND type = $${params.length + 1}`;
+      params.push(type);
+    }
+
+    sql += ` ORDER BY holiday_date ASC, name ASC`;
     const r = await query(sql, params);
     res.json(r.rows);
-  } catch (err) { logError('rh.holidays.list', err); res.status(500).json({ error: err.message }); }
+  } catch (err) {
+    logError('rh.holidays.list', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Create holiday
@@ -1289,13 +1302,25 @@ router.post('/holidays', async (req, res) => {
     const orgId = await getUserOrgId(req.userId);
     const { name, holiday_date, type, state, city, recurring } = req.body;
     if (!name || !holiday_date) return res.status(400).json({ error: 'Nome e data obrigatórios' });
+
     const r = await query(
       `INSERT INTO holidays (organization_id, name, holiday_date, type, state, city, recurring)
-       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7)
+       ON CONFLICT (organization_id, name, holiday_date) DO UPDATE SET
+         type = EXCLUDED.type,
+         state = EXCLUDED.state,
+         city = EXCLUDED.city,
+         recurring = EXCLUDED.recurring,
+         active = true,
+         updated_at = NOW()
+       RETURNING *`,
       [orgId, name, holiday_date, type || 'nacional', emptyToNull(state), emptyToNull(city), recurring !== false]
     );
     res.json(r.rows[0]);
-  } catch (err) { logError('rh.holidays.create', err); res.status(500).json({ error: err.message }); }
+  } catch (err) {
+    logError('rh.holidays.create', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Bulk import holidays (from CSV/Excel)
@@ -1304,19 +1329,30 @@ router.post('/holidays/bulk', async (req, res) => {
     const orgId = await getUserOrgId(req.userId);
     const { holidays } = req.body;
     if (!Array.isArray(holidays) || !holidays.length) return res.status(400).json({ error: 'Lista de feriados vazia' });
+
     let imported = 0;
     for (const h of holidays) {
       if (!h.name || !h.holiday_date) continue;
       await query(
         `INSERT INTO holidays (organization_id, name, holiday_date, type, state, city, recurring)
          VALUES ($1,$2,$3,$4,$5,$6,$7)
-         ON CONFLICT DO NOTHING`,
+         ON CONFLICT (organization_id, name, holiday_date) DO UPDATE SET
+           type = EXCLUDED.type,
+           state = EXCLUDED.state,
+           city = EXCLUDED.city,
+           recurring = EXCLUDED.recurring,
+           active = true,
+           updated_at = NOW()`,
         [orgId, h.name, h.holiday_date, h.type || 'nacional', emptyToNull(h.state), emptyToNull(h.city), h.recurring !== false]
       );
       imported++;
     }
+
     res.json({ imported });
-  } catch (err) { logError('rh.holidays.bulk', err); res.status(500).json({ error: err.message }); }
+  } catch (err) {
+    logError('rh.holidays.bulk', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Delete holiday
