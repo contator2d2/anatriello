@@ -958,3 +958,45 @@ export default function RHColaboradores() {
     </MainLayout>
   );
 }
+
+function PromotorAccessToggle({ employeeId }: { employeeId: string }) {
+  const { data: access, isLoading } = useAppAccess(employeeId);
+  const grantAccess = useGrantAppAccess();
+  const blockAccess = useBlockAppAccess();
+  const { toast } = useToast();
+
+  const isEnabled = access && ['liberado', 'aguardando_login', 'ativo'].includes(access.access_status);
+
+  const handleToggle = async (enabled: boolean) => {
+    try {
+      if (enabled) {
+        // Generate a temp password (CPF-based or random)
+        const tempPass = Math.random().toString(36).slice(-8);
+        await grantAccess.mutateAsync({ employee_id: employeeId, password: tempPass });
+        toast({ title: "Acesso liberado!", description: `Senha temporária: ${tempPass}` });
+      } else {
+        await blockAccess.mutateAsync(employeeId);
+        toast({ title: "Acesso bloqueado" });
+      }
+    } catch {
+      toast({ title: "Erro ao alterar acesso", variant: "destructive" });
+    }
+  };
+
+  return (
+    <div className="col-span-2 flex items-center gap-3 p-3 rounded-lg border bg-muted/30">
+      <Smartphone className="h-5 w-5 text-primary" />
+      <div className="flex-1">
+        <Label className="text-sm font-medium">Acesso ao App do Promotor</Label>
+        <p className="text-xs text-muted-foreground">
+          {isLoading ? "Carregando..." : isEnabled ? `Status: ${access.access_status} • Último login: ${access.last_login ? new Date(access.last_login).toLocaleDateString('pt-BR') : 'Nunca'}` : "Sem acesso ao aplicativo"}
+        </p>
+      </div>
+      <Switch
+        checked={!!isEnabled}
+        onCheckedChange={handleToggle}
+        disabled={isLoading || grantAccess.isPending || blockAccess.isPending}
+      />
+    </div>
+  );
+}
