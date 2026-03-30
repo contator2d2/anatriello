@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useMemo } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { useEmployees, useCreateEmployee, useUpdateEmployee, useDeleteEmployee, useRhDepartments, useBranches, useCreateBranch, useDeleteBranch, useCreateRhDepartment, useDeleteRhDepartment, useRhPositions, useCreateRhPosition, useDeleteRhPosition, useWorkerProfiles, useCreateWorkerProfile, useDeleteWorkerProfile } from "@/hooks/use-rh";
-import { useAppAccess, useGrantAppAccess, useBlockAppAccess } from "@/hooks/use-promotor";
+import { useAppAccess, useGrantAppAccess, useBlockAppAccess, useResetAppPassword } from "@/hooks/use-promotor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { Switch } from "@/components/ui/switch";
-import { Plus, Search, UserCircle, Building2, FileText, Edit, Trash2, Eye, EyeOff, Users, Loader2, Calendar, Briefcase, X, MapPin, UserCog, DollarSign, Gift, Smartphone, KeyRound, Copy } from "lucide-react";
+import { Plus, Search, UserCircle, Building2, FileText, Edit, Trash2, Eye, EyeOff, Users, Loader2, Calendar, Briefcase, X, MapPin, UserCog, DollarSign, Gift, Smartphone, KeyRound, Copy, RefreshCw } from "lucide-react";
 import { format, differenceInYears, differenceInMonths, differenceInDays, addYears, addMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -969,6 +969,7 @@ function PromotorAccessToggle({ employeeId }: { employeeId: string }) {
   const { data: access, isLoading } = useAppAccess(employeeId);
   const grantAccess = useGrantAppAccess();
   const blockAccess = useBlockAppAccess();
+  const resetPassword = useResetAppPassword();
   const { toast } = useToast();
   const [generatedPass, setGeneratedPass] = React.useState<string | null>(null);
 
@@ -988,6 +989,17 @@ function PromotorAccessToggle({ employeeId }: { employeeId: string }) {
       }
     } catch {
       toast({ title: "Erro ao alterar acesso", variant: "destructive" });
+    }
+  };
+
+  const handleResetPassword = async () => {
+    try {
+      const newPass = generateTempPassword();
+      await resetPassword.mutateAsync({ employee_id: employeeId, new_password: newPass });
+      setGeneratedPass(newPass);
+      toast({ title: "Nova senha gerada!" });
+    } catch {
+      toast({ title: "Erro ao gerar nova senha", variant: "destructive" });
     }
   };
 
@@ -1014,6 +1026,11 @@ function PromotorAccessToggle({ employeeId }: { employeeId: string }) {
           disabled={isLoading || grantAccess.isPending || blockAccess.isPending}
         />
       </div>
+      {isEnabled && (
+        <Button type="button" variant="outline" size="sm" onClick={handleResetPassword} disabled={resetPassword.isPending}>
+          <RefreshCw className={`h-3.5 w-3.5 mr-1 ${resetPassword.isPending ? 'animate-spin' : ''}`} /> Gerar nova senha
+        </Button>
+      )}
       {generatedPass && (
         <div className="flex items-center gap-2 p-2 rounded-md border border-primary/30 bg-primary/5">
           <KeyRound className="h-4 w-4 text-primary" />
