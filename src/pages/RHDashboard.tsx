@@ -25,6 +25,17 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 
+const safeDate = (v: any): Date | null => {
+  if (!v) return null;
+  const d = new Date(typeof v === 'string' && !v.includes('T') ? v + 'T12:00:00' : v);
+  return d && !Number.isNaN(d.getTime()) ? d : null;
+};
+
+const safeFormat = (v: any, fmt: string, fallback = "—"): string => {
+  const d = safeDate(v);
+  return d ? format(d, fmt) : fallback;
+};
+
 const VACATION_EMPTY = {
   employee_id: "", vacation_type: "completa", start_date: "", end_date: "",
   days_total: 30, days_taken: 0, abono_pecuniario: false, abono_days: 0,
