@@ -433,7 +433,13 @@ export default function RHColaboradores() {
                   </Select>
                 </div>
                 <div><Label>E-mail</Label><Input type="email" value={form.email} onChange={e => setField("email", e.target.value)} /></div>
-                <div><Label>Telefone</Label><Input value={form.phone} onChange={e => setField("phone", e.target.value)} /></div>
+                <div><Label>Telefone</Label><Input placeholder="(00) 00000-0000" value={form.phone} onChange={e => {
+                  let v = e.target.value.replace(/\D/g, "").slice(0, 11);
+                  if (v.length > 6) v = `(${v.slice(0,2)}) ${v.slice(2,7)}-${v.slice(7)}`;
+                  else if (v.length > 2) v = `(${v.slice(0,2)}) ${v.slice(2)}`;
+                  else if (v.length > 0) v = `(${v}`;
+                  setField("phone", v);
+                }} /></div>
               </div>
 
               {/* Endereço com CEP auto-fill */}
