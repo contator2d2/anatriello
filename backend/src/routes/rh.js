@@ -363,6 +363,143 @@ router.post('/time-records', async (req, res) => {
   }
 });
 
+// Consolidated timesheet (app punches grouped by employee+date)
+router.get('/consolidated-timesheet', async (req, res) => {
+  try {
+    const orgId = req.query.org_id || await getUserOrgId(req.userId);
+    if (!orgId) return res.json([]);
+    const { employee_id, start_date, end_date } = req.query;
+
+    let sql = `
+      SELECT 
+        tp.employee_id,
+        e.full_name as employee_name,
+        e.cpf,
+        e.position,
+        e.work_schedule,
+        tp.punched_at::date as record_date,
+        json_agg(json_build_object(
+          'id', tp.id, 'punch_type', tp.punch_type, 'punched_at', tp.punched_at,
+          'geo_status', tp.geo_status, 'is_offline', tp.is_offline, 'pdv_name', p.name,
+          'sync_status', tp.sync_status
+        ) ORDER BY tp.punched_at) as punches,
+        COUNT(*) as punch_count,
+        MIN(tp.punched_at) as first_punch,
+        MAX(tp.punched_at) as last_punch,
+        EXTRACT(EPOCH FROM (MAX(tp.punched_at) - MIN(tp.punched_at)))/3600.0 as raw_hours
+      FROM time_punches tp
+      JOIN employees e ON e.id = tp.employee_id
+      LEFT JOIN pdvs p ON p.id = tp.pdv_id
+      WHERE tp.organization_id = $1`;
+    const params = [orgId];
+    let idx = 2;
+    if (employee_id) { sql += ` AND tp.employee_id = $${idx++}`; params.push(employee_id); }
+    if (start_date) { sql += ` AND tp.punched_at::date >= $${idx++}`; params.push(start_date); }
+    if (end_date) { sql += ` AND tp.punched_at::date <= $${idx++}`; params.push(end_date); }
+    sql += ` GROUP BY tp.employee_id, e.full_name, e.cpf, e.position, e.work_schedule, tp.punched_at::date
+             ORDER BY tp.punched_at::date DESC, e.full_name`;
+    const result = await query(sql, params);
+    res.json(result.rows);
+  } catch (err) {
+    logError('rh.consolidated_timesheet', err);
+    res.status(500).json({ error: 'Erro' });
+  }
+});
+
+// Divergence detection
+router.get('/punch-divergences', async (req, res) => {
+  try {
+    const orgId = req.query.org_id || await getUserOrgId(req.userId);
+    if (!orgId) return res.json([]);
+    const { start_date, end_date } = req.query;
+    const sd = start_date || new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+    const ed = end_date || new Date().toISOString().slice(0, 10);
+
+    // Find employees who didn't punch on workdays + incomplete punch sequences
+    const divergences = [];
+
+    // 1. Employees with no punches on workdays
+    const noPunch = await query(`
+      SELECT e.id, e.full_name, e.work_schedule, d.dt::date as missing_date
+      FROM employees e
+      CROSS JOIN generate_series($2::date, $3::date, '1 day'::interval) d(dt)
+      WHERE e.organization_id = $1 AND e.status = 'ativo'
+        AND EXTRACT(DOW FROM d.dt) NOT IN (0, 6)
+        AND NOT EXISTS (
+          SELECT 1 FROM time_punches tp WHERE tp.employee_id = e.id AND tp.punched_at::date = d.dt::date
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM time_records tr WHERE tr.employee_id = e.id AND tr.record_date = d.dt::date
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM employee_absences ea WHERE ea.employee_id = e.id AND d.dt::date BETWEEN ea.start_date AND ea.end_date
+        )
+      ORDER BY d.dt DESC, e.full_name
+      LIMIT 100
+    `, [orgId, sd, ed]);
+
+    for (const r of noPunch.rows) {
+      divergences.push({
+        employee_id: r.id,
+        employee_name: r.full_name,
+        date: r.missing_date,
+        type: 'sem_registro',
+        description: 'Nenhum registro de ponto neste dia',
+        severity: 'high',
+      });
+    }
+
+    // 2. Incomplete punch sequences (odd number of punches = missing entry/exit)
+    const incomplete = await query(`
+      SELECT tp.employee_id, e.full_name, tp.punched_at::date as punch_date, COUNT(*) as punch_count
+      FROM time_punches tp
+      JOIN employees e ON e.id = tp.employee_id
+      WHERE tp.organization_id = $1 AND tp.punched_at::date BETWEEN $2 AND $3
+      GROUP BY tp.employee_id, e.full_name, tp.punched_at::date
+      HAVING COUNT(*) % 2 != 0
+      ORDER BY tp.punched_at::date DESC
+    `, [orgId, sd, ed]);
+
+    for (const r of incomplete.rows) {
+      divergences.push({
+        employee_id: r.employee_id,
+        employee_name: r.full_name,
+        date: r.punch_date,
+        type: 'incompleto',
+        description: `Sequência incompleta (${r.punch_count} registros - ímpar)`,
+        severity: 'medium',
+      });
+    }
+
+    // 3. Outside PDV punches
+    const outsidePdv = await query(`
+      SELECT tp.employee_id, e.full_name, tp.punched_at::date as punch_date, COUNT(*) as count
+      FROM time_punches tp
+      JOIN employees e ON e.id = tp.employee_id
+      WHERE tp.organization_id = $1 AND tp.punched_at::date BETWEEN $2 AND $3
+        AND tp.geo_status = 'fora_area'
+      GROUP BY tp.employee_id, e.full_name, tp.punched_at::date
+      ORDER BY tp.punched_at::date DESC
+    `, [orgId, sd, ed]);
+
+    for (const r of outsidePdv.rows) {
+      divergences.push({
+        employee_id: r.employee_id,
+        employee_name: r.full_name,
+        date: r.punch_date,
+        type: 'fora_pdv',
+        description: `${r.count} registro(s) fora do PDV`,
+        severity: 'low',
+      });
+    }
+
+    res.json(divergences);
+  } catch (err) {
+    logError('rh.punch_divergences', err);
+    res.status(500).json({ error: 'Erro' });
+  }
+});
+
 // ===== PAYSLIPS (HOLERITE) =====
 
 router.get('/payslips', async (req, res) => {
