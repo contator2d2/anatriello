@@ -166,6 +166,7 @@ function LiveMapComponent({ employees, pdvs, regions, showPDVs, showPromoters, s
           <br/><span style="font-size:12px;color:#666;">${e.position || e.worker_profile}</span>
           <br/>${statusHtml}
           ${punchInfo}
+          ${e.current_brands ? `<br/><span style="font-size:11px;color:#f59e0b;">🏷️ ${e.current_brands}</span>` : ''}
           ${lastUpdate}
           ${batteryHtml}
           <br/><span style="font-size:11px;color:#888;">⏰ Jornada: ${e.work_schedule || '—'}</span>
@@ -327,6 +328,9 @@ export default function LiveMaps() {
                               </span>
                             ) : (
                               <span className="text-destructive">Sem check-in</span>
+                            )}
+                            {e.current_brands && (
+                              <span className="text-yellow-600 text-[9px] truncate block">🏷️ {e.current_brands}</span>
                             )}
                           </div>
                         </div>

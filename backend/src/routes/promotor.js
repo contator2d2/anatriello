@@ -8,6 +8,19 @@ import { logInfo, logError } from '../logger.js';
 
 const router = express.Router();
 
+// Auto-geocode using Nominatim (OpenStreetMap)
+async function autoGeocode(address, city, state, zip_code) {
+  const parts = [address, city, state, zip_code, 'Brazil'].filter(Boolean);
+  if (parts.length < 2) return null;
+  const q = encodeURIComponent(parts.join(', '));
+  const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=1`, {
+    headers: { 'User-Agent': 'AyratechApp/1.0' }
+  });
+  const data = await res.json();
+  if (data && data[0]) return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+  return null;
+}
+
 // ===== MIDDLEWARE: Promotor Auth =====
 const authenticatePromotor = async (req, res, next) => {
   const authHeader = req.headers.authorization;
@@ -676,10 +689,18 @@ router.post('/rh/pdvs', async (req, res) => {
   try {
     const orgId = req.body.organization_id || (await query(`SELECT organization_id FROM organization_members WHERE user_id = $1 LIMIT 1`, [req.userId])).rows[0]?.organization_id;
     const d = req.body;
+    // Auto-geocode if no lat/lng provided but address exists
+    let lat = d.latitude, lng = d.longitude;
+    if ((!lat || !lng) && (d.address || d.city)) {
+      try {
+        const geo = await autoGeocode(d.address, d.city, d.state, d.zip_code);
+        if (geo) { lat = geo.lat; lng = geo.lng; }
+      } catch (_) {}
+    }
     const result = await query(
       `INSERT INTO pdvs (organization_id, name, client_name, address, zip_code, city, state, neighborhood, latitude, longitude, radius_meters, supervisor_id, notes)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
-      [orgId, d.name, d.client_name, d.address, d.zip_code, d.city, d.state, d.neighborhood, d.latitude, d.longitude, d.radius_meters || 200, d.supervisor_id || null, d.notes]
+      [orgId, d.name, d.client_name, d.address, d.zip_code, d.city, d.state, d.neighborhood, lat, lng, d.radius_meters || 200, d.supervisor_id || null, d.notes]
     );
     res.json(result.rows[0]);
   } catch (err) { logError('promotor.pdvs.create', err); res.status(500).json({ error: 'Erro' }); }
@@ -688,9 +709,17 @@ router.post('/rh/pdvs', async (req, res) => {
 router.put('/rh/pdvs/:id', async (req, res) => {
   try {
     const d = req.body;
+    // Auto-geocode if no lat/lng provided but address exists
+    let lat = d.latitude, lng = d.longitude;
+    if ((!lat || !lng) && (d.address || d.city)) {
+      try {
+        const geo = await autoGeocode(d.address, d.city, d.state, d.zip_code);
+        if (geo) { lat = geo.lat; lng = geo.lng; }
+      } catch (_) {}
+    }
     const result = await query(
       `UPDATE pdvs SET name=$2, client_name=$3, address=$4, zip_code=$5, city=$6, state=$7, neighborhood=$8, latitude=$9, longitude=$10, radius_meters=$11, supervisor_id=$12, notes=$13, active=$14, updated_at=NOW() WHERE id=$1 RETURNING *`,
-      [req.params.id, d.name, d.client_name, d.address, d.zip_code, d.city, d.state, d.neighborhood, d.latitude, d.longitude, d.radius_meters, d.supervisor_id || null, d.notes, d.active !== false]
+      [req.params.id, d.name, d.client_name, d.address, d.zip_code, d.city, d.state, d.neighborhood, lat, lng, d.radius_meters, d.supervisor_id || null, d.notes, d.active !== false]
     );
     res.json(result.rows[0]);
   } catch (err) { res.status(500).json({ error: 'Erro' }); }
@@ -1056,7 +1085,8 @@ router.get('/rh/live-map', async (req, res) => {
           (SELECT tp.punch_type FROM time_punches tp WHERE tp.employee_id = e.id AND tp.punched_at::date = $2 ORDER BY tp.punched_at DESC LIMIT 1) as last_punch_type,
           (SELECT tp.punched_at FROM time_punches tp WHERE tp.employee_id = e.id AND tp.punched_at::date = $2 ORDER BY tp.punched_at DESC LIMIT 1) as last_punch_at,
           (SELECT tp.pdv_id FROM time_punches tp WHERE tp.employee_id = e.id AND tp.punched_at::date = $2 ORDER BY tp.punched_at DESC LIMIT 1) as last_pdv_id,
-          (SELECT p.name FROM time_punches tp JOIN pdvs p ON p.id = tp.pdv_id WHERE tp.employee_id = e.id AND tp.punched_at::date = $2 ORDER BY tp.punched_at DESC LIMIT 1) as last_pdv_name
+          (SELECT p.name FROM time_punches tp JOIN pdvs p ON p.id = tp.pdv_id WHERE tp.employee_id = e.id AND tp.punched_at::date = $2 ORDER BY tp.punched_at DESC LIMIT 1) as last_pdv_name,
+          (SELECT string_agg(DISTINCT mb.name, ', ') FROM merch_pdv_brands mpb JOIN merch_brands mb ON mb.id = mpb.brand_id JOIN time_punches tp2 ON tp2.pdv_id = mpb.pdv_id WHERE tp2.employee_id = e.id AND tp2.punched_at::date = $2 AND mpb.active = true LIMIT 1) as current_brands
         FROM employees e
         LEFT JOIN employee_live_locations ll ON ll.employee_id = e.id
         WHERE e.organization_id = $1 AND e.status = 'ativo'

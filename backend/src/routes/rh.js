@@ -8,6 +8,21 @@ import { logInfo, logError } from '../logger.js';
 const router = express.Router();
 router.use(authenticate);
 
+// Auto-geocode using Nominatim (OpenStreetMap)
+async function autoGeocodeAddress(address, city, state, zip_code) {
+  const parts = [address, city, state, zip_code, 'Brazil'].filter(Boolean);
+  if (parts.length < 2) return null;
+  const q = encodeURIComponent(parts.join(', '));
+  try {
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=1`, {
+      headers: { 'User-Agent': 'AyratechApp/1.0' }
+    });
+    const data = await res.json();
+    if (data && data[0]) return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+  } catch (_) {}
+  return null;
+}
+
 let holidaysInfraPromise = null;
 const seededHolidayYears = new Set();
 
@@ -297,6 +312,12 @@ router.post('/employees', async (req, res) => {
     const d = normalizeEmployeePayload(req.body);
     if (!d.full_name) return res.status(400).json({ error: 'Nome do colaborador é obrigatório' });
 
+    // Auto-geocode home address if no coordinates provided
+    if (!d.home_latitude && !d.home_longitude && (d.address || d.city)) {
+      const geo = await autoGeocodeAddress(d.address, d.city, d.state, d.zip_code);
+      if (geo) { d.home_latitude = geo.lat; d.home_longitude = geo.lng; }
+    }
+
     const result = await query(
       `INSERT INTO employees (organization_id, full_name, social_name, cpf, rg, rg_issuer, birth_date, gender, marital_status, email, phone, phone2,
         address, address_number, complement, neighborhood, city, state, zip_code,
@@ -305,8 +326,8 @@ router.post('/employees', async (req, res) => {
         admission_date, contract_end_date, salary, work_schedule,
         bank_name, bank_agency, bank_account, bank_account_type,
         ctps_number, ctps_series, pis_pasep, cnpj, company_name, status, photo_url, created_by,
-        salary_items, benefits)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46)
+        salary_items, benefits, home_latitude, home_longitude)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48)
        RETURNING *`,
       [orgId, d.full_name, d.social_name, d.cpf, d.rg, d.rg_issuer, d.birth_date, d.gender, d.marital_status, d.email, d.phone, d.phone2,
         d.address, d.address_number, d.complement, d.neighborhood, d.city, d.state, d.zip_code,
@@ -315,7 +336,7 @@ router.post('/employees', async (req, res) => {
         d.admission_date, d.contract_end_date, d.salary, d.work_schedule,
         d.bank_name, d.bank_agency, d.bank_account, d.bank_account_type,
         d.ctps_number, d.ctps_series, d.pis_pasep, d.cnpj, d.company_name, d.status, d.photo_url, req.userId,
-        JSON.stringify(d.salary_items), JSON.stringify(d.benefits)]
+        JSON.stringify(d.salary_items), JSON.stringify(d.benefits), d.home_latitude, d.home_longitude]
     );
     await auditLog(orgId, 'employee', result.rows[0].id, 'create', [{ field: 'full_name', oldVal: null, newVal: d.full_name }], req.userId);
     res.json(result.rows[0]);
@@ -357,6 +378,19 @@ router.put('/employees/:id', async (req, res) => {
         d[k] = JSON.stringify(Array.isArray(req.body[k]) ? req.body[k] : []);
       } else {
         d[k] = emptyToNull(req.body[k]);
+      }
+    }
+
+    // Auto-geocode home address if address changed and no coords sent
+    const addressChanged = ['address', 'city', 'state', 'zip_code'].some(k => sentKeys.includes(k));
+    if (addressChanged && !d.home_latitude && !d.home_longitude) {
+      const addrVal = d.address || req.body.address;
+      const cityVal = d.city || req.body.city;
+      const stateVal = d.state || req.body.state;
+      const zipVal = d.zip_code || req.body.zip_code;
+      if (addrVal || cityVal) {
+        const geo = await autoGeocodeAddress(addrVal, cityVal, stateVal, zipVal);
+        if (geo) { d.home_latitude = geo.lat; d.home_longitude = geo.lng; }
       }
     }
 

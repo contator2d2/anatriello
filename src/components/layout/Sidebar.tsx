@@ -131,6 +131,7 @@ const getNavSections = (hasConnections: boolean): NavSection[] => [
     icon: ShoppingBag,
     items: [
       { name: "Marcas", href: "/merch/marcas", icon: Building2, pageKey: 'merch_marcas' },
+      { name: "PDVs", href: "/rh/pdvs", icon: MapPin, pageKey: 'rh_pdvs' },
       { name: "Categorias", href: "/merch/categorias", icon: TagsIcon, pageKey: 'merch_categorias' },
       { name: "Produtos", href: "/merch/produtos", icon: Boxes, pageKey: 'merch_produtos' },
       { name: "Mix por PDV", href: "/merch/mix", icon: Store, pageKey: 'merch_mix' },
