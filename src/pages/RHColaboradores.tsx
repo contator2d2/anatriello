@@ -190,7 +190,14 @@ export default function RHColaboradores() {
 
   const openNew = () => { setForm({ ...EMPTY_FORM }); setEditId(null); setCpfError(""); setDialogOpen(true); };
   const openEdit = (emp: any) => {
-    setForm({ ...emp, salary: emp.salary || "", birth_date: emp.birth_date?.slice(0, 10) || "", admission_date: emp.admission_date?.slice(0, 10) || "" });
+    setForm({
+      ...emp,
+      salary: emp.salary || "",
+      birth_date: emp.birth_date?.slice(0, 10) || "",
+      admission_date: emp.admission_date?.slice(0, 10) || "",
+      salary_items: emp.salary_items || [],
+      benefits: emp.benefits || [],
+    });
     setEditId(emp.id);
     setCpfError("");
     setDialogOpen(true);
