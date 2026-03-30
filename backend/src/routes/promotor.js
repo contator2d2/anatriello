@@ -20,15 +20,20 @@ function splitAddressAndNumber(address = '') {
   };
 }
 
-function buildGeocodeCandidates({ address, address_number, neighborhood, city, state, zip_code }) {
+function buildGeocodeCandidates({ address, address_number, complement, neighborhood, city, state, zip_code }) {
   const parsed = splitAddressAndNumber(address);
   const street = String(parsed.street || '').trim();
   const number = String(address_number || parsed.number || '').trim();
+  const normalizedComplement = String(complement || '').trim();
   const cleanZip = String(zip_code || '').replace(/\D/g, '');
   const normalizedState = String(state || '').trim().toUpperCase();
   const streetWithNumber = [street, number].filter(Boolean).join(', ');
+  const streetWithComplement = [streetWithNumber, normalizedComplement].filter(Boolean).join(', ');
 
   return [
+    [streetWithComplement, neighborhood, `${city} - ${normalizedState}`, cleanZip, 'Brasil'].filter(Boolean).join(', '),
+    [streetWithComplement, neighborhood, city, normalizedState, cleanZip, 'Brasil'].filter(Boolean).join(', '),
+    [streetWithComplement, neighborhood, city, normalizedState, 'Brasil'].filter(Boolean).join(', '),
     [streetWithNumber, neighborhood, `${city} - ${normalizedState}`, cleanZip, 'Brasil'].filter(Boolean).join(', '),
     [streetWithNumber, neighborhood, city, normalizedState, cleanZip, 'Brasil'].filter(Boolean).join(', '),
     [streetWithNumber, neighborhood, city, normalizedState, 'Brasil'].filter(Boolean).join(', '),
@@ -37,8 +42,8 @@ function buildGeocodeCandidates({ address, address_number, neighborhood, city, s
 }
 
 // Auto-geocode using canonical Brazilian address + Nominatim
-async function autoGeocode(address, city, state, zip_code, neighborhood, address_number = null) {
-  const candidates = buildGeocodeCandidates({ address, address_number, neighborhood, city, state, zip_code });
+async function autoGeocode(address, city, state, zip_code, neighborhood, address_number = null, complement = null) {
+  const candidates = buildGeocodeCandidates({ address, address_number, complement, neighborhood, city, state, zip_code });
   if (!candidates.length) return null;
 
   for (const candidate of candidates) {
@@ -729,7 +734,7 @@ router.post('/rh/pdvs', async (req, res) => {
     let lat = d.latitude, lng = d.longitude;
     if ((!lat || !lng) && (d.address || d.city)) {
       try {
-        const geo = await autoGeocode(d.address, d.city, d.state, d.zip_code, d.neighborhood, d.address_number);
+        const geo = await autoGeocode(d.address, d.city, d.state, d.zip_code, d.neighborhood, d.address_number, d.complement);
         if (geo) { lat = geo.lat; lng = geo.lng; }
       } catch (_) {}
     }
@@ -749,7 +754,7 @@ router.put('/rh/pdvs/:id', async (req, res) => {
     let lat = d.latitude, lng = d.longitude;
     if ((!lat || !lng) && (d.address || d.city)) {
       try {
-        const geo = await autoGeocode(d.address, d.city, d.state, d.zip_code, d.neighborhood, d.address_number);
+        const geo = await autoGeocode(d.address, d.city, d.state, d.zip_code, d.neighborhood, d.address_number, d.complement);
         if (geo) { lat = geo.lat; lng = geo.lng; }
       } catch (_) {}
     }

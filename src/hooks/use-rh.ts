@@ -444,7 +444,7 @@ export function useRegionPDVs(regionId?: string) {
 // ===== GEOCODING =====
 export function useGeocode() {
   return useMutation({
-    mutationFn: (data: { address?: string; address_number?: string; neighborhood?: string; city?: string; state?: string; zip_code?: string }) =>
+    mutationFn: (data: { address?: string; address_number?: string; complement?: string; neighborhood?: string; city?: string; state?: string; zip_code?: string }) =>
       api<any>('/api/rh/geocode', { method: 'POST', body: data }),
   });
 }

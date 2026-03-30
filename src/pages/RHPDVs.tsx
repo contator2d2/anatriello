@@ -15,7 +15,7 @@ import { MapPin, Plus, Edit, Search, Loader2, Navigation } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
-const EMPTY_PDV = { name: '', client_name: '', address: '', zip_code: '', city: '', state: '', neighborhood: '', latitude: '', longitude: '', radius_meters: 200, supervisor_id: '', notes: '', active: true };
+const EMPTY_PDV = { name: '', client_name: '', address: '', address_number: '', complement: '', zip_code: '', city: '', state: '', neighborhood: '', latitude: '', longitude: '', radius_meters: 200, supervisor_id: '', notes: '', active: true };
 
 function splitAddressAndNumber(address: string) {
   const normalized = String(address || '').trim().replace(/\s+/g, ' ');
@@ -52,7 +52,8 @@ export default function RHPDVs() {
 
   const openCreate = () => { setForm(EMPTY_PDV); setEditId(null); setShowDialog(true); };
   const openEdit = (pdv: any) => {
-    setForm({ name: pdv.name, client_name: pdv.client_name || '', address: pdv.address || '', zip_code: pdv.zip_code || '', city: pdv.city || '', state: pdv.state || '', neighborhood: pdv.neighborhood || '', latitude: pdv.latitude || '', longitude: pdv.longitude || '', radius_meters: pdv.radius_meters || 200, supervisor_id: pdv.supervisor_id || '', notes: pdv.notes || '', active: pdv.active !== false });
+    const parsed = splitAddressAndNumber(pdv.address || '');
+    setForm({ name: pdv.name, client_name: pdv.client_name || '', address: parsed.street || pdv.address || '', address_number: pdv.address_number || parsed.number || '', complement: pdv.complement || '', zip_code: pdv.zip_code || '', city: pdv.city || '', state: pdv.state || '', neighborhood: pdv.neighborhood || '', latitude: pdv.latitude || '', longitude: pdv.longitude || '', radius_meters: pdv.radius_meters || 200, supervisor_id: pdv.supervisor_id || '', notes: pdv.notes || '', active: pdv.active !== false });
     setEditId(pdv.id);
     setShowDialog(true);
   };
@@ -61,9 +62,9 @@ export default function RHPDVs() {
     if (!form.name) { toast({ title: 'Nome obrigatório', variant: 'destructive' }); return; }
     try {
       if (editId) {
-        await updatePDV.mutateAsync({ id: editId, ...form, latitude: form.latitude ? Number(form.latitude) : null, longitude: form.longitude ? Number(form.longitude) : null });
+        await updatePDV.mutateAsync({ id: editId, ...form, address: [form.address, form.address_number].filter(Boolean).join(', '), latitude: form.latitude ? Number(form.latitude) : null, longitude: form.longitude ? Number(form.longitude) : null });
       } else {
-        await createPDV.mutateAsync({ ...form, latitude: form.latitude ? Number(form.latitude) : null, longitude: form.longitude ? Number(form.longitude) : null });
+        await createPDV.mutateAsync({ ...form, address: [form.address, form.address_number].filter(Boolean).join(', '), latitude: form.latitude ? Number(form.latitude) : null, longitude: form.longitude ? Number(form.longitude) : null });
       }
       toast({ title: editId ? 'PDV atualizado!' : 'PDV criado!' });
       setShowDialog(false);
@@ -125,10 +126,14 @@ export default function RHPDVs() {
             </div>
             <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1"><Label>CEP</Label><Input value={form.zip_code} onChange={e => { setForm(f => ({ ...f, zip_code: e.target.value })); handleCep(e.target.value); }} placeholder="00000-000" /></div>
-              <div className="space-y-1 col-span-2"><Label>Endereço</Label><Input value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} /></div>
+                <div className="space-y-1 col-span-2"><Label>Endereço</Label><Input value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} /></div>
             </div>
             <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1"><Label>Número *</Label><Input value={form.address_number} onChange={e => setForm(f => ({ ...f, address_number: e.target.value }))} /></div>
+              <div className="space-y-1"><Label>Complemento</Label><Input value={form.complement} onChange={e => setForm(f => ({ ...f, complement: e.target.value }))} /></div>
               <div className="space-y-1"><Label>Bairro</Label><Input value={form.neighborhood} onChange={e => setForm(f => ({ ...f, neighborhood: e.target.value }))} /></div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1"><Label>Cidade</Label><Input value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} /></div>
               <div className="space-y-1"><Label>UF</Label><Input value={form.state} onChange={e => setForm(f => ({ ...f, state: e.target.value }))} maxLength={2} /></div>
             </div>
