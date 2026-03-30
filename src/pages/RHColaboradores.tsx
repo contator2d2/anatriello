@@ -958,23 +958,32 @@ export default function RHColaboradores() {
   );
 }
 
+function generateTempPassword() {
+  const nums = String(Math.floor(Math.random() * 900 + 100));
+  const chars = 'abcdefghijklmnopqrstuvwxyz';
+  const letters = chars[Math.floor(Math.random() * 26)] + chars[Math.floor(Math.random() * 26)];
+  return `ayra${nums}${letters}`;
+}
+
 function PromotorAccessToggle({ employeeId }: { employeeId: string }) {
   const { data: access, isLoading } = useAppAccess(employeeId);
   const grantAccess = useGrantAppAccess();
   const blockAccess = useBlockAppAccess();
   const { toast } = useToast();
+  const [generatedPass, setGeneratedPass] = React.useState<string | null>(null);
 
   const isEnabled = access && ['liberado', 'aguardando_login', 'ativo'].includes(access.access_status);
 
   const handleToggle = async (enabled: boolean) => {
     try {
       if (enabled) {
-        // Generate a temp password (CPF-based or random)
-        const tempPass = Math.random().toString(36).slice(-8);
+        const tempPass = generateTempPassword();
         await grantAccess.mutateAsync({ employee_id: employeeId, password: tempPass });
-        toast({ title: "Acesso liberado!", description: `Senha temporária: ${tempPass}` });
+        setGeneratedPass(tempPass);
+        toast({ title: "Acesso liberado!" });
       } else {
         await blockAccess.mutateAsync(employeeId);
+        setGeneratedPass(null);
         toast({ title: "Acesso bloqueado" });
       }
     } catch {
@@ -982,20 +991,38 @@ function PromotorAccessToggle({ employeeId }: { employeeId: string }) {
     }
   };
 
+  const copyPassword = () => {
+    if (generatedPass) {
+      navigator.clipboard.writeText(generatedPass);
+      toast({ title: "Senha copiada!" });
+    }
+  };
+
   return (
-    <div className="col-span-2 flex items-center gap-3 p-3 rounded-lg border bg-muted/30">
-      <Smartphone className="h-5 w-5 text-primary" />
-      <div className="flex-1">
-        <Label className="text-sm font-medium">Acesso ao App do Promotor</Label>
-        <p className="text-xs text-muted-foreground">
-          {isLoading ? "Carregando..." : isEnabled ? `Status: ${access.access_status} • Último login: ${access.last_login ? new Date(access.last_login).toLocaleDateString('pt-BR') : 'Nunca'}` : "Sem acesso ao aplicativo"}
-        </p>
+    <div className="col-span-2 space-y-2">
+      <div className="flex items-center gap-3 p-3 rounded-lg border bg-muted/30">
+        <Smartphone className="h-5 w-5 text-primary" />
+        <div className="flex-1">
+          <Label className="text-sm font-medium">Acesso ao App do Promotor</Label>
+          <p className="text-xs text-muted-foreground">
+            {isLoading ? "Carregando..." : isEnabled ? `Status: ${access.access_status} • Último login: ${access.last_login ? new Date(access.last_login).toLocaleDateString('pt-BR') : 'Nunca'}` : "Sem acesso ao aplicativo"}
+          </p>
+        </div>
+        <Switch
+          checked={!!isEnabled}
+          onCheckedChange={handleToggle}
+          disabled={isLoading || grantAccess.isPending || blockAccess.isPending}
+        />
       </div>
-      <Switch
-        checked={!!isEnabled}
-        onCheckedChange={handleToggle}
-        disabled={isLoading || grantAccess.isPending || blockAccess.isPending}
-      />
+      {generatedPass && (
+        <div className="flex items-center gap-2 p-2 rounded-md border border-primary/30 bg-primary/5">
+          <KeyRound className="h-4 w-4 text-primary" />
+          <span className="text-sm font-mono font-medium flex-1">{generatedPass}</span>
+          <Button type="button" variant="ghost" size="sm" className="h-7 px-2" onClick={copyPassword}>
+            <Copy className="h-3.5 w-3.5 mr-1" /> Copiar
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
