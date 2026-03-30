@@ -60,6 +60,9 @@ import MetaTemplates from "./pages/MetaTemplates";
 import Assinaturas from "./pages/Assinaturas";
 import AssinarDocumento from "./pages/AssinarDocumento";
 import VerificarDocumento from "./pages/VerificarDocumento";
+import RHColaboradores from "./pages/RHColaboradores";
+import RHPonto from "./pages/RHPonto";
+import RHHolerite from "./pages/RHHolerite";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
