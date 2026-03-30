@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { API_URL, getAuthToken } from '@/lib/api';
+import { resolveMediaUrl } from '@/lib/media';
 
 export interface BrandingSettings {
   logo_login: string | null;
