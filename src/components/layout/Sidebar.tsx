@@ -43,6 +43,9 @@ import {
   DollarSign,
   MapPin,
   Radio,
+  ShoppingBag,
+  Tags as TagsIcon,
+  Boxes,
 } from "lucide-react";
 import { API_URL, getAuthToken } from "@/lib/api";
 import ayratechLogo from "@/assets/ayratech_logo.jpg";
