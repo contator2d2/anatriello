@@ -355,3 +355,104 @@ export function useRhAuditLog(entityType?: string, entityId?: string) {
     queryFn: () => api<any[]>(`/api/rh/audit-log${qs ? `?${qs}` : ''}`),
   });
 }
+
+// ===== HOLIDAYS =====
+export function useHolidays(filters?: { year?: string; type?: string }) {
+  const params = new URLSearchParams();
+  if (filters?.year) params.set('year', filters.year);
+  if (filters?.type) params.set('type', filters.type);
+  const qs = params.toString();
+  return useQuery({
+    queryKey: ['rh-holidays', qs],
+    queryFn: () => api<any[]>(`/api/rh/holidays${qs ? `?${qs}` : ''}`),
+  });
+}
+
+export function useCreateHoliday() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: any) => api<any>('/api/rh/holidays', { method: 'POST', body: data }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['rh-holidays'] }),
+  });
+}
+
+export function useBulkImportHolidays() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (holidays: any[]) => api<any>('/api/rh/holidays/bulk', { method: 'POST', body: { holidays } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['rh-holidays'] }),
+  });
+}
+
+export function useDeleteHoliday() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api<any>(`/api/rh/holidays/${id}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['rh-holidays'] }),
+  });
+}
+
+// ===== SERVICE REGIONS =====
+export function useServiceRegions() {
+  return useQuery({
+    queryKey: ['rh-regions'],
+    queryFn: () => api<any[]>('/api/rh/regions'),
+  });
+}
+
+export function useCreateRegion() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: any) => api<any>('/api/rh/regions', { method: 'POST', body: data }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['rh-regions'] }),
+  });
+}
+
+export function useUpdateRegion() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }: any) => api<any>(`/api/rh/regions/${id}`, { method: 'PUT', body: data }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['rh-regions'] }),
+  });
+}
+
+export function useDeleteRegion() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api<any>(`/api/rh/regions/${id}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['rh-regions'] }),
+  });
+}
+
+export function useLinkPDVsToRegion() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ regionId, pdv_ids }: { regionId: string; pdv_ids: string[] }) =>
+      api<any>(`/api/rh/regions/${regionId}/pdvs`, { method: 'POST', body: { pdv_ids } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['rh-regions'] }),
+  });
+}
+
+export function useRegionPDVs(regionId?: string) {
+  return useQuery({
+    queryKey: ['rh-region-pdvs', regionId],
+    queryFn: () => api<any[]>(`/api/rh/regions/${regionId}/pdvs`),
+    enabled: !!regionId,
+  });
+}
+
+// ===== GEOCODING =====
+export function useGeocode() {
+  return useMutation({
+    mutationFn: (data: { address?: string; city?: string; state?: string; zip_code?: string }) =>
+      api<any>('/api/rh/geocode', { method: 'POST', body: data }),
+  });
+}
+
+// ===== MAP DATA =====
+export function useRhMapData() {
+  return useQuery({
+    queryKey: ['rh-map-data'],
+    queryFn: () => api<any>('/api/rh/map-data'),
+  });
+}
