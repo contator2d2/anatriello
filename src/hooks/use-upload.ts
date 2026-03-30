@@ -98,7 +98,7 @@ export function useUpload(customTokenGetter?: () => string | null) {
       }
       xhr.send(formData);
     });
-  }, []);
+  }, [customTokenGetter]);
 
   const resetProgress = useCallback(() => {
     setProgress(0);
