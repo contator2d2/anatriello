@@ -105,9 +105,9 @@ router.get('/brands', async (req, res) => {
     await ensureMerchandisingInfra();
     const orgId = req.user.organization_id;
     const { status, search } = req.query;
-    let sql = 'SELECT * FROM brands WHERE organization_id = $1';
+    let sql = 'SELECT * FROM merch_brands WHERE organization_id = $1';
     const params = [orgId];
-    if (status) { params.push(status); sql += ` AND status = $${params.length}`; }
+    if (status && status !== 'all') { params.push(status); sql += ` AND status = $${params.length}`; }
     if (search) { params.push(`%${search}%`); sql += ` AND (name ILIKE $${params.length} OR razao_social ILIKE $${params.length})`; }
     sql += ' ORDER BY name';
     const r = await query(sql, params);
@@ -121,7 +121,7 @@ router.post('/brands', async (req, res) => {
     const orgId = req.user.organization_id;
     const { name, razao_social, cnpj, logo_url, description, segment, responsible, phone, email, status, notes } = req.body;
     const r = await query(
-      `INSERT INTO brands (organization_id, name, razao_social, cnpj, logo_url, description, segment, responsible, phone, email, status, notes)
+      `INSERT INTO merch_brands (organization_id, name, razao_social, cnpj, logo_url, description, segment, responsible, phone, email, status, notes)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
       [orgId, name, razao_social, cnpj, logo_url, description, segment, responsible, phone, email, status || 'active', notes]
     );
@@ -133,7 +133,7 @@ router.put('/brands/:id', async (req, res) => {
   try {
     const { name, razao_social, cnpj, logo_url, description, segment, responsible, phone, email, status, notes } = req.body;
     const r = await query(
-      `UPDATE brands SET name=$1, razao_social=$2, cnpj=$3, logo_url=$4, description=$5, segment=$6, responsible=$7, phone=$8, email=$9, status=$10, notes=$11, updated_at=NOW() WHERE id=$12 AND organization_id=$13 RETURNING *`,
+      `UPDATE merch_brands SET name=$1, razao_social=$2, cnpj=$3, logo_url=$4, description=$5, segment=$6, responsible=$7, phone=$8, email=$9, status=$10, notes=$11, updated_at=NOW() WHERE id=$12 AND organization_id=$13 RETURNING *`,
       [name, razao_social, cnpj, logo_url, description, segment, responsible, phone, email, status, notes, req.params.id, req.user.organization_id]
     );
     res.json(r.rows[0]);
@@ -142,7 +142,7 @@ router.put('/brands/:id', async (req, res) => {
 
 router.delete('/brands/:id', async (req, res) => {
   try {
-    await query('DELETE FROM brands WHERE id=$1 AND organization_id=$2', [req.params.id, req.user.organization_id]);
+    await query('DELETE FROM merch_brands WHERE id=$1 AND organization_id=$2', [req.params.id, req.user.organization_id]);
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -151,7 +151,7 @@ router.delete('/brands/:id', async (req, res) => {
 router.get('/categories', async (req, res) => {
   try {
     await ensureMerchandisingInfra();
-    const r = await query('SELECT * FROM product_categories WHERE organization_id=$1 ORDER BY name', [req.user.organization_id]);
+    const r = await query('SELECT * FROM merch_categories WHERE organization_id=$1 ORDER BY name', [req.user.organization_id]);
     res.json(r.rows);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -161,7 +161,7 @@ router.post('/categories', async (req, res) => {
     await ensureMerchandisingInfra();
     const { name, description, status } = req.body;
     const r = await query(
-      'INSERT INTO product_categories (organization_id, name, description, status) VALUES ($1,$2,$3,$4) RETURNING *',
+      'INSERT INTO merch_categories (organization_id, name, description, status) VALUES ($1,$2,$3,$4) RETURNING *',
       [req.user.organization_id, name, description, status || 'active']
     );
     res.json(r.rows[0]);
@@ -172,7 +172,7 @@ router.put('/categories/:id', async (req, res) => {
   try {
     const { name, description, status } = req.body;
     const r = await query(
-      'UPDATE product_categories SET name=$1, description=$2, status=$3 WHERE id=$4 AND organization_id=$5 RETURNING *',
+      'UPDATE merch_categories SET name=$1, description=$2, status=$3 WHERE id=$4 AND organization_id=$5 RETURNING *',
       [name, description, status, req.params.id, req.user.organization_id]
     );
     res.json(r.rows[0]);
@@ -181,7 +181,7 @@ router.put('/categories/:id', async (req, res) => {
 
 router.delete('/categories/:id', async (req, res) => {
   try {
-    await query('DELETE FROM product_categories WHERE id=$1 AND organization_id=$2', [req.params.id, req.user.organization_id]);
+    await query('DELETE FROM merch_categories WHERE id=$1 AND organization_id=$2', [req.params.id, req.user.organization_id]);
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -191,7 +191,7 @@ router.get('/subcategories', async (req, res) => {
   try {
     await ensureMerchandisingInfra();
     const { category_id } = req.query;
-    let sql = 'SELECT s.*, c.name as category_name FROM product_subcategories s JOIN product_categories c ON c.id = s.category_id WHERE s.organization_id=$1';
+    let sql = 'SELECT s.*, c.name as category_name FROM merch_subcategories s JOIN merch_categories c ON c.id = s.category_id WHERE s.organization_id=$1';
     const params = [req.user.organization_id];
     if (category_id) { params.push(category_id); sql += ` AND s.category_id=$${params.length}`; }
     sql += ' ORDER BY c.name, s.name';
@@ -205,7 +205,7 @@ router.post('/subcategories', async (req, res) => {
     await ensureMerchandisingInfra();
     const { name, category_id, description, status } = req.body;
     const r = await query(
-      'INSERT INTO product_subcategories (organization_id, category_id, name, description, status) VALUES ($1,$2,$3,$4,$5) RETURNING *',
+      'INSERT INTO merch_subcategories (organization_id, category_id, name, description, status) VALUES ($1,$2,$3,$4,$5) RETURNING *',
       [req.user.organization_id, category_id, name, description, status || 'active']
     );
     res.json(r.rows[0]);
@@ -216,7 +216,7 @@ router.put('/subcategories/:id', async (req, res) => {
   try {
     const { name, category_id, description, status } = req.body;
     const r = await query(
-      'UPDATE product_subcategories SET name=$1, category_id=$2, description=$3, status=$4 WHERE id=$5 AND organization_id=$6 RETURNING *',
+      'UPDATE merch_subcategories SET name=$1, category_id=$2, description=$3, status=$4 WHERE id=$5 AND organization_id=$6 RETURNING *',
       [name, category_id, description, status, req.params.id, req.user.organization_id]
     );
     res.json(r.rows[0]);
@@ -225,7 +225,7 @@ router.put('/subcategories/:id', async (req, res) => {
 
 router.delete('/subcategories/:id', async (req, res) => {
   try {
-    await query('DELETE FROM product_subcategories WHERE id=$1 AND organization_id=$2', [req.params.id, req.user.organization_id]);
+    await query('DELETE FROM merch_subcategories WHERE id=$1 AND organization_id=$2', [req.params.id, req.user.organization_id]);
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -237,10 +237,10 @@ router.get('/products', async (req, res) => {
     const orgId = req.user.organization_id;
     const { brand_id, category_id, subcategory_id, status, search } = req.query;
     let sql = `SELECT p.*, b.name as brand_name, c.name as category_name, sc.name as subcategory_name
-               FROM products p
-               JOIN brands b ON b.id = p.brand_id
-               JOIN product_categories c ON c.id = p.category_id
-               JOIN product_subcategories sc ON sc.id = p.subcategory_id
+               FROM merch_products p
+               JOIN merch_brands b ON b.id = p.brand_id
+               JOIN merch_categories c ON c.id = p.category_id
+               JOIN merch_subcategories sc ON sc.id = p.subcategory_id
                WHERE p.organization_id = $1`;
     const params = [orgId];
     if (brand_id) { params.push(brand_id); sql += ` AND p.brand_id=$${params.length}`; }
@@ -260,7 +260,7 @@ router.post('/products', async (req, res) => {
     const orgId = req.user.organization_id;
     const { name, brand_id, category_id, subcategory_id, sku, internal_code, barcode, description, image_url, unit, status } = req.body;
     const r = await query(
-      `INSERT INTO products (organization_id, brand_id, category_id, subcategory_id, name, sku, internal_code, barcode, description, image_url, unit, status)
+      `INSERT INTO merch_products (organization_id, brand_id, category_id, subcategory_id, name, sku, internal_code, barcode, description, image_url, unit, status)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
       [orgId, brand_id, category_id, subcategory_id, name, sku, internal_code, barcode, description, image_url, unit || 'un', status || 'active']
     );
@@ -272,7 +272,7 @@ router.put('/products/:id', async (req, res) => {
   try {
     const { name, brand_id, category_id, subcategory_id, sku, internal_code, barcode, description, image_url, unit, status } = req.body;
     const r = await query(
-      `UPDATE products SET name=$1, brand_id=$2, category_id=$3, subcategory_id=$4, sku=$5, internal_code=$6, barcode=$7, description=$8, image_url=$9, unit=$10, status=$11, updated_at=NOW()
+      `UPDATE merch_products SET name=$1, brand_id=$2, category_id=$3, subcategory_id=$4, sku=$5, internal_code=$6, barcode=$7, description=$8, image_url=$9, unit=$10, status=$11, updated_at=NOW()
        WHERE id=$12 AND organization_id=$13 RETURNING *`,
       [name, brand_id, category_id, subcategory_id, sku, internal_code, barcode, description, image_url, unit, status, req.params.id, req.user.organization_id]
     );
@@ -282,7 +282,7 @@ router.put('/products/:id', async (req, res) => {
 
 router.delete('/products/:id', async (req, res) => {
   try {
-    await query('DELETE FROM products WHERE id=$1 AND organization_id=$2', [req.params.id, req.user.organization_id]);
+    await query('DELETE FROM merch_products WHERE id=$1 AND organization_id=$2', [req.params.id, req.user.organization_id]);
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -292,38 +292,34 @@ router.post('/products/import', async (req, res) => {
   try {
     await ensureMerchandisingInfra();
     const orgId = req.user.organization_id;
-    const { items, auto_create } = req.body; // items: [{name, brand_name, category_name, subcategory_name, sku, barcode, image_url}]
+    const { items, auto_create } = req.body;
     const results = { success: 0, errors: [] };
 
     for (const item of items) {
       try {
-        // Find or create brand
-        let brandRow = (await query('SELECT id FROM brands WHERE organization_id=$1 AND name ILIKE $2', [orgId, item.brand_name])).rows[0];
+        let brandRow = (await query('SELECT id FROM merch_brands WHERE organization_id=$1 AND name ILIKE $2', [orgId, item.brand_name])).rows[0];
         if (!brandRow && auto_create) {
-          brandRow = (await query('INSERT INTO brands (organization_id, name) VALUES ($1,$2) RETURNING id', [orgId, item.brand_name])).rows[0];
+          brandRow = (await query('INSERT INTO merch_brands (organization_id, name) VALUES ($1,$2) RETURNING id', [orgId, item.brand_name])).rows[0];
         }
         if (!brandRow) { results.errors.push({ row: item.name, error: `Marca "${item.brand_name}" não encontrada` }); continue; }
 
-        // Find or create category
-        let catRow = (await query('SELECT id FROM product_categories WHERE organization_id=$1 AND name ILIKE $2', [orgId, item.category_name])).rows[0];
+        let catRow = (await query('SELECT id FROM merch_categories WHERE organization_id=$1 AND name ILIKE $2', [orgId, item.category_name])).rows[0];
         if (!catRow && auto_create) {
-          catRow = (await query('INSERT INTO product_categories (organization_id, name) VALUES ($1,$2) RETURNING id', [orgId, item.category_name])).rows[0];
+          catRow = (await query('INSERT INTO merch_categories (organization_id, name) VALUES ($1,$2) RETURNING id', [orgId, item.category_name])).rows[0];
         }
         if (!catRow) { results.errors.push({ row: item.name, error: `Categoria "${item.category_name}" não encontrada` }); continue; }
 
-        // Find or create subcategory
-        let subRow = (await query('SELECT id FROM product_subcategories WHERE organization_id=$1 AND category_id=$2 AND name ILIKE $3', [orgId, catRow.id, item.subcategory_name])).rows[0];
+        let subRow = (await query('SELECT id FROM merch_subcategories WHERE organization_id=$1 AND category_id=$2 AND name ILIKE $3', [orgId, catRow.id, item.subcategory_name])).rows[0];
         if (!subRow && auto_create) {
-          subRow = (await query('INSERT INTO product_subcategories (organization_id, category_id, name) VALUES ($1,$2,$3) RETURNING id', [orgId, catRow.id, item.subcategory_name])).rows[0];
+          subRow = (await query('INSERT INTO merch_subcategories (organization_id, category_id, name) VALUES ($1,$2,$3) RETURNING id', [orgId, catRow.id, item.subcategory_name])).rows[0];
         }
         if (!subRow) { results.errors.push({ row: item.name, error: `Subcategoria "${item.subcategory_name}" não encontrada` }); continue; }
 
-        // Check duplicate
-        const dup = (await query('SELECT id FROM products WHERE organization_id=$1 AND brand_id=$2 AND name ILIKE $3', [orgId, brandRow.id, item.name])).rows[0];
+        const dup = (await query('SELECT id FROM merch_products WHERE organization_id=$1 AND brand_id=$2 AND name ILIKE $3', [orgId, brandRow.id, item.name])).rows[0];
         if (dup) { results.errors.push({ row: item.name, error: 'Produto duplicado' }); continue; }
 
         await query(
-          `INSERT INTO products (organization_id, brand_id, category_id, subcategory_id, name, sku, barcode, image_url) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+          `INSERT INTO merch_products (organization_id, brand_id, category_id, subcategory_id, name, sku, barcode, image_url) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
           [orgId, brandRow.id, catRow.id, subRow.id, item.name, item.sku || null, item.barcode || null, item.image_url || null]
         );
         results.success++;
@@ -341,7 +337,7 @@ router.get('/pdv-brands/:pdvId', async (req, res) => {
     await ensureMerchandisingInfra();
     const r = await query(
       `SELECT pb.*, b.name as brand_name, b.logo_url, b.segment
-       FROM pdv_brands pb JOIN brands b ON b.id = pb.brand_id
+       FROM merch_pdv_brands pb JOIN merch_brands b ON b.id = pb.brand_id
        WHERE pb.pdv_id=$1 AND pb.organization_id=$2 ORDER BY b.name`,
       [req.params.pdvId, req.user.organization_id]
     );
@@ -354,7 +350,7 @@ router.post('/pdv-brands', async (req, res) => {
     await ensureMerchandisingInfra();
     const { pdv_id, brand_id } = req.body;
     const r = await query(
-      `INSERT INTO pdv_brands (organization_id, pdv_id, brand_id) VALUES ($1,$2,$3) ON CONFLICT (pdv_id, brand_id) DO UPDATE SET active=true RETURNING *`,
+      `INSERT INTO merch_pdv_brands (organization_id, pdv_id, brand_id) VALUES ($1,$2,$3) ON CONFLICT (pdv_id, brand_id) DO UPDATE SET active=true RETURNING *`,
       [req.user.organization_id, pdv_id, brand_id]
     );
     res.json(r.rows[0]);
@@ -363,7 +359,7 @@ router.post('/pdv-brands', async (req, res) => {
 
 router.delete('/pdv-brands/:id', async (req, res) => {
   try {
-    await query('DELETE FROM pdv_brands WHERE id=$1 AND organization_id=$2', [req.params.id, req.user.organization_id]);
+    await query('DELETE FROM merch_pdv_brands WHERE id=$1 AND organization_id=$2', [req.params.id, req.user.organization_id]);
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -375,10 +371,10 @@ router.get('/mix/:pdvId/:brandId', async (req, res) => {
     const r = await query(
       `SELECT pbp.*, p.name as product_name, p.sku, p.barcode, p.image_url, p.unit,
               c.name as category_name, sc.name as subcategory_name
-       FROM pdv_brand_products pbp
-       JOIN products p ON p.id = pbp.product_id
-       JOIN product_categories c ON c.id = p.category_id
-       JOIN product_subcategories sc ON sc.id = p.subcategory_id
+       FROM merch_pdv_brand_products pbp
+       JOIN merch_products p ON p.id = pbp.product_id
+       JOIN merch_categories c ON c.id = p.category_id
+       JOIN merch_subcategories sc ON sc.id = p.subcategory_id
        WHERE pbp.pdv_id=$1 AND pbp.brand_id=$2 AND pbp.organization_id=$3
        ORDER BY p.name`,
       [req.params.pdvId, req.params.brandId, req.user.organization_id]
@@ -395,7 +391,7 @@ router.post('/mix', async (req, res) => {
     const inserted = [];
     for (const pid of product_ids) {
       const r = await query(
-        `INSERT INTO pdv_brand_products (organization_id, pdv_id, brand_id, product_id, mandatory, priority)
+        `INSERT INTO merch_pdv_brand_products (organization_id, pdv_id, brand_id, product_id, mandatory, priority)
          VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (pdv_id, brand_id, product_id) DO UPDATE SET active=true, updated_at=NOW() RETURNING *`,
         [orgId, pdv_id, brand_id, pid, mandatory || false, priority || 'media']
       );
@@ -409,7 +405,7 @@ router.put('/mix/:id', async (req, res) => {
   try {
     const { active, mandatory, priority, notes } = req.body;
     const r = await query(
-      `UPDATE pdv_brand_products SET active=$1, mandatory=$2, priority=$3, notes=$4, updated_at=NOW() WHERE id=$5 AND organization_id=$6 RETURNING *`,
+      `UPDATE merch_pdv_brand_products SET active=$1, mandatory=$2, priority=$3, notes=$4, updated_at=NOW() WHERE id=$5 AND organization_id=$6 RETURNING *`,
       [active, mandatory, priority, notes, req.params.id, req.user.organization_id]
     );
     res.json(r.rows[0]);
@@ -420,7 +416,7 @@ router.delete('/mix', async (req, res) => {
   try {
     const { pdv_id, brand_id, product_ids } = req.body;
     for (const pid of product_ids) {
-      await query('DELETE FROM pdv_brand_products WHERE pdv_id=$1 AND brand_id=$2 AND product_id=$3 AND organization_id=$4',
+      await query('DELETE FROM merch_pdv_brand_products WHERE pdv_id=$1 AND brand_id=$2 AND product_id=$3 AND organization_id=$4',
         [pdv_id, brand_id, pid, req.user.organization_id]);
     }
     res.json({ ok: true });
@@ -428,34 +424,31 @@ router.delete('/mix', async (req, res) => {
 });
 
 // ==================== REPORTS ====================
-// Brand report: PDVs where brand is present
 router.get('/reports/brand/:brandId', async (req, res) => {
   try {
     await ensureMerchandisingInfra();
     const orgId = req.user.organization_id;
     const r = await query(
-      `SELECT p.id as pdv_id, p.name as pdv_name, p.network, p.city,
+      `SELECT pb.pdv_id, pb.pdv_id as pdv_name,
               COUNT(pbp.id) as product_count
-       FROM pdv_brands pb
-       JOIN pdvs p ON p.id = pb.pdv_id
-       LEFT JOIN pdv_brand_products pbp ON pbp.pdv_id = pb.pdv_id AND pbp.brand_id = pb.brand_id AND pbp.active=true
+       FROM merch_pdv_brands pb
+       LEFT JOIN merch_pdv_brand_products pbp ON pbp.pdv_id = pb.pdv_id AND pbp.brand_id = pb.brand_id AND pbp.active=true
        WHERE pb.brand_id=$1 AND pb.organization_id=$2 AND pb.active=true
-       GROUP BY p.id, p.name, p.network, p.city ORDER BY p.name`,
+       GROUP BY pb.pdv_id ORDER BY pb.pdv_id`,
       [req.params.brandId, orgId]
     );
     res.json(r.rows);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// PDV report: brands and products in PDV
 router.get('/reports/pdv/:pdvId', async (req, res) => {
   try {
     await ensureMerchandisingInfra();
     const orgId = req.user.organization_id;
     const brands = await query(
       `SELECT b.id, b.name, b.logo_url, COUNT(pbp.id) as product_count
-       FROM pdv_brands pb JOIN brands b ON b.id = pb.brand_id
-       LEFT JOIN pdv_brand_products pbp ON pbp.pdv_id=pb.pdv_id AND pbp.brand_id=pb.brand_id AND pbp.active=true
+       FROM merch_pdv_brands pb JOIN merch_brands b ON b.id = pb.brand_id
+       LEFT JOIN merch_pdv_brand_products pbp ON pbp.pdv_id=pb.pdv_id AND pbp.brand_id=pb.brand_id AND pbp.active=true
        WHERE pb.pdv_id=$1 AND pb.organization_id=$2 AND pb.active=true
        GROUP BY b.id, b.name, b.logo_url ORDER BY b.name`,
       [req.params.pdvId, orgId]
