@@ -107,6 +107,15 @@ const getNavSections = (hasConnections: boolean): NavSection[] => [
     ],
   },
   {
+    title: "RH",
+    icon: Users,
+    items: [
+      { name: "Colaboradores", href: "/rh/colaboradores", icon: UserPlus, pageKey: 'rh_colaboradores' },
+      { name: "Ponto", href: "/rh/ponto", icon: Clock, pageKey: 'rh_ponto' },
+      { name: "Holerite", href: "/rh/holerite", icon: DollarSign, pageKey: 'rh_holerite' },
+    ],
+  },
+  {
     title: "Disparos",
     icon: Send,
     moduleKey: 'campaigns',
