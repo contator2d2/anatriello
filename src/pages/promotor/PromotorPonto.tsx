@@ -18,18 +18,25 @@ const PUNCH_LABELS: Record<string, string> = {
   entrada: '🟢 Entrada', saida_intervalo: '🟡 Saída Intervalo', retorno_intervalo: '🔵 Retorno', saida: '🔴 Saída', extraordinaria: '⚪ Extra', ajuste: '🔧 Ajuste'
 };
 
+function safeFormatDate(value: any, fmt: string, fallback = '—'): string {
+  if (!value) return fallback;
+  const d = new Date(String(value).replace(' ', 'T'));
+  return d && !Number.isNaN(d.getTime()) ? format(d, fmt) : fallback;
+}
+
 export default function PromotorPonto() {
   const startDate = subDays(new Date(), 30).toISOString().slice(0, 10);
   const { data: punches, isLoading } = usePromotorPunches({ start_date: startDate });
 
   // Group by date
   const grouped = (punches || []).reduce((acc: Record<string, any[]>, p: any) => {
-    const date = format(new Date(p.punched_at), 'yyyy-MM-dd');
-    if (!acc[date]) acc[date] = [];
-    acc[date].push(p);
+    const ts = p.punched_at || p.offline_local_time || p.created_at;
+    const dateStr = safeFormatDate(ts, 'yyyy-MM-dd', '');
+    if (!dateStr) return acc;
+    if (!acc[dateStr]) acc[dateStr] = [];
+    acc[dateStr].push(p);
     return acc;
   }, {});
-
   const dates = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
 
   return (
