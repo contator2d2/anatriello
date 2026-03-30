@@ -9,7 +9,9 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { usePromotorSettings, usePromotorUpdateSettings, usePromotorChangePassword } from "@/hooks/use-promotor";
 import { PromotorLayout } from "./PromotorLayout";
-import { Settings, Lock, Palette, Wifi, WifiOff, Navigation, Smartphone, Loader2 } from "lucide-react";
+import { SyncDiagnosticPanel } from "@/components/promotor/SyncDiagnosticPanel";
+import { Settings, Lock, Palette, Wifi, WifiOff, Navigation, Smartphone, Loader2, Download } from "lucide-react";
+import { canInstallPWA, installPWA, isPWAInstalled } from "@/lib/pwa";
 
 export default function PromotorConfig() {
   const { data: settings } = usePromotorSettings();
@@ -24,6 +26,8 @@ export default function PromotorConfig() {
   const [newPwd, setNewPwd] = useState('');
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [gpsStatus, setGpsStatus] = useState('checking');
+  const [pwaInstalled, setPwaInstalled] = useState(isPWAInstalled());
+  const [canInstall, setCanInstall] = useState(canInstallPWA());
 
   const employee = JSON.parse(localStorage.getItem('promotor_employee') || '{}');
 
@@ -49,7 +53,13 @@ export default function PromotorConfig() {
       setGpsStatus('unavailable');
     }
 
-    return () => { window.removeEventListener('online', onOn); window.removeEventListener('offline', onOff); };
+    // Re-check PWA install status periodically
+    const pwaInterval = setInterval(() => {
+      setCanInstall(canInstallPWA());
+      setPwaInstalled(isPWAInstalled());
+    }, 2000);
+
+    return () => { window.removeEventListener('online', onOn); window.removeEventListener('offline', onOff); clearInterval(pwaInterval); };
   }, []);
 
   const handleSaveSettings = async () => {
@@ -75,10 +85,36 @@ export default function PromotorConfig() {
     }
   };
 
+  const handleInstallPWA = async () => {
+    const accepted = await installPWA();
+    if (accepted) {
+      toast({ title: 'App instalado com sucesso!' });
+      setPwaInstalled(true);
+    }
+  };
+
   return (
     <PromotorLayout>
       <div className="p-4 max-w-lg mx-auto space-y-4">
         <h1 className="text-lg font-bold flex items-center gap-2"><Settings className="h-5 w-5" /> Configurações</h1>
+
+        {/* PWA Install */}
+        {!pwaInstalled && (
+          <Card className="border-primary/30 bg-primary/5">
+            <CardContent className="p-3 flex items-center gap-3">
+              <Download className="h-6 w-6 text-primary flex-shrink-0" />
+              <div className="flex-1">
+                <p className="text-sm font-medium">Instalar Aplicativo</p>
+                <p className="text-[10px] text-muted-foreground">Adicione à tela inicial para acesso rápido e offline</p>
+              </div>
+              {canInstall ? (
+                <Button size="sm" onClick={handleInstallPWA}>Instalar</Button>
+              ) : (
+                <p className="text-[10px] text-muted-foreground text-right max-w-[120px]">Use o menu do navegador → "Adicionar à tela inicial"</p>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Profile Info */}
         <Card>
@@ -90,6 +126,9 @@ export default function PromotorConfig() {
             <p><strong>Perfil:</strong> {employee.profile}</p>
           </CardContent>
         </Card>
+
+        {/* Sync Diagnostic */}
+        <SyncDiagnosticPanel />
 
         {/* Theme */}
         <Card>
@@ -147,7 +186,11 @@ export default function PromotorConfig() {
                 {gpsStatus === 'active' ? 'Ativo' : gpsStatus === 'denied' ? 'Permissão negada' : 'Desligado'}
               </span>
             </div>
-            <p className="text-xs text-muted-foreground">Versão do App: 2.0.0</p>
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-2"><Download className="h-4 w-4" /> PWA</span>
+              <span className={pwaInstalled ? 'text-green-600' : 'text-muted-foreground'}>{pwaInstalled ? 'Instalado' : 'Navegador'}</span>
+            </div>
+            <p className="text-xs text-muted-foreground">Versão do App: 2.1.0</p>
           </CardContent>
         </Card>
       </div>

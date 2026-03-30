@@ -203,6 +203,28 @@ export function useCreateCostCenter() {
   });
 }
 
+// ===== APP PUNCHES (from promotor app) =====
+export function useAppPunches(filters?: { employee_id?: string; start_date?: string; end_date?: string }) {
+  const params = new URLSearchParams();
+  if (filters?.employee_id) params.set('employee_id', filters.employee_id);
+  if (filters?.start_date) params.set('start_date', filters.start_date);
+  if (filters?.end_date) params.set('end_date', filters.end_date);
+  const qs = params.toString();
+  return useQuery({
+    queryKey: ['rh-app-punches', qs],
+    queryFn: () => api<any[]>(`/api/rh/app-punches${qs ? `?${qs}` : ''}`),
+  });
+}
+
+// ===== SYNC DIAGNOSTICS =====
+export function useSyncDiagnostics() {
+  return useQuery({
+    queryKey: ['rh-sync-diagnostics'],
+    queryFn: () => api<any>('/api/rh/sync-diagnostics'),
+    refetchInterval: 15000,
+  });
+}
+
 // ===== AUDIT =====
 
 // ===== DASHBOARD =====

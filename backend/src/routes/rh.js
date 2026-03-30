@@ -251,6 +251,74 @@ router.delete('/employees/:id', async (req, res) => {
 
 // ===== TIME RECORDS (PONTO) =====
 
+// App punches (time_punches from promotor app)
+router.get('/app-punches', async (req, res) => {
+  try {
+    const orgId = req.query.org_id || await getUserOrgId(req.userId);
+    if (!orgId) return res.json([]);
+    const { employee_id, start_date, end_date } = req.query;
+    let sql = `SELECT tp.*, e.full_name as employee_name, p.name as pdv_name
+               FROM time_punches tp
+               JOIN employees e ON e.id = tp.employee_id
+               LEFT JOIN pdvs p ON p.id = tp.pdv_id
+               WHERE tp.organization_id = $1`;
+    const params = [orgId];
+    let idx = 2;
+    if (employee_id) { sql += ` AND tp.employee_id = $${idx++}`; params.push(employee_id); }
+    if (start_date) { sql += ` AND tp.punched_at::date >= $${idx++}`; params.push(start_date); }
+    if (end_date) { sql += ` AND tp.punched_at::date <= $${idx++}`; params.push(end_date); }
+    sql += ` ORDER BY tp.punched_at DESC LIMIT 500`;
+    const result = await query(sql, params);
+    res.json(result.rows);
+  } catch (err) {
+    logError('rh.app_punches.list', err);
+    res.status(500).json({ error: 'Erro ao listar registros do app' });
+  }
+});
+
+// Sync diagnostics
+router.get('/sync-diagnostics', async (req, res) => {
+  try {
+    const orgId = req.query.org_id || await getUserOrgId(req.userId);
+    if (!orgId) return res.json({ total: 0, synced: 0, pending: 0, employees: [] });
+
+    const [stats, byEmployee, recent] = await Promise.all([
+      query(`SELECT 
+        COUNT(*) as total,
+        COUNT(*) FILTER (WHERE sync_status = 'synced') as synced,
+        COUNT(*) FILTER (WHERE sync_status = 'pending') as pending,
+        COUNT(*) FILTER (WHERE is_offline = true) as offline_originated,
+        MAX(punched_at) as last_punch_at
+       FROM time_punches WHERE organization_id = $1`, [orgId]),
+      query(`SELECT e.id, e.full_name, e.photo_url,
+        COUNT(tp.id) as total_punches,
+        COUNT(tp.id) FILTER (WHERE tp.sync_status = 'synced') as synced,
+        COUNT(tp.id) FILTER (WHERE tp.sync_status = 'pending') as pending,
+        COUNT(tp.id) FILTER (WHERE tp.is_offline = true) as offline,
+        MAX(tp.punched_at) as last_punch,
+        MAX(CASE WHEN tp.sync_status = 'synced' THEN tp.punched_at END) as last_synced_at
+       FROM employees e
+       LEFT JOIN time_punches tp ON tp.employee_id = e.id
+       WHERE e.organization_id = $1 AND e.status = 'ativo'
+       GROUP BY e.id, e.full_name, e.photo_url
+       HAVING COUNT(tp.id) > 0
+       ORDER BY MAX(tp.punched_at) DESC NULLS LAST`, [orgId]),
+      query(`SELECT tp.id, tp.employee_id, e.full_name, tp.punch_type, tp.punched_at, tp.sync_status, tp.is_offline, tp.geo_status, p.name as pdv_name
+       FROM time_punches tp JOIN employees e ON e.id = tp.employee_id LEFT JOIN pdvs p ON p.id = tp.pdv_id
+       WHERE tp.organization_id = $1 ORDER BY tp.punched_at DESC LIMIT 20`, [orgId]),
+    ]);
+
+    res.json({
+      ...stats.rows[0],
+      employees: byEmployee.rows,
+      recent_punches: recent.rows,
+    });
+  } catch (err) {
+    logError('rh.sync_diagnostics', err);
+    res.status(500).json({ error: 'Erro' });
+  }
+});
+
 router.get('/time-records', async (req, res) => {
   try {
     const orgId = req.query.org_id || await getUserOrgId(req.userId);
