@@ -42,9 +42,9 @@ export default function PromotorEnviar() {
     if (!category) { toast({ title: 'Selecione a categoria', variant: 'destructive' }); return; }
     setSending(true);
     try {
-      await sendDoc.mutateAsync({ category, title: title || CATEGORIES.find(c => c.value === category)?.label, observation });
+      await sendDoc.mutateAsync({ category, title: title || CATEGORIES.find(c => c.value === category)?.label, observation, file_url: fileUrl });
       toast({ title: 'Documento enviado ao RH!' });
-      setCategory(''); setTitle(''); setObservation('');
+      setCategory(''); setTitle(''); setObservation(''); setFileUrl('');
     } catch (err: any) {
       toast({ title: 'Erro', description: err.message, variant: 'destructive' });
     } finally {
