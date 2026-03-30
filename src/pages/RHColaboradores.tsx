@@ -423,10 +423,10 @@ export default function RHColaboradores() {
                 <div><Label>Jornada</Label><Input value={form.work_schedule} onChange={e => setField("work_schedule", e.target.value)} placeholder="08:00-17:00" /></div>
                 <div><Label>Data de Admissão</Label><Input type="date" value={form.admission_date} onChange={e => setField("admission_date", e.target.value)} /></div>
                 <div><Label>Supervisor / Responsável</Label>
-                  <Select value={form.direct_manager_id || ""} onValueChange={v => setField("direct_manager_id", v)}>
+                  <Select value={form.direct_manager_id || "__none__"} onValueChange={v => setField("direct_manager_id", v === "__none__" ? "" : v)}>
                     <SelectTrigger><SelectValue placeholder="Selecionar supervisor" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Nenhum</SelectItem>
+                      <SelectItem value="__none__">Nenhum</SelectItem>
                       {employees.filter((e: any) => e.id !== editId && (e.worker_profile === 'supervisor' || e.worker_profile === 'administrativo')).map((e: any) => (
                         <SelectItem key={e.id} value={e.id}>{e.full_name} ({e.position || e.worker_profile})</SelectItem>
                       ))}
