@@ -135,6 +135,23 @@ router.get('/home', authenticatePromotor, async (req, res) => {
       pdvs = pdvRes.rows;
     }
 
+    // Check schedule status
+    const ws = employee.rows[0]?.work_schedule || '08:00-17:00';
+    const wsParts = String(ws).split('-');
+    const now = new Date();
+    const currentMin = now.getHours() * 60 + now.getMinutes();
+    const startMin = wsParts[0] ? wsParts[0].split(':').reduce((h, m) => parseInt(h) * 60 + parseInt(m), 0) : 480;
+    const endMin = wsParts[1] ? wsParts[1].split(':').reduce((h, m) => parseInt(h) * 60 + parseInt(m), 0) : 1020;
+    const isWithinSchedule = currentMin >= (startMin - 30) && currentMin <= (endMin + 15);
+
+    // Check overtime approval for today
+    const otRes = await query(
+      `SELECT id, status, requested_start, requested_end FROM overtime_requests WHERE employee_id = $1 AND request_date = $2 ORDER BY created_at DESC LIMIT 1`,
+      [empId, today]
+    );
+    const overtimeRequest = otRes.rows[0] || null;
+    const hasOvertimeApproval = overtimeRequest?.status === 'aprovado';
+
     res.json({
       employee: employee.rows[0],
       today_punches: punches.rows,
@@ -143,6 +160,14 @@ router.get('/home', authenticatePromotor, async (req, res) => {
       daily_assignment: assignment.rows[0] || null,
       available_pdvs: pdvs,
       settings: settings.rows[0] || { theme: 'auto' },
+      schedule_status: {
+        work_schedule: ws,
+        schedule_start: wsParts[0] || '08:00',
+        schedule_end: wsParts[1] || '17:00',
+        is_within_schedule: isWithinSchedule,
+        has_overtime_approval: hasOvertimeApproval,
+        overtime_request: overtimeRequest,
+      },
     });
   } catch (err) {
     logError('promotor.home', err);
