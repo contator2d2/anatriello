@@ -3600,7 +3600,7 @@ CREATE TABLE IF NOT EXISTS employees (
   termination_date DATE,
   termination_reason TEXT,
   salary NUMERIC(12,2),
-  work_schedule VARCHAR(100) DEFAULT '08:00-17:00',
+  work_schedule TEXT DEFAULT '08:00-17:00',
   bank_name VARCHAR(100),
   bank_agency VARCHAR(20),
   bank_account VARCHAR(30),
@@ -3623,6 +3623,11 @@ CREATE TABLE IF NOT EXISTS employees (
 CREATE INDEX IF NOT EXISTS idx_employees_org ON employees(organization_id);
 CREATE INDEX IF NOT EXISTS idx_employees_status ON employees(status);
 CREATE INDEX IF NOT EXISTS idx_employees_cpf ON employees(cpf);
+
+DO $$ BEGIN
+  ALTER TABLE employees ALTER COLUMN work_schedule TYPE TEXT;
+EXCEPTION WHEN others THEN null;
+END $$;
 
 -- Dependentes
 CREATE TABLE IF NOT EXISTS employee_dependents (

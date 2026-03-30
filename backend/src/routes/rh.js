@@ -8,6 +8,66 @@ import { logInfo, logError } from '../logger.js';
 const router = express.Router();
 router.use(authenticate);
 
+function emptyToNull(value) {
+  if (value === undefined || value === null) return null;
+  if (typeof value === 'string' && value.trim() === '') return null;
+  return value;
+}
+
+function normalizeEmployeePayload(body = {}) {
+  const workSchedule = body.work_schedule
+    ? (typeof body.work_schedule === 'object' ? JSON.stringify(body.work_schedule) : String(body.work_schedule))
+    : '08:00-17:00';
+
+  return {
+    ...body,
+    full_name: typeof body.full_name === 'string' ? body.full_name.trim() : body.full_name,
+    social_name: emptyToNull(body.social_name),
+    cpf: emptyToNull(body.cpf),
+    rg: emptyToNull(body.rg),
+    rg_issuer: emptyToNull(body.rg_issuer),
+    birth_date: emptyToNull(body.birth_date),
+    gender: emptyToNull(body.gender),
+    marital_status: emptyToNull(body.marital_status),
+    email: emptyToNull(body.email),
+    phone: emptyToNull(body.phone),
+    phone2: emptyToNull(body.phone2),
+    address: emptyToNull(body.address),
+    address_number: emptyToNull(body.address_number),
+    complement: emptyToNull(body.complement),
+    neighborhood: emptyToNull(body.neighborhood),
+    city: emptyToNull(body.city),
+    state: emptyToNull(body.state),
+    zip_code: emptyToNull(body.zip_code),
+    registration_number: emptyToNull(body.registration_number),
+    worker_profile: emptyToNull(body.worker_profile) || 'operacional',
+    employment_type: emptyToNull(body.employment_type) || 'clt',
+    position: emptyToNull(body.position),
+    role_level: emptyToNull(body.role_level),
+    branch_id: emptyToNull(body.branch_id),
+    department_id: emptyToNull(body.department_id),
+    cost_center_id: emptyToNull(body.cost_center_id),
+    direct_manager_id: emptyToNull(body.direct_manager_id),
+    admission_date: emptyToNull(body.admission_date),
+    contract_end_date: emptyToNull(body.contract_end_date),
+    salary: emptyToNull(body.salary) ?? 0,
+    work_schedule: workSchedule,
+    bank_name: emptyToNull(body.bank_name),
+    bank_agency: emptyToNull(body.bank_agency),
+    bank_account: emptyToNull(body.bank_account),
+    bank_account_type: emptyToNull(body.bank_account_type),
+    ctps_number: emptyToNull(body.ctps_number),
+    ctps_series: emptyToNull(body.ctps_series),
+    pis_pasep: emptyToNull(body.pis_pasep),
+    cnpj: emptyToNull(body.cnpj),
+    company_name: emptyToNull(body.company_name),
+    status: emptyToNull(body.status) || 'ativo',
+    photo_url: emptyToNull(body.photo_url),
+    salary_items: Array.isArray(body.salary_items) ? body.salary_items : [],
+    benefits: Array.isArray(body.benefits) ? body.benefits : [],
+  };
+}
+
 // Helper: get user org_id
 async function getUserOrgId(userId) {
   const r = await query(
@@ -81,7 +141,11 @@ router.get('/employees/:id', async (req, res) => {
 router.post('/employees', async (req, res) => {
   try {
     const orgId = req.body.organization_id || await getUserOrgId(req.userId);
-    const d = req.body;
+    if (!orgId) return res.status(400).json({ error: 'Organização não encontrada para o usuário' });
+
+    const d = normalizeEmployeePayload(req.body);
+    if (!d.full_name) return res.status(400).json({ error: 'Nome do colaborador é obrigatório' });
+
     const result = await query(
       `INSERT INTO employees (organization_id, full_name, social_name, cpf, rg, rg_issuer, birth_date, gender, marital_status, email, phone, phone2,
         address, address_number, complement, neighborhood, city, state, zip_code,
@@ -95,25 +159,26 @@ router.post('/employees', async (req, res) => {
        RETURNING *`,
       [orgId, d.full_name, d.social_name, d.cpf, d.rg, d.rg_issuer, d.birth_date, d.gender, d.marital_status, d.email, d.phone, d.phone2,
         d.address, d.address_number, d.complement, d.neighborhood, d.city, d.state, d.zip_code,
-        d.registration_number, d.worker_profile || 'operacional', d.employment_type || 'clt', d.position, d.role_level,
-        d.branch_id || null, d.department_id || null, d.cost_center_id || null, d.direct_manager_id || null,
-        d.admission_date, d.contract_end_date, d.salary, typeof d.work_schedule === 'object' ? JSON.stringify(d.work_schedule) : (d.work_schedule || '08:00-17:00'),
+        d.registration_number, d.worker_profile, d.employment_type, d.position, d.role_level,
+        d.branch_id, d.department_id, d.cost_center_id, d.direct_manager_id,
+        d.admission_date, d.contract_end_date, d.salary, d.work_schedule,
         d.bank_name, d.bank_agency, d.bank_account, d.bank_account_type,
-        d.ctps_number, d.ctps_series, d.pis_pasep, d.cnpj, d.company_name, d.status || 'ativo', d.photo_url, req.userId,
-        JSON.stringify(d.salary_items || []), JSON.stringify(d.benefits || [])]
+        d.ctps_number, d.ctps_series, d.pis_pasep, d.cnpj, d.company_name, d.status, d.photo_url, req.userId,
+        JSON.stringify(d.salary_items), JSON.stringify(d.benefits)]
     );
     await auditLog(orgId, 'employee', result.rows[0].id, 'create', [{ field: 'full_name', oldVal: null, newVal: d.full_name }], req.userId);
     res.json(result.rows[0]);
   } catch (err) {
-    logError('rh.employees.create', err);
-    res.status(500).json({ error: 'Erro ao criar colaborador' });
+    logError('rh.employees.create', err, { body: req.body });
+    const message = err?.detail || err?.message || 'Erro ao criar colaborador';
+    res.status(400).json({ error: message });
   }
 });
 
 // Update employee
 router.put('/employees/:id', async (req, res) => {
   try {
-    const d = req.body;
+    const d = normalizeEmployeePayload(req.body);
     // Get old values for audit
     const old = await query(`SELECT * FROM employees WHERE id = $1`, [req.params.id]);
     if (!old.rows[0]) return res.status(404).json({ error: 'Não encontrado' });
@@ -124,15 +189,13 @@ router.put('/employees/:id', async (req, res) => {
     const sets = fields.map((f, i) => `${f} = $${i + 2}`);
     sets.push(`updated_at = NOW()`);
     const jsonbFields = ['salary_items', 'benefits'];
-    const jsonbFields2 = ['salary_items', 'benefits', 'work_schedule'];
-    const vals = fields.map(f => jsonbFields2.includes(f) && typeof d[f] === 'object' ? JSON.stringify(d[f]) : d[f]);
+    const vals = fields.map((f) => jsonbFields.includes(f) ? JSON.stringify(d[f] || []) : d[f]);
 
     const result = await query(
       `UPDATE employees SET ${sets.join(', ')} WHERE id = $1 RETURNING *`,
       [req.params.id, ...vals]
     );
 
-    // Audit changes
     const changes = fields
       .filter(f => String(old.rows[0][f]) !== String(d[f]))
       .map(f => ({ field: f, oldVal: String(old.rows[0][f] ?? ''), newVal: String(d[f] ?? '') }));
@@ -142,8 +205,9 @@ router.put('/employees/:id', async (req, res) => {
 
     res.json(result.rows[0]);
   } catch (err) {
-    logError('rh.employees.update', err);
-    res.status(500).json({ error: 'Erro ao atualizar' });
+    logError('rh.employees.update', err, { body: req.body, employee_id: req.params.id });
+    const message = err?.detail || err?.message || 'Erro ao atualizar colaborador';
+    res.status(400).json({ error: message });
   }
 });
 
