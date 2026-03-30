@@ -435,8 +435,8 @@ export default function RHDashboard() {
                         <TableRow key={v.id}>
                           <TableCell className="font-medium">{v.full_name}</TableCell>
                           <TableCell><Badge variant="outline">{v.vacation_type === 'parcial' ? 'Parcial' : 'Completa'}</Badge></TableCell>
-                          <TableCell>{v.start_date ? format(new Date(v.start_date + "T12:00:00"), "dd/MM/yyyy") : "—"}</TableCell>
-                          <TableCell>{v.end_date ? format(new Date(v.end_date + "T12:00:00"), "dd/MM/yyyy") : "—"}</TableCell>
+                          <TableCell>{safeFormat(v.start_date, "dd/MM/yyyy")}</TableCell>
+                          <TableCell>{safeFormat(v.end_date, "dd/MM/yyyy")}</TableCell>
                           <TableCell>{v.days_total}</TableCell>
                           <TableCell>
                             <Badge className={v.status === 'em_andamento' ? "bg-green-500/10 text-green-700" : "bg-blue-500/10 text-blue-700"}>
