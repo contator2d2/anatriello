@@ -34,7 +34,7 @@ const EMPTY_FORM = {
   full_name: "", social_name: "", cpf: "", rg: "", birth_date: "", gender: "", email: "", phone: "",
   address: "", city: "", state: "", zip_code: "", registration_number: "",
   worker_profile: "operacional", employment_type: "clt", position: "", salary: "",
-  admission_date: "", department_id: "", branch_id: "", work_schedule: "08:00-17:00",
+  admission_date: "", department_id: "", branch_id: "", direct_manager_id: "", work_schedule: "08:00-17:00",
   bank_name: "", bank_agency: "", bank_account: "", bank_account_type: "",
   ctps_number: "", pis_pasep: "", cnpj: "", company_name: "", status: "ativo",
 };
@@ -283,6 +283,17 @@ export default function RHColaboradores() {
                 <div><Label>Salário (R$)</Label><Input type="number" value={form.salary} onChange={e => setField("salary", e.target.value)} /></div>
                 <div><Label>Jornada</Label><Input value={form.work_schedule} onChange={e => setField("work_schedule", e.target.value)} placeholder="08:00-17:00" /></div>
                 <div><Label>Data de Admissão</Label><Input type="date" value={form.admission_date} onChange={e => setField("admission_date", e.target.value)} /></div>
+                <div><Label>Supervisor / Responsável</Label>
+                  <Select value={form.direct_manager_id || ""} onValueChange={v => setField("direct_manager_id", v)}>
+                    <SelectTrigger><SelectValue placeholder="Selecionar supervisor" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">Nenhum</SelectItem>
+                      {employees.filter((e: any) => e.id !== editId && (e.worker_profile === 'supervisor' || e.worker_profile === 'administrativo')).map((e: any) => (
+                        <SelectItem key={e.id} value={e.id}>{e.full_name} ({e.position || e.worker_profile})</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div><Label>Status</Label>
                   <Select value={form.status} onValueChange={v => setField("status", v)}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
