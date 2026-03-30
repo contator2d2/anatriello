@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback, useRef } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { useRhDashboard, useEmployees, useCreateVacation, useCreateMedicalCertificate, useValidateMedicalCertificate, useMedicalCertificates, useVacations } from "@/hooks/use-rh";
+import { api } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,7 +20,7 @@ import { resolveMediaUrl } from "@/lib/media";
 import {
   LayoutDashboard, AlertTriangle, Clock, UserX, Palmtree, FileText,
   Plus, CheckCircle, XCircle, Stethoscope, CalendarDays, Users, Timer,
-  ShieldAlert, FileCheck, Upload, Loader2, FileUp, Paperclip
+  ShieldAlert, FileCheck, Upload, Loader2, FileUp, Paperclip, Sparkles, Search, ShieldCheck, ShieldX, ShieldQuestion
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -45,6 +46,9 @@ export default function RHDashboard() {
   const [empSearchVac, setEmpSearchVac] = useState("");
   const [empSearchCert, setEmpSearchCert] = useState("");
   const [dragOver, setDragOver] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [crmValidation, setCrmValidation] = useState<any>(null);
+  const [isValidatingCrm, setIsValidatingCrm] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const { uploadFile, isUploading, progress } = useUpload();
@@ -76,20 +80,79 @@ export default function RHDashboard() {
     return inboundDocs.filter((d: any) => d.employee_id === certForm.employee_id);
   }, [inboundDocs, certForm.employee_id]);
 
+  const analyzeWithAI = useCallback(async (docUrl: string) => {
+    setIsAnalyzing(true);
+    try {
+      const result = await api<any>('/api/rh/analyze-certificate', { method: 'POST', body: { document_url: docUrl } });
+      if (result?.data) {
+        setCertForm((p: any) => ({
+          ...p,
+          doctor_name: result.data.doctor_name || p.doctor_name,
+          doctor_crm: result.data.doctor_crm || p.doctor_crm,
+          cid_code: result.data.cid_code || p.cid_code,
+          healthcare_unit: result.data.healthcare_unit || p.healthcare_unit,
+          absence_start: result.data.absence_start || p.absence_start,
+          absence_end: result.data.absence_end || p.absence_end,
+          absence_days: result.data.absence_days || p.absence_days,
+          absence_hours: result.data.absence_hours || p.absence_hours,
+          is_partial: result.data.is_partial ?? p.is_partial,
+          notes: result.data.notes || p.notes,
+        }));
+        toast({ title: "✨ Dados extraídos com IA!", description: "Verifique os campos preenchidos automaticamente." });
+        // Auto-validate CRM if extracted
+        if (result.data.doctor_crm) {
+          const crmParts = result.data.doctor_crm.match(/(\d+)\/?(\w{2})?/);
+          if (crmParts) {
+            validateCrmNumber(crmParts[1], crmParts[2] || '');
+          }
+        }
+      }
+    } catch (err: any) {
+      toast({ title: "Não foi possível analisar", description: err.message || "Tente uma imagem mais nítida", variant: "destructive" });
+    } finally {
+      setIsAnalyzing(false);
+    }
+  }, [toast]);
+
   const handleFileDrop = useCallback(async (file: File) => {
     try {
       const url = await uploadFile(file);
-      if (url) setCertForm((p: any) => ({ ...p, document_url: url }));
+      if (url) {
+        setCertForm((p: any) => ({ ...p, document_url: url }));
+        analyzeWithAI(url);
+      }
     } catch (err: any) {
       toast({ title: "Erro no upload", description: err.message, variant: "destructive" });
     }
-  }, [uploadFile, toast]);
+  }, [uploadFile, toast, analyzeWithAI]);
 
   const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) handleFileDrop(file);
     if (fileInputRef.current) fileInputRef.current.value = "";
   }, [handleFileDrop]);
+
+  const validateCrmNumber = useCallback(async (crm: string, uf: string) => {
+    if (!crm) return;
+    setIsValidatingCrm(true);
+    setCrmValidation(null);
+    try {
+      const result = await api<any>('/api/rh/validate-crm', { method: 'POST', body: { crm, uf: uf || 'SP' } });
+      setCrmValidation(result);
+      if (result.valid === true && result.doctor_name) {
+        setCertForm((p: any) => ({ ...p, doctor_name: result.doctor_name || p.doctor_name }));
+      }
+    } catch {
+      setCrmValidation({ valid: null, message: 'Erro na consulta' });
+    } finally {
+      setIsValidatingCrm(false);
+    }
+  }, []);
+
+  const handleSelectInboundDoc = useCallback((docUrl: string) => {
+    setCertField("document_url", docUrl);
+    analyzeWithAI(docUrl);
+  }, [analyzeWithAI]);
 
   const summary = dashboard?.summary || {};
   const lateArrivals = dashboard?.late_arrivals || [];
@@ -161,7 +224,7 @@ export default function RHDashboard() {
             <Button onClick={() => { setVacForm({ ...VACATION_EMPTY }); setVacDialog(true); }} className="gap-2" variant="outline">
               <Palmtree className="h-4 w-4" /> Lançar Férias
             </Button>
-            <Button onClick={() => { setCertForm({ ...CERT_EMPTY }); setCertDialog(true); }} className="gap-2">
+            <Button onClick={() => { setCertForm({ ...CERT_EMPTY }); setCrmValidation(null); setIsAnalyzing(false); setCertDialog(true); }} className="gap-2">
               <Stethoscope className="h-4 w-4" /> Registrar Atestado
             </Button>
           </div>
@@ -542,9 +605,41 @@ export default function RHDashboard() {
                 </SelectContent>
               </Select>
             </div>
+            {isAnalyzing && (
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-primary/5 border border-primary/20">
+                <Sparkles className="h-4 w-4 text-primary animate-pulse" />
+                <span className="text-sm text-primary font-medium">IA analisando atestado...</span>
+                <Loader2 className="h-4 w-4 animate-spin text-primary ml-auto" />
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <div><Label>Nome do Médico</Label><Input value={certForm.doctor_name} onChange={e => setCertField("doctor_name", e.target.value)} /></div>
-              <div><Label>CRM</Label><Input value={certForm.doctor_crm} onChange={e => setCertField("doctor_crm", e.target.value)} /></div>
+              <div>
+                <Label>CRM</Label>
+                <div className="flex gap-1">
+                  <Input value={certForm.doctor_crm} onChange={e => { setCertField("doctor_crm", e.target.value); setCrmValidation(null); }} className="flex-1" />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="shrink-0"
+                    disabled={!certForm.doctor_crm || isValidatingCrm}
+                    onClick={() => {
+                      const parts = certForm.doctor_crm.match(/(\d+)\/?(\w{2})?/);
+                      if (parts) validateCrmNumber(parts[1], parts[2] || '');
+                    }}
+                    title="Verificar CRM"
+                  >
+                    {isValidatingCrm ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                  </Button>
+                </div>
+                {crmValidation && (
+                  <div className={`mt-1 flex items-center gap-1 text-xs ${crmValidation.valid === true ? 'text-green-600' : crmValidation.valid === false ? 'text-red-600' : 'text-yellow-600'}`}>
+                    {crmValidation.valid === true ? <ShieldCheck className="h-3 w-3" /> : crmValidation.valid === false ? <ShieldX className="h-3 w-3" /> : <ShieldQuestion className="h-3 w-3" />}
+                    <span>{crmValidation.valid === true ? `Ativo — ${crmValidation.doctor_name}` : crmValidation.valid === false ? 'CRM não encontrado/inativo' : crmValidation.message}</span>
+                  </div>
+                )}
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div><Label>CID</Label><Input value={certForm.cid_code} onChange={e => setCertField("cid_code", e.target.value)} placeholder="Ex: J11" /></div>
@@ -609,7 +704,7 @@ export default function RHDashboard() {
                         key={doc.id}
                         type="button"
                         className="w-full flex items-center gap-2 p-2 rounded-md border text-left text-sm hover:bg-muted/50 transition-colors"
-                        onClick={() => doc.file_url && setCertField("document_url", doc.file_url)}
+                        onClick={() => doc.file_url && handleSelectInboundDoc(doc.file_url)}
                       >
                         <FileUp className="h-4 w-4 text-primary shrink-0" />
                         <span className="truncate flex-1">{doc.title || doc.category}</span>

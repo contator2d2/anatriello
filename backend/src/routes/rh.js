@@ -1,7 +1,9 @@
 import express from 'express';
 import { query } from '../db.js';
 import { authenticate } from '../middleware/auth.js';
+import { callAI } from '../lib/ai-caller.js';
 import { logInfo, logError } from '../logger.js';
+import fetch from 'node-fetch';
 
 const router = express.Router();
 router.use(authenticate);
@@ -558,6 +560,156 @@ router.get('/audit-log', async (req, res) => {
   } catch (err) {
     logError('rh.audit.list', err);
     res.status(500).json({ error: 'Erro' });
+  }
+});
+
+// ===== AI CERTIFICATE ANALYSIS =====
+async function getAIConfig(userId) {
+  const orgResult = await query(
+    `SELECT o.ai_provider, o.ai_model, o.ai_api_key 
+     FROM organizations o
+     JOIN organization_members om ON om.organization_id = o.id
+     WHERE om.user_id = $1 LIMIT 1`,
+    [userId]
+  );
+  const org = orgResult.rows[0];
+  if (!org || !org.ai_api_key || org.ai_provider === 'none') return null;
+  return {
+    provider: org.ai_provider,
+    model: org.ai_model || (org.ai_provider === 'openai' ? 'gpt-4o-mini' : 'gemini-2.0-flash'),
+    apiKey: org.ai_api_key,
+  };
+}
+
+router.post('/analyze-certificate', async (req, res) => {
+  try {
+    const { document_url } = req.body;
+    if (!document_url) return res.status(400).json({ error: 'document_url é obrigatório' });
+
+    const aiConfig = await getAIConfig(req.userId);
+    if (!aiConfig) {
+      return res.status(400).json({ error: 'IA não configurada. Configure a chave de IA nas configurações da organização.' });
+    }
+
+    // Build image/document content for AI
+    const resolvedUrl = document_url.startsWith('/') 
+      ? `${process.env.BASE_URL || 'http://localhost:3000'}${document_url}`
+      : document_url;
+
+    const messages = [
+      {
+        role: 'system',
+        content: `Você é um especialista em análise de atestados médicos brasileiros. Analise a imagem/documento do atestado e extraia as seguintes informações em JSON:
+{
+  "doctor_name": "nome completo do médico",
+  "doctor_crm": "número do CRM (apenas números e UF, ex: 12345/SP)",
+  "cid_code": "código CID (ex: J11, Z76.3)",
+  "healthcare_unit": "nome do hospital, clínica ou unidade de saúde",
+  "absence_start": "data início do afastamento no formato YYYY-MM-DD",
+  "absence_end": "data fim do afastamento no formato YYYY-MM-DD",
+  "absence_days": número de dias de afastamento,
+  "absence_hours": "horários se parcial (ex: 08:00-12:00) ou vazio",
+  "is_partial": true ou false se é atestado parcial (horas),
+  "notes": "observações relevantes do atestado"
+}
+Se algum campo não for legível ou não estiver presente, use string vazia "" ou 0 para números. Responda APENAS com o JSON, sem texto adicional.`
+      },
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Analise este atestado médico e extraia as informações:' },
+          { type: 'image_url', image_url: { url: resolvedUrl } }
+        ]
+      }
+    ];
+
+    const result = await callAI(aiConfig, messages, { temperature: 0.1, maxTokens: 800 });
+    
+    let parsed = {};
+    try {
+      const jsonStr = (result.content || '').replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+      parsed = JSON.parse(jsonStr);
+    } catch {
+      logError('rh.analyze-certificate.parse', { raw: result.content });
+      return res.status(422).json({ error: 'Não foi possível extrair dados do atestado. Tente uma imagem mais nítida.' });
+    }
+
+    logInfo('rh.analyze-certificate', { parsed });
+    res.json({ success: true, data: parsed });
+  } catch (err) {
+    logError('rh.analyze-certificate', err);
+    res.status(500).json({ error: 'Erro ao analisar atestado' });
+  }
+});
+
+// ===== CRM VALIDATION =====
+router.post('/validate-crm', async (req, res) => {
+  try {
+    const { crm, uf } = req.body;
+    if (!crm || !uf) return res.status(400).json({ error: 'CRM e UF são obrigatórios' });
+
+    const cleanCrm = crm.replace(/\D/g, '');
+    const cleanUf = uf.toUpperCase().trim();
+
+    // Use CFM portal search
+    const url = `https://portal.cfm.org.br/api/public/medicos?crm=${cleanCrm}&uf=${cleanUf}`;
+    
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0',
+        'Accept': 'application/json',
+      },
+      signal: AbortSignal.timeout(10000),
+    });
+
+    if (!response.ok) {
+      // Fallback: try alternative endpoint
+      const altUrl = `https://www.consultacrm.com.br/api/index.php?tipo=crm&q=${cleanCrm}&chave=1173&destession=&ession=&ession=`;
+      try {
+        const altResp = await fetch(altUrl, { 
+          headers: { 'User-Agent': 'Mozilla/5.0' },
+          signal: AbortSignal.timeout(10000),
+        });
+        if (altResp.ok) {
+          const altData = await altResp.json();
+          const items = altData?.item || [];
+          const match = items.find(i => i.uf?.toUpperCase() === cleanUf);
+          if (match) {
+            return res.json({
+              valid: match.situacao?.toLowerCase().includes('regular') || match.situacao?.toLowerCase().includes('ativo'),
+              doctor_name: match.nome || '',
+              situation: match.situacao || 'Desconhecida',
+              specialty: match.especialidade || '',
+              source: 'consultacrm',
+            });
+          }
+        }
+      } catch { /* ignore fallback errors */ }
+
+      return res.json({ valid: null, message: 'Não foi possível verificar o CRM no momento. Tente novamente mais tarde.' });
+    }
+
+    const data = await response.json();
+    const medicos = data?.dados || data?.items || (Array.isArray(data) ? data : []);
+    
+    if (medicos.length === 0) {
+      return res.json({ valid: false, message: 'CRM não encontrado no CFM.' });
+    }
+
+    const medico = medicos[0];
+    const situacao = medico.situacao || medico.status || '';
+    const isValid = situacao.toLowerCase().includes('regular') || situacao.toLowerCase().includes('ativo');
+
+    res.json({
+      valid: isValid,
+      doctor_name: medico.nome || medico.name || '',
+      situation: situacao,
+      specialty: medico.especialidade || medico.specialty || '',
+      source: 'cfm',
+    });
+  } catch (err) {
+    logError('rh.validate-crm', err);
+    res.json({ valid: null, message: 'Erro ao consultar CRM. Serviço pode estar indisponível.' });
   }
 });
 
