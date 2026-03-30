@@ -14,7 +14,7 @@ export default function PromotorLogin() {
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
-  const { branding } = useBranding();
+  const { branding } = useBranding() as any;
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
