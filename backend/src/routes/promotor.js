@@ -1000,3 +1000,6 @@ router.post('/rh/time-rules', async (req, res) => {
 });
 
 export default router;
+
+// Note: location-update and live-map routes are added below before export
+// They were inserted before the final export statement
