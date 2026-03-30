@@ -1368,49 +1368,90 @@ let regionsInfraPromise = null;
 async function ensureRegionsInfrastructure() {
   if (!regionsInfraPromise) {
     regionsInfraPromise = (async () => {
-      await query(`
-        CREATE TABLE IF NOT EXISTS service_regions (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-          name VARCHAR(255) NOT NULL,
-          color VARCHAR(7) DEFAULT '#3b82f6',
-          polygon JSONB DEFAULT '[]',
-          cities JSONB DEFAULT '[]',
-          states JSONB DEFAULT '[]',
-          supervisor_id UUID,
-          active BOOLEAN DEFAULT true,
-          notes TEXT,
-          created_at TIMESTAMPTZ DEFAULT NOW(),
-          updated_at TIMESTAMPTZ DEFAULT NOW()
-        )
-      `);
+      // Try with FK first, fall back without FK if organizations table missing
+      try {
+        await query(`
+          CREATE TABLE IF NOT EXISTS service_regions (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+            name VARCHAR(255) NOT NULL,
+            color VARCHAR(7) DEFAULT '#3b82f6',
+            polygon JSONB DEFAULT '[]',
+            cities JSONB DEFAULT '[]',
+            states JSONB DEFAULT '[]',
+            supervisor_id UUID,
+            active BOOLEAN DEFAULT true,
+            notes TEXT,
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            updated_at TIMESTAMPTZ DEFAULT NOW()
+          )
+        `);
+      } catch (_fkErr) {
+        await query(`
+          CREATE TABLE IF NOT EXISTS service_regions (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            organization_id UUID NOT NULL,
+            name VARCHAR(255) NOT NULL,
+            color VARCHAR(7) DEFAULT '#3b82f6',
+            polygon JSONB DEFAULT '[]',
+            cities JSONB DEFAULT '[]',
+            states JSONB DEFAULT '[]',
+            supervisor_id UUID,
+            active BOOLEAN DEFAULT true,
+            notes TEXT,
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            updated_at TIMESTAMPTZ DEFAULT NOW()
+          )
+        `);
+      }
       await query(`CREATE INDEX IF NOT EXISTS idx_service_regions_org ON service_regions(organization_id)`);
-      await query(`ALTER TABLE service_regions ADD COLUMN IF NOT EXISTS organization_id UUID`);
-      await query(`ALTER TABLE service_regions ADD COLUMN IF NOT EXISTS color VARCHAR(7) DEFAULT '#3b82f6'`);
-      await query(`ALTER TABLE service_regions ADD COLUMN IF NOT EXISTS polygon JSONB DEFAULT '[]'`);
-      await query(`ALTER TABLE service_regions ADD COLUMN IF NOT EXISTS cities JSONB DEFAULT '[]'`);
-      await query(`ALTER TABLE service_regions ADD COLUMN IF NOT EXISTS states JSONB DEFAULT '[]'`);
-      await query(`ALTER TABLE service_regions ADD COLUMN IF NOT EXISTS supervisor_id UUID`);
-      await query(`ALTER TABLE service_regions ADD COLUMN IF NOT EXISTS active BOOLEAN DEFAULT true`);
-      await query(`ALTER TABLE service_regions ADD COLUMN IF NOT EXISTS notes TEXT`);
 
-      await query(`
-        CREATE TABLE IF NOT EXISTS region_pdvs (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          region_id UUID NOT NULL REFERENCES service_regions(id) ON DELETE CASCADE,
-          pdv_id UUID NOT NULL,
-          auto_assigned BOOLEAN DEFAULT false,
-          created_at TIMESTAMPTZ DEFAULT NOW(),
-          UNIQUE(region_id, pdv_id)
-        )
-      `);
+      // Ensure all columns exist (safe for already-created tables)
+      const cols = [
+        ['organization_id', 'UUID'],
+        ['color', "VARCHAR(7) DEFAULT '#3b82f6'"],
+        ['polygon', "JSONB DEFAULT '[]'"],
+        ['cities', "JSONB DEFAULT '[]'"],
+        ['states', "JSONB DEFAULT '[]'"],
+        ['supervisor_id', 'UUID'],
+        ['active', 'BOOLEAN DEFAULT true'],
+        ['notes', 'TEXT'],
+        ['updated_at', 'TIMESTAMPTZ DEFAULT NOW()'],
+      ];
+      for (const [col, def] of cols) {
+        try { await query(`ALTER TABLE service_regions ADD COLUMN IF NOT EXISTS ${col} ${def}`); } catch (_e) { /* ignore */ }
+      }
+
+      try {
+        await query(`
+          CREATE TABLE IF NOT EXISTS region_pdvs (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            region_id UUID NOT NULL REFERENCES service_regions(id) ON DELETE CASCADE,
+            pdv_id UUID NOT NULL,
+            auto_assigned BOOLEAN DEFAULT false,
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            UNIQUE(region_id, pdv_id)
+          )
+        `);
+      } catch (_e) {
+        await query(`
+          CREATE TABLE IF NOT EXISTS region_pdvs (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            region_id UUID NOT NULL,
+            pdv_id UUID NOT NULL,
+            auto_assigned BOOLEAN DEFAULT false,
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            UNIQUE(region_id, pdv_id)
+          )
+        `);
+      }
       await query(`CREATE INDEX IF NOT EXISTS idx_region_pdvs_region ON region_pdvs(region_id)`);
 
-      // Ensure geo columns on pdvs and employees
-      await query(`ALTER TABLE pdvs ADD COLUMN IF NOT EXISTS latitude DOUBLE PRECISION`);
-      await query(`ALTER TABLE pdvs ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION`);
-      await query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS home_latitude NUMERIC(10,7)`);
-      await query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS home_longitude NUMERIC(10,7)`);
+      // Ensure geo columns
+      try { await query(`ALTER TABLE pdvs ADD COLUMN IF NOT EXISTS latitude DOUBLE PRECISION`); } catch (_e) { /* */ }
+      try { await query(`ALTER TABLE pdvs ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION`); } catch (_e) { /* */ }
+      try { await query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS home_latitude NUMERIC(10,7)`); } catch (_e) { /* */ }
+      try { await query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS home_longitude NUMERIC(10,7)`); } catch (_e) { /* */ }
     })().catch(err => { regionsInfraPromise = null; throw err; });
   }
   return regionsInfraPromise;
