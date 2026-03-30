@@ -167,10 +167,12 @@ function GeocodeButton({ form, setForm }: { form: any; setForm: React.Dispatch<R
 
   const handleGeocode = async () => {
     const parsed = splitAddressAndNumber(form.address);
+    const addressNumber = String(form.address_number || parsed.number || '').trim();
+    const addressStreet = String(parsed.street || form.address || '').trim();
     const cleanZip = String(form.zip_code || '').replace(/\D/g, '');
     const state = String(form.state || '').trim().toUpperCase();
 
-    if (!parsed.street || !parsed.number || !form.neighborhood || !form.city || !state || cleanZip.length !== 8) {
+    if (!addressStreet || !addressNumber || !form.neighborhood || !form.city || !state || cleanZip.length !== 8) {
       toast({
         title: 'Endereço incompleto',
         description: 'Informe rua + número, bairro, cidade, UF e CEP válido para geolocalizar.',
@@ -181,8 +183,9 @@ function GeocodeButton({ form, setForm }: { form: any; setForm: React.Dispatch<R
 
     try {
       const result = await geocode.mutateAsync({
-        address: parsed.street,
-        address_number: parsed.number,
+        address: addressStreet,
+        address_number: addressNumber,
+        complement: form.complement,
         neighborhood: form.neighborhood,
         city: form.city,
         state,
