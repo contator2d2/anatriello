@@ -42,6 +42,7 @@ import {
   BarChart4,
   DollarSign,
   MapPin,
+  Radio,
 } from "lucide-react";
 import { API_URL, getAuthToken } from "@/lib/api";
 import ayratechLogo from "@/assets/ayratech_logo.jpg";
@@ -98,7 +99,8 @@ const getNavSections = (hasConnections: boolean): NavSection[] => [
       { name: "Prospects", href: "/crm/prospects", icon: UserPlus, pageKey: 'crm_prospects' },
       { name: "Empresas", href: "/crm/empresas", icon: Building2, pageKey: 'crm_empresas' },
       { name: "Projetos", href: "/projetos", icon: FolderKanban, pageKey: 'projetos', moduleKey: 'projects' },
-      { name: "Mapa", href: "/mapa", icon: Map, pageKey: 'mapa' },
+      { name: "Mapa CRM", href: "/mapa", icon: Map, pageKey: 'mapa' },
+      { name: "Live Maps", href: "/live-maps", icon: Radio, pageKey: 'live_maps' },
       { name: "Agenda", href: "/crm/agenda", icon: CalendarDays, pageKey: 'crm_agenda' },
       { name: "Tarefas", href: "/tarefas", icon: ClipboardList, pageKey: 'crm_tarefas' },
       { name: "Relatórios", href: "/crm/relatorios", icon: BarChart3, pageKey: 'crm_relatorios' },

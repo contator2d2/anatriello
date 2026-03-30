@@ -69,6 +69,7 @@ import RHPontoMonitor from "./pages/RHPontoMonitor";
 import RHPDVs from "./pages/RHPDVs";
 import RHFeriados from "./pages/RHFeriados";
 import RHMapaOperacional from "./pages/RHMapaOperacional";
+import LiveMaps from "./pages/LiveMaps";
 import PromotorLogin from "./pages/promotor/PromotorLogin";
 import PromotorHome from "./pages/promotor/PromotorHome";
 import PromotorDocumentos from "./pages/promotor/PromotorDocumentos";
@@ -186,6 +187,7 @@ const App = () => (
             <Route path="/rh/pdvs" element={<ProtectedRoute><RHPDVs /></ProtectedRoute>} />
             <Route path="/rh/feriados" element={<ProtectedRoute><RHFeriados /></ProtectedRoute>} />
             <Route path="/rh/mapa" element={<ProtectedRoute><RHMapaOperacional /></ProtectedRoute>} />
+            <Route path="/live-maps" element={<ProtectedRoute><LiveMaps /></ProtectedRoute>} />
             {/* Promotor App */}
             <Route path="/promotor/login" element={<PromotorLogin />} />
             <Route path="/promotor/home" element={<PromotorHome />} />

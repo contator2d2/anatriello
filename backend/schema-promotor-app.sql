@@ -433,3 +433,21 @@ CREATE TABLE IF NOT EXISTS collaborator_app_settings (
 
 -- Colunas extras na employees para vincular supervisor
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS supervisor_id UUID REFERENCES employees(id) ON DELETE SET NULL;
+
+-- ================================================
+-- Rastreamento de Localização em Tempo Real
+-- ================================================
+CREATE TABLE IF NOT EXISTS employee_live_locations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  employee_id UUID NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+  latitude NUMERIC(10,7) NOT NULL,
+  longitude NUMERIC(10,7) NOT NULL,
+  accuracy_meters NUMERIC(8,2),
+  battery_level INTEGER,
+  is_moving BOOLEAN DEFAULT false,
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(employee_id)
+);
+CREATE INDEX IF NOT EXISTS idx_live_locations_org ON employee_live_locations(organization_id);
+CREATE INDEX IF NOT EXISTS idx_live_locations_emp ON employee_live_locations(employee_id);

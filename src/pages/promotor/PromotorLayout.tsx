@@ -2,7 +2,7 @@ import { ReactNode, useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Home, FileText, Clock, Upload, Settings, LogOut, Bell, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { usePromotorNotifications, usePromotorMarkRead } from "@/hooks/use-promotor";
+import { usePromotorNotifications, usePromotorMarkRead, useLocationTracking } from "@/hooks/use-promotor";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -40,6 +40,9 @@ export function PromotorLayout({ children }: PromotorLayoutProps) {
   const markRead = usePromotorMarkRead();
 
   const unreadCount = notifications.filter((n: any) => !n.read).length;
+
+  // Track location every 60s during work hours
+  useLocationTracking();
 
   useEffect(() => {
     const token = localStorage.getItem('promotor_token');
