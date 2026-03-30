@@ -8,21 +8,96 @@ import { logInfo, logError } from '../logger.js';
 const router = express.Router();
 router.use(authenticate);
 
+const BR_GEOCODE_USER_AGENT = 'Ayratech/1.0 (suporte@ayratech.app.br)';
+
+function splitAddressAndNumber(address = '') {
+  const normalized = String(address || '').trim().replace(/\s+/g, ' ');
+  const match = normalized.match(/^(.*?)(?:,\s*|\s+)(?:n[ºo°.]?\s*)?(\d{1,6}[a-zA-Z]?)\s*$/i);
+  if (!match) return { street: normalized, number: '' };
+  return {
+    street: String(match[1] || '').trim().replace(/,$/, ''),
+    number: String(match[2] || '').trim(),
+  };
+}
+
+function normalizeGeocodeInput({ address, address_number, neighborhood, city, state, zip_code, requireComplete = false }) {
+  const parsed = splitAddressAndNumber(address);
+  const cleanZip = String(zip_code || '').replace(/\D/g, '');
+  const street = String(parsed.street || '').trim();
+  const number = String(address_number || parsed.number || '').trim();
+  const normalized = {
+    street,
+    number,
+    neighborhood: String(neighborhood || '').trim(),
+    city: String(city || '').trim(),
+    state: String(state || '').trim().toUpperCase(),
+    cleanZip,
+  };
+
+  if (requireComplete) {
+    if (!street || !number || !normalized.neighborhood || !normalized.city || !normalized.state || cleanZip.length !== 8) {
+      return {
+        normalized,
+        validationError: 'Endereço incompleto: informe rua, número, bairro, cidade, UF e CEP válido (8 dígitos).',
+      };
+    }
+  }
+
+  return { normalized, validationError: null };
+}
+
+function buildGeocodeCandidates(normalized) {
+  const { street, number, neighborhood, city, state, cleanZip } = normalized;
+  const streetWithNumber = [street, number].filter(Boolean).join(', ');
+
+  return [
+    [streetWithNumber, neighborhood, `${city} - ${state}`, cleanZip, 'Brasil'].filter(Boolean).join(', '),
+    [streetWithNumber, neighborhood, city, state, cleanZip, 'Brasil'].filter(Boolean).join(', '),
+    [streetWithNumber, neighborhood, city, state, 'Brasil'].filter(Boolean).join(', '),
+    [street, neighborhood, city, state, cleanZip, 'Brasil'].filter(Boolean).join(', '),
+  ].filter((candidate, index, arr) => candidate && arr.indexOf(candidate) === index);
+}
+
+async function geocodeAddressWithFallback(input, options = {}) {
+  const { requireComplete = false } = options;
+  const { normalized, validationError } = normalizeGeocodeInput({ ...input, requireComplete });
+  const candidates = buildGeocodeCandidates(normalized);
+
+  if (validationError) {
+    return {
+      geo: null,
+      validationError,
+      attemptedAddress: candidates[0] || [normalized.street, normalized.number, normalized.neighborhood, normalized.city, normalized.state, normalized.cleanZip, 'Brasil'].filter(Boolean).join(', '),
+    };
+  }
+
+  for (const candidate of candidates) {
+    try {
+      const q = encodeURIComponent(candidate);
+      const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=br&q=${q}`;
+      const res = await fetch(url, { headers: { 'User-Agent': BR_GEOCODE_USER_AGENT } });
+      const data = await res.json();
+      if (Array.isArray(data) && data[0]) {
+        return {
+          geo: {
+            lat: parseFloat(data[0].lat),
+            lng: parseFloat(data[0].lon),
+            display_name: data[0].display_name,
+          },
+          validationError: null,
+          attemptedAddress: candidate,
+        };
+      }
+    } catch (_) {}
+  }
+
+  return { geo: null, validationError: null, attemptedAddress: candidates[0] || '' };
+}
+
 // Auto-geocode using canonical Brazilian address + Nominatim
-async function autoGeocodeAddress(address, city, state, zip_code, neighborhood) {
-  const cleanZip = typeof zip_code === 'string' ? zip_code.replace(/\D/g, '') : zip_code;
-  const parts = [address, neighborhood, city, state, cleanZip, 'Brasil'].filter(Boolean);
-  if (parts.length < 2) return null;
-  const q = encodeURIComponent(parts.join(', '));
-  const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=br&q=${q}`;
-  try {
-    const res = await fetch(url, {
-      headers: { 'User-Agent': 'Ayratech/1.0 (suporte@ayratech.app.br)' }
-    });
-    const data = await res.json();
-    if (Array.isArray(data) && data[0]) return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon), display_name: data[0].display_name };
-  } catch (_) {}
-  return null;
+async function autoGeocodeAddress(address, city, state, zip_code, neighborhood, address_number = null) {
+  const result = await geocodeAddressWithFallback({ address, address_number, neighborhood, city, state, zip_code });
+  return result.geo;
 }
 
 let holidaysInfraPromise = null;
@@ -1595,14 +1670,27 @@ router.delete('/regions/:regionId/pdvs/:pdvId', async (req, res) => {
 // ===== GEOCODING (via Nominatim - free) =====
 router.post('/geocode', async (req, res) => {
   try {
-    const { address, neighborhood, city, state, zip_code } = req.body;
-    const geo = await autoGeocodeAddress(address, city, state, zip_code, neighborhood);
-    if (!geo) {
-      const cleanZip = typeof zip_code === 'string' ? zip_code.replace(/\D/g, '') : zip_code;
-      const attempted = [address, neighborhood, city, state, cleanZip, 'Brasil'].filter(Boolean).join(', ');
-      return res.json({ found: false, attempted_address: attempted });
+    const { address, address_number, neighborhood, city, state, zip_code } = req.body || {};
+    const result = await geocodeAddressWithFallback(
+      { address, address_number, neighborhood, city, state, zip_code },
+      { requireComplete: true }
+    );
+
+    if (result.validationError) {
+      return res.status(400).json({ error: result.validationError, attempted_address: result.attemptedAddress });
     }
-    res.json({ found: true, latitude: geo.lat, longitude: geo.lng, display_name: geo.display_name });
+
+    if (!result.geo) {
+      return res.json({ found: false, attempted_address: result.attemptedAddress });
+    }
+
+    res.json({
+      found: true,
+      latitude: result.geo.lat,
+      longitude: result.geo.lng,
+      display_name: result.geo.display_name,
+      attempted_address: result.attemptedAddress,
+    });
   } catch (err) { logError('rh.geocode', err); res.status(500).json({ error: err.message }); }
 });
 

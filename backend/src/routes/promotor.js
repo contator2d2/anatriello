@@ -8,17 +8,52 @@ import { logInfo, logError } from '../logger.js';
 
 const router = express.Router();
 
+const BR_GEOCODE_USER_AGENT = 'Ayratech/1.0 (suporte@ayratech.app.br)';
+
+function splitAddressAndNumber(address = '') {
+  const normalized = String(address || '').trim().replace(/\s+/g, ' ');
+  const match = normalized.match(/^(.*?)(?:,\s*|\s+)(?:n[ºo°.]?\s*)?(\d{1,6}[a-zA-Z]?)\s*$/i);
+  if (!match) return { street: normalized, number: '' };
+  return {
+    street: String(match[1] || '').trim().replace(/,$/, ''),
+    number: String(match[2] || '').trim(),
+  };
+}
+
+function buildGeocodeCandidates({ address, address_number, neighborhood, city, state, zip_code }) {
+  const parsed = splitAddressAndNumber(address);
+  const street = String(parsed.street || '').trim();
+  const number = String(address_number || parsed.number || '').trim();
+  const cleanZip = String(zip_code || '').replace(/\D/g, '');
+  const normalizedState = String(state || '').trim().toUpperCase();
+  const streetWithNumber = [street, number].filter(Boolean).join(', ');
+
+  return [
+    [streetWithNumber, neighborhood, `${city} - ${normalizedState}`, cleanZip, 'Brasil'].filter(Boolean).join(', '),
+    [streetWithNumber, neighborhood, city, normalizedState, cleanZip, 'Brasil'].filter(Boolean).join(', '),
+    [streetWithNumber, neighborhood, city, normalizedState, 'Brasil'].filter(Boolean).join(', '),
+    [street, neighborhood, city, normalizedState, cleanZip, 'Brasil'].filter(Boolean).join(', '),
+  ].filter((candidate, index, arr) => candidate && arr.indexOf(candidate) === index);
+}
+
 // Auto-geocode using canonical Brazilian address + Nominatim
-async function autoGeocode(address, city, state, zip_code, neighborhood) {
-  const cleanZip = typeof zip_code === 'string' ? zip_code.replace(/\D/g, '') : zip_code;
-  const parts = [address, neighborhood, city, state, cleanZip, 'Brasil'].filter(Boolean);
-  if (parts.length < 2) return null;
-  const q = encodeURIComponent(parts.join(', '));
-  const res = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=br&q=${q}`, {
-    headers: { 'User-Agent': 'Ayratech/1.0 (suporte@ayratech.app.br)' }
-  });
-  const data = await res.json();
-  if (Array.isArray(data) && data[0]) return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon), display_name: data[0].display_name };
+async function autoGeocode(address, city, state, zip_code, neighborhood, address_number = null) {
+  const candidates = buildGeocodeCandidates({ address, address_number, neighborhood, city, state, zip_code });
+  if (!candidates.length) return null;
+
+  for (const candidate of candidates) {
+    try {
+      const q = encodeURIComponent(candidate);
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=br&q=${q}`, {
+        headers: { 'User-Agent': BR_GEOCODE_USER_AGENT }
+      });
+      const data = await res.json();
+      if (Array.isArray(data) && data[0]) {
+        return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon), display_name: data[0].display_name };
+      }
+    } catch (_) {}
+  }
+
   return null;
 }
 
@@ -694,7 +729,7 @@ router.post('/rh/pdvs', async (req, res) => {
     let lat = d.latitude, lng = d.longitude;
     if ((!lat || !lng) && (d.address || d.city)) {
       try {
-        const geo = await autoGeocode(d.address, d.city, d.state, d.zip_code, d.neighborhood);
+        const geo = await autoGeocode(d.address, d.city, d.state, d.zip_code, d.neighborhood, d.address_number);
         if (geo) { lat = geo.lat; lng = geo.lng; }
       } catch (_) {}
     }
@@ -714,7 +749,7 @@ router.put('/rh/pdvs/:id', async (req, res) => {
     let lat = d.latitude, lng = d.longitude;
     if ((!lat || !lng) && (d.address || d.city)) {
       try {
-        const geo = await autoGeocode(d.address, d.city, d.state, d.zip_code, d.neighborhood);
+        const geo = await autoGeocode(d.address, d.city, d.state, d.zip_code, d.neighborhood, d.address_number);
         if (geo) { lat = geo.lat; lng = geo.lng; }
       } catch (_) {}
     }

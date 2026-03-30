@@ -17,6 +17,13 @@ import { Textarea } from "@/components/ui/textarea";
 
 const EMPTY_PDV = { name: '', client_name: '', address: '', zip_code: '', city: '', state: '', neighborhood: '', latitude: '', longitude: '', radius_meters: 200, supervisor_id: '', notes: '', active: true };
 
+function splitAddressAndNumber(address: string) {
+  const normalized = String(address || '').trim().replace(/\s+/g, ' ');
+  const match = normalized.match(/^(.*?)(?:,\s*|\s+)(?:n[ºo°.]?\s*)?(\d{1,6}[a-zA-Z]?)\s*$/i);
+  if (!match) return { street: normalized, number: '' };
+  return { street: String(match[1] || '').trim().replace(/,$/, ''), number: String(match[2] || '').trim() };
+}
+
 export default function RHPDVs() {
   const [showDialog, setShowDialog] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -154,12 +161,28 @@ function GeocodeButton({ form, setForm }: { form: any; setForm: React.Dispatch<R
   const { toast } = useToast();
 
   const handleGeocode = async () => {
-    if (!form.address && !form.city && !form.zip_code) {
-      toast({ title: 'Preencha o endereço primeiro', variant: 'destructive' });
+    const parsed = splitAddressAndNumber(form.address);
+    const cleanZip = String(form.zip_code || '').replace(/\D/g, '');
+    const state = String(form.state || '').trim().toUpperCase();
+
+    if (!parsed.street || !parsed.number || !form.neighborhood || !form.city || !state || cleanZip.length !== 8) {
+      toast({
+        title: 'Endereço incompleto',
+        description: 'Informe rua + número, bairro, cidade, UF e CEP válido para geolocalizar.',
+        variant: 'destructive',
+      });
       return;
     }
+
     try {
-      const result = await geocode.mutateAsync({ address: form.address, neighborhood: form.neighborhood, city: form.city, state: form.state, zip_code: form.zip_code });
+      const result = await geocode.mutateAsync({
+        address: parsed.street,
+        address_number: parsed.number,
+        neighborhood: form.neighborhood,
+        city: form.city,
+        state,
+        zip_code: cleanZip,
+      });
       if (result.found) {
         setForm((f: any) => ({ ...f, latitude: String(result.latitude), longitude: String(result.longitude) }));
         toast({ title: 'Coordenadas geradas!', description: result.display_name });
@@ -167,7 +190,8 @@ function GeocodeButton({ form, setForm }: { form: any; setForm: React.Dispatch<R
         toast({ title: 'Endereço não encontrado', description: result?.attempted_address ? `Busca: ${result.attempted_address}` : 'Tente um endereço mais completo', variant: 'destructive' });
       }
     } catch (err: any) {
-      toast({ title: 'Erro na geocodificação', description: err.message, variant: 'destructive' });
+      const desc = [err.message, err?.attempted_address ? `Busca: ${err.attempted_address}` : null].filter(Boolean).join(' • ');
+      toast({ title: 'Erro na geocodificação', description: desc, variant: 'destructive' });
     }
   };
 
