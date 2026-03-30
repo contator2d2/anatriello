@@ -64,6 +64,16 @@ import RHColaboradores from "./pages/RHColaboradores";
 import RHPonto from "./pages/RHPonto";
 import RHHolerite from "./pages/RHHolerite";
 import RHDashboard from "./pages/RHDashboard";
+import RHDocumentos from "./pages/RHDocumentos";
+import RHPontoMonitor from "./pages/RHPontoMonitor";
+import RHPDVs from "./pages/RHPDVs";
+import PromotorLogin from "./pages/promotor/PromotorLogin";
+import PromotorHome from "./pages/promotor/PromotorHome";
+import PromotorDocumentos from "./pages/promotor/PromotorDocumentos";
+import PromotorPonto from "./pages/promotor/PromotorPonto";
+import PromotorEnviar from "./pages/promotor/PromotorEnviar";
+import PromotorConfig from "./pages/promotor/PromotorConfig";
+import PromotorTrocarSenha from "./pages/promotor/PromotorTrocarSenha";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
