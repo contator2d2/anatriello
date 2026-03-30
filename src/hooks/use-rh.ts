@@ -138,6 +138,32 @@ export function useCreateRhDepartment() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['rh-departments'] }),
   });
 }
+export function useDeleteRhDepartment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api<any>(`/api/rh/rh-departments/${id}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['rh-departments'] }),
+  });
+}
+
+// ===== POSITIONS (CARGOS) =====
+export function useRhPositions() {
+  return useQuery({ queryKey: ['rh-positions'], queryFn: () => api<any[]>('/api/rh/positions') });
+}
+export function useCreateRhPosition() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: any) => api<any>('/api/rh/positions', { method: 'POST', body: data }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['rh-positions'] }),
+  });
+}
+export function useDeleteRhPosition() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api<any>(`/api/rh/positions/${id}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['rh-positions'] }),
+  });
+}
 
 export function useCostCenters() {
   return useQuery({ queryKey: ['rh-cost-centers'], queryFn: () => api<any[]>('/api/rh/cost-centers') });
