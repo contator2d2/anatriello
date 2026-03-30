@@ -704,7 +704,7 @@ export default function RHDashboard() {
                         key={doc.id}
                         type="button"
                         className="w-full flex items-center gap-2 p-2 rounded-md border text-left text-sm hover:bg-muted/50 transition-colors"
-                        onClick={() => doc.file_url && setCertField("document_url", doc.file_url)}
+                        onClick={() => doc.file_url && handleSelectInboundDoc(doc.file_url)}
                       >
                         <FileUp className="h-4 w-4 text-primary shrink-0" />
                         <span className="truncate flex-1">{doc.title || doc.category}</span>
