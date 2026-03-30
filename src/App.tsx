@@ -99,11 +99,15 @@ function FaviconUpdater() {
   return null;
 }
 
-// Smart redirect: logged in → dashboard, not logged in → login (PWA/mobile skip landing)
+// Smart redirect based on hostname and auth state
 function SmartRedirect() {
   const { isAuthenticated, isLoading } = useAuth();
   const isPWA = window.matchMedia('(display-mode: standalone)').matches
     || (navigator as any).standalone === true;
+  const isPromotorDomain = window.location.hostname.startsWith('promotor.');
+  
+  // If accessing from promotor subdomain, always go to promotor login
+  if (isPromotorDomain) return <Navigate to="/promotor/login" replace />;
   
   if (isLoading) {
     return (
