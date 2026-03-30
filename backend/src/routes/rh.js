@@ -8,6 +8,153 @@ import { logInfo, logError } from '../logger.js';
 const router = express.Router();
 router.use(authenticate);
 
+let holidaysInfraPromise = null;
+const seededHolidayYears = new Set();
+
+function padDatePart(value) {
+  return String(value).padStart(2, '0');
+}
+
+function formatHolidayDate(year, month, day) {
+  return `${year}-${padDatePart(month)}-${padDatePart(day)}`;
+}
+
+function calculateEasterSunday(year) {
+  const a = year % 19;
+  const b = Math.floor(year / 100);
+  const c = year % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31);
+  const day = ((h + l - 7 * m + 114) % 31) + 1;
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
+function addUtcDays(date, days) {
+  const nextDate = new Date(date);
+  nextDate.setUTCDate(nextDate.getUTCDate() + days);
+  return nextDate;
+}
+
+function toIsoDate(date) {
+  return formatHolidayDate(date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate());
+}
+
+function getBrazilNationalHolidays(year) {
+  const safeYear = Number(year);
+  if (!Number.isInteger(safeYear) || safeYear < 2000 || safeYear > 2100) {
+    return [];
+  }
+
+  const easterSunday = calculateEasterSunday(safeYear);
+  const goodFriday = addUtcDays(easterSunday, -2);
+
+  return [
+    { name: 'Confraternização Universal', holiday_date: formatHolidayDate(safeYear, 1, 1), type: 'nacional', recurring: true },
+    { name: 'Paixão de Cristo', holiday_date: toIsoDate(goodFriday), type: 'nacional', recurring: false },
+    { name: 'Tiradentes', holiday_date: formatHolidayDate(safeYear, 4, 21), type: 'nacional', recurring: true },
+    { name: 'Dia do Trabalho', holiday_date: formatHolidayDate(safeYear, 5, 1), type: 'nacional', recurring: true },
+    { name: 'Independência do Brasil', holiday_date: formatHolidayDate(safeYear, 9, 7), type: 'nacional', recurring: true },
+    { name: 'Nossa Senhora Aparecida', holiday_date: formatHolidayDate(safeYear, 10, 12), type: 'nacional', recurring: true },
+    { name: 'Finados', holiday_date: formatHolidayDate(safeYear, 11, 2), type: 'nacional', recurring: true },
+    { name: 'Proclamação da República', holiday_date: formatHolidayDate(safeYear, 11, 15), type: 'nacional', recurring: true },
+    { name: 'Natal', holiday_date: formatHolidayDate(safeYear, 12, 25), type: 'nacional', recurring: true },
+  ];
+}
+
+async function ensureHolidaysInfrastructure() {
+  if (!holidaysInfraPromise) {
+    holidaysInfraPromise = (async () => {
+      await query(`
+        CREATE TABLE IF NOT EXISTS holidays (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+          name VARCHAR(255) NOT NULL,
+          holiday_date DATE NOT NULL,
+          type VARCHAR(20) DEFAULT 'nacional',
+          state VARCHAR(2),
+          city VARCHAR(100),
+          recurring BOOLEAN DEFAULT true,
+          active BOOLEAN DEFAULT true,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await query(`ALTER TABLE holidays ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE`);
+      await query(`ALTER TABLE holidays ADD COLUMN IF NOT EXISTS name VARCHAR(255)`);
+      await query(`ALTER TABLE holidays ADD COLUMN IF NOT EXISTS holiday_date DATE`);
+      await query(`ALTER TABLE holidays ADD COLUMN IF NOT EXISTS type VARCHAR(20) DEFAULT 'nacional'`);
+      await query(`ALTER TABLE holidays ADD COLUMN IF NOT EXISTS state VARCHAR(2)`);
+      await query(`ALTER TABLE holidays ADD COLUMN IF NOT EXISTS city VARCHAR(100)`);
+      await query(`ALTER TABLE holidays ADD COLUMN IF NOT EXISTS recurring BOOLEAN DEFAULT true`);
+      await query(`ALTER TABLE holidays ADD COLUMN IF NOT EXISTS active BOOLEAN DEFAULT true`);
+      await query(`ALTER TABLE holidays ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()`);
+      await query(`ALTER TABLE holidays ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`);
+      await query(`CREATE INDEX IF NOT EXISTS idx_holidays_org ON holidays(organization_id)`);
+      await query(`CREATE INDEX IF NOT EXISTS idx_holidays_date ON holidays(holiday_date)`);
+      await query(`CREATE INDEX IF NOT EXISTS idx_holidays_type ON holidays(type)`);
+      await query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_holidays_org_name_date ON holidays(organization_id, name, holiday_date)`);
+    })().catch((error) => {
+      holidaysInfraPromise = null;
+      throw error;
+    });
+  }
+
+  return holidaysInfraPromise;
+}
+
+async function seedNationalHolidays(orgId, year) {
+  const safeYear = Number(year);
+  const holidays = getBrazilNationalHolidays(safeYear);
+  if (!orgId || !holidays.length) {
+    return;
+  }
+
+  const cacheKey = `${orgId}:${safeYear}`;
+  if (seededHolidayYears.has(cacheKey)) {
+    return;
+  }
+
+  await Promise.all(
+    holidays.map((holiday) =>
+      query(
+        `INSERT INTO holidays (organization_id, name, holiday_date, type, state, city, recurring, active)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,true)
+         ON CONFLICT (organization_id, name, holiday_date) DO NOTHING`,
+        [orgId, holiday.name, holiday.holiday_date, holiday.type, null, null, holiday.recurring]
+      )
+    )
+  );
+
+  seededHolidayYears.add(cacheKey);
+}
+
+router.use('/holidays', async (req, res, next) => {
+  try {
+    await ensureHolidaysInfrastructure();
+
+    if (req.method === 'GET') {
+      const orgId = req.query.org_id || await getUserOrgId(req.userId);
+      const requestedYear = Number(req.query.year || new Date().getFullYear());
+      if (orgId && Number.isInteger(requestedYear)) {
+        await seedNationalHolidays(orgId, requestedYear);
+      }
+    }
+
+    next();
+  } catch (err) {
+    logError('rh.holidays.bootstrap', err, { user_id: req.userId, path: req.path, method: req.method });
+    res.status(500).json({ error: err?.message || 'Erro ao inicializar feriados' });
+  }
+});
+
 function emptyToNull(value) {
   if (value === undefined || value === null) return null;
   if (typeof value === 'string' && value.trim() === '') return null;
