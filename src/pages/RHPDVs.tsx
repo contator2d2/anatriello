@@ -10,7 +10,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useToast } from "@/hooks/use-toast";
 import { useEmployees } from "@/hooks/use-rh";
 import { usePDVs, useCreatePDV, useUpdatePDV } from "@/hooks/use-promotor";
-import { MapPin, Plus, Edit, Search, Loader2 } from "lucide-react";
+import { useGeocode } from "@/hooks/use-rh";
+import { MapPin, Plus, Edit, Search, Loader2, Navigation } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
