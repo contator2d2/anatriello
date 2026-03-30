@@ -80,7 +80,7 @@ export default function RHHolerite() {
 
         <div className="flex flex-col sm:flex-row gap-2">
           <Input type="month" value={monthFilter} onChange={e => setMonthFilter(e.target.value)} className="w-48" />
-          <Select value={employeeFilter} onValueChange={setEmployeeFilter}>
+          <Select value={employeeFilter || "__all__"} onValueChange={v => setEmployeeFilter(v === "__all__" ? "" : v)}>
             <SelectTrigger className="w-60"><SelectValue placeholder="Todos os colaboradores" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="__all__">Todos</SelectItem>
