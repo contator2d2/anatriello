@@ -20,7 +20,7 @@ function splitAddressAndNumber(address = '') {
   };
 }
 
-function normalizeGeocodeInput({ address, address_number, neighborhood, city, state, zip_code, requireComplete = false }) {
+function normalizeGeocodeInput({ address, address_number, complement, neighborhood, city, state, zip_code, requireComplete = false }) {
   const parsed = splitAddressAndNumber(address);
   const cleanZip = String(zip_code || '').replace(/\D/g, '');
   const street = String(parsed.street || '').trim();
@@ -28,6 +28,7 @@ function normalizeGeocodeInput({ address, address_number, neighborhood, city, st
   const normalized = {
     street,
     number,
+    complement: String(complement || '').trim(),
     neighborhood: String(neighborhood || '').trim(),
     city: String(city || '').trim(),
     state: String(state || '').trim().toUpperCase(),
@@ -47,10 +48,14 @@ function normalizeGeocodeInput({ address, address_number, neighborhood, city, st
 }
 
 function buildGeocodeCandidates(normalized) {
-  const { street, number, neighborhood, city, state, cleanZip } = normalized;
+  const { street, number, complement, neighborhood, city, state, cleanZip } = normalized;
   const streetWithNumber = [street, number].filter(Boolean).join(', ');
+  const streetWithComplement = [streetWithNumber, complement].filter(Boolean).join(', ');
 
   return [
+    [streetWithComplement, neighborhood, `${city} - ${state}`, cleanZip, 'Brasil'].filter(Boolean).join(', '),
+    [streetWithComplement, neighborhood, city, state, cleanZip, 'Brasil'].filter(Boolean).join(', '),
+    [streetWithComplement, neighborhood, city, state, 'Brasil'].filter(Boolean).join(', '),
     [streetWithNumber, neighborhood, `${city} - ${state}`, cleanZip, 'Brasil'].filter(Boolean).join(', '),
     [streetWithNumber, neighborhood, city, state, cleanZip, 'Brasil'].filter(Boolean).join(', '),
     [streetWithNumber, neighborhood, city, state, 'Brasil'].filter(Boolean).join(', '),
@@ -67,7 +72,7 @@ async function geocodeAddressWithFallback(input, options = {}) {
     return {
       geo: null,
       validationError,
-      attemptedAddress: candidates[0] || [normalized.street, normalized.number, normalized.neighborhood, normalized.city, normalized.state, normalized.cleanZip, 'Brasil'].filter(Boolean).join(', '),
+      attemptedAddress: candidates[0] || [normalized.street, normalized.number, normalized.complement, normalized.neighborhood, normalized.city, normalized.state, normalized.cleanZip, 'Brasil'].filter(Boolean).join(', '),
     };
   }
 
@@ -95,8 +100,8 @@ async function geocodeAddressWithFallback(input, options = {}) {
 }
 
 // Auto-geocode using canonical Brazilian address + Nominatim
-async function autoGeocodeAddress(address, city, state, zip_code, neighborhood, address_number = null) {
-  const result = await geocodeAddressWithFallback({ address, address_number, neighborhood, city, state, zip_code });
+async function autoGeocodeAddress(address, city, state, zip_code, neighborhood, address_number = null, complement = null) {
+  const result = await geocodeAddressWithFallback({ address, address_number, complement, neighborhood, city, state, zip_code });
   return result.geo;
 }
 
@@ -391,7 +396,7 @@ router.post('/employees', async (req, res) => {
 
     // Auto-geocode home address if no coordinates provided
     if (!d.home_latitude && !d.home_longitude && (d.address || d.city)) {
-      const geo = await autoGeocodeAddress(d.address, d.city, d.state, d.zip_code, d.neighborhood);
+      const geo = await autoGeocodeAddress(d.address, d.city, d.state, d.zip_code, d.neighborhood, d.address_number, d.complement);
       if (geo) { d.home_latitude = geo.lat; d.home_longitude = geo.lng; }
     }
 
@@ -462,11 +467,14 @@ router.put('/employees/:id', async (req, res) => {
     const addressChanged = ['address', 'city', 'state', 'zip_code'].some(k => sentKeys.includes(k));
     if (addressChanged && !d.home_latitude && !d.home_longitude) {
       const addrVal = d.address || req.body.address;
+      const addressNumberVal = d.address_number || req.body.address_number;
+      const complementVal = d.complement || req.body.complement;
       const cityVal = d.city || req.body.city;
       const stateVal = d.state || req.body.state;
+      const zipVal = d.zip_code || req.body.zip_code;
       const neighborhoodVal = d.neighborhood || req.body.neighborhood;
       if (addrVal || cityVal) {
-        const geo = await autoGeocodeAddress(addrVal, cityVal, stateVal, zipVal, neighborhoodVal);
+        const geo = await autoGeocodeAddress(addrVal, cityVal, stateVal, zipVal, neighborhoodVal, addressNumberVal, complementVal);
         if (geo) { d.home_latitude = geo.lat; d.home_longitude = geo.lng; }
       }
     }
@@ -1670,14 +1678,22 @@ router.delete('/regions/:regionId/pdvs/:pdvId', async (req, res) => {
 // ===== GEOCODING (via Nominatim - free) =====
 router.post('/geocode', async (req, res) => {
   try {
-    const { address, address_number, neighborhood, city, state, zip_code } = req.body || {};
+    const payload = req.body || {};
+    const address = payload.address || payload.endereco || '';
+    const address_number = payload.address_number || payload.numero || '';
+    const complement = payload.complement || payload.complemento || '';
+    const neighborhood = payload.neighborhood || payload.bairro || '';
+    const city = payload.city || payload.cidade || '';
+    const state = payload.state || payload.estado || '';
+    const zip_code = payload.zip_code || payload.cep || '';
+
     const result = await geocodeAddressWithFallback(
-      { address, address_number, neighborhood, city, state, zip_code },
+      { address, address_number, complement, neighborhood, city, state, zip_code },
       { requireComplete: true }
     );
 
     if (result.validationError) {
-      return res.status(400).json({ error: result.validationError, attempted_address: result.attemptedAddress });
+      return res.status(400).json({ error: result.validationError, details: `Busca: ${result.attemptedAddress}`, attempted_address: result.attemptedAddress });
     }
 
     if (!result.geo) {
