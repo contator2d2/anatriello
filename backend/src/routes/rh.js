@@ -65,6 +65,8 @@ function normalizeEmployeePayload(body = {}) {
     photo_url: emptyToNull(body.photo_url),
     salary_items: Array.isArray(body.salary_items) ? body.salary_items : [],
     benefits: Array.isArray(body.benefits) ? body.benefits : [],
+    home_latitude: emptyToNull(body.home_latitude) ? Number(body.home_latitude) : null,
+    home_longitude: emptyToNull(body.home_longitude) ? Number(body.home_longitude) : null,
   };
 }
 
