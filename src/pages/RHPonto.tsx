@@ -451,7 +451,7 @@ export default function RHPonto() {
                             {p.is_offline ? (
                               <Badge variant="outline" className="text-[10px]"><WifiOff className="h-3 w-3 mr-1" />Offline</Badge>
                             ) : (
-                              <Badge variant="outline" className="text-[10px] text-green-600 border-green-300"><Wifi className="h-3 w-3 mr-1" />Online</Badge>
+                              <Badge variant="outline" className="text-[10px]"><Wifi className="h-3 w-3 mr-1" />Online</Badge>
                             )}
                             <Badge variant={p.sync_status === 'synced' ? 'default' : 'secondary'} className="text-[10px]">
                               {p.sync_status === 'synced' ? '✓ Sync' : '⏳ Pendente'}
