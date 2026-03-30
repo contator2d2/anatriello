@@ -32,6 +32,7 @@ export default function PromotorEnviar() {
   const [category, setCategory] = useState('');
   const [title, setTitle] = useState('');
   const [observation, setObservation] = useState('');
+  const [fileUrl, setFileUrl] = useState('');
   const [sending, setSending] = useState(false);
   const sendDoc = usePromotorSendDocument();
   const { data: history, isLoading } = usePromotorInboundDocuments();
