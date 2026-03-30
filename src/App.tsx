@@ -63,6 +63,7 @@ import VerificarDocumento from "./pages/VerificarDocumento";
 import RHColaboradores from "./pages/RHColaboradores";
 import RHPonto from "./pages/RHPonto";
 import RHHolerite from "./pages/RHHolerite";
+import RHDashboard from "./pages/RHDashboard";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -161,6 +162,7 @@ const App = () => (
             <Route path="/meta-templates" element={<ProtectedRoute><MetaTemplates /></ProtectedRoute>} />
             <Route path="/assinaturas" element={<ProtectedRoute><Assinaturas /></ProtectedRoute>} />
             <Route path="/rh/colaboradores" element={<ProtectedRoute><RHColaboradores /></ProtectedRoute>} />
+            <Route path="/rh/dashboard" element={<ProtectedRoute><RHDashboard /></ProtectedRoute>} />
             <Route path="/rh/ponto" element={<ProtectedRoute><RHPonto /></ProtectedRoute>} />
             <Route path="/rh/holerite" element={<ProtectedRoute><RHHolerite /></ProtectedRoute>} />
             <Route path="/api-docs" element={<ApiDocumentation />} />
