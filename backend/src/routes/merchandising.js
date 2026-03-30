@@ -6,6 +6,28 @@ import { logInfo, logError } from '../logger.js';
 const router = express.Router();
 router.use(authenticate);
 
+// Helper: resolve organization_id from token user
+async function getUserOrgId(userId) {
+  const r = await query(
+    `SELECT organization_id FROM organization_members WHERE user_id = $1 LIMIT 1`,
+    [userId]
+  );
+  return r.rows[0]?.organization_id || null;
+}
+
+// Middleware: attach orgId to every request
+router.use(async (req, res, next) => {
+  try {
+    const orgId = req.query.org_id || req.body?.organization_id || await getUserOrgId(req.userId);
+    if (!orgId) return res.status(400).json({ error: 'Organização não encontrada para o usuário' });
+    req.orgId = orgId;
+    next();
+  } catch (e) {
+    logError('merch org middleware', e);
+    res.status(500).json({ error: 'Erro ao resolver organização' });
+  }
+});
+
 let infraDone = false;
 
 async function ensureMerchandisingInfra() {
