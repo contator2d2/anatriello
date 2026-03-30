@@ -54,7 +54,7 @@ export default function PromotorPonto() {
         {dates.map(date => (
           <Card key={date}>
             <CardHeader className="p-3 pb-1">
-              <CardTitle className="text-sm font-medium">{format(new Date(date + 'T12:00:00'), 'EEEE, dd/MM/yyyy', { locale: undefined })}</CardTitle>
+              <CardTitle className="text-sm font-medium">{safeFormatDate(date + 'T12:00:00', 'EEEE, dd/MM/yyyy')}</CardTitle>
             </CardHeader>
             <CardContent className="p-3 pt-0 space-y-2">
               {grouped[date].map((p: any) => (
