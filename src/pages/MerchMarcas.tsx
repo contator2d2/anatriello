@@ -53,7 +53,7 @@ export default function MerchMarcas() {
   const set = (k: string, v: any) => setForm((p: any) => ({ ...p, [k]: v }));
 
   return (
-    <MainLayout title="Marcas">
+    <MainLayout>
       <div className="space-y-4">
         <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
           <div className="flex gap-2 flex-1 w-full sm:w-auto">

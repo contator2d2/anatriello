@@ -77,7 +77,7 @@ export default function MerchMixPDV() {
   const toggleRemove = (id: string) => setSelectedToRemove(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
 
   return (
-    <MainLayout title="Mix por PDV">
+    <MainLayout>
       <div className="space-y-4">
         {/* PDV Selector */}
         <Card>

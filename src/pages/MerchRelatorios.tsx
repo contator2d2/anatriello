@@ -21,7 +21,7 @@ export default function MerchRelatorios() {
   const { data: pdvReport = [] } = usePdvReport(selectedPdvId || undefined);
 
   return (
-    <MainLayout title="Relatórios Merchandising">
+    <MainLayout>
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="mb-4">
           <TabsTrigger value="marca"><Building2 className="h-4 w-4 mr-1" />Por Marca</TabsTrigger>

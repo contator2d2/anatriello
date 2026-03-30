@@ -90,7 +90,7 @@ export default function MerchProdutos() {
   };
 
   return (
-    <MainLayout title="Produtos">
+    <MainLayout>
       <div className="space-y-4">
         <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
           <div className="flex gap-2 flex-1 flex-wrap">

@@ -56,7 +56,7 @@ export default function MerchCategorias() {
   };
 
   return (
-    <MainLayout title="Categorias e Subcategorias">
+    <MainLayout>
       <Tabs value={tab} onValueChange={setTab}>
         <div className="flex justify-between items-center mb-4">
           <TabsList>
