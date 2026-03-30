@@ -406,6 +406,52 @@ router.delete('/rh-departments/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: 'Erro' }); }
 });
 
+router.delete('/branches/:id', async (req, res) => {
+  try {
+    await query(`DELETE FROM branches WHERE id = $1`, [req.params.id]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: 'Erro' }); }
+});
+
+// ===== WORKER PROFILES (PERFIS FUNCIONAIS) =====
+router.get('/worker-profiles', async (req, res) => {
+  try {
+    const orgId = req.query.org_id || await getUserOrgId(req.userId);
+    await query(`CREATE TABLE IF NOT EXISTS rh_worker_profiles (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id UUID NOT NULL,
+      name VARCHAR(200) NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+    const result = await query(`SELECT * FROM rh_worker_profiles WHERE organization_id = $1 ORDER BY name`, [orgId]);
+    res.json(result.rows);
+  } catch (err) { res.status(500).json({ error: 'Erro' }); }
+});
+
+router.post('/worker-profiles', async (req, res) => {
+  try {
+    const orgId = req.body.organization_id || await getUserOrgId(req.userId);
+    await query(`CREATE TABLE IF NOT EXISTS rh_worker_profiles (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id UUID NOT NULL,
+      name VARCHAR(200) NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+    const result = await query(
+      `INSERT INTO rh_worker_profiles (organization_id, name) VALUES ($1,$2) RETURNING *`,
+      [orgId, req.body.name]
+    );
+    res.json(result.rows[0]);
+  } catch (err) { res.status(500).json({ error: 'Erro ao criar perfil' }); }
+});
+
+router.delete('/worker-profiles/:id', async (req, res) => {
+  try {
+    await query(`DELETE FROM rh_worker_profiles WHERE id = $1`, [req.params.id]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: 'Erro' }); }
+});
+
 // ===== AUDIT LOG =====
 
 // ===== RH DASHBOARD STATS =====

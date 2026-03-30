@@ -165,6 +165,33 @@ export function useDeleteRhPosition() {
   });
 }
 
+export function useDeleteBranch() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api<any>(`/api/rh/branches/${id}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['rh-branches'] }),
+  });
+}
+
+// ===== WORKER PROFILES (PERFIS FUNCIONAIS) =====
+export function useWorkerProfiles() {
+  return useQuery({ queryKey: ['rh-worker-profiles'], queryFn: () => api<any[]>('/api/rh/worker-profiles') });
+}
+export function useCreateWorkerProfile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: any) => api<any>('/api/rh/worker-profiles', { method: 'POST', body: data }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['rh-worker-profiles'] }),
+  });
+}
+export function useDeleteWorkerProfile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api<any>(`/api/rh/worker-profiles/${id}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['rh-worker-profiles'] }),
+  });
+}
+
 export function useCostCenters() {
   return useQuery({ queryKey: ['rh-cost-centers'], queryFn: () => api<any[]>('/api/rh/cost-centers') });
 }
