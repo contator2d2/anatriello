@@ -13,10 +13,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import {
   Plus, Clock, Smartphone, MapPin, CheckCircle2, AlertTriangle, Wifi, WifiOff,
-  Download, FileSpreadsheet, CalendarDays, CalendarRange, Calendar, Send, Filter
+  Download, FileSpreadsheet, CalendarDays, CalendarRange, Calendar, Filter
 } from "lucide-react";
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subDays, subMonths } from "date-fns";
-import { ptBR } from "date-fns/locale";
 import * as XLSX from "xlsx";
 
 const STATUS_LABELS: Record<string, string> = {
@@ -59,6 +58,35 @@ function getPeriodDates(preset: PeriodPreset): { start: string; end: string } {
     default:
       return { start: format(subDays(now, 30), 'yyyy-MM-dd'), end: format(now, 'yyyy-MM-dd') };
   }
+}
+
+function parseDateValue(value: unknown): Date | null {
+  if (!value) return null;
+
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+
+  const raw = String(value).trim();
+  if (!raw) return null;
+
+  const normalized = /^\d{4}-\d{2}-\d{2}$/.test(raw)
+    ? `${raw}T12:00:00`
+    : raw.includes(' ') && !raw.includes('T')
+      ? raw.replace(' ', 'T')
+      : raw;
+
+  const parsed = new Date(normalized);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function formatDateValue(value: unknown, mask: string, fallback = '—') {
+  const parsed = parseDateValue(value);
+  return parsed ? format(parsed, mask) : fallback;
+}
+
+function getPunchTimestamp(punch: any) {
+  return punch?.punched_at || punch?.offline_local_time || punch?.created_at || null;
 }
 
 export default function RHPonto() {
@@ -110,12 +138,13 @@ export default function RHPonto() {
       await saveMut.mutateAsync({ ...form, total_hours: totalH, overtime_hours: overtime });
       toast({ title: "Ponto registrado!" });
       setDialogOpen(false);
-    } catch { toast({ title: "Erro ao registrar ponto", variant: "destructive" }); }
+    } catch {
+      toast({ title: "Erro ao registrar ponto", variant: "destructive" });
+    }
   };
 
   const setField = (k: string, v: any) => setForm((p: any) => ({ ...p, [k]: v }));
 
-  // Export individual employee timesheet to XLSX
   const exportEmployeeXLS = useCallback((empId?: string) => {
     const empData = empId
       ? consolidated.filter((c: any) => c.employee_id === empId)
@@ -135,14 +164,14 @@ export default function RHPonto() {
       const saida = punches.find((p: any) => p.punch_type === 'saida');
 
       return {
-        'Data': c.record_date ? format(new Date(c.record_date + 'T12:00:00'), 'dd/MM/yyyy') : '',
+        'Data': formatDateValue(c.record_date, 'dd/MM/yyyy', ''),
         'Colaborador': c.employee_name,
         'CPF': c.cpf || '',
         'Cargo': c.position || '',
-        'Entrada': entrada ? format(new Date(entrada.punched_at), 'HH:mm') : '',
-        'Saída Intervalo': saidaInt ? format(new Date(saidaInt.punched_at), 'HH:mm') : '',
-        'Retorno Intervalo': retorno ? format(new Date(retorno.punched_at), 'HH:mm') : '',
-        'Saída': saida ? format(new Date(saida.punched_at), 'HH:mm') : '',
+        'Entrada': formatDateValue(getPunchTimestamp(entrada), 'HH:mm', ''),
+        'Saída Intervalo': formatDateValue(getPunchTimestamp(saidaInt), 'HH:mm', ''),
+        'Retorno Intervalo': formatDateValue(getPunchTimestamp(retorno), 'HH:mm', ''),
+        'Saída': formatDateValue(getPunchTimestamp(saida), 'HH:mm', ''),
         'Total Registros': c.punch_count,
         'Horas Brutas': c.raw_hours ? Number(c.raw_hours).toFixed(2) : '',
         'Status Geo': punches.some((p: any) => p.geo_status === 'fora_area') ? 'FORA PDV' : 'OK',
@@ -151,7 +180,6 @@ export default function RHPonto() {
     });
 
     const ws = XLSX.utils.json_to_sheet(rows);
-    // Column widths
     ws['!cols'] = [
       { wch: 12 }, { wch: 30 }, { wch: 15 }, { wch: 20 },
       { wch: 8 }, { wch: 14 }, { wch: 16 }, { wch: 8 },
@@ -160,11 +188,10 @@ export default function RHPonto() {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Folha de Ponto");
 
-    // Add divergences sheet if present
     const empDivs = empId ? divergences.filter((d: any) => d.employee_id === empId) : divergences;
     if (empDivs.length > 0) {
       const divRows = empDivs.map((d: any) => ({
-        'Data': d.date ? format(new Date(d.date + 'T12:00:00'), 'dd/MM/yyyy') : '',
+        'Data': formatDateValue(d.date, 'dd/MM/yyyy', ''),
         'Colaborador': d.employee_name,
         'Tipo': d.type === 'sem_registro' ? 'Sem Registro' : d.type === 'incompleto' ? 'Incompleto' : 'Fora PDV',
         'Descrição': d.description,
@@ -175,7 +202,7 @@ export default function RHPonto() {
       XLSX.utils.book_append_sheet(wb, wsDiv, "Divergências");
     }
 
-    const fileName = `folha_ponto_${empName.replace(/\s+/g, '_')}_${startDate}_${endDate}.xlsx`;
+    const fileName = `folha_ponto_${String(empName || 'Todos').replace(/\s+/g, '_')}_${startDate}_${endDate}.xlsx`;
     XLSX.writeFile(wb, fileName);
     toast({ title: "Exportação concluída!", description: fileName });
   }, [consolidated, divergences, startDate, endDate, toast]);
@@ -211,7 +238,6 @@ export default function RHPonto() {
           </div>
         </div>
 
-        {/* Period Presets */}
         <div className="flex flex-wrap gap-2 items-center">
           <Filter className="h-4 w-4 text-muted-foreground" />
           {([
@@ -240,7 +266,6 @@ export default function RHPonto() {
           )}
         </div>
 
-        {/* Employee + Period info */}
         <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
           <Select value={employeeFilter || "__all__"} onValueChange={v => setEmployeeFilter(v === "__all__" ? "" : v)}>
             <SelectTrigger className="w-60"><SelectValue placeholder="Todos os colaboradores" /></SelectTrigger>
@@ -249,7 +274,9 @@ export default function RHPonto() {
               {employees.map((e: any) => <SelectItem key={e.id} value={e.id}>{e.full_name}</SelectItem>)}
             </SelectContent>
           </Select>
-          <Badge variant="outline" className="text-xs">{periodLabel}: {format(new Date(startDate + 'T12:00:00'), 'dd/MM')} - {format(new Date(endDate + 'T12:00:00'), 'dd/MM/yyyy')}</Badge>
+          <Badge variant="outline" className="text-xs">
+            {periodLabel}: {formatDateValue(startDate, 'dd/MM')} - {formatDateValue(endDate, 'dd/MM/yyyy')}
+          </Badge>
           {employeeFilter && (
             <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => exportEmployeeXLS(employeeFilter)}>
               <Download className="h-3.5 w-3.5" /> Exportar Individual
@@ -257,7 +284,6 @@ export default function RHPonto() {
           )}
         </div>
 
-        {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
           <Card><CardContent className="p-3 text-center"><p className="text-xl font-bold text-foreground">{consolidated.length}</p><p className="text-[10px] text-muted-foreground">Dias Registrados</p></CardContent></Card>
           <Card><CardContent className="p-3 text-center"><p className="text-xl font-bold text-foreground">{appPunches.length}</p><p className="text-[10px] text-muted-foreground">Registros App</p></CardContent></Card>
@@ -272,7 +298,6 @@ export default function RHPonto() {
           <Card><CardContent className="p-3 text-center"><p className="text-xl font-bold text-orange-600">{outsidePdv.length}</p><p className="text-[10px] text-muted-foreground">Fora PDV</p></CardContent></Card>
         </div>
 
-        {/* Divergence alerts */}
         {filteredDivergences.length > 0 && (
           <Card className="border-destructive/30">
             <CardHeader className="p-3 pb-2">
@@ -291,7 +316,7 @@ export default function RHPonto() {
                       <div className="flex-1 min-w-0">
                         <span className="font-medium">{d.employee_name}</span>
                         <span className="text-muted-foreground mx-2">•</span>
-                        <span className="text-xs text-muted-foreground">{d.date ? format(new Date(d.date + 'T12:00:00'), 'dd/MM/yyyy') : ''}</span>
+                        <span className="text-xs text-muted-foreground">{formatDateValue(d.date, 'dd/MM/yyyy', '')}</span>
                       </div>
                       <span className="text-xs text-muted-foreground truncate max-w-48">{d.description}</span>
                       <Badge variant={d.severity === 'high' ? 'destructive' : d.severity === 'medium' ? 'secondary' : 'outline'} className="text-[10px]">
@@ -315,7 +340,6 @@ export default function RHPonto() {
             <TabsTrigger value="manual" className="gap-2"><Clock className="h-4 w-4" /> Manual ({records.length})</TabsTrigger>
           </TabsList>
 
-          {/* Consolidated view */}
           <TabsContent value="consolidated">
             <Card>
               <CardContent className="p-0">
@@ -351,13 +375,13 @@ export default function RHPonto() {
                       return (
                         <TableRow key={idx} className={isIncomplete ? 'bg-yellow-50/50 dark:bg-yellow-950/10' : hasGeoIssue ? 'bg-orange-50/50 dark:bg-orange-950/10' : ''}>
                           <TableCell className="font-medium text-sm">
-                            {c.record_date ? format(new Date(c.record_date + 'T12:00:00'), 'dd/MM/yyyy') : '—'}
+                            {formatDateValue(c.record_date, 'dd/MM/yyyy')}
                           </TableCell>
                           <TableCell className="text-sm">{c.employee_name}</TableCell>
-                          <TableCell className="text-sm">{entrada ? format(new Date(entrada.punched_at), 'HH:mm') : '—'}</TableCell>
-                          <TableCell className="hidden md:table-cell text-sm">{saidaInt ? format(new Date(saidaInt.punched_at), 'HH:mm') : '—'}</TableCell>
-                          <TableCell className="hidden md:table-cell text-sm">{retorno ? format(new Date(retorno.punched_at), 'HH:mm') : '—'}</TableCell>
-                          <TableCell className="text-sm">{saida ? format(new Date(saida.punched_at), 'HH:mm') : '—'}</TableCell>
+                          <TableCell className="text-sm">{formatDateValue(getPunchTimestamp(entrada), 'HH:mm')}</TableCell>
+                          <TableCell className="hidden md:table-cell text-sm">{formatDateValue(getPunchTimestamp(saidaInt), 'HH:mm')}</TableCell>
+                          <TableCell className="hidden md:table-cell text-sm">{formatDateValue(getPunchTimestamp(retorno), 'HH:mm')}</TableCell>
+                          <TableCell className="text-sm">{formatDateValue(getPunchTimestamp(saida), 'HH:mm')}</TableCell>
                           <TableCell className="font-medium text-sm">{hours}h</TableCell>
                           <TableCell>
                             <div className="flex gap-1">
@@ -385,7 +409,6 @@ export default function RHPonto() {
             </Card>
           </TabsContent>
 
-          {/* App punches */}
           <TabsContent value="app">
             <Card>
               <CardContent className="p-0">
@@ -408,7 +431,7 @@ export default function RHPonto() {
                     ) : appPunches.map((p: any) => (
                       <TableRow key={p.id}>
                         <TableCell className="font-medium text-sm">
-                          {p.punched_at ? format(new Date(p.punched_at), "dd/MM/yyyy HH:mm:ss") : "—"}
+                          {formatDateValue(getPunchTimestamp(p), 'dd/MM/yyyy HH:mm:ss', 'Pendente')}
                         </TableCell>
                         <TableCell>{p.employee_name}</TableCell>
                         <TableCell><span className="text-sm">{PUNCH_LABELS[p.punch_type] || p.punch_type}</span></TableCell>
@@ -443,7 +466,6 @@ export default function RHPonto() {
             </Card>
           </TabsContent>
 
-          {/* Manual records */}
           <TabsContent value="manual">
             <Card>
               <CardContent className="p-0">
@@ -468,7 +490,7 @@ export default function RHPonto() {
                       <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">Nenhum registro encontrado</TableCell></TableRow>
                     ) : records.map((r: any) => (
                       <TableRow key={r.id}>
-                        <TableCell className="font-medium">{r.record_date ? format(new Date(r.record_date + "T12:00:00"), "dd/MM/yyyy") : "—"}</TableCell>
+                        <TableCell className="font-medium">{formatDateValue(r.record_date, 'dd/MM/yyyy')}</TableCell>
                         <TableCell>{r.employee_name}</TableCell>
                         <TableCell className="hidden md:table-cell">{r.entry1 || "—"}</TableCell>
                         <TableCell className="hidden md:table-cell">{r.exit1 || "—"}</TableCell>
@@ -487,7 +509,6 @@ export default function RHPonto() {
         </Tabs>
       </div>
 
-      {/* Register Punch Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader><DialogTitle>Registrar Ponto</DialogTitle></DialogHeader>
