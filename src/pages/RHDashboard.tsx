@@ -605,9 +605,41 @@ export default function RHDashboard() {
                 </SelectContent>
               </Select>
             </div>
+            {isAnalyzing && (
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-primary/5 border border-primary/20">
+                <Sparkles className="h-4 w-4 text-primary animate-pulse" />
+                <span className="text-sm text-primary font-medium">IA analisando atestado...</span>
+                <Loader2 className="h-4 w-4 animate-spin text-primary ml-auto" />
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <div><Label>Nome do Médico</Label><Input value={certForm.doctor_name} onChange={e => setCertField("doctor_name", e.target.value)} /></div>
-              <div><Label>CRM</Label><Input value={certForm.doctor_crm} onChange={e => setCertField("doctor_crm", e.target.value)} /></div>
+              <div>
+                <Label>CRM</Label>
+                <div className="flex gap-1">
+                  <Input value={certForm.doctor_crm} onChange={e => { setCertField("doctor_crm", e.target.value); setCrmValidation(null); }} className="flex-1" />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="shrink-0"
+                    disabled={!certForm.doctor_crm || isValidatingCrm}
+                    onClick={() => {
+                      const parts = certForm.doctor_crm.match(/(\d+)\/?(\w{2})?/);
+                      if (parts) validateCrmNumber(parts[1], parts[2] || '');
+                    }}
+                    title="Verificar CRM"
+                  >
+                    {isValidatingCrm ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                  </Button>
+                </div>
+                {crmValidation && (
+                  <div className={`mt-1 flex items-center gap-1 text-xs ${crmValidation.valid === true ? 'text-green-600' : crmValidation.valid === false ? 'text-red-600' : 'text-yellow-600'}`}>
+                    {crmValidation.valid === true ? <ShieldCheck className="h-3 w-3" /> : crmValidation.valid === false ? <ShieldX className="h-3 w-3" /> : <ShieldQuestion className="h-3 w-3" />}
+                    <span>{crmValidation.valid === true ? `Ativo — ${crmValidation.doctor_name}` : crmValidation.valid === false ? 'CRM não encontrado/inativo' : crmValidation.message}</span>
+                  </div>
+                )}
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div><Label>CID</Label><Input value={certForm.cid_code} onChange={e => setCertField("cid_code", e.target.value)} placeholder="Ex: J11" /></div>
