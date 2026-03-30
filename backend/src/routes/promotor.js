@@ -694,7 +694,7 @@ router.post('/rh/pdvs', async (req, res) => {
     let lat = d.latitude, lng = d.longitude;
     if ((!lat || !lng) && (d.address || d.city)) {
       try {
-        const geo = await autoGeocode(d.address, d.city, d.state, d.zip_code);
+        const geo = await autoGeocode(d.address, d.city, d.state, d.zip_code, d.neighborhood);
         if (geo) { lat = geo.lat; lng = geo.lng; }
       } catch (_) {}
     }
