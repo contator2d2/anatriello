@@ -69,6 +69,39 @@ export function useApproveOvertimeRequest() {
   });
 }
 
+// Location tracking - sends GPS updates every 60s during work hours
+export function useLocationTracking() {
+  useEffect(() => {
+    const token = localStorage.getItem('promotor_token');
+    if (!token || !navigator.geolocation) return;
+
+    const sendLocation = () => {
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          try {
+            await promotorApi('/api/promotor/location-update', {
+              method: 'POST',
+              body: {
+                latitude: pos.coords.latitude,
+                longitude: pos.coords.longitude,
+                accuracy_meters: pos.coords.accuracy,
+                battery_level: (navigator as any).getBattery ? await (navigator as any).getBattery().then((b: any) => Math.round(b.level * 100)).catch(() => null) : null,
+                is_moving: pos.coords.speed ? pos.coords.speed > 0.5 : false,
+              },
+            });
+          } catch { /* silent */ }
+        },
+        () => { /* GPS denied/unavailable - silent */ },
+        { enableHighAccuracy: true, timeout: 10000 }
+      );
+    };
+
+    sendLocation();
+    const interval = setInterval(sendLocation, 60000); // every 60s
+    return () => clearInterval(interval);
+  }, []);
+}
+
 export function usePromotorPunches(filters?: { start_date?: string; end_date?: string }) {
   const params = new URLSearchParams();
   if (filters?.start_date) params.set('start_date', filters.start_date);
