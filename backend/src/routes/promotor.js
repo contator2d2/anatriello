@@ -999,7 +999,82 @@ router.post('/rh/time-rules', async (req, res) => {
   } catch (err) { res.status(500).json({ error: 'Erro' }); }
 });
 
-export default router;
+// =============================================
+// PROMOTOR: ATUALIZAR LOCALIZAÇÃO EM TEMPO REAL
+// =============================================
+router.post('/location-update', authenticatePromotor, async (req, res) => {
+  try {
+    const { latitude, longitude, accuracy_meters, battery_level, is_moving } = req.body;
+    if (!latitude || !longitude) return res.status(400).json({ error: 'Coordenadas obrigatórias' });
 
-// Note: location-update and live-map routes are added below before export
-// They were inserted before the final export statement
+    // Check work schedule - only track during work hours
+    const empRes = await query(`SELECT work_schedule FROM employees WHERE id = $1`, [req.employeeId]);
+    const ws = empRes.rows[0]?.work_schedule || '08:00-17:00';
+    const wsParts = String(ws).split('-');
+    const now = new Date();
+    const currentMin = now.getHours() * 60 + now.getMinutes();
+    const startMin = wsParts[0] ? wsParts[0].split(':').reduce((h, m) => parseInt(h) * 60 + parseInt(m), 0) : 480;
+    const endMin = wsParts[1] ? wsParts[1].split(':').reduce((h, m) => parseInt(h) * 60 + parseInt(m), 0) : 1020;
+
+    // 15 min tolerance before/after
+    if (currentMin < (startMin - 15) || currentMin > (endMin + 15)) {
+      return res.json({ tracked: false, reason: 'outside_schedule' });
+    }
+
+    await query(
+      `INSERT INTO employee_live_locations (organization_id, employee_id, latitude, longitude, accuracy_meters, battery_level, is_moving, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())
+       ON CONFLICT (employee_id) DO UPDATE SET latitude=$3, longitude=$4, accuracy_meters=$5, battery_level=$6, is_moving=$7, updated_at=NOW()`,
+      [req.organizationId, req.employeeId, latitude, longitude, accuracy_meters || null, battery_level || null, is_moving || false]
+    );
+
+    res.json({ tracked: true });
+  } catch (err) {
+    logError('promotor.location-update', err);
+    res.status(500).json({ error: 'Erro' });
+  }
+});
+
+// =============================================
+// RH: LIVE MAP DATA
+// =============================================
+router.get('/rh/live-map', async (req, res) => {
+  try {
+    const orgId = req.query.org_id || (await query(`SELECT organization_id FROM organization_members WHERE user_id = $1 LIMIT 1`, [req.userId])).rows[0]?.organization_id;
+    if (!orgId) return res.json({ employees: [], pdvs: [], regions: [] });
+
+    const today = new Date().toISOString().slice(0, 10);
+
+    const [employees, pdvs, regions] = await Promise.all([
+      query(`
+        SELECT e.id, e.full_name, e.position, e.worker_profile, e.work_schedule, e.photo_url,
+          e.home_latitude, e.home_longitude,
+          ll.latitude as live_lat, ll.longitude as live_lng, ll.accuracy_meters as live_accuracy,
+          ll.battery_level, ll.is_moving, ll.updated_at as location_updated_at,
+          CASE WHEN ll.updated_at > NOW() - INTERVAL '5 minutes' THEN 'online' ELSE 'offline' END as live_status,
+          (SELECT COUNT(*) FROM time_punches tp WHERE tp.employee_id = e.id AND tp.punched_at::date = $2) as punch_count,
+          (SELECT tp.punch_type FROM time_punches tp WHERE tp.employee_id = e.id AND tp.punched_at::date = $2 ORDER BY tp.punched_at DESC LIMIT 1) as last_punch_type,
+          (SELECT tp.punched_at FROM time_punches tp WHERE tp.employee_id = e.id AND tp.punched_at::date = $2 ORDER BY tp.punched_at DESC LIMIT 1) as last_punch_at,
+          (SELECT tp.pdv_id FROM time_punches tp WHERE tp.employee_id = e.id AND tp.punched_at::date = $2 ORDER BY tp.punched_at DESC LIMIT 1) as last_pdv_id,
+          (SELECT p.name FROM time_punches tp JOIN pdvs p ON p.id = tp.pdv_id WHERE tp.employee_id = e.id AND tp.punched_at::date = $2 ORDER BY tp.punched_at DESC LIMIT 1) as last_pdv_name
+        FROM employees e
+        LEFT JOIN employee_live_locations ll ON ll.employee_id = e.id
+        WHERE e.organization_id = $1 AND e.status = 'ativo'
+        ORDER BY e.full_name
+      `, [orgId, today]),
+      query(`SELECT id, name, client_name, address, city, state, latitude, longitude, radius_meters, active FROM pdvs WHERE organization_id = $1 AND active = true`, [orgId]),
+      query(`SELECT sr.*, e.full_name as supervisor_name FROM service_regions sr LEFT JOIN employees e ON e.id = sr.supervisor_id WHERE sr.organization_id = $1 AND sr.active = true`, [orgId]),
+    ]);
+
+    res.json({
+      employees: employees.rows,
+      pdvs: pdvs.rows,
+      regions: regions.rows,
+    });
+  } catch (err) {
+    logError('promotor.live-map', err);
+    res.status(500).json({ error: 'Erro' });
+  }
+});
+
+export default router;
