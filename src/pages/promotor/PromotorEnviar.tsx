@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { FileUploadInput } from "@/components/ui/file-upload-input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
@@ -31,6 +32,7 @@ export default function PromotorEnviar() {
   const [category, setCategory] = useState('');
   const [title, setTitle] = useState('');
   const [observation, setObservation] = useState('');
+  const [fileUrl, setFileUrl] = useState('');
   const [sending, setSending] = useState(false);
   const sendDoc = usePromotorSendDocument();
   const { data: history, isLoading } = usePromotorInboundDocuments();
@@ -40,9 +42,9 @@ export default function PromotorEnviar() {
     if (!category) { toast({ title: 'Selecione a categoria', variant: 'destructive' }); return; }
     setSending(true);
     try {
-      await sendDoc.mutateAsync({ category, title: title || CATEGORIES.find(c => c.value === category)?.label, observation });
+      await sendDoc.mutateAsync({ category, title: title || CATEGORIES.find(c => c.value === category)?.label, observation, file_url: fileUrl });
       toast({ title: 'Documento enviado ao RH!' });
-      setCategory(''); setTitle(''); setObservation('');
+      setCategory(''); setTitle(''); setObservation(''); setFileUrl('');
     } catch (err: any) {
       toast({ title: 'Erro', description: err.message, variant: 'destructive' });
     } finally {
@@ -73,6 +75,16 @@ export default function PromotorEnviar() {
             <div className="space-y-2">
               <Label>Observação</Label>
               <Textarea value={observation} onChange={e => setObservation(e.target.value)} placeholder="Informações adicionais..." rows={3} />
+            </div>
+            <div className="space-y-2">
+              <Label>Anexar Arquivo</Label>
+              <FileUploadInput
+                value={fileUrl}
+                onChange={setFileUrl}
+                accept="image/*,.pdf,.doc,.docx,.jpg,.jpeg,.png"
+                placeholder="Selecione ou arraste o arquivo"
+                previewType="file"
+              />
             </div>
             <Button onClick={handleSend} disabled={sending || !category} className="w-full">
               {sending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Upload className="h-4 w-4 mr-2" />}
