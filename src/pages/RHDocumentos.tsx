@@ -77,7 +77,7 @@ export default function RHDocumentos() {
               <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger className="w-40"><SelectValue placeholder="Status" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Todos</SelectItem>
+                  <SelectItem value="__all__">Todos</SelectItem>
                   <SelectItem value="enviado">Enviado</SelectItem>
                   <SelectItem value="visualizado">Visualizado</SelectItem>
                   <SelectItem value="confirmado">Confirmado</SelectItem>

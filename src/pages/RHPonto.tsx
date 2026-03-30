@@ -86,7 +86,7 @@ export default function RHPonto() {
           <Select value={employeeFilter} onValueChange={setEmployeeFilter}>
             <SelectTrigger className="w-60"><SelectValue placeholder="Todos os colaboradores" /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="">Todos</SelectItem>
+              <SelectItem value="__all__">Todos</SelectItem>
               {employees.map((e: any) => <SelectItem key={e.id} value={e.id}>{e.full_name}</SelectItem>)}
             </SelectContent>
           </Select>

@@ -426,7 +426,7 @@ export default function RHColaboradores() {
                   <Select value={form.direct_manager_id || ""} onValueChange={v => setField("direct_manager_id", v)}>
                     <SelectTrigger><SelectValue placeholder="Selecionar supervisor" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Nenhum</SelectItem>
+                      <SelectItem value="__none__">Nenhum</SelectItem>
                       {employees.filter((e: any) => e.id !== editId && (e.worker_profile === 'supervisor' || e.worker_profile === 'administrativo')).map((e: any) => (
                         <SelectItem key={e.id} value={e.id}>{e.full_name} ({e.position || e.worker_profile})</SelectItem>
                       ))}
