@@ -1115,4 +1115,184 @@ router.post('/validate-crm', async (req, res) => {
   }
 });
 
+// ===== HOLIDAYS =====
+
+// List holidays
+router.get('/holidays', async (req, res) => {
+  try {
+    const orgId = req.query.org_id || await getUserOrgId(req.userId);
+    if (!orgId) return res.json([]);
+    const { year, type } = req.query;
+    let sql = `SELECT * FROM holidays WHERE organization_id = $1`;
+    const params = [orgId];
+    if (year) { sql += ` AND EXTRACT(YEAR FROM holiday_date) = $${params.length + 1}`; params.push(year); }
+    if (type) { sql += ` AND type = $${params.length + 1}`; params.push(type); }
+    sql += ` ORDER BY holiday_date ASC`;
+    const r = await query(sql, params);
+    res.json(r.rows);
+  } catch (err) { logError('rh.holidays.list', err); res.status(500).json({ error: err.message }); }
+});
+
+// Create holiday
+router.post('/holidays', async (req, res) => {
+  try {
+    const orgId = await getUserOrgId(req.userId);
+    const { name, holiday_date, type, state, city, recurring } = req.body;
+    if (!name || !holiday_date) return res.status(400).json({ error: 'Nome e data obrigatórios' });
+    const r = await query(
+      `INSERT INTO holidays (organization_id, name, holiday_date, type, state, city, recurring)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [orgId, name, holiday_date, type || 'nacional', emptyToNull(state), emptyToNull(city), recurring !== false]
+    );
+    res.json(r.rows[0]);
+  } catch (err) { logError('rh.holidays.create', err); res.status(500).json({ error: err.message }); }
+});
+
+// Bulk import holidays (from CSV/Excel)
+router.post('/holidays/bulk', async (req, res) => {
+  try {
+    const orgId = await getUserOrgId(req.userId);
+    const { holidays } = req.body;
+    if (!Array.isArray(holidays) || !holidays.length) return res.status(400).json({ error: 'Lista de feriados vazia' });
+    let imported = 0;
+    for (const h of holidays) {
+      if (!h.name || !h.holiday_date) continue;
+      await query(
+        `INSERT INTO holidays (organization_id, name, holiday_date, type, state, city, recurring)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)
+         ON CONFLICT DO NOTHING`,
+        [orgId, h.name, h.holiday_date, h.type || 'nacional', emptyToNull(h.state), emptyToNull(h.city), h.recurring !== false]
+      );
+      imported++;
+    }
+    res.json({ imported });
+  } catch (err) { logError('rh.holidays.bulk', err); res.status(500).json({ error: err.message }); }
+});
+
+// Delete holiday
+router.delete('/holidays/:id', async (req, res) => {
+  try {
+    await query(`DELETE FROM holidays WHERE id = $1`, [req.params.id]);
+    res.json({ ok: true });
+  } catch (err) { logError('rh.holidays.delete', err); res.status(500).json({ error: err.message }); }
+});
+
+// ===== SERVICE REGIONS =====
+
+// List regions
+router.get('/regions', async (req, res) => {
+  try {
+    const orgId = req.query.org_id || await getUserOrgId(req.userId);
+    if (!orgId) return res.json([]);
+    const r = await query(
+      `SELECT sr.*, e.full_name as supervisor_name,
+         (SELECT COUNT(*) FROM region_pdvs rp WHERE rp.region_id = sr.id) as pdv_count
+       FROM service_regions sr
+       LEFT JOIN employees e ON e.id = sr.supervisor_id
+       WHERE sr.organization_id = $1
+       ORDER BY sr.name`,
+      [orgId]
+    );
+    res.json(r.rows);
+  } catch (err) { logError('rh.regions.list', err); res.status(500).json({ error: err.message }); }
+});
+
+// Create region
+router.post('/regions', async (req, res) => {
+  try {
+    const orgId = await getUserOrgId(req.userId);
+    const { name, color, polygon, cities, states, supervisor_id, notes } = req.body;
+    if (!name) return res.status(400).json({ error: 'Nome obrigatório' });
+    const r = await query(
+      `INSERT INTO service_regions (organization_id, name, color, polygon, cities, states, supervisor_id, notes)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+      [orgId, name, color || '#3b82f6', JSON.stringify(polygon || []), JSON.stringify(cities || []), JSON.stringify(states || []), emptyToNull(supervisor_id), emptyToNull(notes)]
+    );
+    res.json(r.rows[0]);
+  } catch (err) { logError('rh.regions.create', err); res.status(500).json({ error: err.message }); }
+});
+
+// Update region
+router.put('/regions/:id', async (req, res) => {
+  try {
+    const { name, color, polygon, cities, states, supervisor_id, notes, active } = req.body;
+    const r = await query(
+      `UPDATE service_regions SET name=$1, color=$2, polygon=$3, cities=$4, states=$5, supervisor_id=$6, notes=$7, active=$8, updated_at=NOW()
+       WHERE id=$9 RETURNING *`,
+      [name, color, JSON.stringify(polygon || []), JSON.stringify(cities || []), JSON.stringify(states || []), emptyToNull(supervisor_id), emptyToNull(notes), active !== false, req.params.id]
+    );
+    res.json(r.rows[0]);
+  } catch (err) { logError('rh.regions.update', err); res.status(500).json({ error: err.message }); }
+});
+
+// Delete region
+router.delete('/regions/:id', async (req, res) => {
+  try {
+    await query(`DELETE FROM service_regions WHERE id = $1`, [req.params.id]);
+    res.json({ ok: true });
+  } catch (err) { logError('rh.regions.delete', err); res.status(500).json({ error: err.message }); }
+});
+
+// Link PDVs to region
+router.post('/regions/:id/pdvs', async (req, res) => {
+  try {
+    const { pdv_ids, auto_assigned } = req.body;
+    if (!Array.isArray(pdv_ids)) return res.status(400).json({ error: 'pdv_ids obrigatório' });
+    for (const pdvId of pdv_ids) {
+      await query(
+        `INSERT INTO region_pdvs (region_id, pdv_id, auto_assigned) VALUES ($1,$2,$3) ON CONFLICT (region_id, pdv_id) DO NOTHING`,
+        [req.params.id, pdvId, auto_assigned || false]
+      );
+    }
+    res.json({ ok: true });
+  } catch (err) { logError('rh.regions.link-pdvs', err); res.status(500).json({ error: err.message }); }
+});
+
+// Get PDVs in a region
+router.get('/regions/:id/pdvs', async (req, res) => {
+  try {
+    const r = await query(
+      `SELECT p.*, rp.auto_assigned FROM region_pdvs rp JOIN pdvs p ON p.id = rp.pdv_id WHERE rp.region_id = $1 ORDER BY p.name`,
+      [req.params.id]
+    );
+    res.json(r.rows);
+  } catch (err) { logError('rh.regions.pdvs', err); res.status(500).json({ error: err.message }); }
+});
+
+// Remove PDV from region
+router.delete('/regions/:regionId/pdvs/:pdvId', async (req, res) => {
+  try {
+    await query(`DELETE FROM region_pdvs WHERE region_id = $1 AND pdv_id = $2`, [req.params.regionId, req.params.pdvId]);
+    res.json({ ok: true });
+  } catch (err) { logError('rh.regions.remove-pdv', err); res.status(500).json({ error: err.message }); }
+});
+
+// ===== GEOCODING (via Nominatim - free) =====
+router.post('/geocode', async (req, res) => {
+  try {
+    const { address, city, state, zip_code } = req.body;
+    const parts = [address, city, state, zip_code].filter(Boolean).join(', ');
+    if (!parts) return res.status(400).json({ error: 'Endereço necessário' });
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(parts)}&format=json&limit=1&countrycodes=br`;
+    const resp = await fetch(url, { headers: { 'User-Agent': 'AyratechRH/1.0' } });
+    const data = await resp.json();
+    if (data.length === 0) return res.json({ found: false });
+    res.json({ found: true, latitude: parseFloat(data[0].lat), longitude: parseFloat(data[0].lon), display_name: data[0].display_name });
+  } catch (err) { logError('rh.geocode', err); res.status(500).json({ error: err.message }); }
+});
+
+// ===== MAP DATA: PDVs + Employees with coords =====
+router.get('/map-data', async (req, res) => {
+  try {
+    const orgId = req.query.org_id || await getUserOrgId(req.userId);
+    if (!orgId) return res.json({ pdvs: [], employees: [], regions: [] });
+    const [pdvsR, empsR, regionsR] = await Promise.all([
+      query(`SELECT id, name, client_name, address, city, state, latitude, longitude, radius_meters, supervisor_id, active FROM pdvs WHERE organization_id = $1 AND active = true`, [orgId]),
+      query(`SELECT id, full_name, position, worker_profile, city, state, home_latitude, home_longitude, photo_url FROM employees WHERE organization_id = $1 AND status = 'ativo'`, [orgId]),
+      query(`SELECT sr.*, e.full_name as supervisor_name FROM service_regions sr LEFT JOIN employees e ON e.id = sr.supervisor_id WHERE sr.organization_id = $1 AND sr.active = true`, [orgId]),
+    ]);
+    res.json({ pdvs: pdvsR.rows, employees: empsR.rows, regions: regionsR.rows });
+  } catch (err) { logError('rh.map-data', err); res.status(500).json({ error: err.message }); }
+});
+
 export default router;
