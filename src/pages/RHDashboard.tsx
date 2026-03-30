@@ -474,9 +474,13 @@ export default function RHDashboard() {
             <div>
               <Label>Colaborador *</Label>
               <Select value={vacForm.employee_id} onValueChange={v => setVacField("employee_id", v)}>
-                <SelectTrigger><SelectValue placeholder="Selecionar" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Selecionar colaborador" /></SelectTrigger>
                 <SelectContent>
-                  {employees.map((e: any) => <SelectItem key={e.id} value={e.id}>{e.full_name}</SelectItem>)}
+                  <div className="p-2 sticky top-0 bg-popover">
+                    <Input placeholder="Buscar colaborador..." value={empSearchVac} onChange={e => setEmpSearchVac(e.target.value)} className="h-8 text-sm" />
+                  </div>
+                  {filteredEmpVac.map((e: any) => <SelectItem key={e.id} value={e.id}>{e.full_name}</SelectItem>)}
+                  {filteredEmpVac.length === 0 && <p className="text-xs text-muted-foreground text-center py-2">Nenhum encontrado</p>}
                 </SelectContent>
               </Select>
             </div>
