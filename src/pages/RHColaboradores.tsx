@@ -560,8 +560,31 @@ export default function RHColaboradores() {
                     </div>
                   )}
                 </div>
-                <div><Label>Salário (R$)</Label><Input type="number" value={form.salary} onChange={e => setField("salary", e.target.value)} /></div>
+                <div><Label>Salário Mensal (R$)</Label><Input type="number" value={form.salary} onChange={e => setField("salary", e.target.value)} /></div>
                 <div><Label>Jornada</Label><Input value={form.work_schedule} onChange={e => setField("work_schedule", e.target.value)} placeholder="08:00-17:00" /></div>
+                {form.salary && form.work_schedule && (() => {
+                  const match = form.work_schedule.match(/^(\d{2}):(\d{2})\s*-\s*(\d{2}):(\d{2})$/);
+                  if (!match) return null;
+                  const dailyHours = (parseInt(match[3]) * 60 + parseInt(match[4]) - parseInt(match[1]) * 60 - parseInt(match[2])) / 60 - 1; // -1h almoço
+                  const monthlyHours = dailyHours * 22;
+                  const hourlyRate = monthlyHours > 0 ? parseFloat(form.salary) / monthlyHours : 0;
+                  return (
+                    <div className="col-span-2 grid grid-cols-3 gap-3 p-3 rounded-lg bg-muted/50 border">
+                      <div className="text-center">
+                        <p className="text-xs text-muted-foreground">Horas/Dia</p>
+                        <p className="text-sm font-semibold">{dailyHours.toFixed(1)}h</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-xs text-muted-foreground">Horas/Mês (22d)</p>
+                        <p className="text-sm font-semibold">{monthlyHours.toFixed(0)}h</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-xs text-muted-foreground">Valor/Hora</p>
+                        <p className="text-sm font-semibold text-primary">R$ {hourlyRate.toFixed(2)}</p>
+                      </div>
+                    </div>
+                  );
+                })()}
                 <div><Label>Data de Admissão</Label><Input type="date" value={form.admission_date} onChange={e => setField("admission_date", e.target.value)} /></div>
                 <div><Label>Supervisor / Responsável</Label>
                   <Select value={form.direct_manager_id || "__none__"} onValueChange={v => setField("direct_manager_id", v === "__none__" ? "" : v)}>
