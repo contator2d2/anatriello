@@ -3,11 +3,15 @@ import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { usePromotorHome, usePromotorPunch } from "@/hooks/use-promotor";
+import { usePromotorHome, usePromotorPunch, usePromotorOvertimeRequest } from "@/hooks/use-promotor";
 import { PromotorLayout } from "./PromotorLayout";
 import {
-  Clock, FileText, Bell, MapPin, Wifi, WifiOff, Navigation, AlertTriangle, CheckCircle2, Loader2
+  Clock, FileText, Bell, MapPin, Wifi, WifiOff, Navigation, AlertTriangle, CheckCircle2, Loader2, ShieldAlert, Timer
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -15,12 +19,15 @@ import { ptBR } from "date-fns/locale";
 export default function PromotorHome() {
   const { data, isLoading } = usePromotorHome();
   const punch = usePromotorPunch();
+  const overtimeReq = usePromotorOvertimeRequest();
   const { toast } = useToast();
   const navigate = useNavigate();
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [gpsStatus, setGpsStatus] = useState<'checking' | 'active' | 'denied' | 'off'>('checking');
   const [currentPos, setCurrentPos] = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
   const [punchLoading, setPunchLoading] = useState(false);
+  const [overtimeDialog, setOvertimeDialog] = useState(false);
+  const [otForm, setOtForm] = useState({ reason: '', requested_start: '', requested_end: '' });
 
   const employee = data?.employee;
   const todayPunches = data?.today_punches || [];
@@ -28,6 +35,7 @@ export default function PromotorHome() {
   const notifications = data?.notifications || [];
   const dailyAssignment = data?.daily_assignment;
   const availablePdvs = data?.available_pdvs || [];
+  const scheduleStatus = data?.schedule_status;
 
   useEffect(() => {
     const onOn = () => setIsOnline(true);
@@ -55,6 +63,9 @@ export default function PromotorHome() {
     entrada: '🟢 Entrada', saida_intervalo: '🟡 Saída Intervalo', retorno_intervalo: '🔵 Retorno Intervalo', saida: '🔴 Saída', extraordinaria: '⚪ Extra'
   };
 
+  const canPunch = scheduleStatus?.is_within_schedule || scheduleStatus?.has_overtime_approval;
+  const isOutsideSchedule = scheduleStatus && !scheduleStatus.is_within_schedule;
+
   const handlePunch = async () => {
     if (gpsStatus !== 'active' || !currentPos) {
       toast({ title: 'GPS necessário', description: 'Ative a localização para bater o ponto', variant: 'destructive' });
@@ -72,9 +83,31 @@ export default function PromotorHome() {
       });
       toast({ title: 'Ponto registrado!', description: PUNCH_LABELS[getNextPunchType()] });
     } catch (err: any) {
+      if (err.message?.includes('horário de trabalho') || err.message?.includes('OUTSIDE_SCHEDULE')) {
+        setOvertimeDialog(true);
+      }
       toast({ title: 'Erro ao registrar ponto', description: err.message, variant: 'destructive' });
     } finally {
       setPunchLoading(false);
+    }
+  };
+
+  const handleOvertimeRequest = async () => {
+    if (!otForm.reason.trim()) {
+      toast({ title: 'Informe o motivo', variant: 'destructive' });
+      return;
+    }
+    try {
+      await overtimeReq.mutateAsync({
+        reason: otForm.reason,
+        requested_start: otForm.requested_start || undefined,
+        requested_end: otForm.requested_end || undefined,
+      });
+      toast({ title: 'Solicitação enviada!', description: 'Aguarde a aprovação do supervisor' });
+      setOvertimeDialog(false);
+      setOtForm({ reason: '', requested_start: '', requested_end: '' });
+    } catch (err: any) {
+      toast({ title: 'Erro', description: err.message, variant: 'destructive' });
     }
   };
 
@@ -109,9 +142,9 @@ export default function PromotorHome() {
 
         {/* Offline Warning */}
         {!isOnline && (
-          <Card className="border-warning bg-warning/5">
+          <Card className="border-yellow-300 bg-yellow-50 dark:bg-yellow-950/20">
             <CardContent className="p-3 flex items-center gap-3">
-              <WifiOff className="h-5 w-5 text-warning flex-shrink-0" />
+              <WifiOff className="h-5 w-5 text-yellow-600 flex-shrink-0" />
               <div>
                 <p className="text-sm font-medium">Você está sem internet</p>
                 <p className="text-xs text-muted-foreground">Os dados serão salvos e enviados quando a conexão voltar</p>
@@ -125,6 +158,37 @@ export default function PromotorHome() {
           <h1 className="text-lg font-bold">Olá, {employee?.full_name?.split(' ')[0]}! 👋</h1>
           <p className="text-sm text-muted-foreground">{employee?.position || employee?.worker_profile}</p>
         </div>
+
+        {/* Schedule Status */}
+        {scheduleStatus && (
+          <Card className={isOutsideSchedule && !scheduleStatus.has_overtime_approval ? 'border-destructive/50 bg-destructive/5' : 'border-primary/20 bg-primary/5'}>
+            <CardContent className="p-3 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Timer className={`h-5 w-5 ${isOutsideSchedule && !scheduleStatus.has_overtime_approval ? 'text-destructive' : 'text-primary'}`} />
+                <div>
+                  <p className="text-sm font-medium">
+                    Horário: {scheduleStatus.schedule_start} - {scheduleStatus.schedule_end}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {scheduleStatus.is_within_schedule
+                      ? '✅ Dentro do horário de trabalho'
+                      : scheduleStatus.has_overtime_approval
+                        ? '✅ Hora extra autorizada'
+                        : '🚫 Fora do horário de trabalho'}
+                  </p>
+                </div>
+              </div>
+              {isOutsideSchedule && !scheduleStatus.has_overtime_approval && (
+                <Button size="sm" variant="outline" onClick={() => setOvertimeDialog(true)} className="text-xs gap-1">
+                  <ShieldAlert className="h-3.5 w-3.5" /> Solicitar HE
+                </Button>
+              )}
+              {scheduleStatus.overtime_request?.status === 'pendente' && (
+                <Badge variant="secondary" className="text-[10px]">⏳ HE Pendente</Badge>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* PDV do dia */}
         {dailyAssignment && (
@@ -144,12 +208,26 @@ export default function PromotorHome() {
           <CardContent className="p-0">
             <Button
               onClick={handlePunch}
-              disabled={punchLoading || gpsStatus !== 'active'}
-              className="w-full h-24 rounded-none text-lg font-bold bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70"
+              disabled={punchLoading || gpsStatus !== 'active' || (!canPunch && isOutsideSchedule)}
+              className={`w-full h-24 rounded-none text-lg font-bold ${
+                !canPunch && isOutsideSchedule
+                  ? 'bg-muted text-muted-foreground cursor-not-allowed'
+                  : 'bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70'
+              }`}
             >
               {punchLoading ? <Loader2 className="h-6 w-6 animate-spin mr-2" /> : <Clock className="h-6 w-6 mr-2" />}
-              {PUNCH_LABELS[getNextPunchType()] || 'Bater Ponto'}
+              {!canPunch && isOutsideSchedule
+                ? '🔒 Fora do Horário'
+                : PUNCH_LABELS[getNextPunchType()] || 'Bater Ponto'}
             </Button>
+            {!canPunch && isOutsideSchedule && (
+              <div className="p-3 border-t bg-destructive/5 text-center">
+                <p className="text-xs text-destructive font-medium">Ponto bloqueado fora do horário</p>
+                <Button variant="link" size="sm" className="text-xs h-6 p-0" onClick={() => setOvertimeDialog(true)}>
+                  Solicitar hora extra ao supervisor →
+                </Button>
+              </div>
+            )}
             {todayPunches.length > 0 && (
               <div className="p-3 border-t space-y-1">
                 <p className="text-xs font-medium text-muted-foreground">Registros de hoje:</p>
@@ -207,6 +285,48 @@ export default function PromotorHome() {
           </Card>
         )}
       </div>
+
+      {/* Overtime Request Dialog */}
+      <Dialog open={overtimeDialog} onOpenChange={setOvertimeDialog}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ShieldAlert className="h-5 w-5 text-primary" /> Solicitar Hora Extra
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground">
+              Seu horário de trabalho é <b>{scheduleStatus?.schedule_start} - {scheduleStatus?.schedule_end}</b>.
+              Para registrar ponto fora desse horário, solicite autorização.
+            </p>
+            <div>
+              <Label>Motivo *</Label>
+              <Textarea
+                value={otForm.reason}
+                onChange={e => setOtForm(f => ({ ...f, reason: e.target.value }))}
+                placeholder="Ex: Finalizar relatório urgente..."
+                rows={3}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label>Início previsto</Label>
+                <Input type="time" value={otForm.requested_start} onChange={e => setOtForm(f => ({ ...f, requested_start: e.target.value }))} />
+              </div>
+              <div>
+                <Label>Fim previsto</Label>
+                <Input type="time" value={otForm.requested_end} onChange={e => setOtForm(f => ({ ...f, requested_end: e.target.value }))} />
+              </div>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 mt-3">
+            <Button variant="outline" onClick={() => setOvertimeDialog(false)}>Cancelar</Button>
+            <Button onClick={handleOvertimeRequest} disabled={overtimeReq.isPending}>
+              {overtimeReq.isPending ? 'Enviando...' : 'Enviar Solicitação'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </PromotorLayout>
   );
 }

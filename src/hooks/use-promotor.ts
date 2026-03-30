@@ -35,6 +35,40 @@ export function usePromotorPunch() {
   });
 }
 
+export function usePromotorOvertimeRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: any) => promotorApi<any>('/api/promotor/overtime-request', { method: 'POST', body: data }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['promotor-home'] }); qc.invalidateQueries({ queryKey: ['promotor-overtime'] }); },
+  });
+}
+
+export function usePromotorOvertimeRequests() {
+  return useQuery({
+    queryKey: ['promotor-overtime'],
+    queryFn: () => promotorApi<any[]>('/api/promotor/overtime-requests'),
+  });
+}
+
+// RH side hooks
+export function useRhOvertimeRequests(filters?: { status?: string }) {
+  const params = new URLSearchParams();
+  if (filters?.status) params.set('status', filters.status);
+  const qs = params.toString();
+  return useQuery({
+    queryKey: ['rh-overtime-requests', qs],
+    queryFn: () => api<any[]>(`/api/promotor/rh/overtime-requests${qs ? `?${qs}` : ''}`),
+  });
+}
+
+export function useApproveOvertimeRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }: any) => api<any>(`/api/promotor/rh/overtime-requests/${id}`, { method: 'PUT', body: data }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['rh-overtime-requests'] }),
+  });
+}
+
 export function usePromotorPunches(filters?: { start_date?: string; end_date?: string }) {
   const params = new URLSearchParams();
   if (filters?.start_date) params.set('start_date', filters.start_date);
