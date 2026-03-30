@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
-import { useEmployees, useCreateEmployee, useUpdateEmployee, useDeleteEmployee, useRhDepartments, useBranches } from "@/hooks/use-rh";
+import { useEmployees, useCreateEmployee, useUpdateEmployee, useDeleteEmployee, useRhDepartments, useBranches, useCreateRhDepartment, useDeleteRhDepartment, useRhPositions, useCreateRhPosition, useDeleteRhPosition } from "@/hooks/use-rh";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Search, UserCircle, Building2, FileText, Edit, Trash2, Eye, EyeOff, Users, Loader2, Calendar } from "lucide-react";
+import { Plus, Search, UserCircle, Building2, FileText, Edit, Trash2, Eye, EyeOff, Users, Loader2, Calendar, Briefcase, X } from "lucide-react";
 import { format, differenceInYears, differenceInMonths, differenceInDays, addYears, addMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -102,9 +102,19 @@ export default function RHColaboradores() {
   });
   const { data: departments = [] } = useRhDepartments();
   const { data: branches = [] } = useBranches();
+  const { data: positions = [] } = useRhPositions();
   const createMut = useCreateEmployee();
   const updateMut = useUpdateEmployee();
   const deleteMut = useDeleteEmployee();
+  const createDeptMut = useCreateRhDepartment();
+  const deleteDeptMut = useDeleteRhDepartment();
+  const createPosMut = useCreateRhPosition();
+  const deletePosMut = useDeleteRhPosition();
+
+  const [newDeptName, setNewDeptName] = useState("");
+  const [newPosName, setNewPosName] = useState("");
+  const [showDeptManager, setShowDeptManager] = useState(false);
+  const [showPosManager, setShowPosManager] = useState(false);
 
   const maskCPF = (cpf: string) => {
     if (!cpf) return "—";
@@ -386,7 +396,41 @@ export default function RHColaboradores() {
             <TabsContent value="profissional" className="space-y-3 mt-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div><Label>Matrícula</Label><Input value={form.registration_number} onChange={e => setField("registration_number", e.target.value)} /></div>
-                <div><Label>Cargo</Label><Input value={form.position} onChange={e => setField("position", e.target.value)} /></div>
+                <div>
+                  <div className="flex items-center justify-between">
+                    <Label>Cargo</Label>
+                    <Button type="button" variant="ghost" size="sm" className="h-6 px-2 text-xs gap-1" onClick={() => setShowPosManager(!showPosManager)}>
+                      <Briefcase className="h-3 w-3" /> Gerenciar
+                    </Button>
+                  </div>
+                  <Select value={form.position || ""} onValueChange={v => setField("position", v)}>
+                    <SelectTrigger><SelectValue placeholder="Selecionar cargo" /></SelectTrigger>
+                    <SelectContent>
+                      {positions.map((p: any) => <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>)}
+                      {positions.length === 0 && <p className="text-xs text-muted-foreground text-center py-2">Nenhum cargo cadastrado</p>}
+                    </SelectContent>
+                  </Select>
+                  {showPosManager && (
+                    <div className="mt-2 p-3 border rounded-lg bg-muted/30 space-y-2">
+                      <p className="text-xs font-medium">Cargos cadastrados:</p>
+                      <div className="flex flex-wrap gap-1">
+                        {positions.map((p: any) => (
+                          <Badge key={p.id} variant="secondary" className="gap-1 pr-1">
+                            {p.name}
+                            <button onClick={() => deletePosMut.mutate(p.id)} className="ml-1 hover:text-destructive"><X className="h-3 w-3" /></button>
+                          </Badge>
+                        ))}
+                      </div>
+                      <div className="flex gap-1">
+                        <Input value={newPosName} onChange={e => setNewPosName(e.target.value)} placeholder="Novo cargo..." className="h-8 text-sm" />
+                        <Button size="sm" className="h-8 shrink-0" disabled={!newPosName.trim() || createPosMut.isPending}
+                          onClick={async () => { await createPosMut.mutateAsync({ name: newPosName.trim() }); setNewPosName(""); }}>
+                          <Plus className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
                 <div><Label>Perfil</Label>
                   <Select value={form.worker_profile} onValueChange={v => setField("worker_profile", v)}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
@@ -403,13 +447,40 @@ export default function RHColaboradores() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div><Label>Departamento</Label>
+                <div>
+                  <div className="flex items-center justify-between">
+                    <Label>Departamento</Label>
+                    <Button type="button" variant="ghost" size="sm" className="h-6 px-2 text-xs gap-1" onClick={() => setShowDeptManager(!showDeptManager)}>
+                      <Building2 className="h-3 w-3" /> Gerenciar
+                    </Button>
+                  </div>
                   <Select value={form.department_id || ""} onValueChange={v => setField("department_id", v)}>
                     <SelectTrigger><SelectValue placeholder="Selecionar" /></SelectTrigger>
                     <SelectContent>
                       {departments.map((d: any) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+                      {departments.length === 0 && <p className="text-xs text-muted-foreground text-center py-2">Nenhum departamento cadastrado</p>}
                     </SelectContent>
                   </Select>
+                  {showDeptManager && (
+                    <div className="mt-2 p-3 border rounded-lg bg-muted/30 space-y-2">
+                      <p className="text-xs font-medium">Departamentos cadastrados:</p>
+                      <div className="flex flex-wrap gap-1">
+                        {departments.map((d: any) => (
+                          <Badge key={d.id} variant="secondary" className="gap-1 pr-1">
+                            {d.name}
+                            <button onClick={() => deleteDeptMut.mutate(d.id)} className="ml-1 hover:text-destructive"><X className="h-3 w-3" /></button>
+                          </Badge>
+                        ))}
+                      </div>
+                      <div className="flex gap-1">
+                        <Input value={newDeptName} onChange={e => setNewDeptName(e.target.value)} placeholder="Novo departamento..." className="h-8 text-sm" />
+                        <Button size="sm" className="h-8 shrink-0" disabled={!newDeptName.trim() || createDeptMut.isPending}
+                          onClick={async () => { await createDeptMut.mutateAsync({ name: newDeptName.trim() }); setNewDeptName(""); }}>
+                          <Plus className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div><Label>Filial</Label>
                   <Select value={form.branch_id || ""} onValueChange={v => setField("branch_id", v)}>

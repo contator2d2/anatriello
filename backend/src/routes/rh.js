@@ -350,6 +350,62 @@ router.post('/cost-centers', async (req, res) => {
   } catch (err) { res.status(500).json({ error: 'Erro' }); }
 });
 
+// ===== POSITIONS (CARGOS) =====
+router.get('/positions', async (req, res) => {
+  try {
+    const orgId = req.query.org_id || await getUserOrgId(req.userId);
+    const result = await query(`SELECT * FROM rh_positions WHERE organization_id = $1 ORDER BY name`, [orgId]);
+    res.json(result.rows);
+  } catch (err) {
+    // Table may not exist yet — auto-create
+    try {
+      await query(`CREATE TABLE IF NOT EXISTS rh_positions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        organization_id UUID NOT NULL,
+        name VARCHAR(200) NOT NULL,
+        department_id UUID REFERENCES rh_departments(id),
+        description TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )`);
+      res.json([]);
+    } catch (e2) { res.status(500).json({ error: 'Erro' }); }
+  }
+});
+
+router.post('/positions', async (req, res) => {
+  try {
+    const orgId = req.body.organization_id || await getUserOrgId(req.userId);
+    // Ensure table exists
+    await query(`CREATE TABLE IF NOT EXISTS rh_positions (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id UUID NOT NULL,
+      name VARCHAR(200) NOT NULL,
+      department_id UUID REFERENCES rh_departments(id),
+      description TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+    const result = await query(
+      `INSERT INTO rh_positions (organization_id, name, department_id, description) VALUES ($1,$2,$3,$4) RETURNING *`,
+      [orgId, req.body.name, req.body.department_id || null, req.body.description || null]
+    );
+    res.json(result.rows[0]);
+  } catch (err) { res.status(500).json({ error: 'Erro ao criar cargo' }); }
+});
+
+router.delete('/positions/:id', async (req, res) => {
+  try {
+    await query(`DELETE FROM rh_positions WHERE id = $1`, [req.params.id]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: 'Erro' }); }
+});
+
+router.delete('/rh-departments/:id', async (req, res) => {
+  try {
+    await query(`DELETE FROM rh_departments WHERE id = $1`, [req.params.id]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: 'Erro' }); }
+});
+
 // ===== AUDIT LOG =====
 
 // ===== RH DASHBOARD STATS =====
