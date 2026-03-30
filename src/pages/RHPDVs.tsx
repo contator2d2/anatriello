@@ -130,6 +130,7 @@ export default function RHPDVs() {
               <div className="space-y-1"><Label>Longitude</Label><Input type="number" step="any" value={form.longitude} onChange={e => setForm(f => ({ ...f, longitude: e.target.value }))} placeholder="-46.633308" /></div>
               <div className="space-y-1"><Label>Raio (metros)</Label><Input type="number" value={form.radius_meters} onChange={e => setForm(f => ({ ...f, radius_meters: Number(e.target.value) }))} /></div>
             </div>
+            <GeocodeButton form={form} setForm={setForm} />
             <div className="space-y-1"><Label>Supervisor</Label>
               <Select value={form.supervisor_id} onValueChange={v => setForm(f => ({ ...f, supervisor_id: v }))}>
                 <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
