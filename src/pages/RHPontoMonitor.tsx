@@ -6,6 +6,12 @@ import { usePunchMonitor } from "@/hooks/use-promotor";
 import { Clock, CheckCircle2, AlertTriangle, MapPin, UserX, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 
+function safeFormatDate(value: any, fmt: string, fallback = '—'): string {
+  if (!value) return fallback;
+  const d = new Date(String(value).replace(' ', 'T'));
+  return d && !Number.isNaN(d.getTime()) ? format(d, fmt) : fallback;
+}
+
 export default function RHPontoMonitor() {
   const { data, isLoading } = usePunchMonitor();
 
