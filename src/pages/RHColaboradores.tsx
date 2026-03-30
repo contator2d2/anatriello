@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { useEmployees, useCreateEmployee, useUpdateEmployee, useDeleteEmployee, useRhDepartments, useBranches } from "@/hooks/use-rh";
 import { Button } from "@/components/ui/button";
@@ -11,8 +11,9 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Search, UserCircle, Building2, FileText, Edit, Trash2, Eye, EyeOff, Users } from "lucide-react";
-import { format } from "date-fns";
+import { Plus, Search, UserCircle, Building2, FileText, Edit, Trash2, Eye, EyeOff, Users, Loader2, Calendar } from "lucide-react";
+import { format, differenceInYears, differenceInMonths, differenceInDays, addYears, addMonths } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
 const STATUS_COLORS: Record<string, string> = {
   ativo: "bg-green-500/10 text-green-700 border-green-200",
@@ -32,12 +33,57 @@ const PROFILE_LABELS: Record<string, string> = {
 
 const EMPTY_FORM = {
   full_name: "", social_name: "", cpf: "", rg: "", birth_date: "", gender: "", email: "", phone: "",
-  address: "", city: "", state: "", zip_code: "", registration_number: "",
+  address: "", address_number: "", complement: "", neighborhood: "", city: "", state: "", zip_code: "",
+  registration_number: "",
   worker_profile: "operacional", employment_type: "clt", position: "", salary: "",
   admission_date: "", department_id: "", branch_id: "", direct_manager_id: "", work_schedule: "08:00-17:00",
   bank_name: "", bank_agency: "", bank_account: "", bank_account_type: "",
   ctps_number: "", pis_pasep: "", cnpj: "", company_name: "", status: "ativo",
 };
+
+// ============ CPF Validation ============
+function validateCPF(cpf: string): boolean {
+  const cleaned = cpf.replace(/\D/g, "");
+  if (cleaned.length !== 11) return false;
+  if (/^(\d)\1{10}$/.test(cleaned)) return false; // all same digits
+  let sum = 0;
+  for (let i = 0; i < 9; i++) sum += parseInt(cleaned[i]) * (10 - i);
+  let remainder = (sum * 10) % 11;
+  if (remainder === 10) remainder = 0;
+  if (remainder !== parseInt(cleaned[9])) return false;
+  sum = 0;
+  for (let i = 0; i < 10; i++) sum += parseInt(cleaned[i]) * (11 - i);
+  remainder = (sum * 10) % 11;
+  if (remainder === 10) remainder = 0;
+  return remainder === parseInt(cleaned[10]);
+}
+
+function formatCPF(value: string): string {
+  const digits = value.replace(/\D/g, "").slice(0, 11);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 6) return `${digits.slice(0, 3)}.${digits.slice(3)}`;
+  if (digits.length <= 9) return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`;
+  return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
+}
+
+function formatCEP(value: string): string {
+  const digits = value.replace(/\D/g, "").slice(0, 8);
+  if (digits.length <= 5) return digits;
+  return `${digits.slice(0, 5)}-${digits.slice(5)}`;
+}
+
+// ============ Age Calculation ============
+function calcAge(birthDate: string): string {
+  if (!birthDate) return "";
+  const birth = new Date(birthDate + "T00:00:00");
+  const today = new Date();
+  const years = differenceInYears(today, birth);
+  const afterYears = addYears(birth, years);
+  const months = differenceInMonths(today, afterYears);
+  const afterMonths = addMonths(afterYears, months);
+  const days = differenceInDays(today, afterMonths);
+  return `${years} anos, ${months} meses e ${days} dias`;
+}
 
 export default function RHColaboradores() {
   const [search, setSearch] = useState("");
@@ -46,6 +92,8 @@ export default function RHColaboradores() {
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<any>({ ...EMPTY_FORM });
   const [showSensitive, setShowSensitive] = useState(false);
+  const [cpfError, setCpfError] = useState("");
+  const [cepLoading, setCepLoading] = useState(false);
   const { toast } = useToast();
 
   const { data: employees = [], isLoading } = useEmployees({
@@ -64,15 +112,61 @@ export default function RHColaboradores() {
     return cpf.replace(/(\d{3})\.\d{3}\.\d{3}(-\d{2})/, "$1.***.***$2");
   };
 
-  const openNew = () => { setForm({ ...EMPTY_FORM }); setEditId(null); setDialogOpen(true); };
+  // ============ CEP Lookup ============
+  const lookupCEP = useCallback(async (cep: string) => {
+    const digits = cep.replace(/\D/g, "");
+    if (digits.length !== 8) return;
+    setCepLoading(true);
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${digits}/json/`);
+      const data = await res.json();
+      if (!data.erro) {
+        setForm((p: any) => ({
+          ...p,
+          address: data.logradouro || p.address,
+          neighborhood: data.bairro || p.neighborhood,
+          city: data.localidade || p.city,
+          state: data.uf || p.state,
+          complement: data.complemento || p.complement,
+        }));
+        toast({ title: "Endereço preenchido automaticamente!" });
+      } else {
+        toast({ title: "CEP não encontrado", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Erro ao buscar CEP", variant: "destructive" });
+    } finally {
+      setCepLoading(false);
+    }
+  }, [toast]);
+
+  // ============ CPF handler ============
+  const handleCPFChange = (value: string) => {
+    const formatted = formatCPF(value);
+    setField("cpf", formatted);
+    const digits = value.replace(/\D/g, "");
+    if (digits.length === 11) {
+      if (!validateCPF(digits)) {
+        setCpfError("CPF inválido");
+      } else {
+        setCpfError("");
+      }
+    } else {
+      setCpfError("");
+    }
+  };
+
+  const openNew = () => { setForm({ ...EMPTY_FORM }); setEditId(null); setCpfError(""); setDialogOpen(true); };
   const openEdit = (emp: any) => {
     setForm({ ...emp, salary: emp.salary || "", birth_date: emp.birth_date?.slice(0, 10) || "", admission_date: emp.admission_date?.slice(0, 10) || "" });
     setEditId(emp.id);
+    setCpfError("");
     setDialogOpen(true);
   };
 
   const handleSave = async () => {
     if (!form.full_name) { toast({ title: "Nome é obrigatório", variant: "destructive" }); return; }
+    if (cpfError) { toast({ title: "CPF inválido, corrija antes de salvar", variant: "destructive" }); return; }
     try {
       if (editId) {
         await updateMut.mutateAsync({ id: editId, ...form });
@@ -206,6 +300,13 @@ export default function RHColaboradores() {
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editId ? "Editar Colaborador" : "Novo Colaborador"}</DialogTitle>
+            {/* Age display when editing and has birth_date */}
+            {form.birth_date && (
+              <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
+                <Calendar className="h-4 w-4" />
+                <span>Idade: <strong className="text-foreground">{calcAge(form.birth_date)}</strong></span>
+              </div>
+            )}
           </DialogHeader>
           <Tabs defaultValue="pessoal">
             <TabsList className="grid grid-cols-4 w-full">
@@ -219,9 +320,25 @@ export default function RHColaboradores() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div><Label>Nome Completo *</Label><Input value={form.full_name} onChange={e => setField("full_name", e.target.value)} /></div>
                 <div><Label>Nome Social</Label><Input value={form.social_name} onChange={e => setField("social_name", e.target.value)} /></div>
-                <div><Label>CPF</Label><Input value={form.cpf} onChange={e => setField("cpf", e.target.value)} placeholder="000.000.000-00" /></div>
+                <div>
+                  <Label>CPF</Label>
+                  <Input
+                    value={form.cpf}
+                    onChange={e => handleCPFChange(e.target.value)}
+                    placeholder="000.000.000-00"
+                    maxLength={14}
+                    className={cpfError ? "border-destructive" : ""}
+                  />
+                  {cpfError && <p className="text-xs text-destructive mt-1">{cpfError}</p>}
+                </div>
                 <div><Label>RG</Label><Input value={form.rg} onChange={e => setField("rg", e.target.value)} /></div>
-                <div><Label>Data de Nascimento</Label><Input type="date" value={form.birth_date} onChange={e => setField("birth_date", e.target.value)} /></div>
+                <div>
+                  <Label>Data de Nascimento</Label>
+                  <Input type="date" value={form.birth_date} onChange={e => setField("birth_date", e.target.value)} />
+                  {form.birth_date && (
+                    <p className="text-xs text-muted-foreground mt-1">{calcAge(form.birth_date)}</p>
+                  )}
+                </div>
                 <div><Label>Gênero</Label>
                   <Select value={form.gender} onValueChange={v => setField("gender", v)}>
                     <SelectTrigger><SelectValue placeholder="Selecionar" /></SelectTrigger>
@@ -236,11 +353,33 @@ export default function RHColaboradores() {
                 <div><Label>E-mail</Label><Input type="email" value={form.email} onChange={e => setField("email", e.target.value)} /></div>
                 <div><Label>Telefone</Label><Input value={form.phone} onChange={e => setField("phone", e.target.value)} /></div>
               </div>
+
+              {/* Endereço com CEP auto-fill */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div>
+                  <Label>CEP</Label>
+                  <div className="relative">
+                    <Input
+                      value={form.zip_code}
+                      onChange={e => {
+                        const formatted = formatCEP(e.target.value);
+                        setField("zip_code", formatted);
+                        if (formatted.replace(/\D/g, "").length === 8) {
+                          lookupCEP(formatted);
+                        }
+                      }}
+                      placeholder="00000-000"
+                      maxLength={9}
+                    />
+                    {cepLoading && <Loader2 className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />}
+                  </div>
+                </div>
                 <div className="md:col-span-2"><Label>Endereço</Label><Input value={form.address} onChange={e => setField("address", e.target.value)} /></div>
+                <div><Label>Número</Label><Input value={form.address_number} onChange={e => setField("address_number", e.target.value)} /></div>
+                <div><Label>Complemento</Label><Input value={form.complement} onChange={e => setField("complement", e.target.value)} /></div>
+                <div><Label>Bairro</Label><Input value={form.neighborhood} onChange={e => setField("neighborhood", e.target.value)} /></div>
                 <div><Label>Cidade</Label><Input value={form.city} onChange={e => setField("city", e.target.value)} /></div>
                 <div><Label>Estado</Label><Input value={form.state} onChange={e => setField("state", e.target.value)} maxLength={2} /></div>
-                <div><Label>CEP</Label><Input value={form.zip_code} onChange={e => setField("zip_code", e.target.value)} /></div>
               </div>
             </TabsContent>
 
