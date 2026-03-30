@@ -31,6 +31,17 @@ const PROFILE_LABELS: Record<string, string> = {
   administrativo: "Administrativo", supervisor: "Supervisor", promotor: "Promotor", operacional: "Operacional",
 };
 
+const SALARY_ITEM_TYPES = [
+  "Salário Base", "Adicional Noturno", "Adicional Periculosidade", "Adicional Insalubridade",
+  "Comissão", "Gratificação", "Hora Extra", "DSR", "Adicional de Função", "Bonificação", "Outro"
+];
+
+const BENEFIT_TYPES = [
+  "Vale Transporte", "Vale Refeição", "Vale Alimentação", "Plano de Saúde", "Plano Odontológico",
+  "Seguro de Vida", "Auxílio Creche", "Auxílio Educação", "Gympass/Wellhub", "PLR",
+  "Cesta Básica", "Auxílio Home Office", "Outro"
+];
+
 const EMPTY_FORM = {
   full_name: "", social_name: "", cpf: "", rg: "", birth_date: "", gender: "", email: "", phone: "",
   address: "", address_number: "", complement: "", neighborhood: "", city: "", state: "", zip_code: "",
@@ -39,6 +50,8 @@ const EMPTY_FORM = {
   admission_date: "", department_id: "", branch_id: "", direct_manager_id: "", work_schedule: "08:00-17:00",
   bank_name: "", bank_agency: "", bank_account: "", bank_account_type: "",
   ctps_number: "", pis_pasep: "", cnpj: "", company_name: "", status: "ativo",
+  salary_items: [] as { type: string; description: string; value: string }[],
+  benefits: [] as { type: string; description: string; value: string; employer_cost: string }[],
 };
 
 // ============ CPF Validation ============
