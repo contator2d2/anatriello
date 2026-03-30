@@ -348,9 +348,10 @@ export default function RHColaboradores() {
             )}
           </DialogHeader>
           <Tabs defaultValue="pessoal">
-            <TabsList className="grid grid-cols-4 w-full">
+            <TabsList className="grid grid-cols-5 w-full">
               <TabsTrigger value="pessoal">Pessoal</TabsTrigger>
               <TabsTrigger value="profissional">Profissional</TabsTrigger>
+              <TabsTrigger value="remuneracao" className="gap-1"><DollarSign className="h-3 w-3" />Remuneração</TabsTrigger>
               <TabsTrigger value="documentos">Documentos</TabsTrigger>
               <TabsTrigger value="bancario">Bancário</TabsTrigger>
             </TabsList>
