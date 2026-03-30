@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { API_URL, getAuthToken } from '@/lib/api';
+import { resolveMediaUrl } from '@/lib/media';
 
 export interface BrandingSettings {
   logo_login: string | null;
@@ -216,7 +217,13 @@ export function useBranding() {
       const response = await fetch(`${API_URL}/api/admin/branding${orgParam}`);
       if (response.ok) {
         const data = await response.json();
-        setBranding(data);
+        setBranding({
+          ...data,
+          logo_login: resolveMediaUrl(data.logo_login),
+          logo_sidebar: resolveMediaUrl(data.logo_sidebar),
+          logo_topbar: resolveMediaUrl(data.logo_topbar),
+          favicon: resolveMediaUrl(data.favicon),
+        });
         
         if (data.favicon) {
           const link = document.querySelector("link[rel~='icon']") as HTMLLinkElement;
