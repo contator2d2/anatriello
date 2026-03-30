@@ -1,0 +1,342 @@
+import { useState } from "react";
+import { MainLayout } from "@/components/layout/MainLayout";
+import { useEmployees, useCreateEmployee, useUpdateEmployee, useDeleteEmployee, useRhDepartments, useBranches } from "@/hooks/use-rh";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useToast } from "@/hooks/use-toast";
+import { Plus, Search, UserCircle, Building2, FileText, Edit, Trash2, Eye, EyeOff, Users } from "lucide-react";
+import { format } from "date-fns";
+
+const STATUS_COLORS: Record<string, string> = {
+  ativo: "bg-green-500/10 text-green-700 border-green-200",
+  afastado: "bg-yellow-500/10 text-yellow-700 border-yellow-200",
+  ferias: "bg-blue-500/10 text-blue-700 border-blue-200",
+  desligado: "bg-red-500/10 text-red-700 border-red-200",
+  suspenso: "bg-orange-500/10 text-orange-700 border-orange-200",
+};
+
+const EMPLOYMENT_LABELS: Record<string, string> = {
+  clt: "CLT", pj: "PJ", freelancer: "Freelancer", temporario: "Temporário", estagiario: "Estagiário", aprendiz: "Aprendiz",
+};
+
+const PROFILE_LABELS: Record<string, string> = {
+  administrativo: "Administrativo", supervisor: "Supervisor", promotor: "Promotor", operacional: "Operacional",
+};
+
+const EMPTY_FORM = {
+  full_name: "", social_name: "", cpf: "", rg: "", birth_date: "", gender: "", email: "", phone: "",
+  address: "", city: "", state: "", zip_code: "", registration_number: "",
+  worker_profile: "operacional", employment_type: "clt", position: "", salary: "",
+  admission_date: "", department_id: "", branch_id: "", work_schedule: "08:00-17:00",
+  bank_name: "", bank_agency: "", bank_account: "", bank_account_type: "",
+  ctps_number: "", pis_pasep: "", cnpj: "", company_name: "", status: "ativo",
+};
+
+export default function RHColaboradores() {
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [form, setForm] = useState<any>({ ...EMPTY_FORM });
+  const [showSensitive, setShowSensitive] = useState(false);
+  const { toast } = useToast();
+
+  const { data: employees = [], isLoading } = useEmployees({
+    search: search || undefined,
+    status: statusFilter !== "all" ? statusFilter : undefined,
+  });
+  const { data: departments = [] } = useRhDepartments();
+  const { data: branches = [] } = useBranches();
+  const createMut = useCreateEmployee();
+  const updateMut = useUpdateEmployee();
+  const deleteMut = useDeleteEmployee();
+
+  const maskCPF = (cpf: string) => {
+    if (!cpf) return "—";
+    if (showSensitive) return cpf;
+    return cpf.replace(/(\d{3})\.\d{3}\.\d{3}(-\d{2})/, "$1.***.***$2");
+  };
+
+  const openNew = () => { setForm({ ...EMPTY_FORM }); setEditId(null); setDialogOpen(true); };
+  const openEdit = (emp: any) => {
+    setForm({ ...emp, salary: emp.salary || "", birth_date: emp.birth_date?.slice(0, 10) || "", admission_date: emp.admission_date?.slice(0, 10) || "" });
+    setEditId(emp.id);
+    setDialogOpen(true);
+  };
+
+  const handleSave = async () => {
+    if (!form.full_name) { toast({ title: "Nome é obrigatório", variant: "destructive" }); return; }
+    try {
+      if (editId) {
+        await updateMut.mutateAsync({ id: editId, ...form });
+        toast({ title: "Colaborador atualizado!" });
+      } else {
+        await createMut.mutateAsync(form);
+        toast({ title: "Colaborador cadastrado!" });
+      }
+      setDialogOpen(false);
+    } catch {
+      toast({ title: "Erro ao salvar", variant: "destructive" });
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Deseja desligar este colaborador?")) return;
+    await deleteMut.mutateAsync(id);
+    toast({ title: "Colaborador desligado" });
+  };
+
+  const setField = (key: string, val: any) => setForm((p: any) => ({ ...p, [key]: val }));
+
+  const stats = {
+    total: employees.length,
+    ativos: employees.filter((e: any) => e.status === "ativo").length,
+    afastados: employees.filter((e: any) => e.status === "afastado" || e.status === "ferias").length,
+    desligados: employees.filter((e: any) => e.status === "desligado").length,
+  };
+
+  return (
+    <MainLayout>
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground flex items-center gap-2"><Users className="h-6 w-6 text-primary" /> Colaboradores</h1>
+            <p className="text-sm text-muted-foreground">Gestão de pessoas e fichas cadastrais</p>
+          </div>
+          <Button onClick={openNew} className="gap-2"><Plus className="h-4 w-4" /> Novo Colaborador</Button>
+        </div>
+
+        {/* Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {[
+            { label: "Total", value: stats.total, color: "text-foreground" },
+            { label: "Ativos", value: stats.ativos, color: "text-green-600" },
+            { label: "Afastados", value: stats.afastados, color: "text-yellow-600" },
+            { label: "Desligados", value: stats.desligados, color: "text-red-600" },
+          ].map(s => (
+            <Card key={s.label}>
+              <CardContent className="p-4 text-center">
+                <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
+                <p className="text-xs text-muted-foreground">{s.label}</p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        {/* Filters */}
+        <div className="flex flex-col sm:flex-row gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input placeholder="Buscar por nome, CPF ou e-mail..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+          </div>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos</SelectItem>
+              <SelectItem value="ativo">Ativo</SelectItem>
+              <SelectItem value="afastado">Afastado</SelectItem>
+              <SelectItem value="ferias">Férias</SelectItem>
+              <SelectItem value="desligado">Desligado</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button variant="outline" size="icon" onClick={() => setShowSensitive(!showSensitive)} title={showSensitive ? "Ocultar dados sensíveis" : "Mostrar dados sensíveis"}>
+            {showSensitive ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+          </Button>
+        </div>
+
+        {/* Table */}
+        <Card>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Nome</TableHead>
+                  <TableHead className="hidden md:table-cell">CPF</TableHead>
+                  <TableHead className="hidden md:table-cell">Cargo</TableHead>
+                  <TableHead className="hidden lg:table-cell">Vínculo</TableHead>
+                  <TableHead className="hidden lg:table-cell">Departamento</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="w-24">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {isLoading ? (
+                  <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Carregando...</TableCell></TableRow>
+                ) : employees.length === 0 ? (
+                  <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Nenhum colaborador encontrado</TableCell></TableRow>
+                ) : employees.map((emp: any) => (
+                  <TableRow key={emp.id} className="cursor-pointer hover:bg-muted/50" onClick={() => openEdit(emp)}>
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-2">
+                        <UserCircle className="h-8 w-8 text-muted-foreground" />
+                        <div>
+                          <p className="font-medium">{emp.full_name}</p>
+                          <p className="text-xs text-muted-foreground">{emp.email}</p>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell text-sm">{maskCPF(emp.cpf)}</TableCell>
+                    <TableCell className="hidden md:table-cell text-sm">{emp.position || "—"}</TableCell>
+                    <TableCell className="hidden lg:table-cell"><Badge variant="outline" className="text-xs">{EMPLOYMENT_LABELS[emp.employment_type] || emp.employment_type}</Badge></TableCell>
+                    <TableCell className="hidden lg:table-cell text-sm">{emp.department_name || "—"}</TableCell>
+                    <TableCell><Badge className={STATUS_COLORS[emp.status] || ""}>{emp.status}</Badge></TableCell>
+                    <TableCell>
+                      <div className="flex gap-1">
+                        <Button variant="ghost" size="icon" onClick={e => { e.stopPropagation(); openEdit(emp); }}><Edit className="h-4 w-4" /></Button>
+                        <Button variant="ghost" size="icon" onClick={e => { e.stopPropagation(); handleDelete(emp.id); }}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Employee Dialog */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editId ? "Editar Colaborador" : "Novo Colaborador"}</DialogTitle>
+          </DialogHeader>
+          <Tabs defaultValue="pessoal">
+            <TabsList className="grid grid-cols-4 w-full">
+              <TabsTrigger value="pessoal">Pessoal</TabsTrigger>
+              <TabsTrigger value="profissional">Profissional</TabsTrigger>
+              <TabsTrigger value="documentos">Documentos</TabsTrigger>
+              <TabsTrigger value="bancario">Bancário</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="pessoal" className="space-y-3 mt-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div><Label>Nome Completo *</Label><Input value={form.full_name} onChange={e => setField("full_name", e.target.value)} /></div>
+                <div><Label>Nome Social</Label><Input value={form.social_name} onChange={e => setField("social_name", e.target.value)} /></div>
+                <div><Label>CPF</Label><Input value={form.cpf} onChange={e => setField("cpf", e.target.value)} placeholder="000.000.000-00" /></div>
+                <div><Label>RG</Label><Input value={form.rg} onChange={e => setField("rg", e.target.value)} /></div>
+                <div><Label>Data de Nascimento</Label><Input type="date" value={form.birth_date} onChange={e => setField("birth_date", e.target.value)} /></div>
+                <div><Label>Gênero</Label>
+                  <Select value={form.gender} onValueChange={v => setField("gender", v)}>
+                    <SelectTrigger><SelectValue placeholder="Selecionar" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="masculino">Masculino</SelectItem>
+                      <SelectItem value="feminino">Feminino</SelectItem>
+                      <SelectItem value="outro">Outro</SelectItem>
+                      <SelectItem value="nao_informar">Prefiro não informar</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div><Label>E-mail</Label><Input type="email" value={form.email} onChange={e => setField("email", e.target.value)} /></div>
+                <div><Label>Telefone</Label><Input value={form.phone} onChange={e => setField("phone", e.target.value)} /></div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="md:col-span-2"><Label>Endereço</Label><Input value={form.address} onChange={e => setField("address", e.target.value)} /></div>
+                <div><Label>Cidade</Label><Input value={form.city} onChange={e => setField("city", e.target.value)} /></div>
+                <div><Label>Estado</Label><Input value={form.state} onChange={e => setField("state", e.target.value)} maxLength={2} /></div>
+                <div><Label>CEP</Label><Input value={form.zip_code} onChange={e => setField("zip_code", e.target.value)} /></div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="profissional" className="space-y-3 mt-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div><Label>Matrícula</Label><Input value={form.registration_number} onChange={e => setField("registration_number", e.target.value)} /></div>
+                <div><Label>Cargo</Label><Input value={form.position} onChange={e => setField("position", e.target.value)} /></div>
+                <div><Label>Perfil</Label>
+                  <Select value={form.worker_profile} onValueChange={v => setField("worker_profile", v)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(PROFILE_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div><Label>Tipo de Vínculo</Label>
+                  <Select value={form.employment_type} onValueChange={v => setField("employment_type", v)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(EMPLOYMENT_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div><Label>Departamento</Label>
+                  <Select value={form.department_id || ""} onValueChange={v => setField("department_id", v)}>
+                    <SelectTrigger><SelectValue placeholder="Selecionar" /></SelectTrigger>
+                    <SelectContent>
+                      {departments.map((d: any) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div><Label>Filial</Label>
+                  <Select value={form.branch_id || ""} onValueChange={v => setField("branch_id", v)}>
+                    <SelectTrigger><SelectValue placeholder="Selecionar" /></SelectTrigger>
+                    <SelectContent>
+                      {branches.map((b: any) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div><Label>Salário (R$)</Label><Input type="number" value={form.salary} onChange={e => setField("salary", e.target.value)} /></div>
+                <div><Label>Jornada</Label><Input value={form.work_schedule} onChange={e => setField("work_schedule", e.target.value)} placeholder="08:00-17:00" /></div>
+                <div><Label>Data de Admissão</Label><Input type="date" value={form.admission_date} onChange={e => setField("admission_date", e.target.value)} /></div>
+                <div><Label>Status</Label>
+                  <Select value={form.status} onValueChange={v => setField("status", v)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ativo">Ativo</SelectItem>
+                      <SelectItem value="afastado">Afastado</SelectItem>
+                      <SelectItem value="ferias">Férias</SelectItem>
+                      <SelectItem value="suspenso">Suspenso</SelectItem>
+                      <SelectItem value="desligado">Desligado</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="documentos" className="space-y-3 mt-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div><Label>CTPS Número</Label><Input value={form.ctps_number} onChange={e => setField("ctps_number", e.target.value)} /></div>
+                <div><Label>PIS/PASEP</Label><Input value={form.pis_pasep} onChange={e => setField("pis_pasep", e.target.value)} /></div>
+                {form.employment_type === "pj" && (
+                  <>
+                    <div><Label>CNPJ</Label><Input value={form.cnpj} onChange={e => setField("cnpj", e.target.value)} /></div>
+                    <div><Label>Razão Social</Label><Input value={form.company_name} onChange={e => setField("company_name", e.target.value)} /></div>
+                  </>
+                )}
+              </div>
+            </TabsContent>
+
+            <TabsContent value="bancario" className="space-y-3 mt-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div><Label>Banco</Label><Input value={form.bank_name} onChange={e => setField("bank_name", e.target.value)} /></div>
+                <div><Label>Agência</Label><Input value={form.bank_agency} onChange={e => setField("bank_agency", e.target.value)} /></div>
+                <div><Label>Conta</Label><Input value={form.bank_account} onChange={e => setField("bank_account", e.target.value)} /></div>
+                <div><Label>Tipo</Label>
+                  <Select value={form.bank_account_type || ""} onValueChange={v => setField("bank_account_type", v)}>
+                    <SelectTrigger><SelectValue placeholder="Selecionar" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="corrente">Corrente</SelectItem>
+                      <SelectItem value="poupanca">Poupança</SelectItem>
+                      <SelectItem value="pix">PIX</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </TabsContent>
+          </Tabs>
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={handleSave} disabled={createMut.isPending || updateMut.isPending}>
+              {createMut.isPending || updateMut.isPending ? "Salvando..." : "Salvar"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </MainLayout>
+  );
+}

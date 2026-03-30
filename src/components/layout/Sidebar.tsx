@@ -9,6 +9,7 @@ import {
   Building2,
   CalendarDays,
   ChevronDown,
+  Clock,
   Code,
   ClipboardList,
   FileSignature,
@@ -39,6 +40,7 @@ import {
   Ghost,
   FolderKanban,
   BarChart4,
+  DollarSign,
 } from "lucide-react";
 import { API_URL, getAuthToken } from "@/lib/api";
 import ayratechLogo from "@/assets/ayratech_logo.jpg";
@@ -102,6 +104,15 @@ const getNavSections = (hasConnections: boolean): NavSection[] => [
       { name: "Revenue Intel", href: "/revenue-intelligence", icon: Brain, pageKey: 'revenue_intelligence', adminOnly: true },
       { name: "Fantasma", href: "/modulo-fantasma", icon: Ghost, pageKey: 'modulo_fantasma', ownerOnly: true, moduleKey: 'ghost' },
       { name: "Configurações", href: "/crm/configuracoes", icon: Settings, pageKey: 'crm_configuracoes', adminOnly: true },
+    ],
+  },
+  {
+    title: "RH",
+    icon: Users,
+    items: [
+      { name: "Colaboradores", href: "/rh/colaboradores", icon: UserPlus, pageKey: 'rh_colaboradores' },
+      { name: "Ponto", href: "/rh/ponto", icon: Clock, pageKey: 'rh_ponto' },
+      { name: "Holerite", href: "/rh/holerite", icon: DollarSign, pageKey: 'rh_holerite' },
     ],
   },
   {

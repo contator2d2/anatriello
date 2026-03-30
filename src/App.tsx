@@ -60,6 +60,9 @@ import MetaTemplates from "./pages/MetaTemplates";
 import Assinaturas from "./pages/Assinaturas";
 import AssinarDocumento from "./pages/AssinarDocumento";
 import VerificarDocumento from "./pages/VerificarDocumento";
+import RHColaboradores from "./pages/RHColaboradores";
+import RHPonto from "./pages/RHPonto";
+import RHHolerite from "./pages/RHHolerite";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -157,6 +160,9 @@ const App = () => (
             <Route path="/respostas-rapidas" element={<ProtectedRoute><RespostasRapidas /></ProtectedRoute>} />
             <Route path="/meta-templates" element={<ProtectedRoute><MetaTemplates /></ProtectedRoute>} />
             <Route path="/assinaturas" element={<ProtectedRoute><Assinaturas /></ProtectedRoute>} />
+            <Route path="/rh/colaboradores" element={<ProtectedRoute><RHColaboradores /></ProtectedRoute>} />
+            <Route path="/rh/ponto" element={<ProtectedRoute><RHPonto /></ProtectedRoute>} />
+            <Route path="/rh/holerite" element={<ProtectedRoute><RHHolerite /></ProtectedRoute>} />
             <Route path="/api-docs" element={<ApiDocumentation />} />
             <Route path="/f/:slug" element={<PublicFormPage />} />
             <Route path="/assinar/:token" element={<AssinarDocumento />} />
