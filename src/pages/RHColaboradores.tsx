@@ -95,7 +95,6 @@ const EMPTY_FORM = {
   ctps_number: "", pis_pasep: "", cnpj: "", company_name: "", status: "ativo",
   salary_items: [] as { type: string; description: string; value: string }[],
   benefits: [] as { type: string; description: string; value: string; employer_cost: string }[],
-  promotor_access: false,
 };
 
 // ============ CPF Validation ============
