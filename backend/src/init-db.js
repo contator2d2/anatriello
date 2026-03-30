@@ -3820,6 +3820,84 @@ ALTER TABLE employee_absences ADD COLUMN IF NOT EXISTS medical_certificate_id UU
 ALTER TABLE employee_absences ADD COLUMN IF NOT EXISTS organization_id UUID;
 `;
 
+// ============================================
+// STEP 43: Promotor App (Fase 2)
+// ============================================
+const step43PromotorApp = `
+-- PDVs
+CREATE TABLE IF NOT EXISTS pdvs (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE, name VARCHAR(255) NOT NULL, client_name VARCHAR(255), address TEXT, zip_code VARCHAR(10), city VARCHAR(100), state VARCHAR(2), neighborhood VARCHAR(100), latitude NUMERIC(10,7), longitude NUMERIC(10,7), radius_meters INTEGER DEFAULT 200, supervisor_id UUID, active BOOLEAN DEFAULT true, notes TEXT, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW());
+CREATE INDEX IF NOT EXISTS idx_pdvs_org ON pdvs(organization_id);
+
+-- Collaborator PDVs
+CREATE TABLE IF NOT EXISTS collaborator_pdvs (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), employee_id UUID NOT NULL REFERENCES employees(id) ON DELETE CASCADE, pdv_id UUID NOT NULL REFERENCES pdvs(id) ON DELETE CASCADE, assignment_type VARCHAR(20) DEFAULT 'fixo', weekdays JSONB DEFAULT '[]', start_date DATE, end_date DATE, active BOOLEAN DEFAULT true, created_at TIMESTAMPTZ DEFAULT NOW());
+CREATE INDEX IF NOT EXISTS idx_collab_pdvs_emp ON collaborator_pdvs(employee_id);
+
+-- Daily assignments
+CREATE TABLE IF NOT EXISTS collaborator_daily_assignments (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE, employee_id UUID NOT NULL REFERENCES employees(id) ON DELETE CASCADE, pdv_id UUID REFERENCES pdvs(id) ON DELETE SET NULL, assignment_date DATE NOT NULL, shift_start TIME, shift_end TIME, notes TEXT, created_at TIMESTAMPTZ DEFAULT NOW());
+CREATE INDEX IF NOT EXISTS idx_daily_assign_emp ON collaborator_daily_assignments(employee_id, assignment_date);
+
+-- Time Punches
+CREATE TABLE IF NOT EXISTS time_punches (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE, employee_id UUID NOT NULL REFERENCES employees(id) ON DELETE CASCADE, punch_type VARCHAR(30) NOT NULL, punched_at TIMESTAMPTZ NOT NULL, latitude NUMERIC(10,7), longitude NUMERIC(10,7), accuracy_meters NUMERIC(8,2), pdv_id UUID REFERENCES pdvs(id) ON DELETE SET NULL, distance_from_pdv NUMERIC(10,2), geo_status VARCHAR(30) DEFAULT 'dentro_area', device_info TEXT, ip_address VARCHAR(45), is_offline BOOLEAN DEFAULT false, offline_local_time TIMESTAMPTZ, synced_at TIMESTAMPTZ, sync_status VARCHAR(20) DEFAULT 'synced', justification TEXT, approved BOOLEAN, approved_by UUID, created_at TIMESTAMPTZ DEFAULT NOW());
+CREATE INDEX IF NOT EXISTS idx_time_punches_emp ON time_punches(employee_id);
+CREATE INDEX IF NOT EXISTS idx_time_punches_date ON time_punches(punched_at);
+CREATE INDEX IF NOT EXISTS idx_time_punches_org ON time_punches(organization_id);
+
+-- Time Rules
+CREATE TABLE IF NOT EXISTS time_rules (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE, employee_id UUID REFERENCES employees(id) ON DELETE CASCADE, name VARCHAR(255), late_tolerance_minutes INTEGER DEFAULT 10, early_leave_tolerance INTEGER DEFAULT 10, break_tolerance INTEGER DEFAULT 5, max_late_minutes INTEGER DEFAULT 30, require_justification BOOLEAN DEFAULT true, absence_on_no_punch BOOLEAN DEFAULT true, punch_window_minutes INTEGER DEFAULT 60, allow_manual_adjustment BOOLEAN DEFAULT true, require_geo BOOLEAN DEFAULT true, allow_offline_punch BOOLEAN DEFAULT true, allow_exception_punch BOOLEAN DEFAULT false, created_at TIMESTAMPTZ DEFAULT NOW());
+
+-- Time Alerts
+CREATE TABLE IF NOT EXISTS time_alerts (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE, employee_id UUID NOT NULL REFERENCES employees(id) ON DELETE CASCADE, alert_type VARCHAR(50) NOT NULL, alert_date DATE NOT NULL, description TEXT, resolved BOOLEAN DEFAULT false, resolved_by UUID, resolved_at TIMESTAMPTZ, resolution_notes TEXT, created_at TIMESTAMPTZ DEFAULT NOW());
+CREATE INDEX IF NOT EXISTS idx_time_alerts_org ON time_alerts(organization_id);
+CREATE INDEX IF NOT EXISTS idx_time_alerts_date ON time_alerts(alert_date);
+
+-- App Access
+CREATE TABLE IF NOT EXISTS collaborator_app_access (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), employee_id UUID NOT NULL REFERENCES employees(id) ON DELETE CASCADE UNIQUE, login_type VARCHAR(10) DEFAULT 'cpf', password_hash VARCHAR(255), temp_password BOOLEAN DEFAULT false, force_password_change BOOLEAN DEFAULT true, access_status VARCHAR(30) DEFAULT 'sem_acesso', enabled_at TIMESTAMPTZ, enabled_by UUID, last_login TIMESTAMPTZ, last_device TEXT, last_ip VARCHAR(45), created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW());
+
+-- Sessions
+CREATE TABLE IF NOT EXISTS collaborator_sessions (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), employee_id UUID NOT NULL REFERENCES employees(id) ON DELETE CASCADE, token_hash VARCHAR(255) NOT NULL, device_info TEXT, ip_address VARCHAR(45), expires_at TIMESTAMPTZ NOT NULL, created_at TIMESTAMPTZ DEFAULT NOW());
+
+-- Password Resets
+CREATE TABLE IF NOT EXISTS collaborator_password_resets (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), employee_id UUID NOT NULL REFERENCES employees(id) ON DELETE CASCADE, reset_by VARCHAR(20) NOT NULL, reset_by_user_id UUID, ip_address VARCHAR(45), created_at TIMESTAMPTZ DEFAULT NOW());
+
+-- Document Types
+CREATE TABLE IF NOT EXISTS rh_document_types (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE, name VARCHAR(255) NOT NULL, slug VARCHAR(100), requires_signature BOOLEAN DEFAULT false, requires_confirmation BOOLEAN DEFAULT true, category VARCHAR(50) DEFAULT 'geral', active BOOLEAN DEFAULT true, created_at TIMESTAMPTZ DEFAULT NOW());
+
+-- Document Deliveries
+CREATE TABLE IF NOT EXISTS rh_document_deliveries (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE, employee_id UUID NOT NULL REFERENCES employees(id) ON DELETE CASCADE, document_type_id UUID, title VARCHAR(255) NOT NULL, description TEXT, file_url TEXT, file_hash VARCHAR(128), requires_view_only BOOLEAN DEFAULT false, requires_confirmation BOOLEAN DEFAULT false, requires_signature BOOLEAN DEFAULT false, signature_deadline TIMESTAMPTZ, block_until_signed BOOLEAN DEFAULT false, status VARCHAR(30) DEFAULT 'pendente', sent_by UUID, sent_at TIMESTAMPTZ, delivered_at TIMESTAMPTZ, viewed_at TIMESTAMPTZ, confirmed_at TIMESTAMPTZ, signed_at TIMESTAMPTZ, signature_id UUID, refused_at TIMESTAMPTZ, refuse_reason TEXT, cancelled_at TIMESTAMPTZ, cancelled_by UUID, batch_id UUID, ip_at_view VARCHAR(45), ip_at_sign VARCHAR(45), device_at_view TEXT, device_at_sign TEXT, geo_lat_at_sign NUMERIC(10,7), geo_lng_at_sign NUMERIC(10,7), created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW());
+CREATE INDEX IF NOT EXISTS idx_doc_deliveries_org ON rh_document_deliveries(organization_id);
+CREATE INDEX IF NOT EXISTS idx_doc_deliveries_emp ON rh_document_deliveries(employee_id);
+CREATE INDEX IF NOT EXISTS idx_doc_deliveries_status ON rh_document_deliveries(status);
+
+-- Delivery Events
+CREATE TABLE IF NOT EXISTS rh_document_delivery_events (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), delivery_id UUID NOT NULL REFERENCES rh_document_deliveries(id) ON DELETE CASCADE, event_type VARCHAR(30) NOT NULL, event_at TIMESTAMPTZ DEFAULT NOW(), actor_type VARCHAR(20), actor_id UUID, ip_address VARCHAR(45), device_info TEXT, notes TEXT);
+
+-- Inbound Documents
+CREATE TABLE IF NOT EXISTS rh_inbound_documents (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE, employee_id UUID NOT NULL REFERENCES employees(id) ON DELETE CASCADE, category VARCHAR(50) NOT NULL, title VARCHAR(255), file_url TEXT, observation TEXT, status VARCHAR(20) DEFAULT 'recebido', read_by UUID, read_at TIMESTAMPTZ, processed_by UUID, processed_at TIMESTAMPTZ, process_notes TEXT, ip_address VARCHAR(45), device_info TEXT, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW());
+CREATE INDEX IF NOT EXISTS idx_inbound_docs_org ON rh_inbound_documents(organization_id);
+
+-- Payslip Deliveries
+CREATE TABLE IF NOT EXISTS payslip_deliveries (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), payslip_id UUID NOT NULL REFERENCES payslips(id) ON DELETE CASCADE, employee_id UUID NOT NULL REFERENCES employees(id) ON DELETE CASCADE, delivery_status VARCHAR(30) DEFAULT 'pendente', requires_signature BOOLEAN DEFAULT false, sent_at TIMESTAMPTZ, viewed_at TIMESTAMPTZ, confirmed_at TIMESTAMPTZ, signed_at TIMESTAMPTZ, signature_id UUID, created_at TIMESTAMPTZ DEFAULT NOW());
+
+-- Timesheet Exports
+CREATE TABLE IF NOT EXISTS timesheet_exports (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE, employee_id UUID NOT NULL REFERENCES employees(id) ON DELETE CASCADE, reference_month VARCHAR(7) NOT NULL, status VARCHAR(30) DEFAULT 'rascunho', pdf_url TEXT, total_hours NUMERIC(6,2), overtime_hours NUMERIC(6,2), absences INTEGER DEFAULT 0, lates INTEGER DEFAULT 0, sent_at TIMESTAMPTZ, viewed_at TIMESTAMPTZ, confirmed_at TIMESTAMPTZ, signed_at TIMESTAMPTZ, requires_signature BOOLEAN DEFAULT false, signature_id UUID, generated_by UUID, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW());
+
+-- Offline Sync Queue
+CREATE TABLE IF NOT EXISTS offline_sync_queue (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), employee_id UUID NOT NULL REFERENCES employees(id) ON DELETE CASCADE, action_type VARCHAR(50) NOT NULL, payload JSONB NOT NULL, local_timestamp TIMESTAMPTZ NOT NULL, server_timestamp TIMESTAMPTZ, sync_status VARCHAR(20) DEFAULT 'pending', attempts INTEGER DEFAULT 0, error_message TEXT, local_id VARCHAR(100), server_id UUID, created_at TIMESTAMPTZ DEFAULT NOW());
+
+-- Collaborator Notifications
+CREATE TABLE IF NOT EXISTS collaborator_notifications (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE, employee_id UUID NOT NULL REFERENCES employees(id) ON DELETE CASCADE, title VARCHAR(255) NOT NULL, message TEXT, type VARCHAR(30) DEFAULT 'info', reference_type VARCHAR(50), reference_id UUID, read BOOLEAN DEFAULT false, read_at TIMESTAMPTZ, created_at TIMESTAMPTZ DEFAULT NOW());
+CREATE INDEX IF NOT EXISTS idx_collab_notif_emp ON collaborator_notifications(employee_id);
+
+-- Notification Rules
+CREATE TABLE IF NOT EXISTS rh_notification_rules (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE, event_type VARCHAR(50) NOT NULL, notify_rh BOOLEAN DEFAULT true, notify_supervisor BOOLEAN DEFAULT false, notify_collaborator BOOLEAN DEFAULT false, channel_system BOOLEAN DEFAULT true, channel_push BOOLEAN DEFAULT false, channel_email BOOLEAN DEFAULT false, channel_whatsapp BOOLEAN DEFAULT false, active BOOLEAN DEFAULT true, created_at TIMESTAMPTZ DEFAULT NOW());
+
+-- App Settings
+CREATE TABLE IF NOT EXISTS collaborator_app_settings (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), employee_id UUID NOT NULL REFERENCES employees(id) ON DELETE CASCADE UNIQUE, theme VARCHAR(10) DEFAULT 'auto', notifications_enabled BOOLEAN DEFAULT true, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW());
+
+-- Supervisor column
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS supervisor_id UUID;
+`;
+
 const migrationSteps = [
   { name: 'Enums', sql: step1Enums, critical: true },
   { name: 'Core Tables (users, plans)', sql: step2CoreTables, critical: true },
@@ -3864,6 +3942,7 @@ const migrationSteps = [
   { name: 'Lead Webhooks', sql: step40LeadWebhooks, critical: false },
   { name: 'Meta Message Templates', sql: step41MetaTemplates, critical: false },
   { name: 'RH Module', sql: step42RH, critical: false },
+  { name: 'Promotor App (Fase 2)', sql: step43PromotorApp, critical: false },
 ];
 
 export async function initDatabase() {

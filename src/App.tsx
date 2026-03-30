@@ -64,6 +64,16 @@ import RHColaboradores from "./pages/RHColaboradores";
 import RHPonto from "./pages/RHPonto";
 import RHHolerite from "./pages/RHHolerite";
 import RHDashboard from "./pages/RHDashboard";
+import RHDocumentos from "./pages/RHDocumentos";
+import RHPontoMonitor from "./pages/RHPontoMonitor";
+import RHPDVs from "./pages/RHPDVs";
+import PromotorLogin from "./pages/promotor/PromotorLogin";
+import PromotorHome from "./pages/promotor/PromotorHome";
+import PromotorDocumentos from "./pages/promotor/PromotorDocumentos";
+import PromotorPonto from "./pages/promotor/PromotorPonto";
+import PromotorEnviar from "./pages/promotor/PromotorEnviar";
+import PromotorConfig from "./pages/promotor/PromotorConfig";
+import PromotorTrocarSenha from "./pages/promotor/PromotorTrocarSenha";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -165,6 +175,17 @@ const App = () => (
             <Route path="/rh/dashboard" element={<ProtectedRoute><RHDashboard /></ProtectedRoute>} />
             <Route path="/rh/ponto" element={<ProtectedRoute><RHPonto /></ProtectedRoute>} />
             <Route path="/rh/holerite" element={<ProtectedRoute><RHHolerite /></ProtectedRoute>} />
+            <Route path="/rh/documentos" element={<ProtectedRoute><RHDocumentos /></ProtectedRoute>} />
+            <Route path="/rh/ponto-monitor" element={<ProtectedRoute><RHPontoMonitor /></ProtectedRoute>} />
+            <Route path="/rh/pdvs" element={<ProtectedRoute><RHPDVs /></ProtectedRoute>} />
+            {/* Promotor App */}
+            <Route path="/promotor/login" element={<PromotorLogin />} />
+            <Route path="/promotor/home" element={<PromotorHome />} />
+            <Route path="/promotor/documentos" element={<PromotorDocumentos />} />
+            <Route path="/promotor/ponto" element={<PromotorPonto />} />
+            <Route path="/promotor/enviar" element={<PromotorEnviar />} />
+            <Route path="/promotor/configuracoes" element={<PromotorConfig />} />
+            <Route path="/promotor/trocar-senha" element={<PromotorTrocarSenha />} />
             <Route path="/api-docs" element={<ApiDocumentation />} />
             <Route path="/f/:slug" element={<PublicFormPage />} />
             <Route path="/assinar/:token" element={<AssinarDocumento />} />
