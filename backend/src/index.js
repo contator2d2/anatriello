@@ -47,6 +47,7 @@ import metaTemplatesRoutes from './routes/meta-templates.js';
 import docSignaturesRoutes from './routes/doc-signatures.js';
 import rhRoutes from './routes/rh.js';
 import promotorRoutes from './routes/promotor.js';
+import merchandisingRoutes from './routes/merchandising.js';
 import { initDatabase } from './init-db.js';
 import { executeNotifications } from './scheduler.js';
 import { executeCampaignMessages } from './campaign-scheduler.js';
