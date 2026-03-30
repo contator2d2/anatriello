@@ -37,6 +37,7 @@ interface Plan {
   has_lead_scoring: boolean;
   has_ai_summary: boolean;
   has_group_secretary: boolean;
+  has_rh: boolean;
   has_ghost: boolean;
   has_projects: boolean;
   has_lead_gleego: boolean;
@@ -127,6 +128,7 @@ export function useSuperadmin() {
     has_lead_scoring: boolean;
     has_ai_summary: boolean;
     has_group_secretary: boolean;
+    has_rh?: boolean;
     has_ghost?: boolean;
     has_projects?: boolean;
     has_lead_gleego?: boolean;

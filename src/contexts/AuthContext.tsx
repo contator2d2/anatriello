@@ -10,6 +10,7 @@ interface ModulesEnabled {
   chatbots: boolean;
   chat: boolean;
   crm: boolean;
+  rh: boolean;
   ai_agents: boolean;
   group_secretary: boolean;
   ghost: boolean;
@@ -59,6 +60,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     chatbots: true,
     chat: true,
     crm: true,
+    rh: true,
     ai_agents: true,
     group_secretary: false,
     ghost: true,

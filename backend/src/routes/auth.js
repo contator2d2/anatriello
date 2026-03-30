@@ -84,7 +84,8 @@ router.post('/register', async (req, res) => {
       scheduled_messages: true,
       chatbots: true,
       chat: true,
-      crm: true
+      crm: true,
+      rh: true,
     };
 
     let expiresAt = null;
@@ -96,7 +97,7 @@ router.post('/register', async (req, res) => {
 
       // Get plan modules for organization
       const planModulesResult = await query(
-         `SELECT has_campaigns, has_asaas_integration, has_whatsapp_groups, has_scheduled_messages, has_chatbots, has_chat, has_crm, has_group_secretary, has_projects, has_lead_gleego FROM plans WHERE id = $1`,
+         `SELECT has_campaigns, has_asaas_integration, has_whatsapp_groups, has_scheduled_messages, has_chatbots, has_chat, has_crm, has_group_secretary, has_projects, has_lead_gleego, has_rh FROM plans WHERE id = $1`,
         [selectedPlan.id]
       );
       
@@ -110,6 +111,7 @@ router.post('/register', async (req, res) => {
           chatbots: plan.has_chatbots ?? true,
           chat: plan.has_chat ?? true,
           crm: plan.has_crm ?? true,
+          rh: plan.has_rh ?? true,
           group_secretary: plan.has_group_secretary ?? false,
           projects: plan.has_projects ?? false,
           lead_gleego: plan.has_lead_gleego ?? false,
@@ -160,7 +162,7 @@ router.post('/register', async (req, res) => {
     const organizationId = orgRoleResult.rows[0]?.organization_id || null;
     const finalModules = orgRoleResult.rows[0]?.modules_enabled || {
       campaigns: true, billing: true, groups: true,
-      scheduled_messages: true, chatbots: true, chat: true, crm: true
+      scheduled_messages: true, chatbots: true, chat: true, crm: true, rh: true
     };
 
     res.status(201).json({ 
@@ -240,7 +242,13 @@ router.post('/login', async (req, res) => {
       chatbots: true,
       chat: true,
       crm: true,
-      projects: true
+      rh: true,
+      projects: true,
+      ai_agents: true,
+      group_secretary: true,
+      ghost: true,
+      lead_gleego: true,
+      doc_signatures: true,
     };
     
     // Only superadmin bypasses module restrictions - owners/admins follow plan settings
@@ -376,7 +384,13 @@ router.get('/me', async (req, res) => {
       chatbots: true,
       chat: true,
       crm: true,
-      projects: true
+      rh: true,
+      projects: true,
+      ai_agents: true,
+      group_secretary: true,
+      ghost: true,
+      lead_gleego: true,
+      doc_signatures: true,
     };
     
     // Only superadmin bypasses module restrictions - owners/admins follow plan settings

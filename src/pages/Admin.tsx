@@ -65,6 +65,7 @@ interface Plan {
   has_lead_scoring: boolean;
   has_ai_summary: boolean;
   has_group_secretary: boolean;
+  has_rh: boolean;
   has_ghost: boolean;
   has_projects: boolean;
   has_lead_gleego: boolean;
@@ -181,6 +182,7 @@ export default function Admin() {
   const [newPlanLeadScoring, setNewPlanLeadScoring] = useState(true);
   const [newPlanAISummary, setNewPlanAISummary] = useState(true);
   const [newPlanGroupSecretary, setNewPlanGroupSecretary] = useState(false);
+  const [newPlanRH, setNewPlanRH] = useState(true);
   const [newPlanGhost, setNewPlanGhost] = useState(false);
   const [newPlanProjects, setNewPlanProjects] = useState(false);
   const [newPlanLeadGleego, setNewPlanLeadGleego] = useState(false);
@@ -436,6 +438,7 @@ export default function Admin() {
       has_lead_scoring: newPlanLeadScoring,
       has_ai_summary: newPlanAISummary,
       has_group_secretary: newPlanGroupSecretary,
+      has_rh: newPlanRH,
       has_ghost: newPlanGhost,
       has_projects: newPlanProjects,
       has_lead_gleego: newPlanLeadGleego,
@@ -477,6 +480,7 @@ export default function Admin() {
     setNewPlanLeadScoring(true);
     setNewPlanAISummary(true);
     setNewPlanGroupSecretary(false);
+    setNewPlanRH(true);
     setNewPlanGhost(false);
     setNewPlanProjects(false);
     setNewPlanLeadGleego(false);
@@ -509,6 +513,7 @@ export default function Admin() {
       has_lead_scoring: editingPlan.has_lead_scoring,
       has_ai_summary: editingPlan.has_ai_summary,
       has_group_secretary: editingPlan.has_group_secretary,
+      has_rh: editingPlan.has_rh,
       has_ghost: editingPlan.has_ghost,
       has_projects: editingPlan.has_projects,
       has_lead_gleego: editingPlan.has_lead_gleego,
@@ -1074,6 +1079,17 @@ export default function Admin() {
                       </div>
                       <div className="flex items-center justify-between rounded-lg border p-3">
                         <div className="flex items-center gap-2">
+                          <Users className="h-4 w-4 text-muted-foreground" />
+                          <Label htmlFor="rh-switch">Módulo RH</Label>
+                        </div>
+                        <Switch
+                          id="rh-switch"
+                          checked={newPlanRH}
+                          onCheckedChange={setNewPlanRH}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between rounded-lg border p-3">
+                        <div className="flex items-center gap-2">
                           <Label htmlFor="ghost-switch">Módulo Fantasma</Label>
                         </div>
                         <Switch
@@ -1263,6 +1279,9 @@ export default function Admin() {
                         )}
                         {plan.has_group_secretary && (
                           <Badge variant="secondary" className="text-xs">Secretária IA</Badge>
+                        )}
+                        {plan.has_rh && (
+                          <Badge variant="secondary" className="text-xs">RH</Badge>
                         )}
                         {plan.has_ghost && (
                           <Badge variant="secondary" className="text-xs">Fantasma</Badge>
@@ -2345,6 +2364,14 @@ export default function Admin() {
                     id="edit-group-secretary"
                     checked={editingPlan.has_group_secretary}
                     onCheckedChange={(v) => setEditingPlan({ ...editingPlan, has_group_secretary: v })}
+                  />
+                </div>
+                <div className="flex items-center justify-between rounded-lg border p-3">
+                  <Label htmlFor="edit-rh">Módulo RH</Label>
+                  <Switch
+                    id="edit-rh"
+                    checked={editingPlan.has_rh}
+                    onCheckedChange={(v) => setEditingPlan({ ...editingPlan, has_rh: v })}
                   />
                 </div>
                 <div className="flex items-center justify-between rounded-lg border p-3">

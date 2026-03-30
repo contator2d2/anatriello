@@ -283,9 +283,10 @@ router.get('/:id([0-9a-fA-F-]{36})/modules', async (req, res) => {
       billing: true,
       groups: true,
       scheduled_messages: true,
-       chatbots: true,
-       chat: true,
-       crm: true
+      chatbots: true,
+      chat: true,
+      crm: true,
+      rh: true,
     };
     
     res.json(result.rows[0].modules_enabled || defaultModules);

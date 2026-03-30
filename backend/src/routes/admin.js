@@ -12,6 +12,7 @@ const router = Router();
 (async () => {
   try {
     await query(`ALTER TABLE plans ADD COLUMN IF NOT EXISTS has_projects BOOLEAN DEFAULT false`);
+    await query(`ALTER TABLE plans ADD COLUMN IF NOT EXISTS has_rh BOOLEAN DEFAULT true`);
   } catch (_) {}
 })();
 
@@ -426,6 +427,7 @@ router.post('/plans', requireSuperadmin, async (req, res) => {
       has_lead_scoring,
       has_ai_summary,
       has_group_secretary,
+      has_rh,
       has_ghost,
       has_projects,
       has_lead_gleego,
@@ -442,8 +444,8 @@ router.post('/plans', requireSuperadmin, async (req, res) => {
     }
 
     const result = await query(
-      `INSERT INTO plans (name, description, max_connections, max_monthly_messages, max_users, max_supervisors, has_asaas_integration, has_chat, has_whatsapp_groups, has_campaigns, has_chatbots, has_scheduled_messages, has_crm, has_ai_agents, has_departments, has_lead_scoring, has_ai_summary, has_group_secretary, has_ghost, has_projects, has_lead_gleego, has_doc_signatures, doc_signatures_limit, price, billing_period, visible_on_signup, trial_days)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27) RETURNING *`,
+      `INSERT INTO plans (name, description, max_connections, max_monthly_messages, max_users, max_supervisors, has_asaas_integration, has_chat, has_whatsapp_groups, has_campaigns, has_chatbots, has_scheduled_messages, has_crm, has_ai_agents, has_departments, has_lead_scoring, has_ai_summary, has_group_secretary, has_rh, has_ghost, has_projects, has_lead_gleego, has_doc_signatures, doc_signatures_limit, price, billing_period, visible_on_signup, trial_days)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28) RETURNING *`,
       [
         name,
         description,
@@ -463,6 +465,7 @@ router.post('/plans', requireSuperadmin, async (req, res) => {
         has_lead_scoring !== false,
         has_ai_summary !== false,
         has_group_secretary || false,
+        has_rh !== false,
         has_ghost || false,
         has_projects || false,
         has_lead_gleego || false,
@@ -505,6 +508,7 @@ router.patch('/plans/:id', requireSuperadmin, async (req, res) => {
       has_lead_scoring,
       has_ai_summary,
       has_group_secretary,
+      has_rh,
       has_ghost,
       has_projects,
       has_lead_gleego,
@@ -537,18 +541,19 @@ router.patch('/plans/:id', requireSuperadmin, async (req, res) => {
            has_lead_scoring = COALESCE($16, has_lead_scoring),
            has_ai_summary = COALESCE($17, has_ai_summary),
            has_group_secretary = COALESCE($18, has_group_secretary),
-           has_ghost = COALESCE($19, has_ghost),
-           has_projects = COALESCE($20, has_projects),
-           has_lead_gleego = COALESCE($21, has_lead_gleego),
-           has_doc_signatures = COALESCE($22, has_doc_signatures),
-           doc_signatures_limit = COALESCE($23, doc_signatures_limit),
-           price = COALESCE($24, price),
-           billing_period = COALESCE($25, billing_period),
-           is_active = COALESCE($26, is_active),
-           visible_on_signup = COALESCE($27, visible_on_signup),
-           trial_days = COALESCE($28, trial_days),
+           has_rh = COALESCE($19, has_rh),
+           has_ghost = COALESCE($20, has_ghost),
+           has_projects = COALESCE($21, has_projects),
+           has_lead_gleego = COALESCE($22, has_lead_gleego),
+           has_doc_signatures = COALESCE($23, has_doc_signatures),
+           doc_signatures_limit = COALESCE($24, doc_signatures_limit),
+           price = COALESCE($25, price),
+           billing_period = COALESCE($26, billing_period),
+           is_active = COALESCE($27, is_active),
+           visible_on_signup = COALESCE($28, visible_on_signup),
+           trial_days = COALESCE($29, trial_days),
            updated_at = NOW()
-       WHERE id = $29
+       WHERE id = $30
        RETURNING *`,
       [
         name,
@@ -569,6 +574,7 @@ router.patch('/plans/:id', requireSuperadmin, async (req, res) => {
         has_lead_scoring,
         has_ai_summary,
         has_group_secretary,
+        has_rh,
         has_ghost,
         has_projects,
         has_lead_gleego,
@@ -599,7 +605,7 @@ router.post('/plans/sync-all', requireSuperadmin, async (req, res) => {
   try {
     // Get all plans with their modules
     const plansResult = await query(
-      `SELECT id, name, has_campaigns, has_asaas_integration, has_whatsapp_groups, has_scheduled_messages, has_chatbots, has_chat, has_crm, has_ai_agents, has_departments, has_lead_scoring, has_ai_summary, has_group_secretary, has_projects, has_lead_gleego, has_doc_signatures FROM plans`
+      `SELECT id, name, has_campaigns, has_asaas_integration, has_whatsapp_groups, has_scheduled_messages, has_chatbots, has_chat, has_crm, has_ai_agents, has_departments, has_lead_scoring, has_ai_summary, has_group_secretary, has_rh, has_projects, has_lead_gleego, has_doc_signatures FROM plans`
     );
 
     let syncedCount = 0;
@@ -619,6 +625,7 @@ router.post('/plans/sync-all', requireSuperadmin, async (req, res) => {
         lead_scoring: plan.has_lead_scoring ?? true,
         ai_summary: plan.has_ai_summary ?? true,
         group_secretary: plan.has_group_secretary ?? false,
+        rh: plan.has_rh ?? true,
         projects: plan.has_projects ?? false,
         lead_gleego: plan.has_lead_gleego ?? false,
         doc_signatures: plan.has_doc_signatures ?? false,
@@ -937,11 +944,12 @@ router.post('/organizations', requireSuperadmin, async (req, res) => {
       chatbots: true,
       chat: true,
       crm: true,
+      rh: true,
     };
 
     if (plan_id) {
       const planResult = await query(
-        `SELECT has_campaigns, has_asaas_integration, has_whatsapp_groups, has_scheduled_messages, has_chatbots, has_chat, has_crm, has_lead_gleego FROM plans WHERE id = $1`,
+        `SELECT has_campaigns, has_asaas_integration, has_whatsapp_groups, has_scheduled_messages, has_chatbots, has_chat, has_crm, has_lead_gleego, has_rh FROM plans WHERE id = $1`,
         [plan_id]
       );
       if (planResult.rows.length > 0) {
@@ -954,6 +962,7 @@ router.post('/organizations', requireSuperadmin, async (req, res) => {
           chatbots: plan.has_chatbots ?? true,
           chat: plan.has_chat ?? true,
           crm: plan.has_crm ?? true,
+          rh: plan.has_rh ?? true,
           lead_gleego: plan.has_lead_gleego ?? false,
         };
       }
@@ -995,7 +1004,7 @@ router.patch('/organizations/:id', requireSuperadmin, async (req, res) => {
     let modulesEnabled = null;
     if (plan_id && sync_modules !== false) {
       const planResult = await query(
-        `SELECT has_campaigns, has_asaas_integration, has_whatsapp_groups, has_scheduled_messages, has_chatbots, has_chat, has_crm, has_lead_gleego FROM plans WHERE id = $1`,
+        `SELECT has_campaigns, has_asaas_integration, has_whatsapp_groups, has_scheduled_messages, has_chatbots, has_chat, has_crm, has_lead_gleego, has_rh FROM plans WHERE id = $1`,
         [plan_id]
       );
       if (planResult.rows.length > 0) {
@@ -1008,6 +1017,7 @@ router.patch('/organizations/:id', requireSuperadmin, async (req, res) => {
           chatbots: plan.has_chatbots ?? true,
           chat: plan.has_chat ?? true,
           crm: plan.has_crm ?? true,
+          rh: plan.has_rh ?? true,
           lead_gleego: plan.has_lead_gleego ?? false,
         };
       }

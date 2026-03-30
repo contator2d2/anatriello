@@ -3038,6 +3038,9 @@ router.get('/alerts', authenticate, async (req, res) => {
 
     res.json(result.rows);
   } catch (error) {
+    if (error?.code === '42P01') {
+      return res.json([]);
+    }
     console.error('Get alerts error:', error);
     res.status(500).json({ error: 'Erro ao buscar alertas' });
   }
@@ -3061,6 +3064,9 @@ router.post('/alerts/read', authenticate, async (req, res) => {
 
     res.json({ success: true });
   } catch (error) {
+    if (error?.code === '42P01') {
+      return res.json({ success: true });
+    }
     console.error('Mark alerts read error:', error);
     res.status(500).json({ error: 'Erro ao marcar alertas como lidos' });
   }
@@ -3076,6 +3082,9 @@ router.post('/alerts/read-all', authenticate, async (req, res) => {
 
     res.json({ success: true });
   } catch (error) {
+    if (error?.code === '42P01') {
+      return res.json({ success: true });
+    }
     console.error('Mark all alerts read error:', error);
     res.status(500).json({ error: 'Erro ao marcar alertas como lidos' });
   }

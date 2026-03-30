@@ -142,6 +142,7 @@ export default function Organizacoes() {
     chatbots: true,
     chat: true,
     crm: true,
+    rh: true,
     group_secretary: false,
     ghost: false,
     projects: false,
@@ -242,6 +243,7 @@ export default function Organizacoes() {
         chatbots: modules.chatbots ?? true,
         chat: modules.chat ?? true,
         crm: modules.crm ?? true,
+        rh: modules.rh ?? true,
         group_secretary: modules.group_secretary ?? false,
         ghost: modules.ghost ?? false,
         projects: modules.projects ?? false,
@@ -1393,6 +1395,26 @@ export default function Organizacoes() {
                           <Switch
                             checked={modulesEnabled.group_secretary}
                             onCheckedChange={(checked) => setModulesEnabled(prev => ({ ...prev, group_secretary: checked }))}
+                            disabled={!canManageOrg}
+                          />
+                        </div>
+
+                        {/* RH */}
+                        <div className="flex items-center justify-between rounded-lg border p-4">
+                          <div className="flex items-center gap-4">
+                            <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                              <Users className="h-5 w-5 text-primary" />
+                            </div>
+                            <div>
+                              <p className="font-medium">RH</p>
+                              <p className="text-sm text-muted-foreground">
+                                Colaboradores, ponto, banco de horas e holerite
+                              </p>
+                            </div>
+                          </div>
+                          <Switch
+                            checked={modulesEnabled.rh}
+                            onCheckedChange={(checked) => setModulesEnabled(prev => ({ ...prev, rh: checked }))}
                             disabled={!canManageOrg}
                           />
                         </div>

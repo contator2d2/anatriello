@@ -95,6 +95,9 @@ DO $$ BEGIN
     ALTER TABLE plans ADD COLUMN IF NOT EXISTS has_ghost BOOLEAN DEFAULT false;
     ALTER TABLE plans ADD COLUMN IF NOT EXISTS has_projects BOOLEAN DEFAULT false;
     ALTER TABLE plans ADD COLUMN IF NOT EXISTS has_lead_gleego BOOLEAN DEFAULT false;
+    ALTER TABLE plans ADD COLUMN IF NOT EXISTS has_rh BOOLEAN DEFAULT true;
+    ALTER TABLE plans ADD COLUMN IF NOT EXISTS has_doc_signatures BOOLEAN DEFAULT false;
+    ALTER TABLE plans ADD COLUMN IF NOT EXISTS doc_signatures_limit INTEGER DEFAULT 0;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS whatsapp_phone VARCHAR(50);
 EXCEPTION
     WHEN duplicate_column THEN null;
@@ -136,7 +139,7 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_column THEN null; END $$;
 
 DO $$ BEGIN
-    ALTER TABLE organizations ADD COLUMN IF NOT EXISTS modules_enabled JSONB DEFAULT '{"campaigns": true, "billing": true, "groups": true, "scheduled_messages": true, "chatbots": true, "chat": true}'::jsonb;
+    ALTER TABLE organizations ADD COLUMN IF NOT EXISTS modules_enabled JSONB DEFAULT '{"campaigns": true, "billing": true, "groups": true, "scheduled_messages": true, "chatbots": true, "chat": true, "crm": true, "rh": true}'::jsonb;
 EXCEPTION WHEN duplicate_column THEN null; END $$;
 
 -- Organização: configuração global de IA (OpenAI/Gemini)
@@ -3849,7 +3852,7 @@ export async function initDatabase() {
         + '-' + Date.now().toString(36);
       const orgRes = await pool.query(
         `INSERT INTO organizations (name, slug, modules_enabled)
-         VALUES ($1, $2, '{"campaigns":true,"billing":true,"groups":true,"scheduled_messages":true,"chatbots":true,"chat":true,"crm":true}'::jsonb)
+         VALUES ($1, $2, '{"campaigns":true,"billing":true,"groups":true,"scheduled_messages":true,"chatbots":true,"chat":true,"crm":true,"rh":true}'::jsonb)
          RETURNING id`,
         [user.name || 'Organização', slug]
       );
