@@ -16,6 +16,7 @@ interface FileUploadInputProps {
   showPreview?: boolean;
   previewType?: "image" | "file";
   className?: string;
+  customTokenGetter?: () => string | null;
 }
 
 export function FileUploadInput({
@@ -26,8 +27,9 @@ export function FileUploadInput({
   showPreview = true,
   previewType = "image",
   className,
+  customTokenGetter,
 }: FileUploadInputProps) {
-  const { uploadFile, isUploading, progress } = useUpload();
+  const { uploadFile, isUploading, progress } = useUpload(customTokenGetter);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const resolvedUrl = resolveMediaUrl(value);
 

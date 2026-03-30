@@ -12,7 +12,7 @@ interface UploadResult {
   };
 }
 
-export function useUpload() {
+export function useUpload(customTokenGetter?: () => string | null) {
   const [isUploading, setIsUploading] = useState(false);
   const [progress, setProgress] = useState(0);
 
@@ -37,7 +37,7 @@ export function useUpload() {
       const formData = new FormData();
       formData.append('file', file);
 
-      const token = getAuthToken();
+      const token = customTokenGetter ? customTokenGetter() : getAuthToken();
       console.log('[useUpload] Auth token present:', !!token);
       
       const xhr = new XMLHttpRequest();
@@ -98,7 +98,7 @@ export function useUpload() {
       }
       xhr.send(formData);
     });
-  }, []);
+  }, [customTokenGetter]);
 
   const resetProgress = useCallback(() => {
     setProgress(0);

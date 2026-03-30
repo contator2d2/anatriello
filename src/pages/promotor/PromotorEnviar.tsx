@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,6 +37,7 @@ export default function PromotorEnviar() {
   const sendDoc = usePromotorSendDocument();
   const { data: history, isLoading } = usePromotorInboundDocuments();
   const { toast } = useToast();
+  const promotorTokenGetter = useCallback(() => localStorage.getItem('promotor_token'), []);
 
   const handleSend = async () => {
     if (!category) { toast({ title: 'Selecione a categoria', variant: 'destructive' }); return; }
@@ -84,6 +85,7 @@ export default function PromotorEnviar() {
                 accept="image/*,.pdf,.doc,.docx,.jpg,.jpeg,.png"
                 placeholder="Selecione ou arraste o arquivo"
                 previewType="file"
+                customTokenGetter={promotorTokenGetter}
               />
             </div>
             <Button onClick={handleSend} disabled={sending || !category} className="w-full">
