@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
-import { useEmployees, useCreateEmployee, useUpdateEmployee, useDeleteEmployee, useRhDepartments, useBranches } from "@/hooks/use-rh";
+import { useEmployees, useCreateEmployee, useUpdateEmployee, useDeleteEmployee, useRhDepartments, useBranches, useCreateRhDepartment, useDeleteRhDepartment, useRhPositions, useCreateRhPosition, useDeleteRhPosition } from "@/hooks/use-rh";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
