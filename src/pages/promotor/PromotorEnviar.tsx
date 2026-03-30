@@ -85,6 +85,7 @@ export default function PromotorEnviar() {
                 accept="image/*,.pdf,.doc,.docx,.jpg,.jpeg,.png"
                 placeholder="Selecione ou arraste o arquivo"
                 previewType="file"
+                customTokenGetter={promotorTokenGetter}
               />
             </div>
             <Button onClick={handleSend} disabled={sending || !category} className="w-full">
