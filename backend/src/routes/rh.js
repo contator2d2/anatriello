@@ -97,10 +97,12 @@ router.get('/employees', async (req, res) => {
     if (!orgId) return res.json([]);
 
     const { status, search, department_id, branch_id } = req.query;
-    let sql = `SELECT e.*, d.name as department_name, b.name as branch_name
+    let sql = `SELECT e.*, d.name as department_name, b.name as branch_name,
+               CASE WHEN caa.access_status IN ('liberado','aguardando_login','ativo') THEN true ELSE false END as promotor_access
                FROM employees e
                LEFT JOIN rh_departments d ON d.id = e.department_id
                LEFT JOIN branches b ON b.id = e.branch_id
+               LEFT JOIN collaborator_app_access caa ON caa.employee_id = e.id
                WHERE e.organization_id = $1`;
     const params = [orgId];
     let idx = 2;

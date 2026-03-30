@@ -25,6 +25,17 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 
+const safeDate = (v: any): Date | null => {
+  if (!v) return null;
+  const d = new Date(typeof v === 'string' && !v.includes('T') ? v + 'T12:00:00' : v);
+  return d && !Number.isNaN(d.getTime()) ? d : null;
+};
+
+const safeFormat = (v: any, fmt: string, fallback = "—"): string => {
+  const d = safeDate(v);
+  return d ? format(d, fmt) : fallback;
+};
+
 const VACATION_EMPTY = {
   employee_id: "", vacation_type: "completa", start_date: "", end_date: "",
   days_total: 30, days_taken: 0, abono_pecuniario: false, abono_days: 0,
@@ -184,10 +195,10 @@ export default function RHDashboard() {
 
     employees.forEach((e: any) => {
       if (!e.birth_date) return;
-      const bd = new Date(e.birth_date + "T12:00:00");
+      const bd = safeDate(e.birth_date);
+      if (!bd) return;
       const bMonth = bd.getMonth();
       const bDay = bd.getDate();
-      // Check this year's birthday
       const bThisYear = new Date(now.getFullYear(), bMonth, bDay);
       const isToday = bMonth === todayM && bDay === todayD;
       const isThisWeek = bThisYear >= weekStart && bThisYear <= weekEnd;
@@ -371,7 +382,7 @@ export default function RHDashboard() {
                         <div key={e.id} className="flex items-center justify-between p-2 rounded bg-yellow-50 dark:bg-yellow-950/20">
                           <div>
                             <p className="text-sm font-medium">{e.full_name}</p>
-                            <p className="text-xs text-muted-foreground">Admissão: {e.admission_date ? format(new Date(e.admission_date + "T12:00:00"), "dd/MM/yyyy") : "—"}</p>
+                            <p className="text-xs text-muted-foreground">Admissão: {safeFormat(e.admission_date, "dd/MM/yyyy")}</p>
                           </div>
                           <Badge variant="outline" className="text-yellow-600 border-yellow-300">Vencendo</Badge>
                         </div>
@@ -435,8 +446,8 @@ export default function RHDashboard() {
                         <TableRow key={v.id}>
                           <TableCell className="font-medium">{v.full_name}</TableCell>
                           <TableCell><Badge variant="outline">{v.vacation_type === 'parcial' ? 'Parcial' : 'Completa'}</Badge></TableCell>
-                          <TableCell>{v.start_date ? format(new Date(v.start_date + "T12:00:00"), "dd/MM/yyyy") : "—"}</TableCell>
-                          <TableCell>{v.end_date ? format(new Date(v.end_date + "T12:00:00"), "dd/MM/yyyy") : "—"}</TableCell>
+                          <TableCell>{safeFormat(v.start_date, "dd/MM/yyyy")}</TableCell>
+                          <TableCell>{safeFormat(v.end_date, "dd/MM/yyyy")}</TableCell>
                           <TableCell>{v.days_total}</TableCell>
                           <TableCell>
                             <Badge className={v.status === 'em_andamento' ? "bg-green-500/10 text-green-700" : "bg-blue-500/10 text-blue-700"}>

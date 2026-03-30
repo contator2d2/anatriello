@@ -1,6 +1,7 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { useEmployees, useCreateEmployee, useUpdateEmployee, useDeleteEmployee, useRhDepartments, useBranches, useCreateBranch, useDeleteBranch, useCreateRhDepartment, useDeleteRhDepartment, useRhPositions, useCreateRhPosition, useDeleteRhPosition, useWorkerProfiles, useCreateWorkerProfile, useDeleteWorkerProfile } from "@/hooks/use-rh";
+import { useAppAccess, useGrantAppAccess, useBlockAppAccess } from "@/hooks/use-promotor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,7 +12,8 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Search, UserCircle, Building2, FileText, Edit, Trash2, Eye, EyeOff, Users, Loader2, Calendar, Briefcase, X, MapPin, UserCog, DollarSign, Gift } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Plus, Search, UserCircle, Building2, FileText, Edit, Trash2, Eye, EyeOff, Users, Loader2, Calendar, Briefcase, X, MapPin, UserCog, DollarSign, Gift, Smartphone } from "lucide-react";
 import { format, differenceInYears, differenceInMonths, differenceInDays, addYears, addMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -142,6 +144,7 @@ function calcAge(birthDate: string): string {
 export default function RHColaboradores() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [profileFilter, setProfileFilter] = useState("all");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<any>({ ...EMPTY_FORM });
@@ -150,10 +153,16 @@ export default function RHColaboradores() {
   const [cepLoading, setCepLoading] = useState(false);
   const { toast } = useToast();
 
-  const { data: employees = [], isLoading } = useEmployees({
+  const { data: rawEmployees = [], isLoading } = useEmployees({
     search: search || undefined,
     status: statusFilter !== "all" ? statusFilter : undefined,
   });
+
+  const employees = useMemo(() => {
+    if (profileFilter === "all") return rawEmployees;
+    if (profileFilter === "promotor_access") return rawEmployees.filter((e: any) => e.promotor_access);
+    return rawEmployees.filter((e: any) => e.worker_profile === profileFilter);
+  }, [rawEmployees, profileFilter]);
   const { data: departments = [] } = useRhDepartments();
   const { data: branches = [] } = useBranches();
   const { data: positions = [] } = useRhPositions();
@@ -319,6 +328,17 @@ export default function RHColaboradores() {
               <SelectItem value="afastado">Afastado</SelectItem>
               <SelectItem value="ferias">Férias</SelectItem>
               <SelectItem value="desligado">Desligado</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={profileFilter} onValueChange={setProfileFilter}>
+            <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos Perfis</SelectItem>
+              <SelectItem value="promotor">Promotor</SelectItem>
+              <SelectItem value="promotor_access">Com Acesso App</SelectItem>
+              <SelectItem value="administrativo">Administrativo</SelectItem>
+              <SelectItem value="supervisor">Supervisor</SelectItem>
+              <SelectItem value="operacional">Operacional</SelectItem>
             </SelectContent>
           </Select>
           <Button variant="outline" size="icon" onClick={() => setShowSensitive(!showSensitive)} title={showSensitive ? "Ocultar dados sensíveis" : "Mostrar dados sensíveis"}>
@@ -718,6 +738,9 @@ export default function RHColaboradores() {
                     </SelectContent>
                   </Select>
                 </div>
+
+                {/* Acesso App Promotor */}
+                {editId && <PromotorAccessToggle employeeId={editId} />}
               </div>
             </TabsContent>
 
@@ -932,5 +955,47 @@ export default function RHColaboradores() {
         </DialogContent>
       </Dialog>
     </MainLayout>
+  );
+}
+
+function PromotorAccessToggle({ employeeId }: { employeeId: string }) {
+  const { data: access, isLoading } = useAppAccess(employeeId);
+  const grantAccess = useGrantAppAccess();
+  const blockAccess = useBlockAppAccess();
+  const { toast } = useToast();
+
+  const isEnabled = access && ['liberado', 'aguardando_login', 'ativo'].includes(access.access_status);
+
+  const handleToggle = async (enabled: boolean) => {
+    try {
+      if (enabled) {
+        // Generate a temp password (CPF-based or random)
+        const tempPass = Math.random().toString(36).slice(-8);
+        await grantAccess.mutateAsync({ employee_id: employeeId, password: tempPass });
+        toast({ title: "Acesso liberado!", description: `Senha temporária: ${tempPass}` });
+      } else {
+        await blockAccess.mutateAsync(employeeId);
+        toast({ title: "Acesso bloqueado" });
+      }
+    } catch {
+      toast({ title: "Erro ao alterar acesso", variant: "destructive" });
+    }
+  };
+
+  return (
+    <div className="col-span-2 flex items-center gap-3 p-3 rounded-lg border bg-muted/30">
+      <Smartphone className="h-5 w-5 text-primary" />
+      <div className="flex-1">
+        <Label className="text-sm font-medium">Acesso ao App do Promotor</Label>
+        <p className="text-xs text-muted-foreground">
+          {isLoading ? "Carregando..." : isEnabled ? `Status: ${access.access_status} • Último login: ${access.last_login ? new Date(access.last_login).toLocaleDateString('pt-BR') : 'Nunca'}` : "Sem acesso ao aplicativo"}
+        </p>
+      </div>
+      <Switch
+        checked={!!isEnabled}
+        onCheckedChange={handleToggle}
+        disabled={isLoading || grantAccess.isPending || blockAccess.isPending}
+      />
+    </div>
   );
 }
