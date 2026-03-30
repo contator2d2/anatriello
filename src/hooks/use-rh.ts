@@ -151,6 +151,100 @@ export function useCreateCostCenter() {
 }
 
 // ===== AUDIT =====
+
+// ===== DASHBOARD =====
+export function useRhDashboard() {
+  return useQuery({
+    queryKey: ['rh-dashboard'],
+    queryFn: () => api<any>('/api/rh/dashboard-stats'),
+    refetchInterval: 60000,
+  });
+}
+
+// ===== VACATIONS =====
+export function useVacations(filters?: { employee_id?: string; status?: string }) {
+  const params = new URLSearchParams();
+  if (filters?.employee_id) params.set('employee_id', filters.employee_id);
+  if (filters?.status) params.set('status', filters.status);
+  const qs = params.toString();
+  return useQuery({
+    queryKey: ['rh-vacations', qs],
+    queryFn: () => api<any[]>(`/api/rh/vacations${qs ? `?${qs}` : ''}`),
+  });
+}
+
+export function useCreateVacation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: any) => api<any>('/api/rh/vacations', { method: 'POST', body: data }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['rh-vacations'] }); qc.invalidateQueries({ queryKey: ['rh-dashboard'] }); },
+  });
+}
+
+export function useUpdateVacation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }: any) => api<any>(`/api/rh/vacations/${id}`, { method: 'PUT', body: data }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['rh-vacations'] }); qc.invalidateQueries({ queryKey: ['rh-dashboard'] }); },
+  });
+}
+
+// ===== MEDICAL CERTIFICATES =====
+export function useMedicalCertificates(filters?: { employee_id?: string; validated?: string }) {
+  const params = new URLSearchParams();
+  if (filters?.employee_id) params.set('employee_id', filters.employee_id);
+  if (filters?.validated !== undefined) params.set('validated', filters.validated);
+  const qs = params.toString();
+  return useQuery({
+    queryKey: ['rh-medical-certs', qs],
+    queryFn: () => api<any[]>(`/api/rh/medical-certificates${qs ? `?${qs}` : ''}`),
+  });
+}
+
+export function useCreateMedicalCertificate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: any) => api<any>('/api/rh/medical-certificates', { method: 'POST', body: data }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['rh-medical-certs'] }); qc.invalidateQueries({ queryKey: ['rh-dashboard'] }); qc.invalidateQueries({ queryKey: ['rh-time-records'] }); },
+  });
+}
+
+export function useValidateMedicalCertificate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }: any) => api<any>(`/api/rh/medical-certificates/${id}/validate`, { method: 'PUT', body: data }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['rh-medical-certs'] }); qc.invalidateQueries({ queryKey: ['rh-dashboard'] }); },
+  });
+}
+
+// ===== DOCUMENTS =====
+export function useRhDocuments(filters?: { employee_id?: string; doc_type?: string }) {
+  const params = new URLSearchParams();
+  if (filters?.employee_id) params.set('employee_id', filters.employee_id);
+  if (filters?.doc_type) params.set('doc_type', filters.doc_type);
+  const qs = params.toString();
+  return useQuery({
+    queryKey: ['rh-documents', qs],
+    queryFn: () => api<any[]>(`/api/rh/documents${qs ? `?${qs}` : ''}`),
+  });
+}
+
+export function useCreateRhDocument() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: any) => api<any>('/api/rh/documents', { method: 'POST', body: data }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['rh-documents'] }),
+  });
+}
+
+export function useValidateRhDocument() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }: any) => api<any>(`/api/rh/documents/${id}/validate`, { method: 'PUT', body: data }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['rh-documents'] }),
+  });
+}
+
 export function useRhAuditLog(entityType?: string, entityId?: string) {
   const params = new URLSearchParams();
   if (entityType) params.set('entity_type', entityType);
