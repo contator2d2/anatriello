@@ -70,6 +70,11 @@ import RHPDVs from "./pages/RHPDVs";
 import RHFeriados from "./pages/RHFeriados";
 import RHMapaOperacional from "./pages/RHMapaOperacional";
 import LiveMaps from "./pages/LiveMaps";
+import MerchMarcas from "./pages/MerchMarcas";
+import MerchCategorias from "./pages/MerchCategorias";
+import MerchProdutos from "./pages/MerchProdutos";
+import MerchMixPDV from "./pages/MerchMixPDV";
+import MerchRelatorios from "./pages/MerchRelatorios";
 import PromotorLogin from "./pages/promotor/PromotorLogin";
 import PromotorHome from "./pages/promotor/PromotorHome";
 import PromotorDocumentos from "./pages/promotor/PromotorDocumentos";
@@ -188,6 +193,11 @@ const App = () => (
             <Route path="/rh/feriados" element={<ProtectedRoute><RHFeriados /></ProtectedRoute>} />
             <Route path="/rh/mapa" element={<ProtectedRoute><RHMapaOperacional /></ProtectedRoute>} />
             <Route path="/live-maps" element={<ProtectedRoute><LiveMaps /></ProtectedRoute>} />
+            <Route path="/merch/marcas" element={<ProtectedRoute><MerchMarcas /></ProtectedRoute>} />
+            <Route path="/merch/categorias" element={<ProtectedRoute><MerchCategorias /></ProtectedRoute>} />
+            <Route path="/merch/produtos" element={<ProtectedRoute><MerchProdutos /></ProtectedRoute>} />
+            <Route path="/merch/mix" element={<ProtectedRoute><MerchMixPDV /></ProtectedRoute>} />
+            <Route path="/merch/relatorios" element={<ProtectedRoute><MerchRelatorios /></ProtectedRoute>} />
             {/* Promotor App */}
             <Route path="/promotor/login" element={<PromotorLogin />} />
             <Route path="/promotor/home" element={<PromotorHome />} />

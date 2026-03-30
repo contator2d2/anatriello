@@ -43,6 +43,10 @@ import {
   DollarSign,
   MapPin,
   Radio,
+  ShoppingBag,
+  Tags as TagsIcon,
+  Boxes,
+  Store,
 } from "lucide-react";
 import { API_URL, getAuthToken } from "@/lib/api";
 import ayratechLogo from "@/assets/ayratech_logo.jpg";
@@ -58,7 +62,7 @@ interface NavItem {
   href: string;
   icon: any;
   pageKey?: string; // Used for permission template matching
-  moduleKey?: 'campaigns' | 'billing' | 'groups' | 'scheduled_messages' | 'chatbots' | 'chat' | 'crm' | 'rh' | 'ai_agents' | 'group_secretary' | 'ghost' | 'projects' | 'lead_gleego' | 'doc_signatures';
+  moduleKey?: 'campaigns' | 'billing' | 'groups' | 'scheduled_messages' | 'chatbots' | 'chat' | 'crm' | 'rh' | 'ai_agents' | 'group_secretary' | 'ghost' | 'projects' | 'lead_gleego' | 'doc_signatures' | 'merchandising';
   adminOnly?: boolean;
   ownerOnly?: boolean;
   superadminOnly?: boolean;
@@ -68,7 +72,7 @@ interface NavSection {
   title: string;
   icon: any;
   items: NavItem[];
-  moduleKey?: 'campaigns' | 'billing' | 'groups' | 'scheduled_messages' | 'chatbots' | 'chat' | 'crm' | 'rh' | 'ai_agents' | 'group_secretary' | 'ghost' | 'projects' | 'lead_gleego' | 'doc_signatures';
+  moduleKey?: 'campaigns' | 'billing' | 'groups' | 'scheduled_messages' | 'chatbots' | 'chat' | 'crm' | 'rh' | 'ai_agents' | 'group_secretary' | 'ghost' | 'projects' | 'lead_gleego' | 'doc_signatures' | 'merchandising';
   adminOnly?: boolean; // Entire section requires admin role
 }
 
@@ -120,6 +124,17 @@ const getNavSections = (hasConnections: boolean): NavSection[] => [
       { name: "Holerite", href: "/rh/holerite", icon: DollarSign, pageKey: 'rh_holerite', moduleKey: 'rh' },
       { name: "Feriados", href: "/rh/feriados", icon: CalendarDays, pageKey: 'rh_feriados', moduleKey: 'rh' },
       { name: "Mapa", href: "/rh/mapa", icon: MapPin, pageKey: 'rh_mapa', moduleKey: 'rh' },
+    ],
+  },
+  {
+    title: "Merchandising",
+    icon: ShoppingBag,
+    items: [
+      { name: "Marcas", href: "/merch/marcas", icon: Building2, pageKey: 'merch_marcas' },
+      { name: "Categorias", href: "/merch/categorias", icon: TagsIcon, pageKey: 'merch_categorias' },
+      { name: "Produtos", href: "/merch/produtos", icon: Boxes, pageKey: 'merch_produtos' },
+      { name: "Mix por PDV", href: "/merch/mix", icon: Store, pageKey: 'merch_mix' },
+      { name: "Relatórios", href: "/merch/relatorios", icon: BarChart3, pageKey: 'merch_relatorios' },
     ],
   },
   {
