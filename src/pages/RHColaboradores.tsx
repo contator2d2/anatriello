@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Search, UserCircle, Building2, FileText, Edit, Trash2, Eye, EyeOff, Users, Loader2, Calendar, Briefcase, X, MapPin, UserCog } from "lucide-react";
+import { Plus, Search, UserCircle, Building2, FileText, Edit, Trash2, Eye, EyeOff, Users, Loader2, Calendar, Briefcase, X, MapPin, UserCog, DollarSign, Gift } from "lucide-react";
 import { format, differenceInYears, differenceInMonths, differenceInDays, addYears, addMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -31,6 +31,17 @@ const PROFILE_LABELS: Record<string, string> = {
   administrativo: "Administrativo", supervisor: "Supervisor", promotor: "Promotor", operacional: "Operacional",
 };
 
+const SALARY_ITEM_TYPES = [
+  "Salário Base", "Adicional Noturno", "Adicional Periculosidade", "Adicional Insalubridade",
+  "Comissão", "Gratificação", "Hora Extra", "DSR", "Adicional de Função", "Bonificação", "Outro"
+];
+
+const BENEFIT_TYPES = [
+  "Vale Transporte", "Vale Refeição", "Vale Alimentação", "Plano de Saúde", "Plano Odontológico",
+  "Seguro de Vida", "Auxílio Creche", "Auxílio Educação", "Gympass/Wellhub", "PLR",
+  "Cesta Básica", "Auxílio Home Office", "Outro"
+];
+
 const EMPTY_FORM = {
   full_name: "", social_name: "", cpf: "", rg: "", birth_date: "", gender: "", email: "", phone: "",
   address: "", address_number: "", complement: "", neighborhood: "", city: "", state: "", zip_code: "",
@@ -39,6 +50,8 @@ const EMPTY_FORM = {
   admission_date: "", department_id: "", branch_id: "", direct_manager_id: "", work_schedule: "08:00-17:00",
   bank_name: "", bank_agency: "", bank_account: "", bank_account_type: "",
   ctps_number: "", pis_pasep: "", cnpj: "", company_name: "", status: "ativo",
+  salary_items: [] as { type: string; description: string; value: string }[],
+  benefits: [] as { type: string; description: string; value: string; employer_cost: string }[],
 };
 
 // ============ CPF Validation ============
@@ -177,7 +190,14 @@ export default function RHColaboradores() {
 
   const openNew = () => { setForm({ ...EMPTY_FORM }); setEditId(null); setCpfError(""); setDialogOpen(true); };
   const openEdit = (emp: any) => {
-    setForm({ ...emp, salary: emp.salary || "", birth_date: emp.birth_date?.slice(0, 10) || "", admission_date: emp.admission_date?.slice(0, 10) || "" });
+    setForm({
+      ...emp,
+      salary: emp.salary || "",
+      birth_date: emp.birth_date?.slice(0, 10) || "",
+      admission_date: emp.admission_date?.slice(0, 10) || "",
+      salary_items: emp.salary_items || [],
+      benefits: emp.benefits || [],
+    });
     setEditId(emp.id);
     setCpfError("");
     setDialogOpen(true);
@@ -328,9 +348,10 @@ export default function RHColaboradores() {
             )}
           </DialogHeader>
           <Tabs defaultValue="pessoal">
-            <TabsList className="grid grid-cols-4 w-full">
+            <TabsList className="grid grid-cols-5 w-full">
               <TabsTrigger value="pessoal">Pessoal</TabsTrigger>
               <TabsTrigger value="profissional">Profissional</TabsTrigger>
+              <TabsTrigger value="remuneracao" className="gap-1"><DollarSign className="h-3 w-3" />Remuneração</TabsTrigger>
               <TabsTrigger value="documentos">Documentos</TabsTrigger>
               <TabsTrigger value="bancario">Bancário</TabsTrigger>
             </TabsList>
@@ -610,6 +631,177 @@ export default function RHColaboradores() {
                   </Select>
                 </div>
               </div>
+            </TabsContent>
+
+            {/* ===== ABA REMUNERAÇÃO ===== */}
+            <TabsContent value="remuneracao" className="space-y-4 mt-4">
+              {/* Composição Salarial */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold flex items-center gap-2"><DollarSign className="h-4 w-4 text-primary" /> Composição Salarial</h3>
+                  <Button type="button" variant="outline" size="sm" className="h-7 text-xs gap-1"
+                    onClick={() => setForm((p: any) => ({
+                      ...p,
+                      salary_items: [...(p.salary_items || []), { type: "Salário Base", description: "", value: "" }]
+                    }))}>
+                    <Plus className="h-3 w-3" /> Adicionar Item
+                  </Button>
+                </div>
+                {(form.salary_items || []).length === 0 && (
+                  <p className="text-xs text-muted-foreground text-center py-4 border rounded-lg border-dashed">Nenhum item de composição salarial adicionado</p>
+                )}
+                {(form.salary_items || []).map((item: any, idx: number) => (
+                  <div key={idx} className="grid grid-cols-[1fr_1.5fr_auto_auto] gap-2 items-end p-3 rounded-lg bg-muted/30 border">
+                    <div>
+                      <Label className="text-xs">Tipo</Label>
+                      <Select value={item.type} onValueChange={v => {
+                        const items = [...form.salary_items];
+                        items[idx] = { ...items[idx], type: v };
+                        setField("salary_items", items);
+                      }}>
+                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {SALARY_ITEM_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="text-xs">Descrição</Label>
+                      <Input className="h-8 text-xs" placeholder="Detalhes..." value={item.description}
+                        onChange={e => {
+                          const items = [...form.salary_items];
+                          items[idx] = { ...items[idx], description: e.target.value };
+                          setField("salary_items", items);
+                        }} />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Valor (R$)</Label>
+                      <Input className="h-8 text-xs w-28" type="number" placeholder="0,00" value={item.value}
+                        onChange={e => {
+                          const items = [...form.salary_items];
+                          items[idx] = { ...items[idx], value: e.target.value };
+                          setField("salary_items", items);
+                        }} />
+                    </div>
+                    <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-destructive"
+                      onClick={() => {
+                        const items = form.salary_items.filter((_: any, i: number) => i !== idx);
+                        setField("salary_items", items);
+                      }}>
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ))}
+                {(form.salary_items || []).length > 0 && (
+                  <div className="flex justify-end p-2 rounded-lg bg-primary/5 border border-primary/20">
+                    <p className="text-sm font-semibold">Total Composição: <span className="text-primary">
+                      R$ {(form.salary_items || []).reduce((s: number, i: any) => s + (parseFloat(i.value) || 0), 0).toFixed(2)}
+                    </span></p>
+                  </div>
+                )}
+              </div>
+
+              {/* Benefícios */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold flex items-center gap-2"><Gift className="h-4 w-4 text-primary" /> Benefícios</h3>
+                  <Button type="button" variant="outline" size="sm" className="h-7 text-xs gap-1"
+                    onClick={() => setForm((p: any) => ({
+                      ...p,
+                      benefits: [...(p.benefits || []), { type: "Vale Refeição", description: "", value: "", employer_cost: "" }]
+                    }))}>
+                    <Plus className="h-3 w-3" /> Adicionar Benefício
+                  </Button>
+                </div>
+                {(form.benefits || []).length === 0 && (
+                  <p className="text-xs text-muted-foreground text-center py-4 border rounded-lg border-dashed">Nenhum benefício adicionado</p>
+                )}
+                {(form.benefits || []).map((ben: any, idx: number) => (
+                  <div key={idx} className="grid grid-cols-[1fr_1fr_auto_auto_auto] gap-2 items-end p-3 rounded-lg bg-muted/30 border">
+                    <div>
+                      <Label className="text-xs">Benefício</Label>
+                      <Select value={ben.type} onValueChange={v => {
+                        const items = [...form.benefits];
+                        items[idx] = { ...items[idx], type: v };
+                        setField("benefits", items);
+                      }}>
+                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {BENEFIT_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="text-xs">Descrição</Label>
+                      <Input className="h-8 text-xs" placeholder="Detalhes..." value={ben.description}
+                        onChange={e => {
+                          const items = [...form.benefits];
+                          items[idx] = { ...items[idx], description: e.target.value };
+                          setField("benefits", items);
+                        }} />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Valor (R$)</Label>
+                      <Input className="h-8 text-xs w-24" type="number" placeholder="0,00" value={ben.value}
+                        onChange={e => {
+                          const items = [...form.benefits];
+                          items[idx] = { ...items[idx], value: e.target.value };
+                          setField("benefits", items);
+                        }} />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Custo Empresa</Label>
+                      <Input className="h-8 text-xs w-24" type="number" placeholder="0,00" value={ben.employer_cost}
+                        onChange={e => {
+                          const items = [...form.benefits];
+                          items[idx] = { ...items[idx], employer_cost: e.target.value };
+                          setField("benefits", items);
+                        }} />
+                    </div>
+                    <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-destructive"
+                      onClick={() => {
+                        const items = form.benefits.filter((_: any, i: number) => i !== idx);
+                        setField("benefits", items);
+                      }}>
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ))}
+                {(form.benefits || []).length > 0 && (
+                  <div className="flex justify-between p-2 rounded-lg bg-primary/5 border border-primary/20 text-sm">
+                    <p className="font-semibold">Total Benefícios: <span className="text-primary">
+                      R$ {(form.benefits || []).reduce((s: number, i: any) => s + (parseFloat(i.value) || 0), 0).toFixed(2)}
+                    </span></p>
+                    <p className="font-semibold">Custo Empresa: <span className="text-destructive">
+                      R$ {(form.benefits || []).reduce((s: number, i: any) => s + (parseFloat(i.employer_cost) || 0), 0).toFixed(2)}
+                    </span></p>
+                  </div>
+                )}
+              </div>
+
+              {/* Resumo Geral */}
+              {((form.salary_items || []).length > 0 || (form.benefits || []).length > 0) && (
+                <div className="p-3 rounded-lg bg-primary/10 border border-primary/30 space-y-1">
+                  <h4 className="text-sm font-bold text-primary">Resumo da Remuneração</h4>
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Composição Salarial</p>
+                      <p className="font-semibold text-sm">R$ {(form.salary_items || []).reduce((s: number, i: any) => s + (parseFloat(i.value) || 0), 0).toFixed(2)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Benefícios</p>
+                      <p className="font-semibold text-sm">R$ {(form.benefits || []).reduce((s: number, i: any) => s + (parseFloat(i.value) || 0), 0).toFixed(2)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Total Geral</p>
+                      <p className="font-bold text-sm text-primary">R$ {(
+                        (form.salary_items || []).reduce((s: number, i: any) => s + (parseFloat(i.value) || 0), 0) +
+                        (form.benefits || []).reduce((s: number, i: any) => s + (parseFloat(i.value) || 0), 0)
+                      ).toFixed(2)}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </TabsContent>
 
             <TabsContent value="documentos" className="space-y-3 mt-4">

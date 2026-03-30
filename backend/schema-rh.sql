@@ -135,6 +135,10 @@ CREATE TABLE IF NOT EXISTS employees (
   -- Status
   status employee_status DEFAULT 'ativo',
 
+  -- Composição salarial e benefícios (JSONB arrays)
+  salary_items JSONB DEFAULT '[]', -- [{type, description, value}]
+  benefits JSONB DEFAULT '[]', -- [{type, description, value, employer_cost}]
+
   -- Metadados
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
