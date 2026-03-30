@@ -316,7 +316,7 @@ router.post('/employees', async (req, res) => {
 
     // Auto-geocode home address if no coordinates provided
     if (!d.home_latitude && !d.home_longitude && (d.address || d.city)) {
-      const geo = await autoGeocodeAddress(d.address, d.city, d.state, d.zip_code);
+      const geo = await autoGeocodeAddress(d.address, d.city, d.state, d.zip_code, d.neighborhood);
       if (geo) { d.home_latitude = geo.lat; d.home_longitude = geo.lng; }
     }
 
