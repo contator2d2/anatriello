@@ -157,14 +157,66 @@ router.post('/punch', authenticatePromotor, async (req, res) => {
   try {
     const { punch_type, latitude, longitude, accuracy_meters, pdv_id, is_offline, offline_local_time, justification, local_id } = req.body;
 
-    // Validate geo against PDV
+    // ===== WORK SCHEDULE VALIDATION =====
+    const empRes = await query(`SELECT work_schedule FROM employees WHERE id = $1`, [req.employeeId]);
+    const workSchedule = empRes.rows[0]?.work_schedule || '08:00-17:00';
+    const now = is_offline && offline_local_time ? new Date(offline_local_time) : new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+    // Parse schedule "HH:MM-HH:MM"
+    const scheduleParts = String(workSchedule).split('-');
+    const scheduleStart = scheduleParts[0] ? scheduleParts[0].split(':').reduce((h, m) => parseInt(h) * 60 + parseInt(m), 0) : 480;
+    const scheduleEnd = scheduleParts[1] ? scheduleParts[1].split(':').reduce((h, m) => parseInt(h) * 60 + parseInt(m), 0) : 1020;
+
+    // Allow 30 min before start and 15 min after end as tolerance
+    const toleranceBefore = 30;
+    const toleranceAfter = 15;
+    const isWithinSchedule = currentMinutes >= (scheduleStart - toleranceBefore) && currentMinutes <= (scheduleEnd + toleranceAfter);
+
+    if (!isWithinSchedule) {
+      // Check for approved overtime request for today
+      const today = now.toISOString().slice(0, 10);
+      const otReq = await query(
+        `SELECT id, requested_start, requested_end FROM overtime_requests
+         WHERE employee_id = $1 AND request_date = $2 AND status = 'aprovado'
+         ORDER BY created_at DESC LIMIT 1`,
+        [req.employeeId, today]
+      );
+
+      if (!otReq.rows[0]) {
+        const startFmt = scheduleParts[0] || '08:00';
+        const endFmt = scheduleParts[1] || '17:00';
+        return res.status(403).json({
+          error: `Fora do horário de trabalho (${startFmt} - ${endFmt}). Solicite autorização de hora extra ao supervisor.`,
+          code: 'OUTSIDE_SCHEDULE',
+          schedule: { start: startFmt, end: endFmt },
+          current_time: `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`
+        });
+      }
+
+      // Check if overtime window covers current time
+      const otStart = otReq.rows[0].requested_start;
+      const otEnd = otReq.rows[0].requested_end;
+      if (otStart && otEnd) {
+        const otStartMin = otStart.split(':').reduce((h, m) => parseInt(h) * 60 + parseInt(m), 0);
+        const otEndMin = otEnd.split(':').reduce((h, m) => parseInt(h) * 60 + parseInt(m), 0);
+        if (currentMinutes < otStartMin - 15 || currentMinutes > otEndMin + 15) {
+          return res.status(403).json({
+            error: `Hora extra aprovada apenas de ${otStart} a ${otEnd}.`,
+            code: 'OUTSIDE_OVERTIME_WINDOW'
+          });
+        }
+      }
+    }
+
+    // ===== GEO VALIDATION =====
     let distance = null;
     let geo_status = 'sem_gps';
 
     if (latitude && longitude && pdv_id) {
       const pdv = await query(`SELECT latitude, longitude, radius_meters FROM pdvs WHERE id = $1`, [pdv_id]);
       if (pdv.rows[0] && pdv.rows[0].latitude) {
-        const R = 6371000; // Earth radius in meters
+        const R = 6371000;
         const dLat = (pdv.rows[0].latitude - latitude) * Math.PI / 180;
         const dLng = (pdv.rows[0].longitude - longitude) * Math.PI / 180;
         const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
@@ -177,7 +229,6 @@ router.post('/punch', authenticatePromotor, async (req, res) => {
       geo_status = 'sem_pdv';
     }
 
-    // Check time rules
     if (geo_status === 'fora_area') {
       const rules = await query(
         `SELECT allow_exception_punch FROM time_rules WHERE organization_id = $1 AND (employee_id = $2 OR employee_id IS NULL) ORDER BY employee_id NULLS LAST LIMIT 1`,
@@ -198,7 +249,6 @@ router.post('/punch', authenticatePromotor, async (req, res) => {
         is_offline ? 'synced' : 'synced', justification || null]
     );
 
-    // Create alert if outside area
     if (geo_status === 'fora_area' || geo_status === 'excecao') {
       await query(
         `INSERT INTO time_alerts (organization_id, employee_id, alert_type, alert_date, description) VALUES ($1,$2,'fora_pdv',$3,$4)`,
@@ -210,6 +260,129 @@ router.post('/punch', authenticatePromotor, async (req, res) => {
   } catch (err) {
     logError('promotor.punch', err);
     res.status(500).json({ error: 'Erro ao registrar ponto' });
+  }
+});
+
+// =============================================
+// PROMOTOR: SOLICITAR HORA EXTRA
+// =============================================
+router.post('/overtime-request', authenticatePromotor, async (req, res) => {
+  try {
+    const { reason, request_date, requested_start, requested_end } = req.body;
+    if (!reason) return res.status(400).json({ error: 'Informe o motivo da hora extra' });
+    const date = request_date || new Date().toISOString().slice(0, 10);
+
+    // Check for existing pending request
+    const existing = await query(
+      `SELECT id FROM overtime_requests WHERE employee_id = $1 AND request_date = $2 AND status = 'pendente'`,
+      [req.employeeId, date]
+    );
+    if (existing.rows[0]) {
+      return res.status(400).json({ error: 'Já existe uma solicitação pendente para esta data' });
+    }
+
+    const result = await query(
+      `INSERT INTO overtime_requests (organization_id, employee_id, request_date, reason, requested_start, requested_end)
+       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+      [req.organizationId, req.employeeId, date, reason, requested_start || null, requested_end || null]
+    );
+
+    // Notify supervisor
+    const emp = await query(`SELECT full_name, direct_manager_id FROM employees WHERE id = $1`, [req.employeeId]);
+    if (emp.rows[0]?.direct_manager_id) {
+      await query(
+        `INSERT INTO collaborator_notifications (organization_id, employee_id, title, message, type)
+         VALUES ($1,$2,$3,$4,'overtime_request')`,
+        [req.organizationId, emp.rows[0].direct_manager_id,
+         'Solicitação de Hora Extra',
+         `${emp.rows[0].full_name} solicitou hora extra para ${date}: ${reason}`]
+      ).catch(() => {});
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    logError('promotor.overtime-request', err);
+    res.status(500).json({ error: 'Erro ao solicitar hora extra' });
+  }
+});
+
+// =============================================
+// PROMOTOR: MINHAS SOLICITAÇÕES DE HORA EXTRA
+// =============================================
+router.get('/overtime-requests', authenticatePromotor, async (req, res) => {
+  try {
+    const r = await query(
+      `SELECT ot.*, e.full_name as approved_by_name
+       FROM overtime_requests ot
+       LEFT JOIN employees e ON e.id = ot.approved_by
+       WHERE ot.employee_id = $1
+       ORDER BY ot.created_at DESC LIMIT 30`,
+      [req.employeeId]
+    );
+    res.json(r.rows);
+  } catch (err) {
+    logError('promotor.overtime-requests', err);
+    res.status(500).json({ error: 'Erro' });
+  }
+});
+
+// =============================================
+// RH/SUPERVISOR: LISTAR SOLICITAÇÕES DE HORA EXTRA
+// =============================================
+router.get('/rh/overtime-requests', authenticate, async (req, res) => {
+  try {
+    const orgId = req.query.org_id || await getUserOrgId(req.userId);
+    const { status, employee_id } = req.query;
+    let sql = `SELECT ot.*, e.full_name as employee_name, e.position, e.work_schedule, ap.full_name as approved_by_name
+      FROM overtime_requests ot
+      JOIN employees e ON e.id = ot.employee_id
+      LEFT JOIN employees ap ON ap.id = ot.approved_by
+      WHERE ot.organization_id = $1`;
+    const params = [orgId];
+    if (status) { sql += ` AND ot.status = $${params.length + 1}`; params.push(status); }
+    if (employee_id) { sql += ` AND ot.employee_id = $${params.length + 1}`; params.push(employee_id); }
+    sql += ` ORDER BY ot.created_at DESC LIMIT 100`;
+    res.json((await query(sql, params)).rows);
+  } catch (err) {
+    logError('rh.overtime-requests', err);
+    res.status(500).json({ error: 'Erro' });
+  }
+});
+
+// =============================================
+// RH/SUPERVISOR: APROVAR/RECUSAR HORA EXTRA
+// =============================================
+router.put('/rh/overtime-requests/:id', authenticate, async (req, res) => {
+  try {
+    const { status, supervisor_notes } = req.body;
+    if (!['aprovado', 'recusado'].includes(status)) return res.status(400).json({ error: 'Status inválido' });
+
+    // Get supervisor employee id
+    const supEmp = await query(`SELECT id FROM employees WHERE user_id = $1 LIMIT 1`, [req.userId]);
+    const approvedBy = supEmp.rows[0]?.id || null;
+
+    const result = await query(
+      `UPDATE overtime_requests SET status = $1, supervisor_notes = $2, approved_by = $3, approved_at = NOW() WHERE id = $4 RETURNING *`,
+      [status, supervisor_notes || null, approvedBy, req.params.id]
+    );
+
+    // Notify employee
+    if (result.rows[0]) {
+      const ot = result.rows[0];
+      const statusLabel = status === 'aprovado' ? '✅ Aprovada' : '❌ Recusada';
+      await query(
+        `INSERT INTO collaborator_notifications (organization_id, employee_id, title, message, type)
+         VALUES ($1,$2,$3,$4,'overtime_response')`,
+        [ot.organization_id, ot.employee_id,
+         `Hora Extra ${statusLabel}`,
+         `Sua solicitação para ${ot.request_date} foi ${status}. ${supervisor_notes || ''}`]
+      ).catch(() => {});
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    logError('rh.overtime-approve', err);
+    res.status(500).json({ error: 'Erro' });
   }
 });
 
