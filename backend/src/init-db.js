@@ -3744,6 +3744,80 @@ CREATE TABLE IF NOT EXISTS rh_audit_log (
 );
 CREATE INDEX IF NOT EXISTS idx_rh_audit_entity ON rh_audit_log(entity_type, entity_id);
 CREATE INDEX IF NOT EXISTS idx_rh_audit_org ON rh_audit_log(organization_id);
+
+-- ================================================
+-- Férias (Parcial e Completa)
+-- ================================================
+CREATE TABLE IF NOT EXISTS rh_vacations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  employee_id UUID NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+  vacation_type VARCHAR(20) NOT NULL DEFAULT 'completa', -- completa, parcial
+  acquisition_start DATE, -- início período aquisitivo
+  acquisition_end DATE,   -- fim período aquisitivo
+  start_date DATE NOT NULL,
+  end_date DATE NOT NULL,
+  days_total INTEGER NOT NULL,
+  days_taken INTEGER DEFAULT 0,
+  days_remaining INTEGER DEFAULT 0,
+  abono_pecuniario BOOLEAN DEFAULT false,
+  abono_days INTEGER DEFAULT 0,
+  status VARCHAR(20) DEFAULT 'agendada', -- agendada, em_andamento, concluida, cancelada
+  notes TEXT,
+  approved BOOLEAN DEFAULT false,
+  approved_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_rh_vacations_emp ON rh_vacations(employee_id);
+CREATE INDEX IF NOT EXISTS idx_rh_vacations_org ON rh_vacations(organization_id);
+
+-- ================================================
+-- Atestados Médicos (detalhado)
+-- ================================================
+CREATE TABLE IF NOT EXISTS rh_medical_certificates (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  employee_id UUID NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+  doctor_name VARCHAR(255),
+  doctor_crm VARCHAR(30),
+  cid_code VARCHAR(20),
+  healthcare_unit VARCHAR(255),
+  absence_start DATE NOT NULL,
+  absence_end DATE NOT NULL,
+  absence_days INTEGER,
+  absence_hours VARCHAR(20), -- para atestado parcial (ex: "4h")
+  is_partial BOOLEAN DEFAULT false,
+  document_url TEXT,
+  ai_extracted_data JSONB, -- dados extraídos pela IA
+  ai_confidence NUMERIC(3,2), -- confiança da IA (0-1)
+  validated BOOLEAN DEFAULT false,
+  validated_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  validated_at TIMESTAMPTZ,
+  rejection_reason TEXT,
+  justifies_absence BOOLEAN DEFAULT true,
+  linked_time_records JSONB DEFAULT '[]', -- IDs dos registros de ponto justificados
+  notes TEXT,
+  uploaded_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_rh_medical_emp ON rh_medical_certificates(employee_id);
+CREATE INDEX IF NOT EXISTS idx_rh_medical_org ON rh_medical_certificates(organization_id);
+
+-- ================================================
+-- Central de Documentos do Colaborador (ampliada)
+-- ================================================
+ALTER TABLE employee_documents ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'pendente';
+ALTER TABLE employee_documents ADD COLUMN IF NOT EXISTS validated_by UUID;
+ALTER TABLE employee_documents ADD COLUMN IF NOT EXISTS validated_at TIMESTAMPTZ;
+ALTER TABLE employee_documents ADD COLUMN IF NOT EXISTS ai_extracted_data JSONB;
+ALTER TABLE employee_documents ADD COLUMN IF NOT EXISTS rejection_reason TEXT;
+
+-- Colunas extras em employee_absences para vincular atestado
+ALTER TABLE employee_absences ADD COLUMN IF NOT EXISTS medical_certificate_id UUID;
+ALTER TABLE employee_absences ADD COLUMN IF NOT EXISTS organization_id UUID;
 `;
 
 const migrationSteps = [

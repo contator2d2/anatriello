@@ -350,6 +350,196 @@ router.post('/cost-centers', async (req, res) => {
 
 // ===== AUDIT LOG =====
 
+// ===== RH DASHBOARD STATS =====
+router.get('/dashboard-stats', async (req, res) => {
+  try {
+    const orgId = req.query.org_id || await getUserOrgId(req.userId);
+    if (!orgId) return res.json({});
+    const today = new Date().toISOString().slice(0, 10);
+    const lateRes = await query(
+      `SELECT tr.*, e.full_name, e.work_schedule
+       FROM time_records tr JOIN employees e ON e.id = tr.employee_id
+       WHERE tr.organization_id = $1 AND tr.record_date = $2
+         AND tr.entry1 IS NOT NULL AND e.work_schedule IS NOT NULL
+         AND tr.entry1 > CAST(SPLIT_PART(e.work_schedule, '-', 1) || ':00' AS TIME) + INTERVAL '5 minutes'
+       ORDER BY tr.entry1 DESC`, [orgId, today]);
+    const absenceRes = await query(
+      `SELECT e.id, e.full_name, e.position, d.name as department_name
+       FROM employees e LEFT JOIN rh_departments d ON d.id = e.department_id
+       WHERE e.organization_id = $1 AND e.status = 'ativo'
+         AND NOT EXISTS (SELECT 1 FROM time_records tr WHERE tr.employee_id = e.id AND tr.record_date = $2)
+       ORDER BY e.full_name`, [orgId, today]);
+    const vacExpiring = await query(
+      `SELECT e.id, e.full_name, e.admission_date, e.position
+       FROM employees e WHERE e.organization_id = $1 AND e.status = 'ativo' AND e.admission_date IS NOT NULL
+         AND (DATE_PART('month', e.admission_date) = DATE_PART('month', CURRENT_DATE + INTERVAL '30 days')
+           AND DATE_PART('day', e.admission_date) <= DATE_PART('day', CURRENT_DATE + INTERVAL '30 days'))
+       ORDER BY e.admission_date`, [orgId]);
+    let pendingCerts = { rows: [] };
+    try {
+      pendingCerts = await query(
+        `SELECT mc.*, e.full_name FROM rh_medical_certificates mc JOIN employees e ON e.id = mc.employee_id
+         WHERE mc.organization_id = $1 AND mc.validated = false ORDER BY mc.created_at DESC LIMIT 20`, [orgId]);
+    } catch(e) { /* table may not exist yet */ }
+    let activeVacations = { rows: [] };
+    try {
+      activeVacations = await query(
+        `SELECT v.*, e.full_name FROM rh_vacations v JOIN employees e ON e.id = v.employee_id
+         WHERE v.organization_id = $1 AND v.status IN ('agendada', 'em_andamento') ORDER BY v.start_date`, [orgId]);
+    } catch(e) { /* table may not exist yet */ }
+    const countRes = await query(
+      `SELECT
+         (SELECT COUNT(*) FROM employees WHERE organization_id = $1 AND status = 'ativo') as total_active,
+         (SELECT COUNT(*) FROM employees WHERE organization_id = $1 AND status = 'ferias') as on_vacation,
+         (SELECT COUNT(*) FROM employees WHERE organization_id = $1 AND status = 'afastado') as on_leave`, [orgId]);
+    res.json({
+      late_arrivals: lateRes.rows, absences_today: absenceRes.rows,
+      vacations_expiring: vacExpiring.rows, pending_certificates: pendingCerts.rows,
+      active_vacations: activeVacations.rows, summary: countRes.rows[0] || {},
+    });
+  } catch (err) { logError('rh.dashboard', err); res.status(500).json({ error: 'Erro ao carregar dashboard' }); }
+});
+
+// ===== VACATIONS =====
+router.get('/vacations', async (req, res) => {
+  try {
+    const orgId = req.query.org_id || await getUserOrgId(req.userId);
+    if (!orgId) return res.json([]);
+    const { employee_id, status } = req.query;
+    let sql = `SELECT v.*, e.full_name as employee_name, e.position FROM rh_vacations v JOIN employees e ON e.id = v.employee_id WHERE v.organization_id = $1`;
+    const params = [orgId]; let idx = 2;
+    if (employee_id) { sql += ` AND v.employee_id = $${idx++}`; params.push(employee_id); }
+    if (status) { sql += ` AND v.status = $${idx++}`; params.push(status); }
+    sql += ` ORDER BY v.start_date DESC`;
+    res.json((await query(sql, params)).rows);
+  } catch (err) { logError('rh.vacations.list', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.post('/vacations', async (req, res) => {
+  try {
+    const orgId = req.body.organization_id || await getUserOrgId(req.userId);
+    const d = req.body;
+    const result = await query(
+      `INSERT INTO rh_vacations (organization_id, employee_id, vacation_type, acquisition_start, acquisition_end,
+        start_date, end_date, days_total, days_taken, days_remaining, abono_pecuniario, abono_days, status, notes, approved, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
+      [orgId, d.employee_id, d.vacation_type || 'completa', d.acquisition_start, d.acquisition_end,
+        d.start_date, d.end_date, d.days_total || 30, d.days_taken || 0,
+        (d.days_total || 30) - (d.days_taken || 0), d.abono_pecuniario || false, d.abono_days || 0,
+        d.status || 'agendada', d.notes, d.approved || false, req.userId]);
+    if (d.start_date <= new Date().toISOString().slice(0, 10)) {
+      await query(`UPDATE employees SET status = 'ferias', updated_at = NOW() WHERE id = $1`, [d.employee_id]);
+    }
+    await auditLog(orgId, 'vacation', result.rows[0].id, 'create', [{ field: 'vacation', oldVal: null, newVal: `${d.vacation_type}: ${d.start_date} - ${d.end_date}` }], req.userId);
+    res.json(result.rows[0]);
+  } catch (err) { logError('rh.vacations.create', err); res.status(500).json({ error: 'Erro ao registrar férias' }); }
+});
+
+router.put('/vacations/:id', async (req, res) => {
+  try {
+    const d = req.body;
+    const result = await query(
+      `UPDATE rh_vacations SET vacation_type=$2, start_date=$3, end_date=$4, days_total=$5, days_taken=$6, days_remaining=$7,
+        abono_pecuniario=$8, abono_days=$9, status=$10, notes=$11, approved=$12, updated_at=NOW() WHERE id=$1 RETURNING *`,
+      [req.params.id, d.vacation_type, d.start_date, d.end_date, d.days_total, d.days_taken, d.days_remaining, d.abono_pecuniario, d.abono_days, d.status, d.notes, d.approved]);
+    res.json(result.rows[0]);
+  } catch (err) { logError('rh.vacations.update', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// ===== MEDICAL CERTIFICATES =====
+router.get('/medical-certificates', async (req, res) => {
+  try {
+    const orgId = req.query.org_id || await getUserOrgId(req.userId);
+    if (!orgId) return res.json([]);
+    const { employee_id, validated } = req.query;
+    let sql = `SELECT mc.*, e.full_name as employee_name FROM rh_medical_certificates mc JOIN employees e ON e.id = mc.employee_id WHERE mc.organization_id = $1`;
+    const params = [orgId]; let idx = 2;
+    if (employee_id) { sql += ` AND mc.employee_id = $${idx++}`; params.push(employee_id); }
+    if (validated !== undefined) { sql += ` AND mc.validated = $${idx++}`; params.push(validated === 'true'); }
+    sql += ` ORDER BY mc.created_at DESC`;
+    res.json((await query(sql, params)).rows);
+  } catch (err) { logError('rh.medical.list', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.post('/medical-certificates', async (req, res) => {
+  try {
+    const orgId = req.body.organization_id || await getUserOrgId(req.userId);
+    const d = req.body;
+    const result = await query(
+      `INSERT INTO rh_medical_certificates (organization_id, employee_id, doctor_name, doctor_crm, cid_code,
+        healthcare_unit, absence_start, absence_end, absence_days, absence_hours, is_partial,
+        document_url, ai_extracted_data, ai_confidence, notes, uploaded_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
+      [orgId, d.employee_id, d.doctor_name, d.doctor_crm, d.cid_code, d.healthcare_unit,
+        d.absence_start, d.absence_end, d.absence_days, d.absence_hours, d.is_partial || false,
+        d.document_url, d.ai_extracted_data ? JSON.stringify(d.ai_extracted_data) : null,
+        d.ai_confidence, d.notes, req.userId]);
+    // Auto-justify time records
+    if (d.absence_start && d.absence_end) {
+      const days = Math.ceil((new Date(d.absence_end) - new Date(d.absence_start)) / 86400000) + 1;
+      for (let i = 0; i < days; i++) {
+        const dt = new Date(d.absence_start); dt.setDate(dt.getDate() + i);
+        const dateStr = dt.toISOString().slice(0, 10);
+        await query(
+          `INSERT INTO time_records (organization_id, employee_id, record_date, status, justification, total_hours, overtime_hours)
+           VALUES ($1, $2, $3, 'atestado', $4, 0, 0)
+           ON CONFLICT (employee_id, record_date) DO UPDATE SET status = 'atestado', justification = EXCLUDED.justification, updated_at = NOW()`,
+          [orgId, d.employee_id, dateStr, `Atestado: CID ${d.cid_code || 'N/I'} - Dr. ${d.doctor_name || 'N/I'}`]);
+      }
+    }
+    await auditLog(orgId, 'medical_certificate', result.rows[0].id, 'create',
+      [{ field: 'certificate', oldVal: null, newVal: `CID: ${d.cid_code}, Dr: ${d.doctor_name}` }], req.userId);
+    res.json(result.rows[0]);
+  } catch (err) { logError('rh.medical.create', err); res.status(500).json({ error: 'Erro ao registrar atestado' }); }
+});
+
+router.put('/medical-certificates/:id/validate', async (req, res) => {
+  try {
+    const { validated, rejection_reason } = req.body;
+    const result = await query(
+      `UPDATE rh_medical_certificates SET validated = $2, validated_by = $3, validated_at = NOW(), rejection_reason = $4, updated_at = NOW() WHERE id = $1 RETURNING *`,
+      [req.params.id, validated, req.userId, rejection_reason || null]);
+    res.json(result.rows[0]);
+  } catch (err) { logError('rh.medical.validate', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// ===== EMPLOYEE DOCUMENTS =====
+router.get('/documents', async (req, res) => {
+  try {
+    const orgId = req.query.org_id || await getUserOrgId(req.userId);
+    if (!orgId) return res.json([]);
+    const { employee_id, doc_type } = req.query;
+    let sql = `SELECT ed.*, e.full_name as employee_name FROM employee_documents ed JOIN employees e ON e.id = ed.employee_id WHERE e.organization_id = $1`;
+    const params = [orgId]; let idx = 2;
+    if (employee_id) { sql += ` AND ed.employee_id = $${idx++}`; params.push(employee_id); }
+    if (doc_type) { sql += ` AND ed.doc_type = $${idx++}`; params.push(doc_type); }
+    sql += ` ORDER BY ed.created_at DESC`;
+    res.json((await query(sql, params)).rows);
+  } catch (err) { logError('rh.documents.list', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.post('/documents', async (req, res) => {
+  try {
+    const d = req.body;
+    const result = await query(
+      `INSERT INTO employee_documents (employee_id, doc_type, title, file_url, expiry_date, notes, status, uploaded_by, ai_extracted_data)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+      [d.employee_id, d.doc_type, d.title, d.file_url, d.expiry_date, d.notes, d.status || 'pendente', req.userId,
+        d.ai_extracted_data ? JSON.stringify(d.ai_extracted_data) : null]);
+    res.json(result.rows[0]);
+  } catch (err) { logError('rh.documents.create', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.put('/documents/:id/validate', async (req, res) => {
+  try {
+    const { status, rejection_reason } = req.body;
+    const result = await query(
+      `UPDATE employee_documents SET status = $2, validated_by = $3, validated_at = NOW(), rejection_reason = $4 WHERE id = $1 RETURNING *`,
+      [req.params.id, status || 'aprovado', req.userId, rejection_reason || null]);
+    res.json(result.rows[0]);
+  } catch (err) { logError('rh.documents.validate', err); res.status(500).json({ error: 'Erro' }); }
+});
+
 router.get('/audit-log', async (req, res) => {
   try {
     const orgId = req.query.org_id || await getUserOrgId(req.userId);
