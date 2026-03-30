@@ -76,6 +76,16 @@ export default function PromotorEnviar() {
               <Label>Observação</Label>
               <Textarea value={observation} onChange={e => setObservation(e.target.value)} placeholder="Informações adicionais..." rows={3} />
             </div>
+            <div className="space-y-2">
+              <Label>Anexar Arquivo</Label>
+              <FileUploadInput
+                value={fileUrl}
+                onChange={setFileUrl}
+                accept="image/*,.pdf,.doc,.docx,.jpg,.jpeg,.png"
+                placeholder="Selecione ou arraste o arquivo"
+                previewType="file"
+              />
+            </div>
             <Button onClick={handleSend} disabled={sending || !category} className="w-full">
               {sending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Upload className="h-4 w-4 mr-2" />}
               Enviar Documento
