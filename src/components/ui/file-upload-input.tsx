@@ -16,6 +16,7 @@ interface FileUploadInputProps {
   showPreview?: boolean;
   previewType?: "image" | "file";
   className?: string;
+  customTokenGetter?: () => string | null;
 }
 
 export function FileUploadInput({
