@@ -44,24 +44,29 @@ export function MerchImportTab() {
     setFileName(file.name);
     setResult(null);
 
+    const readFileText = async (f: File): Promise<string> => {
+      const buffer = await f.arrayBuffer();
+      try {
+        return new TextDecoder("utf-8", { fatal: true }).decode(buffer);
+      } catch {
+        return new TextDecoder("windows-1252").decode(buffer);
+      }
+    };
+
     const isCSV = file.name.endsWith(".csv");
     if (isCSV) {
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        const text = ev.target?.result as string;
-        const lines = text.split("\n").filter((l) => l.trim());
-        if (lines.length < 2) { toast.error("Arquivo vazio"); return; }
-        const headers = lines[0].split(",").map((h) => h.trim());
-        const rows: ParsedRow[] = [];
-        for (let i = 1; i < lines.length; i++) {
-          const vals = lines[i].split(",").map((v) => v.trim());
-          const row: ParsedRow = {};
-          headers.forEach((h, idx) => { row[h] = vals[idx] || ""; });
-          rows.push(row);
-        }
-        setParsedData(rows);
-      };
-      reader.readAsText(file);
+      const text = await readFileText(file);
+      const lines = text.split("\n").filter((l) => l.trim());
+      if (lines.length < 2) { toast.error("Arquivo vazio"); return; }
+      const headers = lines[0].split(",").map((h) => h.trim());
+      const rows: ParsedRow[] = [];
+      for (let i = 1; i < lines.length; i++) {
+        const vals = lines[i].split(",").map((v) => v.trim());
+        const row: ParsedRow = {};
+        headers.forEach((h, idx) => { row[h] = vals[idx] || ""; });
+        rows.push(row);
+      }
+      setParsedData(rows);
     } else {
       const reader = new FileReader();
       reader.onload = (ev) => {
