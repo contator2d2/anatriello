@@ -35,6 +35,7 @@ function parseSafe(val: unknown, mask: string) {
 export function PromotorLayout({ children }: PromotorLayoutProps) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { branding } = useBranding();
   const [showNotifications, setShowNotifications] = useState(false);
 
   const { data: notifications = [] } = usePromotorNotifications();
