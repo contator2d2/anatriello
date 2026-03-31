@@ -196,19 +196,25 @@ router.get('/home', authenticatePromotor, async (req, res) => {
     const today = new Date().toISOString().slice(0, 10);
     const empId = req.employeeId;
 
+    // Helper to run a query safely – returns empty result on missing-table errors
+    const safeQuery = async (sql, params) => {
+      try { return await query(sql, params); }
+      catch (e) { if (e.code === '42P01' || e.code === '42703') return { rows: [] }; throw e; }
+    };
+
     const [employee, punches, pendingDocs, notifications, assignment, settings] = await Promise.all([
-      query(`SELECT id, full_name, email, cpf, photo_url, worker_profile, work_schedule, position FROM employees WHERE id = $1`, [empId]),
-      query(`SELECT * FROM time_punches WHERE employee_id = $1 AND punched_at::date = $2 ORDER BY punched_at`, [empId, today]),
-      query(`SELECT COUNT(*) as count FROM rh_document_deliveries WHERE employee_id = $1 AND status IN ('enviado', 'entregue', 'visualizado') AND (requires_signature = true OR requires_confirmation = true)`, [empId]),
-      query(`SELECT * FROM collaborator_notifications WHERE employee_id = $1 AND read = false ORDER BY created_at DESC LIMIT 10`, [empId]),
-      query(`SELECT da.*, p.name as pdv_name, p.latitude, p.longitude, p.radius_meters FROM collaborator_daily_assignments da LEFT JOIN pdvs p ON p.id = da.pdv_id WHERE da.employee_id = $1 AND da.assignment_date = $2 LIMIT 1`, [empId, today]),
-      query(`SELECT * FROM collaborator_app_settings WHERE employee_id = $1`, [empId]),
+      safeQuery(`SELECT id, full_name, email, cpf, photo_url, worker_profile, work_schedule, position FROM employees WHERE id = $1`, [empId]),
+      safeQuery(`SELECT * FROM time_punches WHERE employee_id = $1 AND punched_at::date = $2 ORDER BY punched_at`, [empId, today]),
+      safeQuery(`SELECT COUNT(*) as count FROM rh_document_deliveries WHERE employee_id = $1 AND status IN ('enviado', 'entregue', 'visualizado') AND (requires_signature = true OR requires_confirmation = true)`, [empId]),
+      safeQuery(`SELECT * FROM collaborator_notifications WHERE employee_id = $1 AND read = false ORDER BY created_at DESC LIMIT 10`, [empId]),
+      safeQuery(`SELECT da.*, p.name as pdv_name, p.latitude, p.longitude, p.radius_meters FROM collaborator_daily_assignments da LEFT JOIN pdvs p ON p.id = da.pdv_id WHERE da.employee_id = $1 AND da.assignment_date = $2 LIMIT 1`, [empId, today]),
+      safeQuery(`SELECT * FROM collaborator_app_settings WHERE employee_id = $1`, [empId]),
     ]);
 
     // Get linked PDVs if no daily assignment
     let pdvs = [];
     if (!assignment.rows[0]) {
-      const pdvRes = await query(
+      const pdvRes = await safeQuery(
         `SELECT p.* FROM collaborator_pdvs cp JOIN pdvs p ON p.id = cp.pdv_id WHERE cp.employee_id = $1 AND cp.active = true`, [empId]
       );
       pdvs = pdvRes.rows;
@@ -224,12 +230,16 @@ router.get('/home', authenticatePromotor, async (req, res) => {
     const isWithinSchedule = currentMin >= (startMin - 30) && currentMin <= (endMin + 15);
 
     // Check overtime approval for today
-    const otRes = await query(
-      `SELECT id, status, requested_start, requested_end FROM overtime_requests WHERE employee_id = $1 AND request_date = $2 ORDER BY created_at DESC LIMIT 1`,
-      [empId, today]
-    );
-    const overtimeRequest = otRes.rows[0] || null;
-    const hasOvertimeApproval = overtimeRequest?.status === 'aprovado';
+    let overtimeRequest = null;
+    let hasOvertimeApproval = false;
+    try {
+      const otRes = await query(
+        `SELECT id, status, requested_start, requested_end FROM overtime_requests WHERE employee_id = $1 AND request_date = $2 ORDER BY created_at DESC LIMIT 1`,
+        [empId, today]
+      );
+      overtimeRequest = otRes.rows[0] || null;
+      hasOvertimeApproval = overtimeRequest?.status === 'aprovado';
+    } catch (e) { if (e.code !== '42P01' && e.code !== '42703') throw e; }
 
     res.json({
       employee: employee.rows[0],
@@ -250,7 +260,7 @@ router.get('/home', authenticatePromotor, async (req, res) => {
     });
   } catch (err) {
     logError('promotor.home', err);
-    res.status(500).json({ error: 'Erro' });
+    res.status(500).json({ error: 'Erro ao carregar home' });
   }
 });
 
