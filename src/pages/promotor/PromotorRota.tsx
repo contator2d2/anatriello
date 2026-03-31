@@ -19,7 +19,7 @@ import {
 import { toast } from "sonner";
 import {
   MapPin, Camera, Check, AlertTriangle, Archive, Clock,
-  CheckCircle2, Circle, Calendar as CalendarIcon, Trash2, MoreVertical, Store, Info,
+  CheckCircle2, Circle, Calendar as CalendarIcon, Trash2, Store, Info,
   Lock, Unlock, ChevronRight, Target, ImagePlus,
 } from "lucide-react";
 
@@ -311,41 +311,18 @@ export default function PromotorRota() {
     }
   }, [route?.pdv_id, pdvCheckout, pdvCheckoutPhoto, actionForm, navigate]);
 
-  const handleToggleExec = useCallback((exec: any) => {
-    // Check if category is unlocked before allowing product interaction
+  const handleOpenProduct = useCallback((exec: any) => {
     const catStatus = categoryStatusMap[exec.category_id];
     if (catStatus && !catStatus.products_unlocked) {
       toast.error('Finalize a etapa de preparação da categoria antes de executar produtos.');
       return;
     }
-    const newStatus = exec.status === 'completed' ? 'pending' : 'completed';
-    updateExec.mutate({ id: exec.id, status: newStatus, checked: newStatus === 'completed' });
-  }, [updateExec, categoryStatusMap]);
-
-  const handleOpenProductActions = useCallback((exec: any) => {
-    const catStatus = categoryStatusMap[exec.category_id];
-    if (catStatus && !catStatus.products_unlocked) {
-      toast.error('Antes de iniciar, registre o ponto da categoria e tire a foto.');
-      return;
-    }
     setSelectedExec(exec);
-    setActionForm({});
+    setActionForm({ qty_store: exec.qty_store || 0, qty_stock: exec.qty_stock || 0 });
+    setActiveAction(null);
   }, [categoryStatusMap]);
 
-  const handleSubmitAction = useCallback(() => {
-    if (!selectedExec || !activeAction) return;
-    const execId = selectedExec.id;
-
-    if (activeAction === 'validity') {
-      addValidity.mutate({ executionId: execId, ...actionForm }, { onSuccess: () => { toast.success('Validade registrada'); setActiveAction(null); } });
-    } else if (activeAction === 'rupture') {
-      reportRupture.mutate({ executionId: execId, ...actionForm }, { onSuccess: () => { toast.success('Ruptura registrada'); setActiveAction(null); } });
-    } else if (activeAction === 'damage') {
-      reportDamage.mutate({ executionId: execId, ...actionForm }, { onSuccess: () => { toast.success('Avaria registrada'); setActiveAction(null); } });
-    } else if (activeAction === 'discard') {
-      reportDiscard.mutate({ executionId: execId, ...actionForm }, { onSuccess: () => { toast.success('Descarte registrado'); setActiveAction(null); } });
-    }
-  }, [selectedExec, activeAction, actionForm, addValidity, reportRupture, reportDamage, reportDiscard]);
+  // handleSubmitAction removed - logic inlined in dialogs
 
   if (isLoading) return <PromotorLayout><div className="flex items-center justify-center h-64"><div className="animate-spin h-8 w-8 border-2 border-primary border-t-transparent rounded-full" /></div></PromotorLayout>;
   if (!route) return <PromotorLayout><div className="text-center py-12 text-muted-foreground">Rota não encontrada</div></PromotorLayout>;
@@ -469,12 +446,13 @@ export default function PromotorRota() {
                   {/* Products list (locked or unlocked) */}
                   <div className={`space-y-1.5 ${isLocked ? 'opacity-40 pointer-events-none select-none' : ''}`}>
                     {execs.map((exec: any) => (
-                      <Card key={exec.id} className={exec.status === 'completed' ? 'border-green-500/30 bg-green-500/5' : ''}>
+                      <Card key={exec.id} className={`cursor-pointer transition-colors hover:border-primary/40 ${exec.status === 'completed' ? 'border-green-500/30 bg-green-500/5' : ''}`}
+                        onClick={() => handleOpenProduct(exec)}>
                         <CardContent className="p-3">
                           <div className="flex items-center gap-3">
-                            <button onClick={() => handleToggleExec(exec)} className="flex-shrink-0">
+                            <div className="flex-shrink-0">
                               {EXEC_STATUS_ICON[exec.status] || EXEC_STATUS_ICON.pending}
-                            </button>
+                            </div>
                             <div className="flex-1 min-w-0">
                               <div className="text-sm font-medium truncate">{exec.product_name}</div>
                               {exec.exposure_point !== 'natural' && <Badge variant="secondary" className="text-[9px] mt-0.5">{exec.exposure_point}</Badge>}
@@ -487,9 +465,7 @@ export default function PromotorRota() {
                             <div className="flex items-center gap-1">
                               {exec.has_rupture && <AlertTriangle className="h-3.5 w-3.5 text-red-500" />}
                               {exec.has_damage && <Archive className="h-3.5 w-3.5 text-orange-500" />}
-                              <button onClick={() => handleOpenProductActions(exec)} className="p-1 hover:bg-muted rounded">
-                                <MoreVertical className="h-4 w-4 text-muted-foreground" />
-                              </button>
+                              <ChevronRight className="h-4 w-4 text-muted-foreground" />
                             </div>
                           </div>
                         </CardContent>
@@ -525,27 +501,95 @@ export default function PromotorRota() {
           </div>
         )}
 
-        {/* Product action menu */}
+        {/* Product Detail Modal */}
         <Dialog open={!!selectedExec && !activeAction} onOpenChange={() => setSelectedExec(null)}>
-          <DialogContent className="max-w-sm">
-            <DialogHeader><DialogTitle className="text-sm">{selectedExec?.product_name}</DialogTitle></DialogHeader>
-            <div className="grid grid-cols-2 gap-2">
-              {[
-                { key: 'validity', label: 'Validade', icon: CalendarIcon, color: 'text-blue-600' },
-                { key: 'rupture', label: 'Ruptura', icon: AlertTriangle, color: 'text-red-600' },
-                { key: 'damage', label: 'Avaria', icon: Archive, color: 'text-orange-600' },
-                { key: 'discard', label: 'Descarte', icon: Trash2, color: 'text-purple-600' },
-              ].map(a => (
-                <Button key={a.key} variant="outline" className="h-16 flex-col gap-1" onClick={() => { setActiveAction(a.key as ActionType); setActionForm({}); }}>
-                  <a.icon className={`h-5 w-5 ${a.color}`} />
-                  <span className="text-xs">{a.label}</span>
-                </Button>
-              ))}
+          <DialogContent className="max-w-sm max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="text-sm flex items-center gap-2">
+                {EXEC_STATUS_ICON[selectedExec?.status] || EXEC_STATUS_ICON.pending}
+                {selectedExec?.product_name}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <Badge variant={selectedExec?.status === 'completed' ? 'default' : 'secondary'} className="text-[10px]">
+                  {selectedExec?.status === 'completed' ? 'Executado' : selectedExec?.status === 'in_progress' ? 'Em andamento' : 'Pendente'}
+                </Badge>
+                {selectedExec?.exposure_point && selectedExec.exposure_point !== 'natural' && (
+                  <Badge variant="outline" className="text-[10px]">{selectedExec.exposure_point}</Badge>
+                )}
+              </div>
+
+              {/* Counting */}
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold flex items-center gap-1">
+                  <Store className="h-3.5 w-3.5" /> Contagem
+                </Label>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <Label className="text-[10px] text-muted-foreground">Qtd Loja</Label>
+                    <Input type="number" min="0" placeholder="0"
+                      value={actionForm.qty_store ?? selectedExec?.qty_store ?? 0}
+                      onChange={e => setActionForm({ ...actionForm, qty_store: parseInt(e.target.value) || 0 })} />
+                  </div>
+                  <div>
+                    <Label className="text-[10px] text-muted-foreground">Qtd Estoque</Label>
+                    <Input type="number" min="0" placeholder="0"
+                      value={actionForm.qty_stock ?? selectedExec?.qty_stock ?? 0}
+                      onChange={e => setActionForm({ ...actionForm, qty_stock: parseInt(e.target.value) || 0 })} />
+                  </div>
+                </div>
+                <div className="text-[10px] text-muted-foreground text-right">
+                  Total: {(actionForm.qty_store ?? selectedExec?.qty_store ?? 0) + (actionForm.qty_stock ?? selectedExec?.qty_stock ?? 0)}
+                </div>
+              </div>
+
+              {/* Observation */}
+              <div>
+                <Label className="text-[10px] text-muted-foreground">Observação</Label>
+                <Textarea rows={2} placeholder="Observação do produto..."
+                  value={actionForm.product_observation ?? selectedExec?.observation ?? ''}
+                  onChange={e => setActionForm({ ...actionForm, product_observation: e.target.value })} />
+              </div>
+
+              {/* Action buttons */}
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold">Registrar ocorrência</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { key: 'validity', label: 'Validade', icon: CalendarIcon, color: 'text-blue-600' },
+                    { key: 'rupture', label: 'Ruptura', icon: AlertTriangle, color: 'text-red-600' },
+                    { key: 'damage', label: 'Avaria', icon: Archive, color: 'text-orange-600' },
+                    { key: 'discard', label: 'Descarte', icon: Trash2, color: 'text-purple-600' },
+                  ].map(a => (
+                    <Button key={a.key} variant="outline" className="h-12 flex-col gap-0.5 text-[10px]"
+                      onClick={() => setActiveAction(a.key as ActionType)}>
+                      <a.icon className={`h-4 w-4 ${a.color}`} />
+                      <span>{a.label}</span>
+                    </Button>
+                  ))}
+                </div>
+              </div>
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div><Label className="text-xs">Qtd Loja</Label><Input type="number" placeholder="0" onChange={e => updateExec.mutate({ id: selectedExec?.id, qty_store: parseInt(e.target.value) || 0 })} /></div>
-              <div><Label className="text-xs">Qtd Estoque</Label><Input type="number" placeholder="0" onChange={e => updateExec.mutate({ id: selectedExec?.id, qty_stock: parseInt(e.target.value) || 0 })} /></div>
-            </div>
+            <DialogFooter className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => setSelectedExec(null)}>Fechar</Button>
+              <Button size="sm" onClick={() => {
+                if (!selectedExec) return;
+                updateExec.mutate({
+                  id: selectedExec.id,
+                  qty_store: actionForm.qty_store ?? selectedExec.qty_store ?? 0,
+                  qty_stock: actionForm.qty_stock ?? selectedExec.qty_stock ?? 0,
+                  observation: actionForm.product_observation ?? selectedExec.observation,
+                  status: 'completed', checked: true,
+                }, {
+                  onSuccess: () => { toast.success('Produto executado!'); setSelectedExec(null); },
+                  onError: (err: any) => toast.error(err.message),
+                });
+              }} disabled={updateExec.isPending}>
+                <Check className="h-4 w-4 mr-1" />
+                {updateExec.isPending ? 'Salvando...' : 'Salvar e Concluir'}
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
 
@@ -555,30 +599,31 @@ export default function PromotorRota() {
             <DialogHeader>
               <DialogTitle className="text-sm">
                 {activeAction === 'validity' ? 'Registrar Validade' : activeAction === 'rupture' ? 'Registrar Ruptura' : activeAction === 'damage' ? 'Registrar Avaria' : 'Registrar Descarte'}
+                {selectedExec && <span className="block text-xs font-normal text-muted-foreground mt-1">{selectedExec.product_name}</span>}
               </DialogTitle>
             </DialogHeader>
             <div className="space-y-3">
               {activeAction === 'validity' && (
                 <>
-                  <div><Label className="text-xs">Data de Validade</Label><Input type="date" onChange={e => setActionForm({ ...actionForm, expiry_date: e.target.value })} /></div>
+                  <div><Label className="text-xs">Data de Validade</Label><Input type="date" value={actionForm.expiry_date || ''} onChange={e => setActionForm({ ...actionForm, expiry_date: e.target.value })} /></div>
                   <div className="grid grid-cols-2 gap-2">
-                    <div><Label className="text-xs">Qtd Loja</Label><Input type="number" placeholder="0" onChange={e => setActionForm({ ...actionForm, qty_store: parseInt(e.target.value) || 0 })} /></div>
-                    <div><Label className="text-xs">Qtd Estoque</Label><Input type="number" placeholder="0" onChange={e => setActionForm({ ...actionForm, qty_stock: parseInt(e.target.value) || 0 })} /></div>
+                    <div><Label className="text-xs">Qtd Loja</Label><Input type="number" placeholder="0" value={actionForm.val_qty_store ?? ''} onChange={e => setActionForm({ ...actionForm, val_qty_store: parseInt(e.target.value) || 0 })} /></div>
+                    <div><Label className="text-xs">Qtd Estoque</Label><Input type="number" placeholder="0" value={actionForm.val_qty_stock ?? ''} onChange={e => setActionForm({ ...actionForm, val_qty_stock: parseInt(e.target.value) || 0 })} /></div>
                   </div>
                 </>
               )}
               {(activeAction === 'rupture' || activeAction === 'damage' || activeAction === 'discard') && (
                 <>
                   <div className="grid grid-cols-2 gap-2">
-                    <div><Label className="text-xs">Qtd Loja</Label><Input type="number" placeholder="0" onChange={e => setActionForm({ ...actionForm, qty_store: parseInt(e.target.value) || 0 })} /></div>
-                    <div><Label className="text-xs">Qtd Estoque</Label><Input type="number" placeholder="0" onChange={e => setActionForm({ ...actionForm, qty_stock: parseInt(e.target.value) || 0 })} /></div>
+                    <div><Label className="text-xs">Qtd Loja</Label><Input type="number" placeholder="0" value={actionForm.occ_qty_store ?? ''} onChange={e => setActionForm({ ...actionForm, occ_qty_store: parseInt(e.target.value) || 0 })} /></div>
+                    <div><Label className="text-xs">Qtd Estoque</Label><Input type="number" placeholder="0" value={actionForm.occ_qty_stock ?? ''} onChange={e => setActionForm({ ...actionForm, occ_qty_stock: parseInt(e.target.value) || 0 })} /></div>
                   </div>
-                  <div><Label className="text-xs">Motivo</Label><Input placeholder="Motivo" onChange={e => setActionForm({ ...actionForm, reason: e.target.value })} /></div>
-                  <div><Label className="text-xs">Observação</Label><Textarea rows={2} placeholder="Observação" onChange={e => setActionForm({ ...actionForm, observation: e.target.value, description: e.target.value })} /></div>
+                  <div><Label className="text-xs">Motivo</Label><Input placeholder="Motivo" value={actionForm.reason ?? ''} onChange={e => setActionForm({ ...actionForm, reason: e.target.value })} /></div>
+                  <div><Label className="text-xs">Observação</Label><Textarea rows={2} placeholder="Observação" value={actionForm.observation ?? ''} onChange={e => setActionForm({ ...actionForm, observation: e.target.value, description: e.target.value })} /></div>
                   {activeAction === 'damage' && (
                     <div>
                       <Label className="text-xs">Local</Label>
-                      <Select onValueChange={v => setActionForm({ ...actionForm, location: v })}>
+                      <Select value={actionForm.location} onValueChange={v => setActionForm({ ...actionForm, location: v })}>
                         <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="store">Loja</SelectItem>
@@ -592,7 +637,21 @@ export default function PromotorRota() {
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setActiveAction(null)}>Cancelar</Button>
-              <Button onClick={handleSubmitAction}>Salvar</Button>
+              <Button onClick={() => {
+                if (!selectedExec || !activeAction) return;
+                const execId = selectedExec.id;
+                const onDone = () => { toast.success('Registrado com sucesso'); setActiveAction(null); };
+                const onErr = (err: any) => toast.error(err.message);
+                if (activeAction === 'validity') {
+                  addValidity.mutate({ executionId: execId, expiry_date: actionForm.expiry_date, qty_store: actionForm.val_qty_store || 0, qty_stock: actionForm.val_qty_stock || 0 }, { onSuccess: onDone, onError: onErr });
+                } else if (activeAction === 'rupture') {
+                  reportRupture.mutate({ executionId: execId, qty_store: actionForm.occ_qty_store || 0, qty_stock: actionForm.occ_qty_stock || 0, reason: actionForm.reason, observation: actionForm.observation }, { onSuccess: onDone, onError: onErr });
+                } else if (activeAction === 'damage') {
+                  reportDamage.mutate({ executionId: execId, qty_store: actionForm.occ_qty_store || 0, qty_stock: actionForm.occ_qty_stock || 0, reason: actionForm.reason, observation: actionForm.observation, description: actionForm.observation, location: actionForm.location }, { onSuccess: onDone, onError: onErr });
+                } else if (activeAction === 'discard') {
+                  reportDiscard.mutate({ executionId: execId, qty_store: actionForm.occ_qty_store || 0, qty_stock: actionForm.occ_qty_stock || 0, reason: actionForm.reason, observation: actionForm.observation }, { onSuccess: onDone, onError: onErr });
+                }
+              }}>Salvar</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
