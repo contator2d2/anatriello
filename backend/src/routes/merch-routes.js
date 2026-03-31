@@ -1024,7 +1024,8 @@ router.get('/promotor/routes/:id', promotorAuth, async (req, res) => {
     if (!route.rows.length) return res.status(404).json({ error: 'Rota não encontrada' });
 
     const executions = await query(
-      `SELECT rpe.*, pr.name as product_name, pr.sku, pr.barcode, pr.image_url,
+      `SELECT rpe.*, (COALESCE(rpe.qty_store,0) + COALESCE(rpe.qty_stock,0)) as qty_total,
+       pr.name as product_name, pr.sku, pr.barcode, pr.image_url,
        pc.name as category_name, ps.name as subcategory_name
        FROM route_product_executions rpe
        JOIN merch_products pr ON pr.id = rpe.product_id
@@ -1185,11 +1186,11 @@ router.put('/promotor/executions/:id', promotorAuth, async (req, res) => {
     const newStock = qty_stock !== undefined ? qty_stock : (currentExec.rows[0]?.qty_stock || 0);
     const result = await query(
       `UPDATE route_product_executions SET checked=COALESCE($2,checked), qty_store=COALESCE($3,qty_store),
-       qty_stock=COALESCE($4,qty_stock), qty_total=$9, exposure_point=COALESCE($5,exposure_point),
+       qty_stock=COALESCE($4,qty_stock), exposure_point=COALESCE($5,exposure_point),
        observation=COALESCE($6,observation), status=COALESCE($7,status),
        executed_by=$8, executed_at=NOW(), updated_at=NOW()
-       WHERE id=$1 RETURNING *`,
-      [req.params.id, checked, qty_store, qty_stock, exposure_point, observation, status, req.employeeId, newStore + newStock]
+       WHERE id=$1 RETURNING *, (COALESCE(qty_store,0) + COALESCE(qty_stock,0)) as qty_total`,
+      [req.params.id, checked, qty_store, qty_stock, exposure_point, observation, status, req.employeeId]
     );
 
     // Update route progress
