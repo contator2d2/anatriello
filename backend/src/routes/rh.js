@@ -1724,4 +1724,25 @@ router.get('/map-data', async (req, res) => {
   } catch (err) { logError('rh.map-data', err); res.status(500).json({ error: err.message }); }
 });
 
+router.get('/pdvs', async (req, res) => {
+  try {
+    const orgId = req.query.org_id || await getUserOrgId(req.userId);
+    if (!orgId) return res.json([]);
+
+    const result = await query(
+      `SELECT p.*, e.full_name as supervisor_name
+       FROM pdvs p
+       LEFT JOIN employees e ON e.id = p.supervisor_id
+       WHERE p.organization_id = $1
+       ORDER BY p.name`,
+      [orgId]
+    );
+
+    res.json(result.rows);
+  } catch (err) {
+    logError('rh.pdvs.list', err);
+    res.status(500).json({ error: err.message || 'Erro ao listar PDVs' });
+  }
+});
+
 export default router;
