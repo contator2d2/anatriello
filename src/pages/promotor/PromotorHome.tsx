@@ -570,6 +570,56 @@ export default function PromotorHome() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* PDV Checkout Dialog */}
+      <Dialog open={showPdvCheckout} onOpenChange={(open) => { if (!open) { setShowPdvCheckout(false); setActionPdv(null); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Store className="h-5 w-5 text-primary" /> Checkout da Loja
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Card className="border-primary/30 bg-primary/5">
+              <CardContent className="p-3">
+                <p className="text-sm font-medium">{actionPdv?.pdv_name}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Todas as rotas foram concluídas. Faça o checkout para encerrar a visita.
+                </p>
+              </CardContent>
+            </Card>
+
+            <div className="space-y-2">
+              <Label className="text-xs">Foto de saída (opcional)</Label>
+              {pdvCheckoutPhoto ? (
+                <div className="space-y-2">
+                  <img src={pdvCheckoutPhoto} alt="Checkout" className="w-full rounded-lg border max-h-48 object-cover" />
+                  <Button variant="outline" size="sm" onClick={() => setPdvCheckoutPhoto('')}>Tirar outra foto</Button>
+                </div>
+              ) : (
+                <CameraCapture
+                  onCapture={setPdvCheckoutPhoto}
+                  watermark={{ pdvName: actionPdv?.pdv_name || '', brandName: '', photoType: 'Checkout PDV' }}
+                  customTokenGetter={() => localStorage.getItem('promotor_token')}
+                  buttonLabel="Tirar foto de saída da loja"
+                />
+              )}
+            </div>
+
+            <div>
+              <Label className="text-xs">Observação</Label>
+              <Textarea rows={2} placeholder="Observações sobre a visita..." value={pdvCheckoutNotes} onChange={e => setPdvCheckoutNotes(e.target.value)} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setShowPdvCheckout(false); setActionPdv(null); }}>Cancelar</Button>
+            <Button onClick={() => actionPdv && handlePdvCheckout(actionPdv.pdv_id)} disabled={pdvCheckoutLoading}>
+              {pdvCheckoutLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Fazer Checkout
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </PromotorLayout>
   );
 }
