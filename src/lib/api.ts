@@ -2,6 +2,11 @@ const ENV_API_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
 const isBrowser = typeof window !== 'undefined';
 const isLocalhost = isBrowser && ['localhost', '127.0.0.1'].includes(window.location.hostname);
 
+const normalizeEndpoint = (endpoint: string) => {
+  if (endpoint === '/api/rh/pdvs') return '/api/promotor/rh/pdvs';
+  return endpoint;
+};
+
 const getBaseCandidates = (endpoint: string) => {
   const sameOriginBase = '';
   const supportsSameOrigin = endpoint.startsWith('/api/') || endpoint.startsWith('/uploads/');
@@ -48,6 +53,7 @@ interface ApiOptions {
 
 export const api = async <T>(endpoint: string, options: ApiOptions = {}): Promise<T> => {
   const { method = 'GET', body, auth = true } = options;
+  const normalizedEndpoint = normalizeEndpoint(endpoint);
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -60,13 +66,13 @@ export const api = async <T>(endpoint: string, options: ApiOptions = {}): Promis
     }
   }
 
-  const baseCandidates = getBaseCandidates(endpoint);
+  const baseCandidates = getBaseCandidates(normalizedEndpoint);
   const retries = method === 'GET' ? MAX_GET_RETRIES : 0;
   let lastError: Error | null = null;
 
   for (let baseIndex = 0; baseIndex < baseCandidates.length; baseIndex++) {
     const base = baseCandidates[baseIndex];
-    const url = buildUrl(base, endpoint);
+    const url = buildUrl(base, normalizedEndpoint);
 
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
@@ -121,7 +127,11 @@ export const api = async <T>(endpoint: string, options: ApiOptions = {}): Promis
           }
 
           // Fallback para same-origin somente em GET, evitando duplicidade em mutações
-          const shouldTryNextBase = method === 'GET' && baseIndex < baseCandidates.length - 1 && response.status >= 500;
+          const shouldTryNextBase = method === 'GET' && baseIndex < baseCandidates.length - 1 && (
+            response.status >= 500 ||
+            (base === '' && response.status === 404) ||
+            (base === '' && typeof data?.raw === 'string' && (data.raw.trim().startsWith('<!') || data.raw.includes('<html')))
+          );
           if (shouldTryNextBase) {
             lastError = new Error(`${baseMsg}${details}`);
             break;
