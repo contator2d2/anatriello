@@ -287,14 +287,19 @@ router.post('/punch', authenticatePromotor, async (req, res) => {
 
     // ===== WORK SCHEDULE VALIDATION =====
     const empRes = await query(`SELECT work_schedule FROM employees WHERE id = $1`, [req.employeeId]);
-    const workSchedule = empRes.rows[0]?.work_schedule || '08:00-17:00';
+    const wsRaw = empRes.rows[0]?.work_schedule || '08:00-17:00';
     const now = is_offline && offline_local_time ? new Date(offline_local_time) : new Date();
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
-    // Parse schedule "HH:MM-HH:MM"
-    const scheduleParts = String(workSchedule).split('-');
-    const scheduleStart = scheduleParts[0] ? scheduleParts[0].split(':').reduce((h, m) => parseInt(h) * 60 + parseInt(m), 0) : 480;
-    const scheduleEnd = scheduleParts[1] ? scheduleParts[1].split(':').reduce((h, m) => parseInt(h) * 60 + parseInt(m), 0) : 1020;
+    // Parse schedule — supports JSON {"entry":"HH:MM","exit":"HH:MM"} or plain "HH:MM-HH:MM"
+    let schedStartStr = '08:00', schedEndStr = '17:00';
+    try {
+      const parsed = typeof wsRaw === 'object' ? wsRaw : (typeof wsRaw === 'string' && wsRaw.trim().startsWith('{') ? JSON.parse(wsRaw) : null);
+      if (parsed && parsed.entry) { schedStartStr = parsed.entry; schedEndStr = parsed.exit || '17:00'; }
+      else { const parts = String(wsRaw).split('-'); if (parts.length >= 2) { schedStartStr = parts[0].trim(); schedEndStr = parts[1].trim(); } }
+    } catch { const parts = String(wsRaw).split('-'); if (parts.length >= 2) { schedStartStr = parts[0].trim(); schedEndStr = parts[1].trim(); } }
+    const scheduleStart = schedStartStr.split(':').reduce((h, m) => parseInt(h) * 60 + parseInt(m), 0) || 480;
+    const scheduleEnd = schedEndStr.split(':').reduce((h, m) => parseInt(h) * 60 + parseInt(m), 0) || 1020;
 
     // Allow 30 min before start and 15 min after end as tolerance
     const toleranceBefore = 30;
@@ -312,8 +317,8 @@ router.post('/punch', authenticatePromotor, async (req, res) => {
       );
 
       if (!otReq.rows[0]) {
-        const startFmt = scheduleParts[0] || '08:00';
-        const endFmt = scheduleParts[1] || '17:00';
+        const startFmt = schedStartStr;
+        const endFmt = schedEndStr;
         return res.status(403).json({
           error: `Fora do horário de trabalho (${startFmt} - ${endFmt}). Solicite autorização de hora extra ao supervisor.`,
           code: 'OUTSIDE_SCHEDULE',
