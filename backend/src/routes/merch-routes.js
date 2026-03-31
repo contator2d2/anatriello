@@ -1097,7 +1097,7 @@ router.get('/ai/optimization-context', authenticate, async (req, res) => {
     let promoterSql = `SELECT e.id, e.full_name, e.home_latitude, e.home_longitude, e.work_schedule,
                         e.direct_manager_id as supervisor_id,
                         COALESCE(
-                          (SELECT json_agg(bp.brand_id) FROM brand_promoters bp WHERE bp.employee_id = e.id), '[]'
+                          (SELECT json_agg(bpa.brand_id) FROM brand_promoter_assignments bpa WHERE bpa.employee_id = e.id AND bpa.active = true), '[]'
                         ) as brand_ids,
                         (SELECT COUNT(*) FROM merch_routes mr WHERE mr.promoter_id = e.id 
                          AND mr.visit_date >= $2 AND mr.visit_date <= $3 AND mr.status != 'cancelled') as existing_routes
