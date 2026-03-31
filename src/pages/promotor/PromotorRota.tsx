@@ -14,11 +14,13 @@ import {
   usePromotorRouteDetail, usePromotorCheckin, usePromotorCheckout,
   usePromotorUpdateExecution, usePromotorReportDamage, usePromotorReportRupture,
   usePromotorAddValidity, usePromotorReportDiscard,
+  usePromotorSetPointType, usePromotorCategoryPhoto,
 } from "@/hooks/use-promotor-routes";
 import { toast } from "sonner";
 import {
   MapPin, Camera, Check, AlertTriangle, Archive, Clock,
-  CheckCircle2, Circle, Calendar as CalendarIcon, Trash2, MoreVertical, Store, Info
+  CheckCircle2, Circle, Calendar as CalendarIcon, Trash2, MoreVertical, Store, Info,
+  Lock, Unlock, ChevronRight, Target, ImagePlus,
 } from "lucide-react";
 
 const EXEC_STATUS_ICON: Record<string, any> = {
@@ -46,10 +48,151 @@ const usePromotorPdvCheckout = () => {
   };
 };
 
+// ===== Category Preparation Component =====
+function CategoryPreparation({ category, routeId, pdvName, brandName, onUnlocked }: {
+  category: any; routeId: string; pdvName: string; brandName: string; onUnlocked: () => void;
+}) {
+  const setPointType = usePromotorSetPointType();
+  const setCategoryPhoto = usePromotorCategoryPhoto();
+  const [photoUrl, setPhotoUrl] = useState('');
+
+  const hasPointType = !!category.point_type;
+  const hasPhoto = !!category.category_before_photo;
+  const isUnlocked = category.products_unlocked;
+
+  const handleSetPointType = (type: string) => {
+    setPointType.mutate({ routeId, catId: category.category_id, point_type: type }, {
+      onSuccess: () => toast.success(`Ponto ${type === 'natural' ? 'Natural' : 'Extra'} selecionado`),
+      onError: (err: any) => toast.error(err.message),
+    });
+  };
+
+  const handleUploadPhoto = async () => {
+    if (!photoUrl) return toast.error('É necessário tirar a foto da categoria antes de acessar os produtos.');
+    try {
+      const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
+        navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000 })
+      ).catch(() => null);
+      setCategoryPhoto.mutate({
+        routeId, catId: category.category_id, photo_url: photoUrl,
+        latitude: pos?.coords.latitude, longitude: pos?.coords.longitude,
+      }, {
+        onSuccess: () => { toast.success('Foto registrada! Produtos liberados.'); onUnlocked(); },
+        onError: (err: any) => toast.error(err.message),
+      });
+    } catch {
+      setCategoryPhoto.mutate({ routeId, catId: category.category_id, photo_url: photoUrl }, {
+        onSuccess: () => { toast.success('Foto registrada!'); onUnlocked(); },
+        onError: (err: any) => toast.error(err.message),
+      });
+    }
+  };
+
+  if (isUnlocked) return null;
+
+  return (
+    <Card className="border-primary/40 bg-primary/5">
+      <CardContent className="p-4 space-y-4">
+        {/* Bloco 1: Identification */}
+        <div className="flex items-center gap-2 text-sm">
+          <Target className="h-4 w-4 text-primary" />
+          <div>
+            <span className="font-bold">{category.category_name}</span>
+            <span className="text-muted-foreground ml-2">• {pdvName} • {brandName}</span>
+          </div>
+        </div>
+
+        {/* Step indicator */}
+        <div className="flex items-center gap-2 text-[11px]">
+          <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full ${hasPointType ? 'bg-green-500/20 text-green-700' : 'bg-yellow-500/20 text-yellow-700'}`}>
+            {hasPointType ? <CheckCircle2 className="h-3 w-3" /> : <span className="font-bold">1</span>}
+            Tipo de Ponto
+          </div>
+          <ChevronRight className="h-3 w-3 text-muted-foreground" />
+          <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full ${hasPhoto ? 'bg-green-500/20 text-green-700' : hasPointType ? 'bg-yellow-500/20 text-yellow-700' : 'bg-muted text-muted-foreground'}`}>
+            {hasPhoto ? <CheckCircle2 className="h-3 w-3" /> : <span className="font-bold">2</span>}
+            Foto Categoria
+          </div>
+          <ChevronRight className="h-3 w-3 text-muted-foreground" />
+          <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+            <Lock className="h-3 w-3" />
+            Produtos
+          </div>
+        </div>
+
+        {/* Bloco 2: Point Type */}
+        {!hasPointType && (
+          <div className="space-y-2">
+            <Label className="text-xs font-semibold">Selecione o tipo de ponto:</Label>
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                variant="outline" className="h-14 flex-col gap-1 border-2 hover:border-primary hover:bg-primary/10"
+                onClick={() => handleSetPointType('natural')} disabled={setPointType.isPending}
+              >
+                <MapPin className="h-5 w-5 text-blue-600" />
+                <span className="text-xs font-medium">Ponto Natural</span>
+              </Button>
+              <Button
+                variant="outline" className="h-14 flex-col gap-1 border-2 hover:border-primary hover:bg-primary/10"
+                onClick={() => handleSetPointType('extra')} disabled={setPointType.isPending}
+              >
+                <Target className="h-5 w-5 text-orange-600" />
+                <span className="text-xs font-medium">Ponto Extra</span>
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Show selected point type */}
+        {hasPointType && !hasPhoto && (
+          <div className="flex items-center gap-2 text-xs">
+            <Badge variant="secondary">{category.point_type === 'natural' ? '📍 Ponto Natural' : '🎯 Ponto Extra'}</Badge>
+          </div>
+        )}
+
+        {/* Bloco 3: Photo */}
+        {hasPointType && !hasPhoto && (
+          <div className="space-y-2">
+            <Label className="text-xs font-semibold flex items-center gap-1">
+              <Camera className="h-3.5 w-3.5" /> Foto obrigatória da categoria (ANTES da execução)
+            </Label>
+            <FileUploadInput
+              value={photoUrl}
+              onChange={setPhotoUrl}
+              accept="image/*,.jpg,.jpeg,.png,.webp"
+              placeholder="Tire a foto da categoria"
+              previewType="image"
+              customTokenGetter={() => localStorage.getItem('promotor_token')}
+            />
+            <Button className="w-full" onClick={handleUploadPhoto} disabled={!photoUrl || setCategoryPhoto.isPending}>
+              <ImagePlus className="h-4 w-4 mr-2" />
+              {setCategoryPhoto.isPending ? 'Enviando...' : 'Registrar foto e liberar produtos'}
+            </Button>
+          </div>
+        )}
+
+        {/* Lock message */}
+        {!isUnlocked && (
+          <div className="flex items-center gap-2 p-2 rounded bg-destructive/10 text-destructive text-xs">
+            <Lock className="h-4 w-4 flex-shrink-0" />
+            <span>
+              {!hasPointType
+                ? 'Selecione se é ponto natural ou extra para continuar.'
+                : !hasPhoto
+                  ? 'É necessário tirar a foto da categoria antes de acessar os produtos.'
+                  : 'Finalize a etapa inicial para continuar.'}
+            </span>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function PromotorRota() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { data: route, isLoading } = usePromotorRouteDetail(id);
+  const { data: route, isLoading, refetch } = usePromotorRouteDetail(id);
   const checkin = usePromotorCheckin();
   const checkout = usePromotorCheckout();
   const updateExec = usePromotorUpdateExecution();
@@ -68,13 +211,22 @@ export default function PromotorRota() {
   const [checkinPhotoUrl, setCheckinPhotoUrl] = useState('');
   const [routeCompletionResult, setRouteCompletionResult] = useState<any>(null);
 
+  // Build category status map
+  const categoryStatusMap = useMemo(() => {
+    const map: Record<string, any> = {};
+    (route?.category_statuses || []).forEach((cs: any) => {
+      map[cs.category_id] = cs;
+    });
+    return map;
+  }, [route?.category_statuses]);
+
   const groupedExecs = useMemo(() => {
     if (!route?.executions) return {};
-    const groups: Record<string, any[]> = {};
+    const groups: Record<string, { catId: string; execs: any[] }> = {};
     route.executions.forEach((e: any) => {
       const cat = e.category_name || 'Sem Categoria';
-      if (!groups[cat]) groups[cat] = [];
-      groups[cat].push(e);
+      if (!groups[cat]) groups[cat] = { catId: e.category_id, execs: [] };
+      groups[cat].execs.push(e);
     });
     return groups;
   }, [route?.executions]);
@@ -144,9 +296,25 @@ export default function PromotorRota() {
   }, [route?.pdv_id, pdvCheckout, pdvCheckoutPhoto, actionForm, navigate]);
 
   const handleToggleExec = useCallback((exec: any) => {
+    // Check if category is unlocked before allowing product interaction
+    const catStatus = categoryStatusMap[exec.category_id];
+    if (catStatus && !catStatus.products_unlocked) {
+      toast.error('Finalize a etapa de preparação da categoria antes de executar produtos.');
+      return;
+    }
     const newStatus = exec.status === 'completed' ? 'pending' : 'completed';
     updateExec.mutate({ id: exec.id, status: newStatus, checked: newStatus === 'completed' });
-  }, [updateExec]);
+  }, [updateExec, categoryStatusMap]);
+
+  const handleOpenProductActions = useCallback((exec: any) => {
+    const catStatus = categoryStatusMap[exec.category_id];
+    if (catStatus && !catStatus.products_unlocked) {
+      toast.error('Antes de iniciar, registre o ponto da categoria e tire a foto.');
+      return;
+    }
+    setSelectedExec(exec);
+    setActionForm({});
+  }, [categoryStatusMap]);
 
   const handleSubmitAction = useCallback(() => {
     if (!selectedExec || !activeAction) return;
@@ -173,6 +341,7 @@ export default function PromotorRota() {
   return (
     <PromotorLayout>
       <div className="max-w-lg mx-auto p-4 space-y-4">
+        {/* Route header card */}
         <Card>
           <CardContent className="p-4">
             <div className="flex items-start justify-between mb-2">
@@ -203,6 +372,7 @@ export default function PromotorRota() {
           </CardContent>
         </Card>
 
+        {/* Check-in photo requirement */}
         {needsCheckin && route.require_checkin_photo && (
           <Card className="border-primary/30">
             <CardContent className="p-4 space-y-3">
@@ -237,18 +407,44 @@ export default function PromotorRota() {
           </Card>
         )}
 
+        {/* Active route: categories with step-by-step flow */}
         {isActive && (
           <div className="space-y-4">
-            {Object.entries(groupedExecs).map(([category, execs]) => {
-              const doneCount = (execs as any[]).filter((e: any) => e.status === 'completed').length;
+            {Object.entries(groupedExecs).map(([category, { catId, execs }]) => {
+              const catStatus = categoryStatusMap[catId];
+              const isLocked = catStatus && !catStatus.products_unlocked;
+              const doneCount = execs.filter((e: any) => e.status === 'completed').length;
+
               return (
                 <div key={category}>
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-sm font-bold">{category}</h3>
-                    <Badge variant="outline" className="text-[10px]">{doneCount}/{(execs as any[]).length}</Badge>
+                  {/* Category preparation (if locked) */}
+                  {isLocked && (
+                    <CategoryPreparation
+                      category={catStatus}
+                      routeId={id!}
+                      pdvName={route.pdv_name}
+                      brandName={route.brand_name}
+                      onUnlocked={() => refetch()}
+                    />
+                  )}
+
+                  {/* Category header */}
+                  <div className="flex items-center justify-between mb-2 mt-3">
+                    <div className="flex items-center gap-2">
+                      {isLocked ? <Lock className="h-4 w-4 text-muted-foreground" /> : <Unlock className="h-4 w-4 text-green-600" />}
+                      <h3 className="text-sm font-bold">{category}</h3>
+                      {catStatus?.point_type && (
+                        <Badge variant="outline" className="text-[9px]">
+                          {catStatus.point_type === 'natural' ? '📍 Natural' : '🎯 Extra'}
+                        </Badge>
+                      )}
+                    </div>
+                    <Badge variant="outline" className="text-[10px]">{doneCount}/{execs.length}</Badge>
                   </div>
-                  <div className="space-y-1.5">
-                    {(execs as any[]).map((exec: any) => (
+
+                  {/* Products list (locked or unlocked) */}
+                  <div className={`space-y-1.5 ${isLocked ? 'opacity-40 pointer-events-none select-none' : ''}`}>
+                    {execs.map((exec: any) => (
                       <Card key={exec.id} className={exec.status === 'completed' ? 'border-green-500/30 bg-green-500/5' : ''}>
                         <CardContent className="p-3">
                           <div className="flex items-center gap-3">
@@ -267,7 +463,7 @@ export default function PromotorRota() {
                             <div className="flex items-center gap-1">
                               {exec.has_rupture && <AlertTriangle className="h-3.5 w-3.5 text-red-500" />}
                               {exec.has_damage && <Archive className="h-3.5 w-3.5 text-orange-500" />}
-                              <button onClick={() => { setSelectedExec(exec); setActionForm({}); }} className="p-1 hover:bg-muted rounded">
+                              <button onClick={() => handleOpenProductActions(exec)} className="p-1 hover:bg-muted rounded">
                                 <MoreVertical className="h-4 w-4 text-muted-foreground" />
                               </button>
                             </div>
@@ -280,7 +476,7 @@ export default function PromotorRota() {
               );
             })}
 
-            {/* Complete Route button (NOT PDV checkout) */}
+            {/* Complete Route button */}
             <Button className="w-full h-12" onClick={() => setShowCompleteRoute(true)} disabled={checkout.isPending}>
               <Check className="h-5 w-5 mr-2" /> Concluir Rota
             </Button>
@@ -377,7 +573,7 @@ export default function PromotorRota() {
           </DialogContent>
         </Dialog>
 
-        {/* Complete Route Dialog (NOT checkout) */}
+        {/* Complete Route Dialog */}
         <Dialog open={showCompleteRoute} onOpenChange={setShowCompleteRoute}>
           <DialogContent className="max-w-sm">
             <DialogHeader><DialogTitle>Concluir Rota</DialogTitle></DialogHeader>
