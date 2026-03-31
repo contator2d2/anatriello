@@ -132,3 +132,21 @@ export function usePromotorPostpone() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['promotor-route'] }),
   });
 }
+
+export function usePromotorSetPointType() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ routeId, catId, point_type }: { routeId: string; catId: string; point_type: string }) =>
+      promotorApi<any>(`/api/merch/promotor/routes/${routeId}/categories/${catId}/point-type`, { method: 'POST', body: { point_type } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['promotor-route'] }),
+  });
+}
+
+export function usePromotorCategoryPhoto() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ routeId, catId, ...data }: { routeId: string; catId: string; photo_url: string; latitude?: number; longitude?: number }) =>
+      promotorApi<any>(`/api/merch/promotor/routes/${routeId}/categories/${catId}/photo`, { method: 'POST', body: data }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['promotor-route'] }),
+  });
+}
