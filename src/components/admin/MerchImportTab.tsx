@@ -127,13 +127,13 @@ export function MerchImportTab() {
             body: {
               auto_create: autoCreate,
               items: parsedData.map((r) => ({
-                brand_name: r.brand_name || r.Marca || "",
-                name: r.name || r.Nome || r.Produto || "",
-                sku: r.sku || r.SKU || r.codigo || "",
+                brand_name: r.brand_name || r.Marca || r.marca || "",
+                name: r.name || r.Nome || r.Produto || r.produto || r.descricao || r["Descrição"] || "",
+                sku: r.sku || r.SKU || r.codigo || r["Código"] || "",
                 barcode: r.barcode || r["Código de Barras"] || r.codigo_barras || "",
-                category_name: r.category_name || r.Categoria || "",
-                subcategory_name: r.subcategory_name || r.Subcategoria || "",
-                image_url: r.image_url || "",
+                category_name: r.category_name || r.Categoria || r.categoria || "",
+                subcategory_name: r.subcategory_name || r.Subcategoria || r.subcategoria || r.category_name || r.Categoria || r.categoria || "",
+                image_url: r.image_url || r.imagem || r.foto || "",
               })),
             },
           });

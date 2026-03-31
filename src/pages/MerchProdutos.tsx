@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
-import { useProducts, useCreateProduct, useUpdateProduct, useDeleteProduct, useBrands, useCategories, useSubcategories, useImportProducts } from "@/hooks/use-merchandising";
+import { useProducts, useCreateProduct, useUpdateProduct, useDeleteProduct, useBulkDeleteProducts, useBrands, useCategories, useSubcategories, useImportProducts } from "@/hooks/use-merchandising";
 import { FileUploadInput } from "@/components/ui/file-upload-input";
 import { Plus, Search, Pencil, Trash2, Package, Upload, Download } from "lucide-react";
 import { toast } from "sonner";
@@ -36,6 +36,7 @@ export default function MerchProdutos() {
   const createProduct = useCreateProduct();
   const updateProduct = useUpdateProduct();
   const deleteProduct = useDeleteProduct();
+  const bulkDeleteProducts = useBulkDeleteProducts();
   const importProducts = useImportProducts();
 
   const openNew = () => { setForm({ ...emptyProduct }); setEditingId(null); setDialogOpen(true); };
@@ -60,20 +61,13 @@ export default function MerchProdutos() {
     if (!selectedIds.size) return;
     if (!confirm(`Excluir ${selectedIds.size} produto(s) selecionado(s)?`)) return;
 
-    let ok = 0;
-    let fail = 0;
-
-    for (const id of selectedIds) {
-      try {
-        await deleteProduct.mutateAsync(id);
-        ok++;
-      } catch {
-        fail++;
-      }
+    try {
+      const result = await bulkDeleteProducts.mutateAsync(Array.from(selectedIds));
+      setSelectedIds(new Set());
+      toast.success(`${result.deleted} excluído(s)`);
+    } catch (e: any) {
+      toast.error(e.message);
     }
-
-    setSelectedIds(new Set());
-    toast.success(`${ok} excluído(s)${fail ? `, ${fail} erro(s)` : ''}`);
   };
 
   const toggleAll = () => {
@@ -96,19 +90,27 @@ export default function MerchProdutos() {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
+      const getValue = (row: Record<string, any>, keys: string[]) => {
+        for (const key of keys) {
+          const value = row[key];
+          if (value !== undefined && value !== null && String(value).trim()) return String(value).trim();
+        }
+        return '';
+      };
+
       const data = await file.arrayBuffer();
       const wb = XLSX.read(data);
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rows: any[] = XLSX.utils.sheet_to_json(ws);
       const items = rows.map(r => ({
-        name: r['nome'] || r['name'] || '',
-        brand_name: r['marca'] || r['brand'] || '',
-        category_name: r['categoria'] || r['category'] || '',
-        subcategory_name: r['subcategoria'] || r['subcategory'] || '',
-        sku: r['sku'] || r['codigo'] || '',
-        barcode: r['codigo_barras'] || r['barcode'] || '',
-        image_url: r['imagem'] || r['image_url'] || '',
-      }));
+        name: getValue(r, ['nome', 'Nome', 'name', 'Name', 'produto', 'Produto', 'descricao', 'Descrição']),
+        brand_name: getValue(r, ['marca', 'Marca', 'brand', 'brand_name']),
+        category_name: getValue(r, ['categoria', 'Categoria', 'category', 'category_name']),
+        subcategory_name: getValue(r, ['subcategoria', 'Subcategoria', 'subcategory', 'subcategory_name']) || getValue(r, ['categoria', 'Categoria', 'category', 'category_name']),
+        sku: getValue(r, ['sku', 'SKU', 'codigo', 'Código']),
+        barcode: getValue(r, ['codigo_barras', 'Código de Barras', 'barcode']),
+        image_url: getValue(r, ['imagem', 'Imagem', 'image_url', 'foto', 'Foto']),
+      })).filter(item => item.name);
       const result = await importProducts.mutateAsync({ items, auto_create: true });
       toast.success(`${result.success} produtos importados`);
       if (result.errors?.length > 0) toast.error(`${result.errors.length} erros na importação`);
