@@ -1,5 +1,6 @@
 import { ReactNode, useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
+import { useBranding } from "@/hooks/use-branding";
 import { Home, FileText, Clock, Upload, Settings, LogOut, Bell, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePromotorNotifications, usePromotorMarkRead, useLocationTracking } from "@/hooks/use-promotor";
