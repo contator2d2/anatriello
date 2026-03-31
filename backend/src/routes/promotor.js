@@ -264,9 +264,9 @@ router.get('/home', authenticatePromotor, async (req, res) => {
       available_pdvs: pdvs,
       settings: settings.rows[0] || { theme: 'auto' },
       schedule_status: {
-        work_schedule: ws,
-        schedule_start: wsParts[0] || '08:00',
-        schedule_end: wsParts[1] || '17:00',
+        work_schedule: `${scheduleStart}-${scheduleEnd}`,
+        schedule_start: scheduleStart,
+        schedule_end: scheduleEnd,
         is_within_schedule: isWithinSchedule,
         has_overtime_approval: hasOvertimeApproval,
         overtime_request: overtimeRequest,
