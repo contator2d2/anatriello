@@ -3952,6 +3952,7 @@ const migrationSteps = [
   { name: 'Meta Message Templates', sql: step41MetaTemplates, critical: false },
   { name: 'RH Module', sql: step42RH, critical: false },
   { name: 'Promotor App (Fase 2)', sql: step43PromotorApp, critical: false },
+  { name: 'Merchandising Phase 4 (Routes)', sql: step44MerchPhase4, critical: false },
 ];
 
 export async function initDatabase() {
