@@ -57,6 +57,20 @@ router.post('/routes', authenticate, async (req, res) => {
             window_start, window_end, estimated_duration_min, priority, visit_type, notes,
             recurrence_type, recurrence_interval, recurrence_until, recurrence_weekdays } = req.body;
 
+    // Resolve effective checklist for this brand when not explicitly passed
+    let effectiveChecklistId = checklist_id || null;
+    if (!effectiveChecklistId && brand_id) {
+      try {
+        const checklistRes = await query(
+          `SELECT id FROM brand_checklists
+           WHERE organization_id=$1 AND brand_id=$2 AND active=true
+           ORDER BY created_at DESC LIMIT 1`,
+          [orgId, brand_id]
+        );
+        effectiveChecklistId = checklistRes.rows[0]?.id || null;
+      } catch { /* brand_checklists may not exist yet */ }
+    }
+
     // Build list of dates to create
     const dates = [];
     const startDate = new Date(visit_date + 'T12:00:00Z');
@@ -74,13 +88,12 @@ router.post('/routes', authenticate, async (req, res) => {
           dates.push(current.toISOString().split('T')[0]);
           current.setDate(current.getDate() + interval);
         } else if (recurrence_type === 'weekly') {
-          // If weekdays specified, create for each selected weekday in that week
           if (recurrence_weekdays && recurrence_weekdays.length > 0) {
             const weekStart = new Date(current);
-            weekStart.setDate(weekStart.getDate() - weekStart.getUTCDay() + 1); // Monday
+            weekStart.setDate(weekStart.getDate() - weekStart.getUTCDay() + 1);
             for (const wd of recurrence_weekdays) {
               const d = new Date(weekStart);
-              d.setDate(d.getDate() + (wd - 1)); // wd: 1=Mon..7=Sun
+              d.setDate(d.getDate() + (wd - 1));
               if (d >= startDate && d <= endDate) {
                 dates.push(d.toISOString().split('T')[0]);
               }
@@ -95,7 +108,6 @@ router.post('/routes', authenticate, async (req, res) => {
           current.setMonth(current.getMonth() + interval);
         }
       }
-      // Deduplicate
       const uniqueDates = [...new Set(dates)];
       dates.length = 0;
       dates.push(...uniqueDates.sort());
@@ -112,16 +124,16 @@ router.post('/routes', authenticate, async (req, res) => {
          visit_date, scheduled_time, window_start, window_end, estimated_duration_min, priority, visit_type,
          recurrence, notes, created_by)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
-        [orgId, promoter_id, supervisor_id, pdv_id, brand_id, checklist_id, d, scheduled_time,
+        [orgId, promoter_id, supervisor_id, pdv_id, brand_id, effectiveChecklistId, d, scheduled_time,
          window_start, window_end, estimated_duration_min || 60, priority || 'normal', visit_type || 'regular',
          recurrence, notes, req.userId]
       );
 
-      // Auto-load products from PDV mix
       try {
         const mixProducts = await query(
-          `SELECT pbp.product_id, p.category_id FROM pdv_brand_products pbp
-           JOIN products p ON p.id = pbp.product_id
+          `SELECT pbp.product_id, p.category_id
+           FROM merch_pdv_brand_products pbp
+           JOIN merch_products p ON p.id = pbp.product_id
            WHERE pbp.pdv_id=$1 AND pbp.brand_id=$2 AND pbp.active=true`,
           [pdv_id, brand_id]
         );
@@ -131,12 +143,12 @@ router.post('/routes', authenticate, async (req, res) => {
             [result.rows[0].id, mp.product_id, mp.category_id]
           );
         }
-      } catch (e) { /* mix table may not exist yet */ }
+      } catch (e) { /* merchandising mix table may not exist yet */ }
 
       created.push(result.rows[0]);
     }
 
-    logInfo('routes.created', { count: created.length, first_id: created[0]?.id });
+    logInfo('routes.created', { count: created.length, first_id: created[0]?.id, checklist_id: effectiveChecklistId });
     res.json(created.length === 1 ? created[0] : { routes: created, count: created.length });
   } catch (err) { logError('routes.create', err); res.status(500).json({ error: 'Erro ao criar rota' }); }
 });
