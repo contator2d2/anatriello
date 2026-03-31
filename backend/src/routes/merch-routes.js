@@ -1178,6 +1178,9 @@ router.put('/promotor/executions/:id', promotorAuth, async (req, res) => {
     const { checked, qty_store, qty_stock, exposure_point, observation, status } = req.body;
     // Calculate qty_total
     const currentExec = await query('SELECT * FROM route_product_executions WHERE id=$1', [req.params.id]);
+    if (!currentExec.rows.length) {
+      return res.status(404).json({ error: 'Execução não encontrada' });
+    }
     const newStore = qty_store !== undefined ? qty_store : (currentExec.rows[0]?.qty_store || 0);
     const newStock = qty_stock !== undefined ? qty_stock : (currentExec.rows[0]?.qty_stock || 0);
     const result = await query(
@@ -1192,16 +1195,23 @@ router.put('/promotor/executions/:id', promotorAuth, async (req, res) => {
     // Update route progress
     if (result.rows.length) {
       const routeId = result.rows[0].route_id;
-      const progress = await query(
-        `SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE status='completed') as done
-         FROM route_product_executions WHERE route_id=$1`, [routeId]
-      );
-      const pct = progress.rows[0].total > 0 ? (progress.rows[0].done / progress.rows[0].total * 100) : 0;
-      await query('UPDATE merch_routes SET progress_pct=$2, updated_at=NOW() WHERE id=$1', [routeId, pct]);
+      try {
+        const progress = await query(
+          `SELECT COUNT(*)::int as total, COUNT(*) FILTER (WHERE status='completed')::int as done
+           FROM route_product_executions WHERE route_id=$1`, [routeId]
+        );
+        const pct = progress.rows[0].total > 0 ? (progress.rows[0].done / progress.rows[0].total * 100) : 0;
+        await query('UPDATE merch_routes SET progress_pct=$2, updated_at=NOW() WHERE id=$1', [routeId, pct]);
+      } catch (progressErr) {
+        logWarn('promotor.exec_update.progress_failed', { routeId, error: progressErr?.message });
+      }
     }
 
     res.json(result.rows[0]);
-  } catch (err) { logError('promotor.exec_update', err); res.status(500).json({ error: 'Erro' }); }
+  } catch (err) {
+    logError('promotor.exec_update', err, { id: req.params.id, body: req.body, employeeId: req.employeeId });
+    res.status(500).json({ error: err?.message || 'Erro ao atualizar execução' });
+  }
 });
 
 // Promotor: Add validity entry
