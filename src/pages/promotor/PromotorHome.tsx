@@ -441,6 +441,26 @@ export default function PromotorHome() {
           </>
         )}
 
+        {/* PDV Checkout Pending */}
+        {pdvsNeedingCheckout.length > 0 && (
+          <div className="space-y-2">
+            {pdvsNeedingCheckout.map(pdv => (
+              <Card key={pdv.pdv_id} className="border-primary/40 bg-primary/5">
+                <CardContent className="p-3 flex items-center gap-3">
+                  <Store className="h-6 w-6 text-primary flex-shrink-0" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">{pdv.pdv_name}</p>
+                    <p className="text-[10px] text-muted-foreground">Todas as rotas concluídas — checkout pendente</p>
+                  </div>
+                  <Button size="sm" onClick={() => { setShowPdvCheckout(true); setActionPdv(pdv); }}>
+                    Checkout
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+
         {/* Quick actions */}
         <div className="grid grid-cols-2 gap-3">
           <Card className="cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => navigate('/promotor/documentos')}>
