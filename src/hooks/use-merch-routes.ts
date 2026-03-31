@@ -206,3 +206,11 @@ export function useRouteAssignmentHistory(routeId?: string) {
     enabled: !!routeId,
   });
 }
+
+// Promoters Team (admin)
+export function useMerchPromoters() {
+  return useQuery({
+    queryKey: ['merch-promoters-team'],
+    queryFn: () => api<any[]>('/api/merch/promoters-team'),
+  });
+}

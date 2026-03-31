@@ -999,4 +999,32 @@ router.post('/promotor/postpone', promotorAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: 'Erro' }); }
 });
 
+// ===== PROMOTER TEAM LIST (admin) =====
+router.get('/promoters-team', authenticate, async (req, res) => {
+  try {
+    const orgRes = await query('SELECT organization_id FROM organization_members WHERE user_id=$1 LIMIT 1', [req.userId]);
+    if (!orgRes.rows.length) return res.status(403).json({ error: 'Sem organização' });
+    const orgId = orgRes.rows[0].organization_id;
+
+    const result = await query(
+      `SELECT e.id, e.full_name, e.position, e.photo_url, e.worker_profile,
+              e.direct_manager_id as supervisor_id,
+              sv.full_name as supervisor_name,
+              (SELECT COUNT(*) FROM merch_routes mr WHERE mr.promoter_id = e.id AND mr.visit_date >= CURRENT_DATE - interval '30 days') as total_routes,
+              (SELECT COUNT(DISTINCT mr.brand_id) FROM merch_routes mr WHERE mr.promoter_id = e.id AND mr.visit_date >= CURRENT_DATE - interval '90 days') as active_brands,
+              (SELECT COUNT(DISTINCT mr.pdv_id) FROM merch_routes mr WHERE mr.promoter_id = e.id AND mr.visit_date >= CURRENT_DATE - interval '90 days') as active_pdvs
+       FROM employees e
+       LEFT JOIN employees sv ON sv.id = e.direct_manager_id
+       WHERE e.organization_id = $1 AND e.worker_profile IN ('promotor','operacional') AND e.status = 'ativo'
+       ORDER BY sv.full_name NULLS LAST, e.full_name`,
+      [orgId]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    logError('merch.promoters-team', err);
+    if (err.code === '42P01') return res.json([]);
+    res.status(500).json({ error: 'Erro' });
+  }
+});
+
 export default router;
