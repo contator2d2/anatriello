@@ -93,6 +93,7 @@ export function PromotorLayout({ children }: PromotorLayoutProps) {
           <div className="flex items-center justify-between h-14 px-4 max-w-lg mx-auto">
             <h2 className="text-sm font-bold text-foreground truncate">
               {navItems.find(i => location.pathname === i.path)?.label || 'Promotor'}
+              {branding.company_name && <span className="text-xs font-normal text-muted-foreground ml-2">· {branding.company_name}</span>}
             </h2>
             <button
               onClick={() => setShowNotifications(!showNotifications)}
