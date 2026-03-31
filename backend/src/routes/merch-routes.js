@@ -481,8 +481,8 @@ router.get('/promotor/routes/:id', promotorAuth, async (req, res) => {
        bc.require_checkin_photo, bc.require_checkout_photo, bc.require_stock_count,
        bc.require_validity_check, bc.require_extra_point
        FROM merch_routes r
-       JOIN pdvs p ON p.id = r.pdv_id
-       JOIN brands b ON b.id = r.brand_id
+       LEFT JOIN pdvs p ON p.id = r.pdv_id
+       LEFT JOIN brands b ON b.id = r.brand_id
        LEFT JOIN brand_checklists bc ON bc.id = r.checklist_id
        WHERE r.id=$1 AND r.promoter_id=$2`, [req.params.id, req.employeeId]
     );
