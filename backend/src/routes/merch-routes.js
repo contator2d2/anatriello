@@ -220,13 +220,29 @@ router.put('/routes/:id', authenticate, async (req, res) => {
   } catch (err) { logError('routes.update', err); res.status(500).json({ error: 'Erro ao atualizar rota' }); }
 });
 
-// Delete route
+// Delete route (supports scope: 'single' | 'future')
 router.delete('/routes/:id', authenticate, async (req, res) => {
   try {
     const orgRes = await query('SELECT organization_id FROM organization_members WHERE user_id=$1 LIMIT 1', [req.userId]);
     if (!orgRes.rows.length) return res.status(403).json({ error: 'Sem organização' });
-    await query('DELETE FROM merch_routes WHERE id=$1 AND organization_id=$2', [req.params.id, orgRes.rows[0].organization_id]);
-    res.json({ ok: true });
+    const orgId = orgRes.rows[0].organization_id;
+    const scope = req.query.scope || 'single';
+
+    if (scope === 'future') {
+      // Find current route to get its siblings
+      const current = await query('SELECT * FROM merch_routes WHERE id=$1 AND organization_id=$2', [req.params.id, orgId]);
+      if (!current.rows.length) return res.status(404).json({ error: 'Rota não encontrada' });
+      const r = current.rows[0];
+      const result = await query(
+        `DELETE FROM merch_routes WHERE organization_id=$1 AND promoter_id=$2 AND pdv_id=$3 AND brand_id=$4
+         AND visit_date >= $5 AND status IN ('scheduled','confirmed')`,
+        [orgId, r.promoter_id, r.pdv_id, r.brand_id, r.visit_date]
+      );
+      res.json({ ok: true, deleted: result.rowCount });
+    } else {
+      await query('DELETE FROM merch_routes WHERE id=$1 AND organization_id=$2', [req.params.id, orgId]);
+      res.json({ ok: true });
+    }
   } catch (err) { logError('routes.delete', err); res.status(500).json({ error: 'Erro' }); }
 });
 
