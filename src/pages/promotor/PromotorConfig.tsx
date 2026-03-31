@@ -62,6 +62,22 @@ export default function PromotorConfig() {
     return () => { window.removeEventListener('online', onOn); window.removeEventListener('offline', onOff); clearInterval(pwaInterval); };
   }, []);
 
+  // Apply theme to document
+  useEffect(() => {
+    const root = document.documentElement;
+    let effective: 'light' | 'dark';
+    if (theme === 'claro') {
+      effective = 'light';
+    } else if (theme === 'escuro') {
+      effective = 'dark';
+    } else {
+      effective = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+    root.classList.remove('light', 'dark');
+    root.classList.add(effective);
+    localStorage.setItem('promotor-theme', theme);
+  }, [theme]);
+
   const handleSaveSettings = async () => {
     try {
       await updateSettings.mutateAsync({ theme, notifications_enabled: notifications });

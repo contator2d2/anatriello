@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -6,13 +6,14 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { usePromotorHome, usePromotorPunch, usePromotorOvertimeRequest } from "@/hooks/use-promotor";
+import { CameraCapture } from "@/components/promotor/CameraCapture";
 import { PromotorLayout } from "./PromotorLayout";
 import {
   Clock, FileText, Bell, MapPin, Wifi, WifiOff, Navigation, AlertTriangle, CheckCircle2,
-  Loader2, ShieldAlert, Timer, ChevronRight, PlayCircle, Package
+  Loader2, ShieldAlert, Timer, ChevronRight, PlayCircle, Package, Store
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
