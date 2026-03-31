@@ -212,7 +212,8 @@ app.post('/api/meta/webhook', async (req, res) => {
 
     for (const entry of (body.entry || [])) {
       for (const change of (entry.changes || [])) {
-        if (change.field !== 'messages') continue;
+        // Accept both 'messages' and 'message_echoes' fields
+        if (change.field !== 'messages' && change.field !== 'message_echoes') continue;
         const value = change.value;
         if (!value) continue;
 
@@ -235,6 +236,13 @@ app.post('/api/meta/webhook', async (req, res) => {
         for (const message of (value.messages || [])) {
           try {
             const from = message.from; // sender phone
+            
+            // Skip outbound echoes (messages sent by us) to avoid duplicates
+            if (change.field === 'message_echoes') {
+              console.log(`[Meta Webhook] Echo received for message ${message.id}, skipping inbound processing`);
+              continue;
+            }
+
             const msgType = message.type;
             let content = '';
             let mediaUrl = null;

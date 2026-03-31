@@ -61,12 +61,17 @@ async function resolveWapiToken(connection) {
 export function detectProvider(connection) {
   const provider = String(connection?.provider || '').toLowerCase();
 
+  // Meta Cloud API
+  if (provider === 'meta' || connection?.meta_token) {
+    return 'meta';
+  }
+
   // Direct Instance ID é sempre W-API no sistema atual
   if (connection?.instance_id) {
     return 'wapi';
   }
 
-  if (provider === 'wapi' || provider === 'evolution') {
+  if (provider === 'wapi' || provider === 'evolution' || provider === 'meta') {
     return provider;
   }
 
@@ -83,6 +88,11 @@ export async function checkStatus(connection) {
   if (provider === 'wapi') {
     const resolvedToken = await resolveWapiToken(connection);
     return wapiProvider.checkStatus(connection.instance_id, resolvedToken);
+  }
+
+  // Meta Cloud API - always "connected" if token exists
+  if (provider === 'meta') {
+    return { status: connection.meta_token ? 'connected' : 'disconnected' };
   }
 
   // Evolution API
@@ -252,6 +262,123 @@ export async function sendMessage(connection, phone, content, messageType, media
       return result;
     } catch (error) {
       logError('whatsapp.send_message_wapi_exception', error, {
+        connection_id: connection.id,
+        duration_ms: Date.now() - startedAt,
+      });
+      return { success: false, error: error.message };
+    }
+  }
+
+  // Meta Cloud API
+  if (provider === 'meta') {
+    try {
+      const phoneNumberId = connection.meta_phone_number_id;
+      const metaToken = connection.meta_token;
+
+      if (!phoneNumberId || !metaToken) {
+        logError('whatsapp.send_message_meta_missing_config', null, {
+          connection_id: connection.id,
+          has_phone_number_id: Boolean(phoneNumberId),
+          has_token: Boolean(metaToken),
+        });
+        return { success: false, error: 'Conexão Meta sem token ou phone_number_id' };
+      }
+
+      const META_GRAPH_URL = 'https://graph.facebook.com/v21.0';
+      let metaBody;
+
+      if (messageType === 'text' || !messageType) {
+        metaBody = {
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: phone.replace(/\D/g, ''),
+          type: 'text',
+          text: { preview_url: true, body: content },
+        };
+      } else if (messageType === 'image') {
+        metaBody = {
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: phone.replace(/\D/g, ''),
+          type: 'image',
+          image: { link: mediaUrl, ...(content ? { caption: content } : {}) },
+        };
+      } else if (messageType === 'video') {
+        metaBody = {
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: phone.replace(/\D/g, ''),
+          type: 'video',
+          video: { link: mediaUrl, ...(content ? { caption: content } : {}) },
+        };
+      } else if (messageType === 'audio') {
+        metaBody = {
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: phone.replace(/\D/g, ''),
+          type: 'audio',
+          audio: { link: mediaUrl },
+        };
+      } else if (messageType === 'document') {
+        metaBody = {
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: phone.replace(/\D/g, ''),
+          type: 'document',
+          document: { link: mediaUrl, ...(content ? { caption: content } : {}) },
+        };
+      } else {
+        // Fallback to text
+        metaBody = {
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: phone.replace(/\D/g, ''),
+          type: 'text',
+          text: { preview_url: true, body: content || `[${messageType}]` },
+        };
+      }
+
+      logInfo('whatsapp.send_message_meta_request', {
+        connection_id: connection.id,
+        phone_number_id: phoneNumberId,
+        type: metaBody.type,
+        to: metaBody.to,
+      });
+
+      const response = await fetch(`${META_GRAPH_URL}/${phoneNumberId}/messages`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${metaToken}`,
+        },
+        body: JSON.stringify(metaBody),
+      });
+
+      const responseData = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        const errorMsg = responseData?.error?.message || responseData?.error?.error_data?.details || `HTTP ${response.status}`;
+        logError('whatsapp.send_message_meta_api_error', null, {
+          connection_id: connection.id,
+          status: response.status,
+          error: errorMsg,
+          error_code: responseData?.error?.code,
+          error_subcode: responseData?.error?.error_subcode,
+          duration_ms: Date.now() - startedAt,
+        });
+        return { success: false, error: errorMsg };
+      }
+
+      const messageId = responseData?.messages?.[0]?.id;
+      logInfo('whatsapp.send_message_meta_success', {
+        connection_id: connection.id,
+        message_id: messageId,
+        duration_ms: Date.now() - startedAt,
+      });
+
+      return { success: true, messageId };
+    } catch (error) {
+      logError('whatsapp.send_message_meta_exception', error, {
         connection_id: connection.id,
         duration_ms: Date.now() - startedAt,
       });
