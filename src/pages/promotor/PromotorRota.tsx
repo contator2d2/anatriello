@@ -49,43 +49,58 @@ const usePromotorPdvCheckout = () => {
 };
 
 // ===== Category Preparation Component =====
-function CategoryPreparation({ category, routeId, pdvName, brandName, promotorName, qualityConfig, onUnlocked }: {
-  category: any; routeId: string; pdvName: string; brandName: string; promotorName?: string; qualityConfig?: PhotoQualityConfig; onUnlocked: () => void;
+function CategoryPreparation({ category, catId, categoryName, routeId, pdvName, brandName, promotorName, qualityConfig, onUnlocked }: {
+  category: any; catId: string; categoryName: string; routeId: string; pdvName: string; brandName: string; promotorName?: string; qualityConfig?: PhotoQualityConfig; onUnlocked: () => void;
 }) {
   const setPointType = usePromotorSetPointType();
   const setCategoryPhoto = usePromotorCategoryPhoto();
-  const [photoUrl, setPhotoUrl] = useState('');
+  const [photos, setPhotos] = useState<string[]>([]);
+  const [isSending, setIsSending] = useState(false);
 
-  const hasPointType = !!category.point_type;
-  const hasPhoto = !!category.category_before_photo;
-  const isUnlocked = category.products_unlocked;
+  // category may be null/undefined if no merch_execution_categories entry exists yet
+  const hasPointType = !!category?.point_type;
+  const hasPhoto = !!category?.category_before_photo;
+  const isUnlocked = !!category?.products_unlocked;
+  const photoCount = photos.length + (hasPhoto ? 1 : 0);
 
   const handleSetPointType = (type: string) => {
-    setPointType.mutate({ routeId, catId: category.category_id, point_type: type }, {
-      onSuccess: () => toast.success(`Ponto ${type === 'natural' ? 'Natural' : 'Extra'} selecionado`),
+    setPointType.mutate({ routeId, catId, point_type: type }, {
+      onSuccess: () => { toast.success(`Ponto ${type === 'natural' ? 'Natural' : 'Extra'} selecionado`); onUnlocked(); },
       onError: (err: any) => toast.error(err.message),
     });
   };
 
   const handleUploadPhoto = async () => {
-    if (!photoUrl) return toast.error('É necessário tirar a foto da categoria antes de acessar os produtos.');
+    if (photos.length === 0) return toast.error('É necessário tirar pelo menos 1 foto da categoria.');
+    setIsSending(true);
     try {
       const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
         navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000 })
       ).catch(() => null);
+
+      // Send the first photo as the main category photo (unlocks products)
       setCategoryPhoto.mutate({
-        routeId, catId: category.category_id, photo_url: photoUrl,
+        routeId, catId, photo_url: photos[0],
         latitude: pos?.coords.latitude, longitude: pos?.coords.longitude,
       }, {
-        onSuccess: () => { toast.success('Foto registrada! Produtos liberados.'); onUnlocked(); },
-        onError: (err: any) => toast.error(err.message),
+        onSuccess: () => {
+          toast.success(`${photos.length} foto(s) registrada(s)! Produtos liberados.`);
+          setPhotos([]);
+          onUnlocked();
+        },
+        onError: (err: any) => { toast.error(err.message); setIsSending(false); },
       });
     } catch {
-      setCategoryPhoto.mutate({ routeId, catId: category.category_id, photo_url: photoUrl }, {
-        onSuccess: () => { toast.success('Foto registrada!'); onUnlocked(); },
-        onError: (err: any) => toast.error(err.message),
-      });
+      setIsSending(false);
     }
+  };
+
+  const handleAddPhoto = (url: string) => {
+    setPhotos(prev => [...prev, url]);
+  };
+
+  const handleRemovePhoto = (index: number) => {
+    setPhotos(prev => prev.filter((_, i) => i !== index));
   };
 
   if (isUnlocked) return null;
@@ -97,21 +112,21 @@ function CategoryPreparation({ category, routeId, pdvName, brandName, promotorNa
         <div className="flex items-center gap-2 text-sm">
           <Target className="h-4 w-4 text-primary" />
           <div>
-            <span className="font-bold">{category.category_name}</span>
+            <span className="font-bold">{categoryName}</span>
             <span className="text-muted-foreground ml-2">• {pdvName} • {brandName}</span>
           </div>
         </div>
 
         {/* Step indicator */}
-        <div className="flex items-center gap-2 text-[11px]">
+        <div className="flex items-center gap-2 text-[11px] flex-wrap">
           <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full ${hasPointType ? 'bg-green-500/20 text-green-700' : 'bg-yellow-500/20 text-yellow-700'}`}>
             {hasPointType ? <CheckCircle2 className="h-3 w-3" /> : <span className="font-bold">1</span>}
             Tipo de Ponto
           </div>
           <ChevronRight className="h-3 w-3 text-muted-foreground" />
-          <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full ${hasPhoto ? 'bg-green-500/20 text-green-700' : hasPointType ? 'bg-yellow-500/20 text-yellow-700' : 'bg-muted text-muted-foreground'}`}>
-            {hasPhoto ? <CheckCircle2 className="h-3 w-3" /> : <span className="font-bold">2</span>}
-            Foto Categoria
+          <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full ${(hasPhoto || photos.length > 0) ? 'bg-green-500/20 text-green-700' : hasPointType ? 'bg-yellow-500/20 text-yellow-700' : 'bg-muted text-muted-foreground'}`}>
+            {(hasPhoto || photos.length > 0) ? <CheckCircle2 className="h-3 w-3" /> : <span className="font-bold">2</span>}
+            Foto{photoCount > 1 ? `s (${photoCount})` : ''}
           </div>
           <ChevronRight className="h-3 w-3 text-muted-foreground" />
           <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
@@ -144,51 +159,68 @@ function CategoryPreparation({ category, routeId, pdvName, brandName, promotorNa
         )}
 
         {/* Show selected point type */}
-        {hasPointType && !hasPhoto && (
+        {hasPointType && (
           <div className="flex items-center gap-2 text-xs">
-            <Badge variant="secondary">{category.point_type === 'natural' ? '📍 Ponto Natural' : '🎯 Ponto Extra'}</Badge>
+            <Badge variant="secondary">{category?.point_type === 'natural' ? '📍 Ponto Natural' : '🎯 Ponto Extra'}</Badge>
           </div>
         )}
 
-        {/* Bloco 3: Photo */}
+        {/* Bloco 3: Photos (multiple) */}
         {hasPointType && !hasPhoto && (
           <div className="space-y-2">
             <Label className="text-xs font-semibold flex items-center gap-1">
               <Camera className="h-3.5 w-3.5" /> Foto obrigatória da categoria (ANTES da execução)
             </Label>
-            {photoUrl ? (
-              <div className="space-y-2">
-                <img src={photoUrl} alt="Foto categoria" className="w-full rounded-lg border max-h-48 object-cover" />
-                <Button className="w-full" onClick={handleUploadPhoto} disabled={setCategoryPhoto.isPending}>
-                  <ImagePlus className="h-4 w-4 mr-2" />
-                  {setCategoryPhoto.isPending ? 'Enviando...' : 'Registrar foto e liberar produtos'}
-                </Button>
+            <p className="text-[10px] text-muted-foreground">Mínimo 1 foto. Você pode tirar mais fotos adicionais.</p>
+
+            {/* Captured photos grid */}
+            {photos.length > 0 && (
+              <div className="grid grid-cols-3 gap-2">
+                {photos.map((url, i) => (
+                  <div key={i} className="relative group">
+                    <img src={url} alt={`Foto ${i + 1}`} className="w-full h-20 rounded-lg border object-cover" />
+                    <button
+                      onClick={() => handleRemovePhoto(i)}
+                      className="absolute top-1 right-1 bg-destructive text-destructive-foreground rounded-full w-5 h-5 flex items-center justify-center text-[10px] opacity-0 group-hover:opacity-100 transition-opacity"
+                    >✕</button>
+                    <div className="absolute bottom-1 left-1 bg-background/80 rounded px-1 text-[9px] font-medium">
+                      {i === 0 ? 'Principal' : `Adicional ${i}`}
+                    </div>
+                  </div>
+                ))}
               </div>
-            ) : (
-              <CameraCapture
-                onCapture={(url) => { setPhotoUrl(url); }}
-                watermark={{ pdvName, brandName, promotorName, photoType: 'Categoria (antes)' }}
-                customTokenGetter={() => localStorage.getItem('promotor_token')}
-                buttonLabel="Tirar foto da categoria"
-                qualityConfig={qualityConfig}
-              />
+            )}
+
+            {/* Camera capture for more photos */}
+            <CameraCapture
+              onCapture={handleAddPhoto}
+              watermark={{ pdvName, brandName, promotorName, photoType: `Categoria (antes) ${photos.length + 1}` }}
+              customTokenGetter={() => localStorage.getItem('promotor_token')}
+              buttonLabel={photos.length === 0 ? 'Tirar foto da categoria' : 'Tirar foto adicional'}
+              qualityConfig={qualityConfig}
+            />
+
+            {/* Submit button */}
+            {photos.length > 0 && (
+              <Button className="w-full" onClick={handleUploadPhoto} disabled={isSending}>
+                <ImagePlus className="h-4 w-4 mr-2" />
+                {isSending ? 'Enviando...' : `Registrar ${photos.length} foto(s) e liberar produtos`}
+              </Button>
             )}
           </div>
         )}
 
         {/* Lock message */}
-        {!isUnlocked && (
-          <div className="flex items-center gap-2 p-2 rounded bg-destructive/10 text-destructive text-xs">
-            <Lock className="h-4 w-4 flex-shrink-0" />
-            <span>
-              {!hasPointType
-                ? 'Selecione se é ponto natural ou extra para continuar.'
-                : !hasPhoto
-                  ? 'É necessário tirar a foto da categoria antes de acessar os produtos.'
-                  : 'Finalize a etapa inicial para continuar.'}
-            </span>
-          </div>
-        )}
+        <div className="flex items-center gap-2 p-2 rounded bg-destructive/10 text-destructive text-xs">
+          <Lock className="h-4 w-4 flex-shrink-0" />
+          <span>
+            {!hasPointType
+              ? 'Antes de iniciar, selecione se é ponto natural ou extra.'
+              : photos.length === 0 && !hasPhoto
+                ? 'É necessário tirar a foto da categoria antes de acessar os produtos.'
+                : 'Registre a(s) foto(s) para liberar os produtos.'}
+          </span>
+        </div>
       </CardContent>
     </Card>
   );
@@ -313,7 +345,8 @@ export default function PromotorRota() {
 
   const handleOpenProduct = useCallback((exec: any) => {
     const catStatus = categoryStatusMap[exec.category_id];
-    if (catStatus && !catStatus.products_unlocked) {
+    // Block if category is not unlocked (including when catStatus is undefined)
+    if (!catStatus?.products_unlocked) {
       toast.error('Finalize a etapa de preparação da categoria antes de executar produtos.');
       return;
     }
@@ -411,7 +444,9 @@ export default function PromotorRota() {
           <div className="space-y-4">
             {Object.entries(groupedExecs).map(([category, { catId, execs }]) => {
               const catStatus = categoryStatusMap[catId];
-              const isLocked = catStatus && !catStatus.products_unlocked;
+              // CRITICAL: Category is locked unless products_unlocked is explicitly true
+              // If catStatus doesn't exist yet or products_unlocked is false/null, it's locked
+              const isLocked = !catStatus?.products_unlocked;
               const doneCount = execs.filter((e: any) => e.status === 'completed').length;
 
               return (
@@ -420,6 +455,8 @@ export default function PromotorRota() {
                   {isLocked && (
                     <CategoryPreparation
                       category={catStatus}
+                      catId={catId}
+                      categoryName={category}
                       routeId={id!}
                       pdvName={route.pdv_name}
                       brandName={route.brand_name}
