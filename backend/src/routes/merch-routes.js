@@ -461,19 +461,43 @@ router.get('/routes/live', authenticate, async (req, res) => {
     if (!orgRes.rows.length) return res.json([]);
     const orgId = orgRes.rows[0].organization_id;
 
+    // Check if supporting tables exist to avoid subquery crashes
+    let hasExecCategories = false;
+    let hasProductExecs = false;
+    try {
+      await query(`SELECT 1 FROM merch_execution_categories LIMIT 0`);
+      hasExecCategories = true;
+    } catch {}
+    try {
+      await query(`SELECT 1 FROM route_product_executions LIMIT 0`);
+      hasProductExecs = true;
+    } catch {}
+
+    const productCountSql = hasProductExecs
+      ? `(SELECT COUNT(*) FROM route_product_executions rpe WHERE rpe.route_id = r.id)`
+      : `0`;
+    const completedCountSql = hasProductExecs
+      ? `(SELECT COUNT(*) FROM route_product_executions rpe WHERE rpe.route_id = r.id AND rpe.status = 'completed')`
+      : `0`;
+    const categoryProgressSql = hasExecCategories
+      ? `(SELECT COALESCE(json_agg(json_build_object(
+                'category_id', mec.category_id,
+                'category_name', COALESCE(mec.category_name,''),
+                'point_type', mec.point_type,
+                'products_unlocked', COALESCE(mec.products_unlocked, false),
+                'completed', COALESCE(mec.completed, false),
+                'before_photo', mec.category_before_photo,
+                'after_photo', mec.category_after_photo
+              )), '[]'::json) FROM merch_execution_categories mec WHERE mec.route_id = r.id)`
+      : `'[]'::json`;
+
     const result = await query(
       `SELECT r.*, e.full_name as promoter_name, p.name as pdv_name, p.city as pdv_city, b.name as brand_name,
-              bc.name as checklist_name,
-              r.checkin_at, r.checkout_at, r.completed_at, r.progress_pct,
-              (SELECT COUNT(*) FROM route_product_executions rpe WHERE rpe.route_id = r.id) as total_products,
-              (SELECT COUNT(*) FROM route_product_executions rpe WHERE rpe.route_id = r.id AND rpe.status = 'completed') as completed_products,
-              (SELECT json_agg(json_build_object(
-                'category_id', mec.category_id,
-                'category_name', mec.category_name,
-                'point_type', mec.point_type,
-                'products_unlocked', mec.products_unlocked,
-                'completed', mec.completed
-              )) FROM merch_execution_categories mec WHERE mec.route_id = r.id) as category_progress
+              COALESCE(bc.name,'') as checklist_name,
+              r.checkin_at, r.checkout_at, r.completed_at, COALESCE(r.progress_pct, 0) as progress_pct,
+              ${productCountSql} as total_products,
+              ${completedCountSql} as completed_products,
+              ${categoryProgressSql} as category_progress
        FROM merch_routes r
        LEFT JOIN employees e ON e.id = r.promoter_id
        LEFT JOIN pdvs p ON p.id = r.pdv_id
@@ -482,7 +506,29 @@ router.get('/routes/live', authenticate, async (req, res) => {
        WHERE r.organization_id=$1 AND r.visit_date = CURRENT_DATE
        ORDER BY CASE r.status WHEN 'in_progress' THEN 0 WHEN 'scheduled' THEN 1 WHEN 'confirmed' THEN 2 ELSE 3 END, r.scheduled_time`, [orgId]
     );
-    res.json(result.rows);
+
+    // Resolve photo URLs to absolute paths
+    const base = (process.env.API_BASE_URL || '').replace(/\/+$/, '');
+    const rows = result.rows.map(r => {
+      // Fix category progress photo URLs
+      if (Array.isArray(r.category_progress)) {
+        r.category_progress = r.category_progress.map(cp => ({
+          ...cp,
+          before_photo: cp.before_photo && !cp.before_photo.startsWith('http') ? `${base}${cp.before_photo.startsWith('/') ? '' : '/'}${cp.before_photo}` : cp.before_photo,
+          after_photo: cp.after_photo && !cp.after_photo.startsWith('http') ? `${base}${cp.after_photo.startsWith('/') ? '' : '/'}${cp.after_photo}` : cp.after_photo,
+        }));
+      }
+      // Fix checkin/checkout photos
+      if (r.checkin_photo && !r.checkin_photo.startsWith('http')) {
+        r.checkin_photo = `${base}${r.checkin_photo.startsWith('/') ? '' : '/'}${r.checkin_photo}`;
+      }
+      if (r.checkout_photo && !r.checkout_photo.startsWith('http')) {
+        r.checkout_photo = `${base}${r.checkout_photo.startsWith('/') ? '' : '/'}${r.checkout_photo}`;
+      }
+      return r;
+    });
+
+    res.json(rows);
   } catch (err) {
     logError('routes.live', err);
     if (err.code === '42P01') return res.json([]);
