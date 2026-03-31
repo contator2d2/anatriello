@@ -190,6 +190,32 @@ router.put('/routes/:id', authenticate, async (req, res) => {
     updates.push(`updated_at=NOW()`);
 
     const result = await query(`UPDATE merch_routes SET ${updates.join(',')} WHERE id=$1 RETURNING *`, params);
+
+    // Re-hydrate products when pdv or brand changed
+    const newPdv = req.body.pdv_id || old.pdv_id;
+    const newBrand = req.body.brand_id || old.brand_id;
+    if (req.body.pdv_id !== undefined || req.body.brand_id !== undefined) {
+      try {
+        // Remove old non-executed products
+        await query(`DELETE FROM route_product_executions WHERE route_id=$1 AND (status IS NULL OR status='pending')`, [req.params.id]);
+        const mixProducts = await query(
+          `SELECT pbp.product_id, p.category_id
+           FROM pdv_brand_products pbp
+           JOIN products p ON p.id = pbp.product_id
+           WHERE pbp.pdv_id=$1 AND pbp.brand_id=$2 AND pbp.active=true`,
+          [newPdv, newBrand]
+        );
+        for (const mp of mixProducts.rows) {
+          await query(
+            `INSERT INTO route_product_executions (route_id, product_id, category_id) VALUES ($1,$2,$3)
+             ON CONFLICT DO NOTHING`,
+            [req.params.id, mp.product_id, mp.category_id]
+          );
+        }
+        logInfo('routes.products_rehydrated', { route_id: req.params.id, count: mixProducts.rows.length });
+      } catch (e) { logError('routes.rehydrate_products', e); }
+    }
+
     res.json(result.rows[0]);
   } catch (err) { logError('routes.update', err); res.status(500).json({ error: 'Erro ao atualizar rota' }); }
 });
