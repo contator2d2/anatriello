@@ -46,6 +46,7 @@ export default function MerchRotas() {
   const [filterStatus, setFilterStatus] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [showAIPlanner, setShowAIPlanner] = useState(false);
+  const [scopeDialog, setScopeDialog] = useState<{ action: 'edit' | 'delete'; data?: any } | null>(null);
 
   // Calculate date range
   const dateRange = useMemo(() => {
@@ -66,6 +67,44 @@ export default function MerchRotas() {
   const updateRoute = useUpdateMerchRoute();
   const deleteRoute = useDeleteMerchRoute();
   const duplicateRoute = useDuplicateMerchRoute();
+
+  // Check if route has future siblings (recurrence)
+  const hasFutureSiblings = (route: any) => {
+    if (!route?.recurrence) return false;
+    const rec = typeof route.recurrence === 'string' ? JSON.parse(route.recurrence) : route.recurrence;
+    return rec?.type && rec.type !== 'none';
+  };
+
+  const handleSaveIntent = (data: any) => {
+    if (selectedRoute?.id && hasFutureSiblings(selectedRoute)) {
+      setScopeDialog({ action: 'edit', data });
+    } else if (selectedRoute?.id) {
+      updateRoute.mutate({ id: selectedRoute.id, ...data }, { onSuccess: () => { toast.success('Rota atualizada'); setSelectedRoute(null); } });
+    } else {
+      createRoute.mutate(data, { onSuccess: () => { toast.success('Rota criada'); setShowCreate(false); } });
+    }
+  };
+
+  const handleDeleteIntent = () => {
+    if (selectedRoute?.id && hasFutureSiblings(selectedRoute)) {
+      setScopeDialog({ action: 'delete' });
+    } else if (selectedRoute?.id) {
+      deleteRoute.mutate({ id: selectedRoute.id }, { onSuccess: () => { toast.success('Rota excluída'); setSelectedRoute(null); } });
+    }
+  };
+
+  const executeScopeAction = (scope: 'single' | 'future') => {
+    if (!selectedRoute?.id) return;
+    if (scopeDialog?.action === 'delete') {
+      deleteRoute.mutate({ id: selectedRoute.id, scope }, {
+        onSuccess: () => { toast.success(scope === 'future' ? 'Rotas futuras excluídas' : 'Rota excluída'); setSelectedRoute(null); setScopeDialog(null); }
+      });
+    } else if (scopeDialog?.action === 'edit' && scopeDialog.data) {
+      updateRoute.mutate({ id: selectedRoute.id, ...scopeDialog.data, _scope: scope }, {
+        onSuccess: () => { toast.success(scope === 'future' ? 'Rotas futuras atualizadas' : 'Rota atualizada'); setSelectedRoute(null); setScopeDialog(null); }
+      });
+    }
+  };
 
   const navigate = (dir: 'prev' | 'next') => {
     if (viewMode === 'month') setCurrentDate(dir === 'next' ? addMonths(currentDate, 1) : subMonths(currentDate, 1));
