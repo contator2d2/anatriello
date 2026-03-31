@@ -318,6 +318,81 @@ function ExtraPointPhotoGate({ catId, categoryName, routeId, pdvName, brandName,
   );
 }
 
+// ===== Category After Photo Gate (required to close/complete category) =====
+function CategoryAfterPhotoGate({ catId, categoryName, routeId, pdvName, brandName, promotorName, qualityConfig, onCompleted }: {
+  catId: string; categoryName: string; routeId: string; pdvName: string; brandName: string; promotorName?: string; qualityConfig?: PhotoQualityConfig; onCompleted: () => void;
+}) {
+  const setCategoryAfterPhoto = usePromotorCategoryAfterPhoto();
+  const [photos, setPhotos] = useState<string[]>([]);
+  const [isSending, setIsSending] = useState(false);
+
+  const handleUpload = async () => {
+    if (photos.length === 0) return toast.error('É necessário tirar pelo menos 1 foto (DEPOIS).');
+    setIsSending(true);
+    try {
+      const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
+        navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000 })
+      ).catch(() => null);
+      setCategoryAfterPhoto.mutate({
+        routeId, catId, photo_url: photos[0],
+        latitude: pos?.coords.latitude, longitude: pos?.coords.longitude,
+      }, {
+        onSuccess: () => { toast.success('Foto DEPOIS registrada! Categoria concluída.'); setPhotos([]); onCompleted(); },
+        onError: (err: any) => { toast.error(err.message); setIsSending(false); },
+      });
+    } catch { setIsSending(false); }
+  };
+
+  return (
+    <Card className="border-green-500/40 bg-green-50/50 mt-2">
+      <CardContent className="p-4 space-y-3">
+        <div className="flex items-center gap-2 text-sm">
+          <Camera className="h-4 w-4 text-green-600" />
+          <div>
+            <span className="font-bold">{categoryName}</span>
+            <Badge variant="secondary" className="ml-2 text-[9px] bg-green-100 text-green-700">Foto DEPOIS</Badge>
+          </div>
+        </div>
+
+        <p className="text-[10px] text-muted-foreground">
+          Tire a foto da categoria <b>DEPOIS</b> da execução para concluir esta categoria.
+        </p>
+
+        {photos.length > 0 && (
+          <div className="flex gap-2 flex-wrap">
+            {photos.map((p, i) => (
+              <div key={i} className="relative">
+                <img src={p} alt="" className="w-20 h-20 rounded-lg object-cover border" />
+                <button className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground rounded-full w-5 h-5 flex items-center justify-center text-[10px]"
+                  onClick={() => setPhotos(prev => prev.filter((_, idx) => idx !== i))}>✕</button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <CameraCapture
+          onCapture={(url: string) => setPhotos(prev => [...prev, url])}
+          watermark={{ pdvName, brandName, promotorName, photoType: `Categoria (depois)` }}
+          customTokenGetter={() => localStorage.getItem('promotor_token')}
+          buttonLabel={photos.length > 0 ? 'Tirar mais uma foto' : 'Tirar foto DEPOIS'}
+          qualityConfig={qualityConfig}
+        />
+
+        {photos.length > 0 && (
+          <Button className="w-full" onClick={handleUpload} disabled={isSending || setCategoryAfterPhoto.isPending}>
+            <CheckCircle2 className="h-4 w-4 mr-2" /> {isSending ? 'Enviando...' : 'Registrar e Concluir Categoria'}
+          </Button>
+        )}
+
+        <div className="flex items-center gap-2 p-2 rounded-md bg-green-100/50 text-green-800 text-[11px]">
+          <Camera className="h-4 w-4 flex-shrink-0" />
+          <span>Foto DEPOIS obrigatória para concluir esta categoria.</span>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function PromotorRota() {
   const { id } = useParams();
   const navigate = useNavigate();
