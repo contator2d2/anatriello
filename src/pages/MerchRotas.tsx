@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,8 +8,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Calendar, ChevronLeft, ChevronRight, Plus, MapPin, Clock, User, Eye, Copy, Trash2, Edit, Filter } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Calendar, ChevronLeft, ChevronRight, Plus, MapPin, Clock, User, Eye, Copy, Trash2, Edit, Filter, Repeat } from "lucide-react";
 import { useMerchRoutes, useCreateMerchRoute, useUpdateMerchRoute, useDeleteMerchRoute, useDuplicateMerchRoute, useBrandChecklists } from "@/hooks/use-merch-routes";
+import { useBrands } from "@/hooks/use-merchandising";
 import { usePDVs } from "@/hooks/use-promotor";
 import { useEmployees } from "@/hooks/use-rh";
 import { toast } from "sonner";
@@ -267,19 +269,14 @@ export default function MerchRotas() {
 // Route Form Dialog
 function RouteFormDialog({ open, route, onClose, pdvs, employees, onSave, onDelete, onDuplicate }: any) {
   const [form, setForm] = useState<any>({});
+  const { data: brands = [] } = useBrands();
   const { data: checklists = [] } = useBrandChecklists(form.brand_id);
 
-  // Get unique brands from PDV data
-  const brands = useMemo(() => {
-    const seen = new Set();
-    return (pdvs || []).reduce((acc: any[], p: any) => {
-      // We'll just show brand select - brands come from route data
-      return acc;
-    }, []);
-  }, [pdvs]);
+  const WEEKDAY_LABELS = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
 
-  useState(() => {
+  useEffect(() => {
     if (route) {
+      const rec = route.recurrence ? (typeof route.recurrence === 'string' ? JSON.parse(route.recurrence) : route.recurrence) : null;
       setForm({
         promoter_id: route.promoter_id, supervisor_id: route.supervisor_id,
         pdv_id: route.pdv_id, brand_id: route.brand_id, checklist_id: route.checklist_id,
@@ -287,11 +284,24 @@ function RouteFormDialog({ open, route, onClose, pdvs, employees, onSave, onDele
         window_start: route.window_start, window_end: route.window_end,
         estimated_duration_min: route.estimated_duration_min, priority: route.priority,
         visit_type: route.visit_type, notes: route.notes, status: route.status,
+        recurrence_type: rec?.type || 'none',
+        recurrence_interval: rec?.interval || 1,
+        recurrence_until: rec?.until || '',
+        recurrence_weekdays: rec?.weekdays || [],
       });
     } else {
-      setForm({ visit_date: format(new Date(), 'yyyy-MM-dd'), priority: 'normal', visit_type: 'regular', estimated_duration_min: 60 });
+      setForm({
+        visit_date: format(new Date(), 'yyyy-MM-dd'), priority: 'normal', visit_type: 'regular',
+        estimated_duration_min: 60, recurrence_type: 'none', recurrence_interval: 1,
+        recurrence_weekdays: [], recurrence_until: '',
+      });
     }
-  });
+  }, [route, open]);
+
+  const toggleWeekday = (wd: number) => {
+    const current = form.recurrence_weekdays || [];
+    setForm({ ...form, recurrence_weekdays: current.includes(wd) ? current.filter((d: number) => d !== wd) : [...current, wd] });
+  };
 
   return (
     <Dialog open={open} onOpenChange={() => onClose()}>
@@ -320,9 +330,20 @@ function RouteFormDialog({ open, route, onClose, pdvs, employees, onSave, onDele
               </Select>
             </div>
           </div>
+
+          <div>
+            <Label className="text-xs">Marca *</Label>
+            <Select value={form.brand_id || ''} onValueChange={v => setForm({ ...form, brand_id: v })}>
+              <SelectTrigger><SelectValue placeholder="Selecione a marca" /></SelectTrigger>
+              <SelectContent>
+                {(brands || []).map((b: any) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label className="text-xs">Data *</Label>
+              <Label className="text-xs">Data início *</Label>
               <Input type="date" value={form.visit_date || ''} onChange={e => setForm({ ...form, visit_date: e.target.value })} />
             </div>
             <div>
@@ -330,6 +351,63 @@ function RouteFormDialog({ open, route, onClose, pdvs, employees, onSave, onDele
               <Input type="time" value={form.scheduled_time || ''} onChange={e => setForm({ ...form, scheduled_time: e.target.value })} />
             </div>
           </div>
+
+          {/* Recurrence */}
+          {!route && (
+            <div className="space-y-2 p-3 rounded-lg border bg-muted/30">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Repeat className="h-4 w-4 text-primary" /> Recorrência
+              </div>
+              <Select value={form.recurrence_type || 'none'} onValueChange={v => setForm({ ...form, recurrence_type: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Sem recorrência (única)</SelectItem>
+                  <SelectItem value="daily">Diária</SelectItem>
+                  <SelectItem value="weekly">Semanal</SelectItem>
+                  <SelectItem value="monthly">Mensal</SelectItem>
+                </SelectContent>
+              </Select>
+
+              {form.recurrence_type && form.recurrence_type !== 'none' && (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label className="text-xs">Intervalo</Label>
+                      <Input type="number" min={1} value={form.recurrence_interval || 1}
+                        onChange={e => setForm({ ...form, recurrence_interval: parseInt(e.target.value) || 1 })} />
+                      <span className="text-[10px] text-muted-foreground">
+                        {form.recurrence_type === 'daily' ? 'dia(s)' : form.recurrence_type === 'weekly' ? 'semana(s)' : 'mês(es)'}
+                      </span>
+                    </div>
+                    <div>
+                      <Label className="text-xs">Até (data fim)</Label>
+                      <Input type="date" value={form.recurrence_until || ''}
+                        onChange={e => setForm({ ...form, recurrence_until: e.target.value })} />
+                    </div>
+                  </div>
+
+                  {form.recurrence_type === 'weekly' && (
+                    <div>
+                      <Label className="text-xs mb-1 block">Dias da semana</Label>
+                      <div className="flex gap-1">
+                        {WEEKDAY_LABELS.map((label, i) => {
+                          const wd = i + 1;
+                          const selected = (form.recurrence_weekdays || []).includes(wd);
+                          return (
+                            <button key={wd} type="button" onClick={() => toggleWeekday(wd)}
+                              className={`w-9 h-8 text-xs rounded-md border transition-colors ${selected ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground border-border hover:bg-muted'}`}>
+                              {label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label className="text-xs">Duração (min)</Label>
@@ -382,7 +460,9 @@ function RouteFormDialog({ open, route, onClose, pdvs, employees, onSave, onDele
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={onClose}>Cancelar</Button>
-            <Button onClick={() => onSave(form)}>Salvar</Button>
+            <Button onClick={() => onSave(form)} disabled={!form.promoter_id || !form.pdv_id || !form.brand_id || !form.visit_date}>
+              {form.recurrence_type && form.recurrence_type !== 'none' ? 'Criar Rotas' : 'Salvar'}
+            </Button>
           </div>
         </DialogFooter>
       </DialogContent>
