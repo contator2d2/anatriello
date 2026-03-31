@@ -31,7 +31,7 @@ export default function PromotorAgenda() {
     return { from: format(currentDate, 'yyyy-MM-dd'), to: format(currentDate, 'yyyy-MM-dd') };
   }, [viewMode, currentDate]);
 
-  const { data: routes = [], isLoading } = usePromotorAgenda(dateRange);
+  const { data: routes = [], isLoading } = usePromotorAgenda({ date_from: dateRange.from, date_to: dateRange.to });
 
   const todayRoutes = useMemo(() => {
     const today = format(new Date(), 'yyyy-MM-dd');
