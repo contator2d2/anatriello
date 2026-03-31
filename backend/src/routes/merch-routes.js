@@ -41,7 +41,7 @@ router.get('/routes', authenticate, async (req, res) => {
   } catch (err) { logError('routes.list', err); res.status(500).json({ error: 'Erro ao listar rotas' }); }
 });
 
-// Create route
+// Create route (with recurrence support)
 router.post('/routes', authenticate, async (req, res) => {
   try {
     const orgRes = await query('SELECT organization_id FROM organization_members WHERE user_id=$1 LIMIT 1', [req.userId]);
@@ -49,35 +49,90 @@ router.post('/routes', authenticate, async (req, res) => {
     const orgId = orgRes.rows[0].organization_id;
 
     const { promoter_id, supervisor_id, pdv_id, brand_id, checklist_id, visit_date, scheduled_time,
-            window_start, window_end, estimated_duration_min, priority, visit_type, recurrence, notes } = req.body;
+            window_start, window_end, estimated_duration_min, priority, visit_type, notes,
+            recurrence_type, recurrence_interval, recurrence_until, recurrence_weekdays } = req.body;
 
-    const result = await query(
-      `INSERT INTO merch_routes (organization_id, promoter_id, supervisor_id, pdv_id, brand_id, checklist_id,
-       visit_date, scheduled_time, window_start, window_end, estimated_duration_min, priority, visit_type,
-       recurrence, notes, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
-      [orgId, promoter_id, supervisor_id, pdv_id, brand_id, checklist_id, visit_date, scheduled_time,
-       window_start, window_end, estimated_duration_min || 60, priority || 'normal', visit_type || 'regular',
-       recurrence, notes, req.userId]
-    );
-
-    // Auto-load products from PDV mix
-    const mixProducts = await query(
-      `SELECT pbp.product_id, p.category_id FROM pdv_brand_products pbp
-       JOIN products p ON p.id = pbp.product_id
-       WHERE pbp.pdv_id=$1 AND pbp.brand_id=$2 AND pbp.active=true`,
-      [pdv_id, brand_id]
-    );
-
-    for (const mp of mixProducts.rows) {
-      await query(
-        `INSERT INTO route_product_executions (route_id, product_id, category_id) VALUES ($1,$2,$3)`,
-        [result.rows[0].id, mp.product_id, mp.category_id]
-      );
+    // Build list of dates to create
+    const dates = [];
+    const startDate = new Date(visit_date + 'T12:00:00Z');
+    
+    if (!recurrence_type || recurrence_type === 'none') {
+      dates.push(visit_date);
+    } else {
+      const endDate = recurrence_until ? new Date(recurrence_until + 'T12:00:00Z') : new Date(startDate);
+      if (!recurrence_until) endDate.setMonth(endDate.getMonth() + 3); // default 3 months
+      const interval = recurrence_interval || 1;
+      
+      let current = new Date(startDate);
+      while (current <= endDate) {
+        if (recurrence_type === 'daily') {
+          dates.push(current.toISOString().split('T')[0]);
+          current.setDate(current.getDate() + interval);
+        } else if (recurrence_type === 'weekly') {
+          // If weekdays specified, create for each selected weekday in that week
+          if (recurrence_weekdays && recurrence_weekdays.length > 0) {
+            const weekStart = new Date(current);
+            weekStart.setDate(weekStart.getDate() - weekStart.getUTCDay() + 1); // Monday
+            for (const wd of recurrence_weekdays) {
+              const d = new Date(weekStart);
+              d.setDate(d.getDate() + (wd - 1)); // wd: 1=Mon..7=Sun
+              if (d >= startDate && d <= endDate) {
+                dates.push(d.toISOString().split('T')[0]);
+              }
+            }
+            current.setDate(current.getDate() + 7 * interval);
+          } else {
+            dates.push(current.toISOString().split('T')[0]);
+            current.setDate(current.getDate() + 7 * interval);
+          }
+        } else if (recurrence_type === 'monthly') {
+          dates.push(current.toISOString().split('T')[0]);
+          current.setMonth(current.getMonth() + interval);
+        }
+      }
+      // Deduplicate
+      const uniqueDates = [...new Set(dates)];
+      dates.length = 0;
+      dates.push(...uniqueDates.sort());
     }
 
-    logInfo('route.created', { route_id: result.rows[0].id });
-    res.json(result.rows[0]);
+    const recurrence = (recurrence_type && recurrence_type !== 'none')
+      ? JSON.stringify({ type: recurrence_type, interval: recurrence_interval || 1, until: recurrence_until, weekdays: recurrence_weekdays })
+      : null;
+
+    const created = [];
+    for (const d of dates) {
+      const result = await query(
+        `INSERT INTO merch_routes (organization_id, promoter_id, supervisor_id, pdv_id, brand_id, checklist_id,
+         visit_date, scheduled_time, window_start, window_end, estimated_duration_min, priority, visit_type,
+         recurrence, notes, created_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
+        [orgId, promoter_id, supervisor_id, pdv_id, brand_id, checklist_id, d, scheduled_time,
+         window_start, window_end, estimated_duration_min || 60, priority || 'normal', visit_type || 'regular',
+         recurrence, notes, req.userId]
+      );
+
+      // Auto-load products from PDV mix
+      try {
+        const mixProducts = await query(
+          `SELECT pbp.product_id, p.category_id FROM pdv_brand_products pbp
+           JOIN products p ON p.id = pbp.product_id
+           WHERE pbp.pdv_id=$1 AND pbp.brand_id=$2 AND pbp.active=true`,
+          [pdv_id, brand_id]
+        );
+        for (const mp of mixProducts.rows) {
+          await query(
+            `INSERT INTO route_product_executions (route_id, product_id, category_id) VALUES ($1,$2,$3)`,
+            [result.rows[0].id, mp.product_id, mp.category_id]
+          );
+        }
+      } catch (e) { /* mix table may not exist yet */ }
+
+      created.push(result.rows[0]);
+    }
+
+    logInfo('routes.created', { count: created.length, first_id: created[0]?.id });
+    res.json(created.length === 1 ? created[0] : { routes: created, count: created.length });
   } catch (err) { logError('routes.create', err); res.status(500).json({ error: 'Erro ao criar rota' }); }
 });
 
