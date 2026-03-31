@@ -446,6 +446,8 @@ export default function PromotorRota() {
                       routeId={id!}
                       pdvName={route.pdv_name}
                       brandName={route.brand_name}
+                      promotorName={route.promotor_name}
+                      qualityConfig={photoQualityConfig}
                       onUnlocked={() => refetch()}
                     />
                   )}
