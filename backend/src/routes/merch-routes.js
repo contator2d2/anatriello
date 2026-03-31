@@ -950,6 +950,10 @@ async function ensureExecutionCategoryTables() {
     await query(`ALTER TABLE merch_execution_categories ADD COLUMN IF NOT EXISTS category_photo_longitude DOUBLE PRECISION`);
     await query(`ALTER TABLE merch_execution_categories ADD COLUMN IF NOT EXISTS products_unlocked BOOLEAN DEFAULT false`);
     await query(`ALTER TABLE merch_execution_categories ADD COLUMN IF NOT EXISTS unlocked_at TIMESTAMPTZ`);
+    await query(`ALTER TABLE merch_execution_categories ADD COLUMN IF NOT EXISTS category_after_photo TEXT`);
+    await query(`ALTER TABLE merch_execution_categories ADD COLUMN IF NOT EXISTS category_after_photo_at TIMESTAMPTZ`);
+    await query(`ALTER TABLE merch_execution_categories ADD COLUMN IF NOT EXISTS category_after_photo_latitude DOUBLE PRECISION`);
+    await query(`ALTER TABLE merch_execution_categories ADD COLUMN IF NOT EXISTS category_after_photo_longitude DOUBLE PRECISION`);
     await query(`ALTER TABLE merch_execution_categories ADD COLUMN IF NOT EXISTS completed BOOLEAN DEFAULT false`);
     await query(`ALTER TABLE merch_execution_categories ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ`);
     await query(`ALTER TABLE merch_execution_categories ADD COLUMN IF NOT EXISTS performed_by UUID`);
