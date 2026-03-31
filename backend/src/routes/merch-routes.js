@@ -1228,8 +1228,20 @@ router.post('/promotor/executions/:id/discard', promotorAuth, async (req, res) =
 // Promotor: Set category point type
 router.post('/promotor/routes/:routeId/categories/:catId/point-type', promotorAuth, async (req, res) => {
   try {
-    const { point_type } = req.body;
-    if (!['natural', 'extra'].includes(point_type)) return res.status(400).json({ error: 'Tipo de ponto inválido. Use: natural ou extra' });
+    const rawPointType = req.body?.point_type ?? req.body?.pointType;
+    const normalizedPointType = String(rawPointType || '').trim().toLowerCase();
+    const point_type = normalizedPointType === 'natural' || normalizedPointType === 'extra'
+      ? normalizedPointType
+      : normalizedPointType === 'ponto natural' || normalizedPointType === 'natural_point'
+        ? 'natural'
+        : normalizedPointType === 'ponto extra' || normalizedPointType === 'extra_point'
+          ? 'extra'
+          : null;
+
+    if (!point_type) {
+      return res.status(400).json({ error: 'Tipo de ponto inválido. Use: natural ou extra' });
+    }
+
     const result = await query(
       `UPDATE merch_execution_categories SET point_type=$3, point_type_at=NOW(), performed_by=$4, updated_at=NOW()
        WHERE route_id=$1 AND category_id=$2 RETURNING *`,
@@ -1237,14 +1249,18 @@ router.post('/promotor/routes/:routeId/categories/:catId/point-type', promotorAu
     );
     if (!result.rows.length) return res.status(404).json({ error: 'Categoria não encontrada nesta rota' });
 
-    await query(
-      `INSERT INTO route_execution_logs (route_id, action, details, performed_by, source)
-       VALUES ($1,'category_point_type',$2,$3,'app')`,
-      [req.params.routeId, JSON.stringify({ category_id: req.params.catId, point_type }), req.employeeId]
-    );
+    try {
+      await query(
+        `INSERT INTO route_execution_logs (route_id, action, details, performed_by, source)
+         VALUES ($1,'category_point_type',$2,$3,'app')`,
+        [req.params.routeId, JSON.stringify({ category_id: req.params.catId, point_type, received_body: req.body }), req.employeeId]
+      );
+    } catch (logErr) {
+      logWarn('promotor.cat_point_type.log_failed', { routeId: req.params.routeId, catId: req.params.catId, error: logErr?.message });
+    }
 
     res.json(result.rows[0]);
-  } catch (err) { logError('promotor.cat_point_type', err); res.status(500).json({ error: 'Erro' }); }
+  } catch (err) { logError('promotor.cat_point_type', err, { routeId: req.params.routeId, catId: req.params.catId, body: req.body }); res.status(500).json({ error: 'Erro' }); }
 });
 
 // Promotor: Upload category before photo
