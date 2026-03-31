@@ -126,17 +126,17 @@ export default function MerchRotas() {
         {showFilters && (
           <Card>
             <CardContent className="p-3 flex flex-wrap gap-3">
-              <Select value={filterPromoter} onValueChange={setFilterPromoter}>
+              <Select value={filterPromoter || "__all__"} onValueChange={(v) => setFilterPromoter(v === "__all__" ? "" : v)}>
                 <SelectTrigger className="w-48"><SelectValue placeholder="Promotor" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Todos</SelectItem>
-                  {employees.map((e: any) => <SelectItem key={e.id} value={e.id}>{e.full_name}</SelectItem>)}
+                  <SelectItem value="__all__">Todos</SelectItem>
+                  {employees.filter((e: any) => e?.id).map((e: any) => <SelectItem key={e.id} value={e.id}>{e.full_name}</SelectItem>)}
                 </SelectContent>
               </Select>
-              <Select value={filterStatus} onValueChange={setFilterStatus}>
+              <Select value={filterStatus || "__all__"} onValueChange={(v) => setFilterStatus(v === "__all__" ? "" : v)}>
                 <SelectTrigger className="w-44"><SelectValue placeholder="Status" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Todos</SelectItem>
+                  <SelectItem value="__all__">Todos</SelectItem>
                   {Object.entries(STATUS_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
                 </SelectContent>
               </Select>

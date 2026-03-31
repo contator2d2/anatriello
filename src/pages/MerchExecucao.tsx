@@ -140,10 +140,10 @@ export default function MerchExecucao() {
 
           <TabsContent value="damages" className="space-y-3">
             <div className="flex gap-2">
-              <Select value={damageFilter} onValueChange={setDamageFilter}>
+              <Select value={damageFilter || "__all__"} onValueChange={(v) => setDamageFilter(v === "__all__" ? "" : v)}>
                 <SelectTrigger className="w-48"><SelectValue placeholder="Filtrar status" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Todos</SelectItem>
+                  <SelectItem value="__all__">Todos</SelectItem>
                   {Object.entries(DAMAGE_STATUS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
                 </SelectContent>
               </Select>
