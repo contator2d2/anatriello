@@ -317,8 +317,8 @@ router.post('/punch', authenticatePromotor, async (req, res) => {
       );
 
       if (!otReq.rows[0]) {
-        const startFmt = scheduleParts[0] || '08:00';
-        const endFmt = scheduleParts[1] || '17:00';
+        const startFmt = schedStartStr;
+        const endFmt = schedEndStr;
         return res.status(403).json({
           error: `Fora do horário de trabalho (${startFmt} - ${endFmt}). Solicite autorização de hora extra ao supervisor.`,
           code: 'OUTSIDE_SCHEDULE',
