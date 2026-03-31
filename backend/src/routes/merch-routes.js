@@ -866,6 +866,41 @@ router.get('/return-requests', authenticate, async (req, res) => {
 
 // ===== PROMOTOR APP ENDPOINTS =====
 
+// Auto-create PDV visit tables
+async function ensurePdvVisitTables() {
+  try {
+    await query(`CREATE TABLE IF NOT EXISTS pdv_visits (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id UUID NOT NULL,
+      promoter_id UUID NOT NULL,
+      pdv_id UUID NOT NULL,
+      visit_date DATE NOT NULL DEFAULT CURRENT_DATE,
+      checkin_at TIMESTAMPTZ, checkin_latitude DOUBLE PRECISION, checkin_longitude DOUBLE PRECISION,
+      checkin_photo_url TEXT, checkin_device TEXT,
+      checkout_at TIMESTAMPTZ, checkout_latitude DOUBLE PRECISION, checkout_longitude DOUBLE PRECISION,
+      checkout_photo_url TEXT,
+      status VARCHAR(20) DEFAULT 'active', notes TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(promoter_id, pdv_id, visit_date)
+    )`);
+    await query(`CREATE TABLE IF NOT EXISTS pdv_visit_routes (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      visit_id UUID NOT NULL, route_id UUID NOT NULL,
+      started_at TIMESTAMPTZ, completed_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(visit_id, route_id)
+    )`);
+    await query(`CREATE TABLE IF NOT EXISTS pdv_visit_timeline (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      visit_id UUID NOT NULL, route_id UUID,
+      event_type VARCHAR(50) NOT NULL, event_data JSONB DEFAULT '{}',
+      performed_by UUID, created_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+  } catch (e) { /* ignore if already exists */ }
+}
+// Run once on load
+ensurePdvVisitTables().catch(() => {});
+
 // Promotor auth middleware
 function promotorAuth(req, res, next) {
   const token = req.headers.authorization?.replace('Bearer ', '');
