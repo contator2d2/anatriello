@@ -1113,8 +1113,12 @@ router.post('/location-update', authenticatePromotor, async (req, res) => {
     if (!latitude || !longitude) return res.status(400).json({ error: 'Coordenadas obrigatórias' });
 
     // Check work schedule - only track during work hours
-    const empRes = await query(`SELECT work_schedule FROM employees WHERE id = $1`, [req.employeeId]);
-    const ws = empRes.rows[0]?.work_schedule || '08:00-17:00';
+    let ws = '08:00-17:00';
+    try {
+      const empRes = await query(`SELECT work_schedule FROM employees WHERE id = $1`, [req.employeeId]);
+      ws = empRes.rows[0]?.work_schedule || ws;
+    } catch (e) { /* table may not exist */ }
+
     const wsParts = String(ws).split('-');
     const now = new Date();
     const currentMin = now.getHours() * 60 + now.getMinutes();
@@ -1126,12 +1130,17 @@ router.post('/location-update', authenticatePromotor, async (req, res) => {
       return res.json({ tracked: false, reason: 'outside_schedule' });
     }
 
-    await query(
-      `INSERT INTO employee_live_locations (organization_id, employee_id, latitude, longitude, accuracy_meters, battery_level, is_moving, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())
-       ON CONFLICT (employee_id) DO UPDATE SET latitude=$3, longitude=$4, accuracy_meters=$5, battery_level=$6, is_moving=$7, updated_at=NOW()`,
-      [req.organizationId, req.employeeId, latitude, longitude, accuracy_meters || null, battery_level || null, is_moving || false]
-    );
+    try {
+      await query(
+        `INSERT INTO employee_live_locations (organization_id, employee_id, latitude, longitude, accuracy_meters, battery_level, is_moving, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())
+         ON CONFLICT (employee_id) DO UPDATE SET latitude=$3, longitude=$4, accuracy_meters=$5, battery_level=$6, is_moving=$7, updated_at=NOW()`,
+        [req.organizationId, req.employeeId, latitude, longitude, accuracy_meters || null, battery_level || null, is_moving || false]
+      );
+    } catch (e) {
+      if (e.code === '42P01') return res.json({ tracked: false, reason: 'table_not_ready' });
+      throw e;
+    }
 
     res.json({ tracked: true });
   } catch (err) {

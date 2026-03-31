@@ -454,8 +454,8 @@ router.get('/promotor/agenda', promotorAuth, async (req, res) => {
                b.name as brand_name, b.logo_url as brand_logo,
                bc.name as checklist_name
                FROM merch_routes r
-               JOIN pdvs p ON p.id = r.pdv_id
-               JOIN brands b ON b.id = r.brand_id
+               LEFT JOIN pdvs p ON p.id = r.pdv_id
+               LEFT JOIN brands b ON b.id = r.brand_id
                LEFT JOIN brand_checklists bc ON bc.id = r.checklist_id
                WHERE r.promoter_id = $1 AND r.organization_id = $2`;
     const params = [req.employeeId, req.orgId];
