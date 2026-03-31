@@ -12,6 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { useProducts, useCreateProduct, useUpdateProduct, useDeleteProduct, useBulkDeleteProducts, useBrands, useCategories, useSubcategories, useImportProducts } from "@/hooks/use-merchandising";
 import { FileUploadInput } from "@/components/ui/file-upload-input";
+import { mapProductImportRow, parseImportFile } from "@/lib/merch-import";
 import { Plus, Search, Pencil, Trash2, Package, Upload, Download } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
@@ -90,30 +91,15 @@ export default function MerchProdutos() {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
-      const getValue = (row: Record<string, any>, keys: string[]) => {
-        for (const key of keys) {
-          const value = row[key];
-          if (value !== undefined && value !== null && String(value).trim()) return String(value).trim();
-        }
-        return '';
-      };
-
-      const data = await file.arrayBuffer();
-      const wb = XLSX.read(data);
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows: any[] = XLSX.utils.sheet_to_json(ws);
-      const items = rows.map(r => ({
-        name: getValue(r, ['nome', 'Nome', 'name', 'Name', 'produto', 'Produto', 'descricao', 'Descrição']),
-        brand_name: getValue(r, ['marca', 'Marca', 'brand', 'brand_name']),
-        category_name: getValue(r, ['categoria', 'Categoria', 'category', 'category_name']),
-        subcategory_name: getValue(r, ['subcategoria', 'Subcategoria', 'subcategory', 'subcategory_name']) || getValue(r, ['categoria', 'Categoria', 'category', 'category_name']),
-        sku: getValue(r, ['sku', 'SKU', 'codigo', 'Código']),
-        barcode: getValue(r, ['codigo_barras', 'Código de Barras', 'barcode']),
-        image_url: getValue(r, ['imagem', 'Imagem', 'image_url', 'foto', 'Foto']),
-      })).filter(item => item.name);
+      const rows = await parseImportFile(file);
+      const items = rows.map(mapProductImportRow).filter(item => item.name);
+      if (!items.length) {
+        toast.error('Nenhuma linha válida de produto foi reconhecida no arquivo');
+        return;
+      }
       const result = await importProducts.mutateAsync({ items, auto_create: true });
-      toast.success(`${result.success} produtos importados`);
-      if (result.errors?.length > 0) toast.error(`${result.errors.length} erros na importação`);
+      if (result.success > 0) toast.success(`${result.success} produtos importados`);
+      if (result.errors?.length > 0) toast.error(`${result.errors.length} erro(s) na importação`);
     } catch (err: any) { toast.error(err.message); }
     if (fileRef.current) fileRef.current.value = '';
   };

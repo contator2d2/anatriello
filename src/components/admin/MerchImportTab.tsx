@@ -9,9 +9,9 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { api } from "@/lib/api";
+import { mapBrandImportRow, mapCategoryImportRow, mapProductImportRow, parseImportFile } from "@/lib/merch-import";
 import { toast } from "sonner";
 import { Upload, FileSpreadsheet, CheckCircle2, XCircle, Loader2, Download, AlertTriangle, Tags, Package, FolderTree } from "lucide-react";
-import * as XLSX from "xlsx";
 
 type ImportType = "brands" | "categories" | "products";
 
@@ -44,38 +44,15 @@ export function MerchImportTab() {
     setFileName(file.name);
     setResult(null);
 
-    const readFileText = async (f: File): Promise<string> => {
-      const buffer = await f.arrayBuffer();
-      try {
-        return new TextDecoder("utf-8", { fatal: true }).decode(buffer);
-      } catch {
-        return new TextDecoder("windows-1252").decode(buffer);
-      }
-    };
-
-    const isCSV = file.name.endsWith(".csv");
-    if (isCSV) {
-      const text = await readFileText(file);
-      const lines = text.split("\n").filter((l) => l.trim());
-      if (lines.length < 2) { toast.error("Arquivo vazio"); return; }
-      const headers = lines[0].split(",").map((h) => h.trim());
-      const rows: ParsedRow[] = [];
-      for (let i = 1; i < lines.length; i++) {
-        const vals = lines[i].split(",").map((v) => v.trim());
-        const row: ParsedRow = {};
-        headers.forEach((h, idx) => { row[h] = vals[idx] || ""; });
-        rows.push(row);
+    try {
+      const rows = await parseImportFile(file);
+      if (!rows.length) {
+        toast.error("Arquivo vazio ou sem linhas válidas");
+        return;
       }
       setParsedData(rows);
-    } else {
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        const wb = XLSX.read(ev.target?.result, { type: "binary" });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const data = XLSX.utils.sheet_to_json<ParsedRow>(ws, { defval: "" });
-        setParsedData(data);
-      };
-      reader.readAsBinaryString(file);
+    } catch (err: any) {
+      toast.error(err.message || "Não foi possível ler o arquivo");
     }
   };
 
@@ -96,52 +73,52 @@ export function MerchImportTab() {
       let res: ImportResult;
       switch (importType) {
         case "brands":
+          {
+            const items = parsedData.map(mapBrandImportRow).filter((item) => item.name);
+            if (!items.length) {
+              toast.error("Nenhuma linha válida de marca foi reconhecida no arquivo");
+              return;
+            }
           res = await api<ImportResult>("/api/merchandising/brands/import", {
             method: "POST",
-            body: {
-              items: parsedData.map((r) => ({
-                name: r.name || r.Nome || r.descricao || "",
-                razao_social: r.razao_social || r["Razão Social"] || "",
-                cnpj: r.cnpj || r.CNPJ || "",
-                phone: r.phone || r.telefone || r.Telefone || "",
-                status: r.status || r.Status || "active",
-              })),
-            },
+            body: { items },
           });
+          }
           break;
         case "categories":
+          {
+            const items = parsedData.map(mapCategoryImportRow).filter((item) => item.name);
+            if (!items.length) {
+              toast.error("Nenhuma linha válida de categoria foi reconhecida no arquivo");
+              return;
+            }
           res = await api<ImportResult>("/api/merchandising/categories/import", {
             method: "POST",
-            body: {
-              items: parsedData.map((r) => ({
-                name: r.Nome || r.name || "",
-                parent: r["Categoria Pai"] || r.parent || undefined,
-                description: r["Descrição"] || r.description || undefined,
-              })),
-            },
+            body: { items },
           });
+          }
           break;
         case "products":
+          {
+            const items = parsedData.map(mapProductImportRow).filter((item) => item.name);
+            if (!items.length) {
+              toast.error("Nenhuma linha válida de produto foi reconhecida no arquivo");
+              return;
+            }
           res = await api<ImportResult>("/api/merchandising/products/import", {
             method: "POST",
             body: {
               auto_create: autoCreate,
-              items: parsedData.map((r) => ({
-                brand_name: r.brand_name || r.Marca || r.marca || "",
-                name: r.name || r.Nome || r.Produto || r.produto || r.descricao || r["Descrição"] || "",
-                sku: r.sku || r.SKU || r.codigo || r["Código"] || "",
-                barcode: r.barcode || r["Código de Barras"] || r.codigo_barras || "",
-                category_name: r.category_name || r.Categoria || r.categoria || "",
-                subcategory_name: r.subcategory_name || r.Subcategoria || r.subcategoria || r.category_name || r.Categoria || r.categoria || "",
-                image_url: r.image_url || r.imagem || r.foto || "",
-              })),
+              items,
             },
           });
+          }
           break;
       }
       setResult(res);
       const total = res.created ?? res.success ?? ((res.categories_created || 0) + (res.subcategories_created || 0));
-      toast.success(`Importação concluída: ${total} registros criados`);
+      if (total > 0) toast.success(`Importação concluída: ${total} registros criados`);
+      else toast.error("Nenhum item novo foi importado");
     } catch (err: any) {
       toast.error(err.message);
     } finally {
