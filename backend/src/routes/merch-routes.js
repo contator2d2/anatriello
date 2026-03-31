@@ -1908,4 +1908,64 @@ router.get('/workload', authenticate, async (req, res) => {
   }
 });
 
+// ===== PHOTO QUALITY CONFIG =====
+
+router.get('/photo-quality-config', authenticate, async (req, res) => {
+  try {
+    const orgRes = await query('SELECT organization_id FROM organization_members WHERE user_id=$1 LIMIT 1', [req.userId]);
+    if (!orgRes.rows.length) return res.status(403).json({ error: 'Sem organização' });
+    const orgId = orgRes.rows[0].organization_id;
+
+    const result = await query(
+      `SELECT config FROM organization_settings WHERE organization_id = $1 AND setting_key = 'photo_quality_config'`,
+      [orgId]
+    );
+    const config = result.rows[0]?.config || {
+      blur_tolerance: 30, min_brightness: 40, max_brightness: 220,
+      min_resolution_w: 640, min_resolution_h: 480,
+      compression_quality: 0.7, max_file_size_kb: 1024,
+    };
+    res.json({ config });
+  } catch (err) {
+    logError('merch.photo-quality-config.get', err);
+    // Return defaults on any error (table might not exist yet)
+    res.json({
+      config: {
+        blur_tolerance: 30, min_brightness: 40, max_brightness: 220,
+        min_resolution_w: 640, min_resolution_h: 480,
+        compression_quality: 0.7, max_file_size_kb: 1024,
+      }
+    });
+  }
+});
+
+router.put('/photo-quality-config', authenticate, async (req, res) => {
+  try {
+    const orgRes = await query('SELECT organization_id FROM organization_members WHERE user_id=$1 LIMIT 1', [req.userId]);
+    if (!orgRes.rows.length) return res.status(403).json({ error: 'Sem organização' });
+    const orgId = orgRes.rows[0].organization_id;
+
+    // Ensure table exists
+    await query(`CREATE TABLE IF NOT EXISTS organization_settings (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id UUID NOT NULL,
+      setting_key TEXT NOT NULL,
+      config JSONB DEFAULT '{}',
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(organization_id, setting_key)
+    )`);
+
+    await query(
+      `INSERT INTO organization_settings (organization_id, setting_key, config, updated_at)
+       VALUES ($1, 'photo_quality_config', $2, NOW())
+       ON CONFLICT (organization_id, setting_key) DO UPDATE SET config = $2, updated_at = NOW()`,
+      [orgId, JSON.stringify(req.body)]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    logError('merch.photo-quality-config.put', err);
+    res.status(500).json({ error: 'Erro ao salvar configuração' });
+  }
+});
+
 export default router;
