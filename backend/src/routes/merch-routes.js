@@ -132,18 +132,20 @@ router.post('/routes', authenticate, async (req, res) => {
       try {
         const mixProducts = await query(
           `SELECT pbp.product_id, p.category_id
-           FROM merch_pdv_brand_products pbp
-           JOIN merch_products p ON p.id = pbp.product_id
+           FROM pdv_brand_products pbp
+           JOIN products p ON p.id = pbp.product_id
            WHERE pbp.pdv_id=$1 AND pbp.brand_id=$2 AND pbp.active=true`,
           [pdv_id, brand_id]
         );
         for (const mp of mixProducts.rows) {
           await query(
-            `INSERT INTO route_product_executions (route_id, product_id, category_id) VALUES ($1,$2,$3)`,
+            `INSERT INTO route_product_executions (route_id, product_id, category_id) VALUES ($1,$2,$3)
+             ON CONFLICT DO NOTHING`,
             [result.rows[0].id, mp.product_id, mp.category_id]
           );
         }
-      } catch (e) { /* merchandising mix table may not exist yet */ }
+        logInfo('routes.products_hydrated', { route_id: result.rows[0].id, count: mixProducts.rows.length });
+      } catch (e) { logError('routes.hydrate_products', e); }
 
       created.push(result.rows[0]);
     }
