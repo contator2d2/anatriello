@@ -69,6 +69,18 @@ export function useDeleteCategory() {
   });
 }
 
+export function useImportCategories() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { items: { name: string; parent?: string; description?: string }[] }) =>
+      api<any>('/api/merchandising/categories/import', { method: 'POST', body: data }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['merch-categories'] });
+      qc.invalidateQueries({ queryKey: ['merch-subcategories'] });
+    },
+  });
+}
+
 // ===== SUBCATEGORIES =====
 export function useSubcategories(categoryId?: string) {
   const params = categoryId ? `?category_id=${categoryId}` : '';
