@@ -115,6 +115,9 @@ export default function MerchRotas() {
             <p className="text-sm text-muted-foreground">Planejamento e acompanhamento de visitas</p>
           </div>
           <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => setShowAIPlanner(true)} className="border-primary/30 text-primary hover:bg-primary/10">
+              <Sparkles className="h-4 w-4 mr-1" /> Planejamento IA
+            </Button>
             <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)}>
               <Filter className="h-4 w-4 mr-1" /> Filtros
             </Button>
