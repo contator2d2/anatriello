@@ -49,8 +49,8 @@ const usePromotorPdvCheckout = () => {
 };
 
 // ===== Category Preparation Component =====
-function CategoryPreparation({ category, routeId, pdvName, brandName, onUnlocked }: {
-  category: any; routeId: string; pdvName: string; brandName: string; onUnlocked: () => void;
+function CategoryPreparation({ category, routeId, pdvName, brandName, promotorName, qualityConfig, onUnlocked }: {
+  category: any; routeId: string; pdvName: string; brandName: string; promotorName?: string; qualityConfig?: PhotoQualityConfig; onUnlocked: () => void;
 }) {
   const setPointType = usePromotorSetPointType();
   const setCategoryPhoto = usePromotorCategoryPhoto();
