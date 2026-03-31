@@ -455,17 +455,16 @@ export default function PromotorRota() {
         {/* Active route: categories with step-by-step flow */}
         {isActive && (
           <div className="space-y-4">
-            {Object.entries(groupedExecs).map(([category, { catId, execs }]) => {
+            {Object.entries(groupedExecs).map(([category, { catId, execs, isExtraGroup }]) => {
               const catStatus = categoryStatusMap[catId];
-              // CRITICAL: Category is locked unless products_unlocked is explicitly true
-              // If catStatus doesn't exist yet or products_unlocked is false/null, it's locked
-              const isLocked = !catStatus?.products_unlocked;
+              // Extra groups are always unlocked (already pre-configured)
+              const isLocked = isExtraGroup ? false : !catStatus?.products_unlocked;
               const doneCount = execs.filter((e: any) => e.status === 'completed').length;
 
               return (
                 <div key={category}>
-                  {/* Category preparation (if locked) */}
-                  {isLocked && (
+                  {/* Category preparation (if locked) - skip for extra groups */}
+                  {isLocked && !isExtraGroup && (
                     <CategoryPreparation
                       category={catStatus}
                       catId={catId}
@@ -482,9 +481,11 @@ export default function PromotorRota() {
                   {/* Category header */}
                   <div className="flex items-center justify-between mb-2 mt-3">
                     <div className="flex items-center gap-2">
-                      {isLocked ? <Lock className="h-4 w-4 text-muted-foreground" /> : <Unlock className="h-4 w-4 text-green-600" />}
+                      {isExtraGroup ? <Target className="h-4 w-4 text-orange-600" /> : isLocked ? <Lock className="h-4 w-4 text-muted-foreground" /> : <Unlock className="h-4 w-4 text-green-600" />}
                       <h3 className="text-sm font-bold">{category}</h3>
-                      {catStatus?.point_type && (
+                      {isExtraGroup ? (
+                        <Badge variant="secondary" className="text-[9px] bg-orange-100 text-orange-700 border-orange-300">🎯 Extra</Badge>
+                      ) : catStatus?.point_type && (
                         <Badge variant="outline" className="text-[9px]">
                           {catStatus.point_type === 'natural' ? '📍 Natural' : '🎯 Extra'}
                         </Badge>
