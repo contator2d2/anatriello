@@ -623,12 +623,15 @@ export default function PromotorRota() {
           <div className="space-y-4">
             {Object.entries(groupedExecs).map(([category, { catId, execs, isExtraGroup }]) => {
               const catStatus = categoryStatusMap[catId];
-              // For extra groups: need photo but NOT point type — check if extra photo exists
-              // We track extra photos via a simple state since they don't have a separate category entry
+              // For extra groups: need photo but NOT point type
               const extraPhotoKey = `extra_${catId}`;
               const hasExtraPhoto = extraGroupPhotos[extraPhotoKey];
               const isLocked = isExtraGroup ? !hasExtraPhoto : !catStatus?.products_unlocked;
               const doneCount = execs.filter((e: any) => e.status === 'completed').length;
+              const allProductsDone = doneCount === execs.length && execs.length > 0;
+              const hasAfterPhoto = !!catStatus?.category_after_photo || !!catStatus?.completed;
+              // Show after photo gate when all products done but no after photo yet
+              const needsAfterPhoto = allProductsDone && !isLocked && !hasAfterPhoto;
 
               return (
                 <div key={category}>
@@ -664,11 +667,14 @@ export default function PromotorRota() {
                   {/* Category header */}
                   <div className="flex items-center justify-between mb-2 mt-3">
                     <div className="flex items-center gap-2">
-                      {isExtraGroup ? <Target className="h-4 w-4 text-orange-600" /> : isLocked ? <Lock className="h-4 w-4 text-muted-foreground" /> : <Unlock className="h-4 w-4 text-green-600" />}
+                      {hasAfterPhoto ? <CheckCircle2 className="h-4 w-4 text-green-600" /> : isExtraGroup ? <Target className="h-4 w-4 text-orange-600" /> : isLocked ? <Lock className="h-4 w-4 text-muted-foreground" /> : <Unlock className="h-4 w-4 text-green-600" />}
                       <h3 className="text-sm font-bold">{category}</h3>
-                      {isExtraGroup ? (
+                      {hasAfterPhoto && (
+                        <Badge variant="secondary" className="text-[9px] bg-green-100 text-green-700">✅ Concluída</Badge>
+                      )}
+                      {isExtraGroup && !hasAfterPhoto ? (
                         <Badge variant="secondary" className="text-[9px] bg-orange-100 text-orange-700 border-orange-300">🎯 Extra</Badge>
-                      ) : catStatus?.point_type && (
+                      ) : !hasAfterPhoto && catStatus?.point_type && (
                         <Badge variant="outline" className="text-[9px]">
                           {catStatus.point_type === 'natural' ? '📍 Natural' : '🎯 Extra'}
                         </Badge>
@@ -706,6 +712,20 @@ export default function PromotorRota() {
                       </Card>
                     ))}
                   </div>
+
+                  {/* After Photo Gate - shown when all products done but category not yet completed */}
+                  {needsAfterPhoto && (
+                    <CategoryAfterPhotoGate
+                      catId={catId}
+                      categoryName={category}
+                      routeId={id!}
+                      pdvName={route.pdv_name}
+                      brandName={route.brand_name}
+                      promotorName={route.promotor_name}
+                      qualityConfig={photoQualityConfig}
+                      onCompleted={() => refetch()}
+                    />
+                  )}
                 </div>
               );
             })}
