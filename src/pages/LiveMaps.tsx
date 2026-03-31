@@ -207,12 +207,24 @@ function LiveMapComponent({ employees, pdvs, regions, showPDVs, showPromoters, s
 
 export default function LiveMaps() {
   const { data, isLoading } = useLiveMapData();
+  const { data: liveRoutes = [] } = useLiveRoutes();
   const [showPDVs, setShowPDVs] = useState(true);
   const [showPromoters, setShowPromoters] = useState(true);
   const [showSupervisors, setShowSupervisors] = useState(true);
   const [showRegions, setShowRegions] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedEmployee, setSelectedEmployee] = useState<any>(null);
+
+  // Build a map of promoter_id -> their routes
+  const routesByPromoter = useMemo(() => {
+    const map: Record<string, any[]> = {};
+    liveRoutes.forEach((r: any) => {
+      if (!r.promoter_id) return;
+      if (!map[r.promoter_id]) map[r.promoter_id] = [];
+      map[r.promoter_id].push(r);
+    });
+    return map;
+  }, [liveRoutes]);
 
   const employees = data?.employees || [];
   const pdvs = data?.pdvs || [];
