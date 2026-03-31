@@ -464,7 +464,11 @@ router.get('/promotor/agenda', promotorAuth, async (req, res) => {
     if (date_to) { sql += ` AND r.visit_date <= $${idx++}`; params.push(date_to); }
     sql += ' ORDER BY r.visit_date, r.scheduled_time';
     res.json((await query(sql, params)).rows);
-  } catch (err) { logError('promotor.agenda', err); res.status(500).json({ error: 'Erro' }); }
+  } catch (err) {
+    logError('promotor.agenda', err);
+    if (err.code === '42P01') return res.json([]);
+    res.status(500).json({ error: 'Erro' });
+  }
 });
 
 // Promotor: Route detail with products
