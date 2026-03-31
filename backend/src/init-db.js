@@ -3907,6 +3907,60 @@ ALTER TABLE employees ADD COLUMN IF NOT EXISTS salary_items JSONB NOT NULL DEFAU
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS benefits JSONB NOT NULL DEFAULT '[]'::jsonb;
 `;
 
+// Step 44: Merchandising Phase 4 - Routes, Execution, Damages
+const step44MerchPhase4 = `
+CREATE TABLE IF NOT EXISTS photo_quality_settings (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL, brand_id UUID, blur_tolerance NUMERIC(5,2) DEFAULT 50, min_brightness NUMERIC(5,2) DEFAULT 30, max_brightness NUMERIC(5,2) DEFAULT 90, compression_quality INTEGER DEFAULT 80, max_file_size_mb NUMERIC(5,2) DEFAULT 5, require_checkin_photo BOOLEAN DEFAULT true, require_category_photo BOOLEAN DEFAULT true, require_checkout_photo BOOLEAN DEFAULT false, watermark_enabled BOOLEAN DEFAULT true, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW());
+
+CREATE TABLE IF NOT EXISTS brand_checklists (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL, brand_id UUID NOT NULL, name VARCHAR(255) NOT NULL, description TEXT, require_checkin_photo BOOLEAN DEFAULT true, require_checkout_photo BOOLEAN DEFAULT false, require_stock_count BOOLEAN DEFAULT false, require_validity_check BOOLEAN DEFAULT false, require_extra_point BOOLEAN DEFAULT false, stock_count_frequency VARCHAR(20) DEFAULT 'every_visit', validity_check_frequency VARCHAR(20) DEFAULT 'every_visit', active BOOLEAN DEFAULT true, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW());
+
+CREATE TABLE IF NOT EXISTS brand_checklist_rules (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), checklist_id UUID, category_id UUID, subcategory_id UUID, product_id UUID, require_photo BOOLEAN DEFAULT false, require_count BOOLEAN DEFAULT false, require_validity BOOLEAN DEFAULT false, require_stock BOOLEAN DEFAULT false, require_extra_point BOOLEAN DEFAULT false, require_observation BOOLEAN DEFAULT false, count_frequency VARCHAR(20) DEFAULT 'every_visit', max_postponements INTEGER DEFAULT 1, is_mandatory BOOLEAN DEFAULT true, sort_order INTEGER DEFAULT 0, created_at TIMESTAMPTZ DEFAULT NOW());
+
+CREATE TABLE IF NOT EXISTS brand_promoter_assignments (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL, brand_id UUID NOT NULL, employee_id UUID NOT NULL, assignment_type VARCHAR(20) DEFAULT 'preferred', active BOOLEAN DEFAULT true, created_at TIMESTAMPTZ DEFAULT NOW());
+
+CREATE TABLE IF NOT EXISTS exposure_point_types (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL, name VARCHAR(100) NOT NULL, code VARCHAR(50) NOT NULL, description TEXT, active BOOLEAN DEFAULT true, created_at TIMESTAMPTZ DEFAULT NOW());
+
+CREATE TABLE IF NOT EXISTS merch_routes (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL, promoter_id UUID NOT NULL, supervisor_id UUID, pdv_id UUID NOT NULL, brand_id UUID NOT NULL, checklist_id UUID, visit_date DATE NOT NULL, scheduled_time TIME, window_start TIME, window_end TIME, estimated_duration_min INTEGER DEFAULT 60, priority VARCHAR(10) DEFAULT 'normal', visit_type VARCHAR(30) DEFAULT 'regular', recurrence VARCHAR(20), recurrence_parent_id UUID, status VARCHAR(30) DEFAULT 'scheduled', notes TEXT, checkin_at TIMESTAMPTZ, checkin_latitude NUMERIC(10,7), checkin_longitude NUMERIC(10,7), checkin_photo_url TEXT, checkin_device TEXT, checkout_at TIMESTAMPTZ, checkout_latitude NUMERIC(10,7), checkout_longitude NUMERIC(10,7), checkout_photo_url TEXT, progress_pct NUMERIC(5,2) DEFAULT 0, completed_at TIMESTAMPTZ, completion_notes TEXT, created_by UUID, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW());
+CREATE INDEX IF NOT EXISTS idx_merch_routes_org ON merch_routes(organization_id);
+CREATE INDEX IF NOT EXISTS idx_merch_routes_promoter ON merch_routes(promoter_id, visit_date);
+CREATE INDEX IF NOT EXISTS idx_merch_routes_status ON merch_routes(status);
+
+CREATE TABLE IF NOT EXISTS route_person_assignments (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), route_id UUID, employee_id UUID NOT NULL, role VARCHAR(20) DEFAULT 'executor', assigned_at TIMESTAMPTZ DEFAULT NOW(), removed_at TIMESTAMPTZ, reason TEXT, assigned_by UUID, active BOOLEAN DEFAULT true);
+
+CREATE TABLE IF NOT EXISTS route_photos (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), route_id UUID, photo_type VARCHAR(30) NOT NULL, category_id UUID, product_id UUID, exposure_point VARCHAR(50), photo_url TEXT NOT NULL, thumbnail_url TEXT, original_size_bytes INTEGER, compressed_size_bytes INTEGER, latitude NUMERIC(10,7), longitude NUMERIC(10,7), quality_score NUMERIC(5,2), quality_passed BOOLEAN DEFAULT true, quality_rejection_reason TEXT, watermark_applied BOOLEAN DEFAULT false, upload_source VARCHAR(20) DEFAULT 'app', uploaded_by UUID, contingency_reason TEXT, captured_at TIMESTAMPTZ DEFAULT NOW(), created_at TIMESTAMPTZ DEFAULT NOW());
+
+CREATE TABLE IF NOT EXISTS route_product_executions (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), route_id UUID, product_id UUID NOT NULL, category_id UUID, exposure_point VARCHAR(50) DEFAULT 'natural', status VARCHAR(20) DEFAULT 'pending', checked BOOLEAN DEFAULT false, qty_store INTEGER DEFAULT 0, qty_stock INTEGER DEFAULT 0, has_rupture BOOLEAN DEFAULT false, has_damage BOOLEAN DEFAULT false, has_discard BOOLEAN DEFAULT false, observation TEXT, executed_by UUID, executed_at TIMESTAMPTZ, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW());
+
+CREATE TABLE IF NOT EXISTS product_validity_entries (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), execution_id UUID, route_id UUID, product_id UUID NOT NULL, expiry_date DATE NOT NULL, qty_store INTEGER DEFAULT 0, qty_stock INTEGER DEFAULT 0, recorded_by UUID, created_at TIMESTAMPTZ DEFAULT NOW());
+
+CREATE TABLE IF NOT EXISTS product_ruptures (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), route_id UUID, product_id UUID NOT NULL, execution_id UUID, location VARCHAR(20) DEFAULT 'store', qty_store INTEGER DEFAULT 0, qty_stock INTEGER DEFAULT 0, reason VARCHAR(100), observation TEXT, photo_url TEXT, recorded_by UUID, created_at TIMESTAMPTZ DEFAULT NOW());
+
+CREATE TABLE IF NOT EXISTS product_damages (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL, route_id UUID, product_id UUID NOT NULL, pdv_id UUID NOT NULL, brand_id UUID NOT NULL, execution_id UUID, promoter_id UUID NOT NULL, location VARCHAR(20) DEFAULT 'store', qty_store INTEGER DEFAULT 0, qty_stock INTEGER DEFAULT 0, reason VARCHAR(255), description TEXT, photo_url TEXT, status VARCHAR(30) DEFAULT 'registered', created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW());
+
+CREATE TABLE IF NOT EXISTS product_discards (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), route_id UUID, product_id UUID NOT NULL, execution_id UUID, qty_store INTEGER DEFAULT 0, qty_stock INTEGER DEFAULT 0, reason VARCHAR(255), photo_url TEXT, observation TEXT, recorded_by UUID, created_at TIMESTAMPTZ DEFAULT NOW());
+
+CREATE TABLE IF NOT EXISTS damage_return_requests (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL, pdv_id UUID NOT NULL, brand_id UUID NOT NULL, promoter_id UUID NOT NULL, status VARCHAR(30) DEFAULT 'awaiting_invoice', notes TEXT, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW());
+
+CREATE TABLE IF NOT EXISTS damage_return_items (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), request_id UUID, damage_id UUID, created_at TIMESTAMPTZ DEFAULT NOW());
+
+CREATE TABLE IF NOT EXISTS return_invoices (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), request_id UUID, invoice_number VARCHAR(100), invoice_date DATE, issuer_name VARCHAR(255), issuer_cnpj VARCHAR(20), photo_url TEXT, pdf_url TEXT, ocr_data JSONB, ocr_confidence NUMERIC(5,2), manually_reviewed BOOLEAN DEFAULT false, uploaded_by UUID, created_at TIMESTAMPTZ DEFAULT NOW());
+
+CREATE TABLE IF NOT EXISTS route_execution_logs (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), route_id UUID, action VARCHAR(50) NOT NULL, details JSONB, performed_by UUID, source VARCHAR(20) DEFAULT 'app', created_at TIMESTAMPTZ DEFAULT NOW());
+
+CREATE TABLE IF NOT EXISTS route_edit_audit_logs (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), route_id UUID, field_changed VARCHAR(100), old_value TEXT, new_value TEXT, edited_by UUID NOT NULL, editor_role VARCHAR(30), source VARCHAR(20) DEFAULT 'web', reason TEXT, route_was_completed BOOLEAN DEFAULT false, created_at TIMESTAMPTZ DEFAULT NOW());
+
+CREATE TABLE IF NOT EXISTS route_stock_postponements (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), route_id UUID, product_id UUID, category_id UUID, item_type VARCHAR(20) NOT NULL, reason TEXT NOT NULL, postponed_by UUID NOT NULL, next_route_id UUID, status VARCHAR(20) DEFAULT 'pending', created_at TIMESTAMPTZ DEFAULT NOW());
+
+CREATE TABLE IF NOT EXISTS route_notifications (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL, route_id UUID, recipient_id UUID NOT NULL, type VARCHAR(30) NOT NULL, title VARCHAR(255) NOT NULL, message TEXT, read BOOLEAN DEFAULT false, created_at TIMESTAMPTZ DEFAULT NOW());
+
+CREATE TABLE IF NOT EXISTS pdv_service_windows (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), pdv_id UUID NOT NULL, weekday INTEGER NOT NULL, open_time TIME NOT NULL, close_time TIME NOT NULL, created_at TIMESTAMPTZ DEFAULT NOW());
+
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS home_latitude NUMERIC(10,7);
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS home_longitude NUMERIC(10,7);
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS max_daily_visits INTEGER DEFAULT 10;
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS max_daily_hours NUMERIC(4,1) DEFAULT 8;
+ALTER TABLE brands ADD COLUMN IF NOT EXISTS promoter_access VARCHAR(20) DEFAULT 'open';
+`;
+
 const migrationSteps = [
   { name: 'Enums', sql: step1Enums, critical: true },
   { name: 'Core Tables (users, plans)', sql: step2CoreTables, critical: true },
