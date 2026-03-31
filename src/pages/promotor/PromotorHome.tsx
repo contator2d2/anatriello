@@ -44,6 +44,10 @@ export default function PromotorHome() {
   const [punchLoading, setPunchLoading] = useState(false);
   const [overtimeDialog, setOvertimeDialog] = useState(false);
   const [otForm, setOtForm] = useState({ reason: '', requested_start: '', requested_end: '' });
+  const [showPdvCheckout, setShowPdvCheckout] = useState(false);
+  const [pdvCheckoutPhoto, setPdvCheckoutPhoto] = useState('');
+  const [pdvCheckoutNotes, setPdvCheckoutNotes] = useState('');
+  const [pdvCheckoutLoading, setPdvCheckoutLoading] = useState(false);
 
   const employee = data?.employee;
   const todayPunches = data?.today_punches || [];
@@ -58,6 +62,54 @@ export default function PromotorHome() {
   const hasRoutesToday = data?.has_routes_today || false;
   const completedRoutesCount = data?.completed_routes_count || 0;
   const pendingRoutesCount = data?.pending_routes_count || 0;
+
+  // Detect PDVs where all routes are completed but no checkout was done
+  const pdvsNeedingCheckout = useMemo(() => {
+    if (!todayRoutes.length) return [];
+    const pdvMap: Record<string, { pdv_id: string; pdv_name: string; routes: any[] }> = {};
+    todayRoutes.forEach((r: any) => {
+      if (!pdvMap[r.pdv_id]) pdvMap[r.pdv_id] = { pdv_id: r.pdv_id, pdv_name: r.pdv_name, routes: [] };
+      pdvMap[r.pdv_id].routes.push(r);
+    });
+    return Object.values(pdvMap).filter(p =>
+      p.routes.length > 0 &&
+      p.routes.every((r: any) => r.status === 'completed') &&
+      !p.routes.some((r: any) => r.pdv_checkout_done)
+    );
+  }, [todayRoutes]);
+
+  const handlePdvCheckout = useCallback(async (pdvId: string) => {
+    setPdvCheckoutLoading(true);
+    try {
+      const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
+        navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000 })
+      );
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      const token = localStorage.getItem('promotor_token');
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const url = `${(import.meta.env.VITE_API_URL || '').replace(/\/$/, '')}/api/merch/promotor/pdv-checkout`;
+      const response = await fetch(url, {
+        method: 'POST', headers,
+        body: JSON.stringify({
+          pdv_id: pdvId,
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
+          photo_url: pdvCheckoutPhoto || undefined,
+          notes: pdvCheckoutNotes || undefined,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result?.error || 'Erro');
+      toast({ title: 'Checkout do PDV realizado!' });
+      setShowPdvCheckout(false);
+      setPdvCheckoutPhoto('');
+      setPdvCheckoutNotes('');
+    } catch (err: any) {
+      toast({ title: 'Erro no checkout', description: err.message, variant: 'destructive' });
+    } finally {
+      setPdvCheckoutLoading(false);
+    }
+  }, [pdvCheckoutPhoto, pdvCheckoutNotes, toast]);
 
   useEffect(() => {
     const onOn = () => setIsOnline(true);
