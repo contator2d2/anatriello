@@ -280,6 +280,11 @@ function RouteFormDialog({ open, route, onClose, pdvs, employees, onSave, onDele
   const { data: brands = [] } = useBrands();
   const { data: checklists = [] } = useBrandChecklists(form.brand_id);
   const { data: brandPromoters = [] } = useBrandPromoters(form.brand_id);
+  const { data: mixPreview = [] } = useRouteMixPreview(form.pdv_id, form.brand_id);
+  const { data: routeProducts = [] } = useRouteProducts(route?.id);
+  const addProduct = useAddRouteProduct();
+  const removeProduct = useRemoveRouteProduct();
+  const syncProducts = useSyncRouteProducts();
 
   // Sort employees: brand-linked promoters first
   const sortedEmployees = useMemo(() => {
@@ -291,6 +296,10 @@ function RouteFormDialog({ open, route, onClose, pdvs, employees, onSave, onDele
       return aLinked - bLinked;
     });
   }, [employees, brandPromoters]);
+
+  // Products to show: for existing routes use routeProducts, for new routes use mixPreview
+  const displayProducts = route?.id ? routeProducts : mixPreview;
+  const routeProductIds = new Set(routeProducts.map((p: any) => p.product_id));
 
   const WEEKDAY_LABELS = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
 
@@ -323,9 +332,38 @@ function RouteFormDialog({ open, route, onClose, pdvs, employees, onSave, onDele
     setForm({ ...form, recurrence_weekdays: current.includes(wd) ? current.filter((d: number) => d !== wd) : [...current, wd] });
   };
 
+  const handleAddMixProduct = (product: any) => {
+    if (route?.id) {
+      addProduct.mutate({ routeId: route.id, product_id: product.product_id, category_id: product.category_id }, {
+        onSuccess: () => toast.success('Produto adicionado'),
+      });
+    }
+  };
+
+  const handleRemoveProduct = (productId: string) => {
+    if (route?.id) {
+      removeProduct.mutate({ routeId: route.id, productId }, {
+        onSuccess: () => toast.success('Produto removido'),
+      });
+    }
+  };
+
+  const handleSyncProducts = () => {
+    if (route?.id) {
+      syncProducts.mutate(route.id, {
+        onSuccess: () => toast.success('Produtos sincronizados do mix'),
+      });
+    }
+  };
+
+  // Products from mix that are NOT yet in the route
+  const availableToAdd = route?.id
+    ? mixPreview.filter((mp: any) => !routeProductIds.has(mp.product_id))
+    : [];
+
   return (
     <Dialog open={open} onOpenChange={() => onClose()}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{route ? 'Editar Rota' : 'Nova Rota'}</DialogTitle>
         </DialogHeader>
@@ -471,6 +509,78 @@ function RouteFormDialog({ open, route, onClose, pdvs, employees, onSave, onDele
               </Select>
             </div>
           )}
+
+          {/* Product Mix Section */}
+          {form.pdv_id && form.brand_id && (
+            <div className="space-y-2 p-3 rounded-lg border bg-muted/30">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <Package className="h-4 w-4 text-primary" />
+                  Produtos ({displayProducts.length})
+                </div>
+                {route?.id && (
+                  <Button variant="outline" size="sm" onClick={handleSyncProducts} disabled={syncProducts.isPending}
+                    className="h-7 text-xs">
+                    <RefreshCw className={`h-3 w-3 mr-1 ${syncProducts.isPending ? 'animate-spin' : ''}`} />
+                    Sincronizar do Mix
+                  </Button>
+                )}
+              </div>
+
+              {displayProducts.length === 0 ? (
+                <div className="text-xs text-muted-foreground text-center py-3 bg-background/50 rounded-md">
+                  {!route?.id
+                    ? 'Nenhum produto no mix deste PDV/Marca. Configure o mix primeiro em Mix por PDV.'
+                    : 'Nenhum produto vinculado. Clique em "Sincronizar do Mix" ou adicione manualmente.'}
+                </div>
+              ) : (
+                <div className="max-h-48 overflow-y-auto space-y-1">
+                  {displayProducts.map((p: any) => (
+                    <div key={p.product_id || p.id} className="flex items-center justify-between py-1.5 px-2 rounded-md bg-background/50 text-xs">
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium truncate">{p.product_name}</div>
+                        <div className="text-muted-foreground flex items-center gap-2">
+                          {p.category_name && <span>{p.category_name}</span>}
+                          {p.sku && <span>SKU: {p.sku}</span>}
+                          {p.mandatory && <Badge variant="secondary" className="text-[9px] h-4">Obrigatório</Badge>}
+                          {p.status && p.status !== 'pending' && (
+                            <Badge variant={p.status === 'completed' ? 'default' : 'secondary'} className="text-[9px] h-4">
+                              {p.status === 'completed' ? 'Executado' : p.status}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                      {route?.id && (!p.status || p.status === 'pending') && (
+                        <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive hover:text-destructive"
+                          onClick={() => handleRemoveProduct(p.product_id)}>
+                          <X className="h-3 w-3" />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Add products from mix that aren't in route yet */}
+              {route?.id && availableToAdd.length > 0 && (
+                <div className="pt-2 border-t">
+                  <Label className="text-xs text-muted-foreground mb-1 block">Adicionar do mix ({availableToAdd.length} disponíveis)</Label>
+                  <div className="max-h-32 overflow-y-auto space-y-1">
+                    {availableToAdd.map((p: any) => (
+                      <div key={p.product_id} className="flex items-center justify-between py-1 px-2 rounded-md bg-background/30 text-xs">
+                        <span className="truncate">{p.product_name} {p.category_name ? `(${p.category_name})` : ''}</span>
+                        <Button variant="outline" size="sm" className="h-6 text-[10px] px-2"
+                          onClick={() => handleAddMixProduct(p)}>
+                          <Plus className="h-3 w-3 mr-0.5" /> Adicionar
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           <div>
             <Label className="text-xs">Observações</Label>
             <Textarea value={form.notes || ''} onChange={e => setForm({ ...form, notes: e.target.value })} rows={2} />
