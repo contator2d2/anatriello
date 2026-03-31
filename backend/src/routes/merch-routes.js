@@ -1424,6 +1424,19 @@ router.post('/promotor/routes/:routeId/categories/:catId/after-photo', promotorA
       [req.params.routeId, req.params.catId, photo_url, latitude, longitude, req.employeeId]
     );
 
+    // Save to live_photo_books for the book view
+    try {
+      const routeInfo = await query('SELECT organization_id, brand_id, pdv_id, promoter_id FROM merch_routes WHERE id=$1', [req.params.routeId]);
+      if (routeInfo.rows.length) {
+        const r = routeInfo.rows[0];
+        await query(
+          `INSERT INTO live_photo_books (organization_id, brand_id, pdv_id, route_id, category_id, photo_type, photo_url, promoter_id, captured_at, upload_source)
+           VALUES ($1,$2,$3,$4,$5,'after',$6,$7,NOW(),'app')`,
+          [r.organization_id, r.brand_id, r.pdv_id, req.params.routeId, req.params.catId, photo_url, r.promoter_id]
+        );
+      }
+    } catch (e) { /* ignore if live_photo_books missing columns */ }
+
     await query(
       `INSERT INTO route_execution_logs (route_id, action, details, performed_by, source)
        VALUES ($1,'category_after_photo',$2,$3,'app')`,
