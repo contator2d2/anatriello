@@ -63,9 +63,9 @@ export function PromotorLayout({ children }: PromotorLayoutProps) {
 
   const navItems = [
     { path: '/promotor/home', icon: Home, label: 'Início' },
-    { path: '/promotor/documentos', icon: FileText, label: 'Docs' },
+    { path: '/promotor/agenda', icon: Clock, label: 'Agenda' },
+    { path: '/promotor/avarias', icon: FileText, label: 'Avarias' },
     { path: '/promotor/ponto', icon: Clock, label: 'Ponto' },
-    { path: '/promotor/enviar', icon: Upload, label: 'Enviar' },
     { path: '/promotor/configuracoes', icon: Settings, label: 'Config' },
   ];
 

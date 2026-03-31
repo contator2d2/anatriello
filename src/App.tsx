@@ -75,8 +75,13 @@ import MerchCategorias from "./pages/MerchCategorias";
 import MerchProdutos from "./pages/MerchProdutos";
 import MerchMixPDV from "./pages/MerchMixPDV";
 import MerchRelatorios from "./pages/MerchRelatorios";
+import MerchRotas from "./pages/MerchRotas";
+import MerchExecucao from "./pages/MerchExecucao";
 import PromotorLogin from "./pages/promotor/PromotorLogin";
 import PromotorHome from "./pages/promotor/PromotorHome";
+import PromotorAgenda from "./pages/promotor/PromotorAgenda";
+import PromotorRota from "./pages/promotor/PromotorRota";
+import PromotorAvarias from "./pages/promotor/PromotorAvarias";
 import PromotorDocumentos from "./pages/promotor/PromotorDocumentos";
 import PromotorPonto from "./pages/promotor/PromotorPonto";
 import PromotorEnviar from "./pages/promotor/PromotorEnviar";
@@ -198,9 +203,14 @@ const App = () => (
             <Route path="/merch/produtos" element={<ProtectedRoute><MerchProdutos /></ProtectedRoute>} />
             <Route path="/merch/mix" element={<ProtectedRoute><MerchMixPDV /></ProtectedRoute>} />
             <Route path="/merch/relatorios" element={<ProtectedRoute><MerchRelatorios /></ProtectedRoute>} />
+            <Route path="/merch/rotas" element={<ProtectedRoute><MerchRotas /></ProtectedRoute>} />
+            <Route path="/merch/execucao" element={<ProtectedRoute><MerchExecucao /></ProtectedRoute>} />
             {/* Promotor App */}
             <Route path="/promotor/login" element={<PromotorLogin />} />
             <Route path="/promotor/home" element={<PromotorHome />} />
+            <Route path="/promotor/agenda" element={<PromotorAgenda />} />
+            <Route path="/promotor/rota/:id" element={<PromotorRota />} />
+            <Route path="/promotor/avarias" element={<PromotorAvarias />} />
             <Route path="/promotor/documentos" element={<PromotorDocumentos />} />
             <Route path="/promotor/ponto" element={<PromotorPonto />} />
             <Route path="/promotor/enviar" element={<PromotorEnviar />} />
