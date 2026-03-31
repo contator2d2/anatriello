@@ -96,6 +96,22 @@ export default function MerchCategorias() {
             <TabsTrigger value="subcategorias">Subcategorias</TabsTrigger>
           </TabsList>
           <div className="flex gap-2">
+            {selectedCatIds.size > 0 && tab === 'categorias' && (
+              <Button variant="destructive" onClick={async () => {
+                if (!confirm(`Excluir ${selectedCatIds.size} categoria(s)?`)) return;
+                for (const id of selectedCatIds) { try { await deleteCat.mutateAsync(id); } catch {} }
+                setSelectedCatIds(new Set());
+                toast.success('Excluídas');
+              }}><Trash2 className="h-4 w-4 mr-2" />Excluir {selectedCatIds.size}</Button>
+            )}
+            {selectedSubIds.size > 0 && tab === 'subcategorias' && (
+              <Button variant="destructive" onClick={async () => {
+                if (!confirm(`Excluir ${selectedSubIds.size} subcategoria(s)?`)) return;
+                for (const id of selectedSubIds) { try { await deleteSub.mutateAsync(id); } catch {} }
+                setSelectedSubIds(new Set());
+                toast.success('Excluídas');
+              }}><Trash2 className="h-4 w-4 mr-2" />Excluir {selectedSubIds.size}</Button>
+            )}
             <Button variant="outline" onClick={handleImportCSV}><Upload className="h-4 w-4 mr-2" />Importar CSV</Button>
             <Button onClick={tab === 'categorias' ? openNewCat : openNewSub}><Plus className="h-4 w-4 mr-2" />Nova</Button>
           </div>
