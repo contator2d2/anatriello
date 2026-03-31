@@ -16,6 +16,24 @@ import { ptBR } from "date-fns/locale";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
+const DAY_LABELS: Record<string, string> = { seg: 'Seg', ter: 'Ter', qua: 'Qua', qui: 'Qui', sex: 'Sex', sab: 'Sáb', dom: 'Dom' };
+
+function formatWorkSchedule(ws: any): string {
+  if (!ws) return '—';
+  try {
+    const obj = typeof ws === 'string' ? JSON.parse(ws) : ws;
+    if (!obj || typeof obj !== 'object') return String(ws);
+    const days = obj.days;
+    if (days && typeof days === 'object') {
+      const active = Object.entries(days).filter(([, v]) => v).map(([k]) => DAY_LABELS[k] || k);
+      const time = obj.entry && obj.exit ? `${obj.entry}–${obj.exit}` : '';
+      return `${active.join(', ')}${time ? ` • ${time}` : ''}`;
+    }
+    if (obj.entry && obj.exit) return `${obj.entry}–${obj.exit}`;
+    return '—';
+  } catch { return String(ws); }
+}
+
 function useLiveMapData() {
   return useQuery({
     queryKey: ['live-map-data'],
@@ -169,7 +187,7 @@ function LiveMapComponent({ employees, pdvs, regions, showPDVs, showPromoters, s
           ${e.current_brands ? `<br/><span style="font-size:11px;color:#f59e0b;">🏷️ ${e.current_brands}</span>` : ''}
           ${lastUpdate}
           ${batteryHtml}
-          <br/><span style="font-size:11px;color:#888;">⏰ Jornada: ${e.work_schedule || '—'}</span>
+          <br/><span style="font-size:11px;color:#888;">⏰ Jornada: ${formatWorkSchedule(e.work_schedule)}</span>
         </div>
       `);
 
