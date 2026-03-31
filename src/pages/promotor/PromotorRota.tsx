@@ -19,7 +19,7 @@ import {
 import { toast } from "sonner";
 import {
   MapPin, Camera, Check, AlertTriangle, Archive, Clock,
-  CheckCircle2, Circle, Calendar as CalendarIcon, Trash2, MoreVertical, Store, Info,
+  CheckCircle2, Circle, Calendar as CalendarIcon, Trash2, Store, Info,
   Lock, Unlock, ChevronRight, Target, ImagePlus,
 } from "lucide-react";
 
