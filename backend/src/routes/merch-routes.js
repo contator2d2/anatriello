@@ -917,8 +917,53 @@ async function ensurePdvVisitTables() {
     )`);
   } catch (e) { /* ignore if already exists */ }
 }
+
+async function ensureExecutionCategoryTables() {
+  try {
+    await query(`CREATE TABLE IF NOT EXISTS merch_execution_categories (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      route_id UUID NOT NULL REFERENCES merch_routes(id) ON DELETE CASCADE,
+      category_id UUID NOT NULL REFERENCES merch_categories(id),
+      category_name VARCHAR(255),
+      point_type VARCHAR(20),
+      point_type_at TIMESTAMPTZ,
+      category_before_photo TEXT,
+      category_photo_at TIMESTAMPTZ,
+      category_photo_latitude DOUBLE PRECISION,
+      category_photo_longitude DOUBLE PRECISION,
+      products_unlocked BOOLEAN DEFAULT false,
+      unlocked_at TIMESTAMPTZ,
+      completed BOOLEAN DEFAULT false,
+      completed_at TIMESTAMPTZ,
+      performed_by UUID,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(route_id, category_id)
+    )`);
+
+    await query(`ALTER TABLE merch_execution_categories ADD COLUMN IF NOT EXISTS category_name VARCHAR(255)`);
+    await query(`ALTER TABLE merch_execution_categories ADD COLUMN IF NOT EXISTS point_type VARCHAR(20)`);
+    await query(`ALTER TABLE merch_execution_categories ADD COLUMN IF NOT EXISTS point_type_at TIMESTAMPTZ`);
+    await query(`ALTER TABLE merch_execution_categories ADD COLUMN IF NOT EXISTS category_before_photo TEXT`);
+    await query(`ALTER TABLE merch_execution_categories ADD COLUMN IF NOT EXISTS category_photo_at TIMESTAMPTZ`);
+    await query(`ALTER TABLE merch_execution_categories ADD COLUMN IF NOT EXISTS category_photo_latitude DOUBLE PRECISION`);
+    await query(`ALTER TABLE merch_execution_categories ADD COLUMN IF NOT EXISTS category_photo_longitude DOUBLE PRECISION`);
+    await query(`ALTER TABLE merch_execution_categories ADD COLUMN IF NOT EXISTS products_unlocked BOOLEAN DEFAULT false`);
+    await query(`ALTER TABLE merch_execution_categories ADD COLUMN IF NOT EXISTS unlocked_at TIMESTAMPTZ`);
+    await query(`ALTER TABLE merch_execution_categories ADD COLUMN IF NOT EXISTS completed BOOLEAN DEFAULT false`);
+    await query(`ALTER TABLE merch_execution_categories ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ`);
+    await query(`ALTER TABLE merch_execution_categories ADD COLUMN IF NOT EXISTS performed_by UUID`);
+    await query(`ALTER TABLE merch_execution_categories ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()`);
+    await query(`ALTER TABLE merch_execution_categories ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`);
+    await query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_exec_categories_route_category ON merch_execution_categories(route_id, category_id)`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_exec_categories_route ON merch_execution_categories(route_id)`);
+  } catch (e) {
+    logWarn('ensureExecutionCategoryTables.failed', { error: e?.message });
+  }
+}
 // Run once on load
 ensurePdvVisitTables().catch(() => {});
+ensureExecutionCategoryTables().catch(() => {});
 
 // Promotor auth middleware
 function promotorAuth(req, res, next) {
@@ -1228,6 +1273,8 @@ router.post('/promotor/executions/:id/discard', promotorAuth, async (req, res) =
 // Promotor: Set category point type
 router.post('/promotor/routes/:routeId/categories/:catId/point-type', promotorAuth, async (req, res) => {
   try {
+    await ensureExecutionCategoryTables();
+
     const rawPointType = req.body?.point_type ?? req.body?.pointType;
     const normalizedPointType = String(rawPointType || '').trim().toLowerCase();
     const point_type = normalizedPointType === 'natural' || normalizedPointType === 'extra'
@@ -1242,12 +1289,32 @@ router.post('/promotor/routes/:routeId/categories/:catId/point-type', promotorAu
       return res.status(400).json({ error: 'Tipo de ponto inválido. Use: natural ou extra' });
     }
 
-    const result = await query(
-      `UPDATE merch_execution_categories SET point_type=$3, point_type_at=NOW(), performed_by=$4, updated_at=NOW()
-       WHERE route_id=$1 AND category_id=$2 RETURNING *`,
-      [req.params.routeId, req.params.catId, point_type, req.employeeId]
+    const categoryInRoute = await query(
+      `SELECT COUNT(*)::int AS total, COALESCE(MAX(pc.name), 'Sem nome') AS category_name
+       FROM route_product_executions rpe
+       LEFT JOIN merch_categories pc ON pc.id = rpe.category_id
+       WHERE rpe.route_id=$1 AND rpe.category_id=$2`,
+      [req.params.routeId, req.params.catId]
     );
-    if (!result.rows.length) return res.status(404).json({ error: 'Categoria não encontrada nesta rota' });
+
+    if (!categoryInRoute.rows[0]?.total) {
+      return res.status(404).json({ error: 'Categoria não encontrada nesta rota' });
+    }
+
+    const result = await query(
+      `INSERT INTO merch_execution_categories (
+         route_id, category_id, category_name, point_type, point_type_at, performed_by, updated_at
+       ) VALUES ($1,$2,$3,$4,NOW(),$5,NOW())
+       ON CONFLICT (route_id, category_id)
+       DO UPDATE SET
+         category_name = EXCLUDED.category_name,
+         point_type = EXCLUDED.point_type,
+         point_type_at = NOW(),
+         performed_by = EXCLUDED.performed_by,
+         updated_at = NOW()
+       RETURNING *`,
+      [req.params.routeId, req.params.catId, categoryInRoute.rows[0].category_name, point_type, req.employeeId]
+    );
 
     try {
       await query(
