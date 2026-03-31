@@ -153,6 +153,14 @@ export function useDeleteProduct() {
   });
 }
 
+export function useBulkDeleteProducts() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: string[]) => api<{ ok: boolean; deleted: number }>('/api/merchandising/products/bulk-delete', { method: 'POST', body: { ids } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['merch-products'] }),
+  });
+}
+
 export function useImportProducts() {
   const qc = useQueryClient();
   return useMutation({

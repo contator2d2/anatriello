@@ -1,5 +1,5 @@
 import express from 'express';
-import { query } from '../db.js';
+import { query, pool } from '../db.js';
 import { authenticate } from '../middleware/auth.js';
 import { logInfo, logError } from '../logger.js';
 
@@ -29,6 +29,9 @@ router.use(async (req, res, next) => {
 });
 
 let infraDone = false;
+
+const normalizeMerchText = (value) => String(value ?? '').replace(/\s+/g, ' ').trim();
+const normalizeMerchKey = (value) => normalizeMerchText(value).toLowerCase();
 
 async function ensureMerchandisingInfra() {
   if (infraDone) return;
@@ -378,48 +381,178 @@ router.delete('/products/:id', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+router.post('/products/bulk-delete', async (req, res) => {
+  try {
+    await ensureMerchandisingInfra();
+    const ids = Array.isArray(req.body?.ids)
+      ? req.body.ids.map((id) => String(id)).filter(Boolean)
+      : [];
+
+    if (!ids.length) {
+      return res.status(400).json({ error: 'Nenhum produto selecionado' });
+    }
+
+    const deleted = await query(
+      'DELETE FROM merch_products WHERE organization_id=$1 AND id = ANY($2::uuid[]) RETURNING id',
+      [req.orgId, ids]
+    );
+
+    res.json({ ok: true, deleted: deleted.rowCount || 0 });
+  } catch (e) {
+    logError('bulk delete products', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Bulk import products
 router.post('/products/import', async (req, res) => {
+  const client = await pool.connect();
   try {
     await ensureMerchandisingInfra();
     const orgId = req.orgId;
     const { items, auto_create } = req.body;
+
+    if (!Array.isArray(items) || !items.length) {
+      return res.status(400).json({ error: 'Nenhum item enviado' });
+    }
+
     const results = { success: 0, errors: [] };
+
+    await client.query('BEGIN');
+
+    const [brandRows, categoryRows, subcategoryRows, productRows] = await Promise.all([
+      client.query('SELECT id, name FROM merch_brands WHERE organization_id=$1', [orgId]),
+      client.query('SELECT id, name FROM merch_categories WHERE organization_id=$1', [orgId]),
+      client.query('SELECT id, category_id, name FROM merch_subcategories WHERE organization_id=$1', [orgId]),
+      client.query('SELECT brand_id, name FROM merch_products WHERE organization_id=$1', [orgId]),
+    ]);
+
+    const brandMap = new Map(brandRows.rows.map((row) => [normalizeMerchKey(row.name), row.id]));
+    const categoryMap = new Map(categoryRows.rows.map((row) => [normalizeMerchKey(row.name), row.id]));
+    const subcategoryMap = new Map(
+      subcategoryRows.rows.map((row) => [`${row.category_id}:${normalizeMerchKey(row.name)}`, row.id])
+    );
+    const productKeySet = new Set(
+      productRows.rows.map((row) => `${row.brand_id}:${normalizeMerchKey(row.name)}`)
+    );
 
     for (const item of items) {
       try {
-        let brandRow = (await query('SELECT id FROM merch_brands WHERE organization_id=$1 AND name ILIKE $2', [orgId, item.brand_name])).rows[0];
-        if (!brandRow && auto_create) {
-          brandRow = (await query('INSERT INTO merch_brands (organization_id, name) VALUES ($1,$2) RETURNING id', [orgId, item.brand_name])).rows[0];
-        }
-        if (!brandRow) { results.errors.push({ row: item.name, error: `Marca "${item.brand_name}" não encontrada` }); continue; }
-
-        let catRow = (await query('SELECT id FROM merch_categories WHERE organization_id=$1 AND name ILIKE $2', [orgId, item.category_name])).rows[0];
-        if (!catRow && auto_create) {
-          catRow = (await query('INSERT INTO merch_categories (organization_id, name) VALUES ($1,$2) RETURNING id', [orgId, item.category_name])).rows[0];
-        }
-        if (!catRow) { results.errors.push({ row: item.name, error: `Categoria "${item.category_name}" não encontrada` }); continue; }
-
-        let subRow = (await query('SELECT id FROM merch_subcategories WHERE organization_id=$1 AND category_id=$2 AND name ILIKE $3', [orgId, catRow.id, item.subcategory_name])).rows[0];
-        if (!subRow && auto_create) {
-          subRow = (await query('INSERT INTO merch_subcategories (organization_id, category_id, name) VALUES ($1,$2,$3) RETURNING id', [orgId, catRow.id, item.subcategory_name])).rows[0];
-        }
-        if (!subRow) { results.errors.push({ row: item.name, error: `Subcategoria "${item.subcategory_name}" não encontrada` }); continue; }
-
-        const dup = (await query('SELECT id FROM merch_products WHERE organization_id=$1 AND brand_id=$2 AND name ILIKE $3', [orgId, brandRow.id, item.name])).rows[0];
-        if (dup) { results.errors.push({ row: item.name, error: 'Produto duplicado' }); continue; }
-
-        await query(
-          `INSERT INTO merch_products (organization_id, brand_id, category_id, subcategory_id, name, sku, barcode, image_url) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-          [orgId, brandRow.id, catRow.id, subRow.id, item.name, item.sku || null, item.barcode || null, item.image_url || null]
+        const name = normalizeMerchText(item.name || item.descricao || item.product_name);
+        const brandName = normalizeMerchText(item.brand_name || item.brand || item.marca);
+        const categoryName = normalizeMerchText(item.category_name || item.category || item.categoria);
+        const subcategoryName = normalizeMerchText(
+          item.subcategory_name || item.subcategory || item.subcategoria || categoryName
         );
+        const sku = normalizeMerchText(item.sku || item.codigo);
+        const internalCode = normalizeMerchText(item.internal_code || item.codigo_interno || item.codigo);
+        const barcode = normalizeMerchText(item.barcode || item.codigo_barras);
+        const description = normalizeMerchText(item.description);
+        const imageUrl = normalizeMerchText(item.image_url || item.imagem || item.foto);
+        const unit = normalizeMerchText(item.unit || item.unidade) || 'un';
+        const status = normalizeMerchText(item.status) || 'active';
+
+        if (!name) {
+          results.errors.push({ row: item.name || item.descricao || 'linha sem nome', error: 'Nome do produto não informado' });
+          continue;
+        }
+
+        let brandId = item.brand_id || null;
+        if (!brandId) {
+          if (!brandName) {
+            results.errors.push({ row: name, error: 'Marca não informada' });
+            continue;
+          }
+
+          const brandKey = normalizeMerchKey(brandName);
+          brandId = brandMap.get(brandKey) || null;
+          if (!brandId && auto_create) {
+            const insertedBrand = await client.query(
+              'INSERT INTO merch_brands (organization_id, name) VALUES ($1,$2) RETURNING id',
+              [orgId, brandName]
+            );
+            brandId = insertedBrand.rows[0].id;
+            brandMap.set(brandKey, brandId);
+          }
+        }
+        if (!brandId) {
+          results.errors.push({ row: name, error: `Marca "${brandName}" não encontrada` });
+          continue;
+        }
+
+        let categoryId = item.category_id || null;
+        if (!categoryId) {
+          if (!categoryName) {
+            results.errors.push({ row: name, error: 'Categoria não informada' });
+            continue;
+          }
+
+          const categoryKey = normalizeMerchKey(categoryName);
+          categoryId = categoryMap.get(categoryKey) || null;
+          if (!categoryId && auto_create) {
+            const insertedCategory = await client.query(
+              'INSERT INTO merch_categories (organization_id, name) VALUES ($1,$2) RETURNING id',
+              [orgId, categoryName]
+            );
+            categoryId = insertedCategory.rows[0].id;
+            categoryMap.set(categoryKey, categoryId);
+          }
+        }
+        if (!categoryId) {
+          results.errors.push({ row: name, error: `Categoria "${categoryName}" não encontrada` });
+          continue;
+        }
+
+        let subcategoryId = item.subcategory_id || null;
+        if (!subcategoryId) {
+          if (!subcategoryName) {
+            results.errors.push({ row: name, error: 'Subcategoria não informada' });
+            continue;
+          }
+
+          const subcategoryKey = `${categoryId}:${normalizeMerchKey(subcategoryName)}`;
+          subcategoryId = subcategoryMap.get(subcategoryKey) || null;
+          if (!subcategoryId && auto_create) {
+            const insertedSubcategory = await client.query(
+              'INSERT INTO merch_subcategories (organization_id, category_id, name) VALUES ($1,$2,$3) RETURNING id',
+              [orgId, categoryId, subcategoryName]
+            );
+            subcategoryId = insertedSubcategory.rows[0].id;
+            subcategoryMap.set(subcategoryKey, subcategoryId);
+          }
+        }
+        if (!subcategoryId) {
+          results.errors.push({ row: name, error: `Subcategoria "${subcategoryName}" não encontrada` });
+          continue;
+        }
+
+        const productKey = `${brandId}:${normalizeMerchKey(name)}`;
+        if (productKeySet.has(productKey)) {
+          results.errors.push({ row: name, error: 'Produto duplicado' });
+          continue;
+        }
+
+        await client.query(
+          `INSERT INTO merch_products (organization_id, brand_id, category_id, subcategory_id, name, sku, internal_code, barcode, description, image_url, unit, status)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+          [orgId, brandId, categoryId, subcategoryId, name, sku || null, internalCode || null, barcode || null, description || null, imageUrl || null, unit, status]
+        );
+        productKeySet.add(productKey);
         results.success++;
       } catch (itemErr) {
         results.errors.push({ row: item.name, error: itemErr.message });
       }
     }
+
+    await client.query('COMMIT');
     res.json(results);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) {
+    await client.query('ROLLBACK');
+    logError('import products', e);
+    res.status(500).json({ error: e.message });
+  } finally {
+    client.release();
+  }
 });
 
 // ==================== PDV BRANDS ====================
