@@ -454,6 +454,8 @@ export default function PromotorRota() {
                   {isLocked && (
                     <CategoryPreparation
                       category={catStatus}
+                      catId={catId}
+                      categoryName={category}
                       routeId={id!}
                       pdvName={route.pdv_name}
                       brandName={route.brand_name}
