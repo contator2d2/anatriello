@@ -1573,7 +1573,7 @@ router.get('/ai/optimization-context', authenticate, async (req, res) => {
                          ORDER BY r.visit_date, r.scheduled_time`;
 
     // Get brands
-    const brandsSql = `SELECT id, name FROM brands WHERE organization_id = $1 ORDER BY name`;
+    const brandsSql = `SELECT id, name FROM merch_brands WHERE organization_id = $1 ORDER BY name`;
 
     const [promoters, pdvsList, existing, brands] = await Promise.all([
       query(promoterSql, promoterParams),
