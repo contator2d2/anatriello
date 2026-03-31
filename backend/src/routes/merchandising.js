@@ -169,6 +169,26 @@ router.delete('/brands/:id', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Bulk import brands
+router.post('/brands/import', async (req, res) => {
+  try {
+    await ensureMerchandisingInfra();
+    const { items } = req.body; // [{name, razao_social?, cnpj?, phone?, status?}]
+    if (!items?.length) return res.status(400).json({ error: 'Nenhum item enviado' });
+    let created = 0, skipped = 0;
+    for (const item of items) {
+      const existing = await query('SELECT id FROM merch_brands WHERE organization_id=$1 AND LOWER(name)=LOWER($2)', [req.orgId, item.name.trim()]);
+      if (existing.rows.length) { skipped++; continue; }
+      await query(
+        'INSERT INTO merch_brands (organization_id, name, razao_social, cnpj, phone, status) VALUES ($1,$2,$3,$4,$5,$6)',
+        [req.orgId, item.name.trim(), item.razao_social || null, item.cnpj || null, item.phone || null, item.status || 'active']
+      );
+      created++;
+    }
+    res.json({ ok: true, created, skipped });
+  } catch (e) { logError('import brands', e); res.status(500).json({ error: e.message }); }
+});
+
 // ==================== CATEGORIES ====================
 router.get('/categories', async (req, res) => {
   try {
