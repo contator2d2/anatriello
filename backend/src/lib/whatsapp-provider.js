@@ -90,6 +90,11 @@ export async function checkStatus(connection) {
     return wapiProvider.checkStatus(connection.instance_id, resolvedToken);
   }
 
+  // Meta Cloud API - always "connected" if token exists
+  if (provider === 'meta') {
+    return { status: connection.meta_token ? 'connected' : 'disconnected' };
+  }
+
   // Evolution API
   try {
     const startedAt = Date.now();
