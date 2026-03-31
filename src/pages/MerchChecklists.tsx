@@ -66,7 +66,7 @@ export default function MerchChecklists() {
   };
 
   return (
-    <MainLayout title="Checklists por Marca">
+    <MainLayout>
       <div className="space-y-4">
         {/* Header */}
         <div className="flex items-center justify-between gap-3 flex-wrap">

@@ -44,7 +44,7 @@ export default function MerchAuditoria() {
   const routesWithEdits = (routes as any[]).filter((r: any) => r.status === 'completed' || r.has_edits);
 
   return (
-    <MainLayout title="Auditoria do Supervisor">
+    <MainLayout>
       <div className="space-y-4">
         {/* Filters */}
         <Card>

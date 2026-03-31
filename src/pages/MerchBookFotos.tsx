@@ -48,7 +48,7 @@ export default function MerchBookFotos() {
   const sortedDates = Object.keys(grouped).sort().reverse();
 
   return (
-    <MainLayout title="Book de Fotos">
+    <MainLayout>
       <div className="space-y-4">
         {/* Filters */}
         <Card>
