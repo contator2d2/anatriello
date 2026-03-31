@@ -89,7 +89,8 @@ export function useUpdateMerchRoute() {
 export function useDeleteMerchRoute() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => api<any>(`/api/merch/routes/${id}`, { method: 'DELETE' }),
+    mutationFn: ({ id, scope }: { id: string; scope?: string }) =>
+      api<any>(`/api/merch/routes/${id}${scope ? `?scope=${scope}` : ''}`, { method: 'DELETE' }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['merch-routes'] }),
   });
 }

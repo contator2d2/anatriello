@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -46,6 +47,7 @@ export default function MerchRotas() {
   const [filterStatus, setFilterStatus] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [showAIPlanner, setShowAIPlanner] = useState(false);
+  const [scopeDialog, setScopeDialog] = useState<{ action: 'edit' | 'delete'; data?: any } | null>(null);
 
   // Calculate date range
   const dateRange = useMemo(() => {
@@ -66,6 +68,44 @@ export default function MerchRotas() {
   const updateRoute = useUpdateMerchRoute();
   const deleteRoute = useDeleteMerchRoute();
   const duplicateRoute = useDuplicateMerchRoute();
+
+  // Check if route has future siblings (recurrence)
+  const hasFutureSiblings = (route: any) => {
+    if (!route?.recurrence) return false;
+    const rec = typeof route.recurrence === 'string' ? JSON.parse(route.recurrence) : route.recurrence;
+    return rec?.type && rec.type !== 'none';
+  };
+
+  const handleSaveIntent = (data: any) => {
+    if (selectedRoute?.id && hasFutureSiblings(selectedRoute)) {
+      setScopeDialog({ action: 'edit', data });
+    } else if (selectedRoute?.id) {
+      updateRoute.mutate({ id: selectedRoute.id, ...data }, { onSuccess: () => { toast.success('Rota atualizada'); setSelectedRoute(null); } });
+    } else {
+      createRoute.mutate(data, { onSuccess: () => { toast.success('Rota criada'); setShowCreate(false); } });
+    }
+  };
+
+  const handleDeleteIntent = () => {
+    if (selectedRoute?.id && hasFutureSiblings(selectedRoute)) {
+      setScopeDialog({ action: 'delete' });
+    } else if (selectedRoute?.id) {
+      deleteRoute.mutate({ id: selectedRoute.id }, { onSuccess: () => { toast.success('Rota excluída'); setSelectedRoute(null); } });
+    }
+  };
+
+  const executeScopeAction = (scope: 'single' | 'future') => {
+    if (!selectedRoute?.id) return;
+    if (scopeDialog?.action === 'delete') {
+      deleteRoute.mutate({ id: selectedRoute.id, scope }, {
+        onSuccess: () => { toast.success(scope === 'future' ? 'Rotas futuras excluídas' : 'Rota excluída'); setSelectedRoute(null); setScopeDialog(null); }
+      });
+    } else if (scopeDialog?.action === 'edit' && scopeDialog.data) {
+      updateRoute.mutate({ id: selectedRoute.id, ...scopeDialog.data, _scope: scope }, {
+        onSuccess: () => { toast.success(scope === 'future' ? 'Rotas futuras atualizadas' : 'Rota atualizada'); setSelectedRoute(null); setScopeDialog(null); }
+      });
+    }
+  };
 
   const navigate = (dir: 'prev' | 'next') => {
     if (viewMode === 'month') setCurrentDate(dir === 'next' ? addMonths(currentDate, 1) : subMonths(currentDate, 1));
@@ -252,20 +292,35 @@ export default function MerchRotas() {
           onClose={() => { setShowCreate(false); setSelectedRoute(null); }}
           pdvs={pdvs}
           employees={employees}
-          onSave={(data: any) => {
-            if (selectedRoute?.id) {
-              updateRoute.mutate({ id: selectedRoute.id, ...data }, { onSuccess: () => { toast.success('Rota atualizada'); setSelectedRoute(null); } });
-            } else {
-              createRoute.mutate(data, { onSuccess: () => { toast.success('Rota criada'); setShowCreate(false); } });
-            }
-          }}
-          onDelete={selectedRoute?.id ? () => {
-            deleteRoute.mutate(selectedRoute.id, { onSuccess: () => { toast.success('Rota excluída'); setSelectedRoute(null); } });
-          } : undefined}
+          onSave={handleSaveIntent}
+          onDelete={selectedRoute?.id ? handleDeleteIntent : undefined}
           onDuplicate={selectedRoute?.id ? () => {
             duplicateRoute.mutate({ id: selectedRoute.id }, { onSuccess: () => { toast.success('Rota duplicada'); setSelectedRoute(null); } });
           } : undefined}
         />
+
+        {/* Scope Confirmation Dialog */}
+        <AlertDialog open={!!scopeDialog} onOpenChange={() => setScopeDialog(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                {scopeDialog?.action === 'delete' ? 'Excluir rota recorrente' : 'Editar rota recorrente'}
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                Esta rota faz parte de uma série recorrente. Deseja aplicar a {scopeDialog?.action === 'delete' ? 'exclusão' : 'alteração'} apenas nesta rota ou em todas as rotas futuras da série?
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <Button variant="outline" onClick={() => executeScopeAction('single')}>
+                Apenas esta rota
+              </Button>
+              <Button variant={scopeDialog?.action === 'delete' ? 'destructive' : 'default'} onClick={() => executeScopeAction('future')}>
+                Esta e todas futuras
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         {/* AI Route Planner */}
         <AIRoutePlanner open={showAIPlanner} onClose={() => setShowAIPlanner(false)} />

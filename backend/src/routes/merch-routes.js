@@ -155,7 +155,7 @@ router.post('/routes', authenticate, async (req, res) => {
   } catch (err) { logError('routes.create', err); res.status(500).json({ error: 'Erro ao criar rota' }); }
 });
 
-// Update route
+// Update route (supports scope: 'single' | 'future')
 router.put('/routes/:id', authenticate, async (req, res) => {
   try {
     const orgRes = await query('SELECT organization_id FROM organization_members WHERE user_id=$1 LIMIT 1', [req.userId]);
@@ -166,6 +166,10 @@ router.put('/routes/:id', authenticate, async (req, res) => {
     if (!existing.rows.length) return res.status(404).json({ error: 'Rota não encontrada' });
 
     const old = existing.rows[0];
+    const scope = req.body._scope || 'single';
+    // Remove internal field
+    delete req.body._scope;
+
     const fields = ['promoter_id','supervisor_id','pdv_id','brand_id','checklist_id','visit_date','scheduled_time',
                     'window_start','window_end','estimated_duration_min','priority','visit_type','notes','status'];
 
@@ -175,7 +179,6 @@ router.put('/routes/:id', authenticate, async (req, res) => {
 
     for (const f of fields) {
       if (req.body[f] !== undefined && req.body[f] !== old[f]) {
-        // Audit log
         await query(
           `INSERT INTO route_edit_audit_logs (route_id, field_changed, old_value, new_value, edited_by, editor_role, source, reason, route_was_completed)
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
@@ -189,6 +192,34 @@ router.put('/routes/:id', authenticate, async (req, res) => {
     if (!updates.length) return res.json(old);
     updates.push(`updated_at=NOW()`);
 
+    // Apply to single or future sibling routes
+    if (scope === 'future') {
+      // Build SET clause for siblings (exclude visit_date and status for bulk)
+      const bulkFields = ['promoter_id','supervisor_id','pdv_id','brand_id','checklist_id','scheduled_time',
+                          'window_start','window_end','estimated_duration_min','priority','visit_type','notes'];
+      const bulkUpdates = [];
+      const bulkParams = [];
+      let bIdx = 1;
+      for (const f of bulkFields) {
+        if (req.body[f] !== undefined && req.body[f] !== old[f]) {
+          bulkUpdates.push(`${f}=$${bIdx++}`);
+          bulkParams.push(req.body[f]);
+        }
+      }
+      if (bulkUpdates.length > 0) {
+        bulkUpdates.push(`updated_at=NOW()`);
+        bulkParams.push(orgId, old.promoter_id, old.pdv_id, old.brand_id, old.visit_date);
+        const whereStart = bIdx;
+        const bulkSql = `UPDATE merch_routes SET ${bulkUpdates.join(',')}
+          WHERE organization_id=$${whereStart} AND promoter_id=$${whereStart+1} AND pdv_id=$${whereStart+2}
+          AND brand_id=$${whereStart+3} AND visit_date >= $${whereStart+4}
+          AND status IN ('scheduled','confirmed')`;
+        await query(bulkSql, bulkParams);
+        logInfo('routes.bulk_updated', { base_route: req.params.id, scope: 'future' });
+      }
+    }
+
+    // Always update the current route with all changes
     const result = await query(`UPDATE merch_routes SET ${updates.join(',')} WHERE id=$1 RETURNING *`, params);
 
     // Re-hydrate products when pdv or brand changed
@@ -196,7 +227,6 @@ router.put('/routes/:id', authenticate, async (req, res) => {
     const newBrand = req.body.brand_id || old.brand_id;
     if (req.body.pdv_id !== undefined || req.body.brand_id !== undefined) {
       try {
-        // Remove old non-executed products
         await query(`DELETE FROM route_product_executions WHERE route_id=$1 AND (status IS NULL OR status='pending')`, [req.params.id]);
         const mixProducts = await query(
           `SELECT pbp.product_id, p.category_id
@@ -220,13 +250,29 @@ router.put('/routes/:id', authenticate, async (req, res) => {
   } catch (err) { logError('routes.update', err); res.status(500).json({ error: 'Erro ao atualizar rota' }); }
 });
 
-// Delete route
+// Delete route (supports scope: 'single' | 'future')
 router.delete('/routes/:id', authenticate, async (req, res) => {
   try {
     const orgRes = await query('SELECT organization_id FROM organization_members WHERE user_id=$1 LIMIT 1', [req.userId]);
     if (!orgRes.rows.length) return res.status(403).json({ error: 'Sem organização' });
-    await query('DELETE FROM merch_routes WHERE id=$1 AND organization_id=$2', [req.params.id, orgRes.rows[0].organization_id]);
-    res.json({ ok: true });
+    const orgId = orgRes.rows[0].organization_id;
+    const scope = req.query.scope || 'single';
+
+    if (scope === 'future') {
+      // Find current route to get its siblings
+      const current = await query('SELECT * FROM merch_routes WHERE id=$1 AND organization_id=$2', [req.params.id, orgId]);
+      if (!current.rows.length) return res.status(404).json({ error: 'Rota não encontrada' });
+      const r = current.rows[0];
+      const result = await query(
+        `DELETE FROM merch_routes WHERE organization_id=$1 AND promoter_id=$2 AND pdv_id=$3 AND brand_id=$4
+         AND visit_date >= $5 AND status IN ('scheduled','confirmed')`,
+        [orgId, r.promoter_id, r.pdv_id, r.brand_id, r.visit_date]
+      );
+      res.json({ ok: true, deleted: result.rowCount });
+    } else {
+      await query('DELETE FROM merch_routes WHERE id=$1 AND organization_id=$2', [req.params.id, orgId]);
+      res.json({ ok: true });
+    }
   } catch (err) { logError('routes.delete', err); res.status(500).json({ error: 'Erro' }); }
 });
 
