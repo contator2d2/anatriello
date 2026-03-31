@@ -843,22 +843,49 @@ router.get('/photo-book', authenticate, async (req, res) => {
     const orgRes = await query('SELECT organization_id FROM organization_members WHERE user_id=$1 LIMIT 1', [req.userId]);
     const orgId = orgRes.rows[0].organization_id;
     const { brand_id, pdv_id, date_from, date_to } = req.query;
-    let sql = `SELECT lpb.*, e.full_name as promoter_name, pc.name as category_name, pr.name as product_name
-               FROM live_photo_books lpb
-               LEFT JOIN employees e ON e.id=lpb.promoter_id
-               LEFT JOIN merch_categories pc ON pc.id=lpb.category_id
-               LEFT JOIN merch_products pr ON pr.id=lpb.product_id
-               WHERE lpb.organization_id=$1`;
+
+    // Ensure live_photo_books has upload_source column
+    try { await query(`ALTER TABLE live_photo_books ADD COLUMN IF NOT EXISTS upload_source VARCHAR(20) DEFAULT 'app'`); } catch(e) {}
+
+    // Query from both live_photo_books AND route_photos (union for completeness)
+    let sql = `SELECT * FROM (
+      SELECT lpb.id, lpb.organization_id, lpb.brand_id, lpb.pdv_id, lpb.route_id, lpb.category_id, lpb.product_id,
+             lpb.photo_type, lpb.photo_url, lpb.promoter_id, lpb.captured_at, lpb.upload_source,
+             e.full_name as promoter_name, pc.name as category_name, pr.name as product_name,
+             p.name as pdv_name, b.name as brand_name
+      FROM live_photo_books lpb
+      LEFT JOIN employees e ON e.id=lpb.promoter_id
+      LEFT JOIN merch_categories pc ON pc.id=lpb.category_id
+      LEFT JOIN merch_products pr ON pr.id=lpb.product_id
+      LEFT JOIN pdvs p ON p.id=lpb.pdv_id
+      LEFT JOIN merch_brands b ON b.id=lpb.brand_id
+      WHERE lpb.organization_id=$1
+      UNION ALL
+      SELECT rp.id, r.organization_id, r.brand_id, r.pdv_id, rp.route_id, rp.category_id, rp.product_id,
+             rp.photo_type, rp.photo_url, r.promoter_id, COALESCE(rp.captured_at, rp.created_at) as captured_at, rp.upload_source,
+             e2.full_name as promoter_name, pc2.name as category_name, pr2.name as product_name,
+             p2.name as pdv_name, b2.name as brand_name
+      FROM route_photos rp
+      JOIN merch_routes r ON r.id=rp.route_id
+      LEFT JOIN employees e2 ON e2.id=r.promoter_id
+      LEFT JOIN merch_categories pc2 ON pc2.id=rp.category_id
+      LEFT JOIN merch_products pr2 ON pr2.id=rp.product_id
+      LEFT JOIN pdvs p2 ON p2.id=r.pdv_id
+      LEFT JOIN merch_brands b2 ON b2.id=r.brand_id
+      WHERE r.organization_id=$1
+        AND NOT EXISTS (SELECT 1 FROM live_photo_books lpb2 WHERE lpb2.route_id=rp.route_id AND lpb2.photo_url=rp.photo_url)
+    ) combined WHERE 1=1`;
     const params = [orgId];
     let idx = 2;
-    if (brand_id) { sql += ` AND lpb.brand_id=$${idx++}`; params.push(brand_id); }
-    if (pdv_id) { sql += ` AND lpb.pdv_id=$${idx++}`; params.push(pdv_id); }
-    if (date_from) { sql += ` AND lpb.captured_at >= $${idx++}`; params.push(date_from); }
-    if (date_to) { sql += ` AND lpb.captured_at <= $${idx++}`; params.push(date_to + ' 23:59:59'); }
-    sql += ' ORDER BY lpb.captured_at DESC LIMIT 200';
+    if (brand_id) { sql += ` AND brand_id=$${idx++}`; params.push(brand_id); }
+    if (pdv_id) { sql += ` AND pdv_id=$${idx++}`; params.push(pdv_id); }
+    if (date_from) { sql += ` AND captured_at >= $${idx++}`; params.push(date_from); }
+    if (date_to) { sql += ` AND captured_at <= $${idx++}`; params.push(date_to + ' 23:59:59'); }
+    sql += ' ORDER BY captured_at DESC LIMIT 500';
     res.json((await query(sql, params)).rows);
   } catch (err) {
     if (err.code === '42P01') return res.json([]);
+    logError('photo-book', err);
     res.status(500).json({ error: 'Erro' });
   }
 });
