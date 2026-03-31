@@ -87,8 +87,8 @@ export function PromotorLayout({ children }: PromotorLayoutProps) {
     <div className="min-h-screen bg-background flex flex-col">
       {/* Top bar with notifications */}
       {!isLoginPage && (
-        <header className="sticky top-0 z-50 bg-card border-b border-border">
-          <div className="flex items-center justify-between h-12 px-4 max-w-lg mx-auto">
+        <header className="sticky top-0 z-50 bg-card border-b border-border" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+          <div className="flex items-center justify-between h-14 px-4 max-w-lg mx-auto">
             <h2 className="text-sm font-bold text-foreground truncate">
               {navItems.find(i => location.pathname === i.path)?.label || 'Promotor'}
             </h2>
