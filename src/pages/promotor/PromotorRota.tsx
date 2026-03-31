@@ -276,11 +276,18 @@ export default function PromotorRota() {
 
   const groupedExecs = useMemo(() => {
     if (!route?.executions) return {};
-    const groups: Record<string, { catId: string; execs: any[] }> = {};
+    const groups: Record<string, { catId: string; execs: any[]; isExtraGroup?: boolean }> = {};
     route.executions.forEach((e: any) => {
-      const cat = e.category_name || 'Sem Categoria';
-      if (!groups[cat]) groups[cat] = { catId: e.category_id, execs: [] };
-      groups[cat].execs.push(e);
+      const baseCat = e.category_name || 'Sem Categoria';
+      // Separate extra-point products into their own group
+      if (e.exposure_point === 'extra') {
+        const extraKey = `${baseCat} (Ponto Extra)`;
+        if (!groups[extraKey]) groups[extraKey] = { catId: e.category_id, execs: [], isExtraGroup: true };
+        groups[extraKey].execs.push(e);
+      } else {
+        if (!groups[baseCat]) groups[baseCat] = { catId: e.category_id, execs: [] };
+        groups[baseCat].execs.push(e);
+      }
     });
     return groups;
   }, [route?.executions]);
@@ -448,17 +455,16 @@ export default function PromotorRota() {
         {/* Active route: categories with step-by-step flow */}
         {isActive && (
           <div className="space-y-4">
-            {Object.entries(groupedExecs).map(([category, { catId, execs }]) => {
+            {Object.entries(groupedExecs).map(([category, { catId, execs, isExtraGroup }]) => {
               const catStatus = categoryStatusMap[catId];
-              // CRITICAL: Category is locked unless products_unlocked is explicitly true
-              // If catStatus doesn't exist yet or products_unlocked is false/null, it's locked
-              const isLocked = !catStatus?.products_unlocked;
+              // Extra groups are always unlocked (already pre-configured)
+              const isLocked = isExtraGroup ? false : !catStatus?.products_unlocked;
               const doneCount = execs.filter((e: any) => e.status === 'completed').length;
 
               return (
                 <div key={category}>
-                  {/* Category preparation (if locked) */}
-                  {isLocked && (
+                  {/* Category preparation (if locked) - skip for extra groups */}
+                  {isLocked && !isExtraGroup && (
                     <CategoryPreparation
                       category={catStatus}
                       catId={catId}
@@ -475,9 +481,11 @@ export default function PromotorRota() {
                   {/* Category header */}
                   <div className="flex items-center justify-between mb-2 mt-3">
                     <div className="flex items-center gap-2">
-                      {isLocked ? <Lock className="h-4 w-4 text-muted-foreground" /> : <Unlock className="h-4 w-4 text-green-600" />}
+                      {isExtraGroup ? <Target className="h-4 w-4 text-orange-600" /> : isLocked ? <Lock className="h-4 w-4 text-muted-foreground" /> : <Unlock className="h-4 w-4 text-green-600" />}
                       <h3 className="text-sm font-bold">{category}</h3>
-                      {catStatus?.point_type && (
+                      {isExtraGroup ? (
+                        <Badge variant="secondary" className="text-[9px] bg-orange-100 text-orange-700 border-orange-300">🎯 Extra</Badge>
+                      ) : catStatus?.point_type && (
                         <Badge variant="outline" className="text-[9px]">
                           {catStatus.point_type === 'natural' ? '📍 Natural' : '🎯 Extra'}
                         </Badge>
@@ -527,7 +535,7 @@ export default function PromotorRota() {
             {/* Extra Point button */}
             <Button variant="outline" className="w-full h-10 border-dashed border-orange-400/50 text-orange-600 hover:bg-orange-50"
               onClick={() => {
-                const cats = Object.entries(groupedExecs);
+                const cats = Object.entries(groupedExecs).filter(([, v]) => !v.isExtraGroup);
                 if (cats.length === 1) {
                   setShowExtraPointDialog({ catId: cats[0][1].catId, categoryName: cats[0][0] });
                   setSelectedExtraProducts([]);
@@ -794,7 +802,7 @@ export default function PromotorRota() {
           <DialogContent className="max-w-sm">
             <DialogHeader><DialogTitle className="text-sm">Selecione a Categoria</DialogTitle></DialogHeader>
             <div className="space-y-2">
-              {Object.entries(groupedExecs).map(([category, { catId }]) => (
+              {Object.entries(groupedExecs).filter(([, v]) => !v.isExtraGroup).map(([category, { catId }]) => (
                 <Button key={catId} variant="outline" className="w-full justify-start" onClick={() => {
                   setShowExtraPointCategoryPicker(false);
                   setShowExtraPointDialog({ catId, categoryName: category });
