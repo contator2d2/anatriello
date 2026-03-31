@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { PromotorLayout } from "./PromotorLayout";
 import { Card, CardContent } from "@/components/ui/card";
@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { FileUploadInput } from "@/components/ui/file-upload-input";
+import { CameraCapture, type PhotoQualityConfig } from "@/components/promotor/CameraCapture";
 import {
   usePromotorRouteDetail, usePromotorCheckin, usePromotorCheckout,
   usePromotorUpdateExecution, usePromotorReportDamage, usePromotorReportRupture,
@@ -49,8 +49,8 @@ const usePromotorPdvCheckout = () => {
 };
 
 // ===== Category Preparation Component =====
-function CategoryPreparation({ category, routeId, pdvName, brandName, onUnlocked }: {
-  category: any; routeId: string; pdvName: string; brandName: string; onUnlocked: () => void;
+function CategoryPreparation({ category, routeId, pdvName, brandName, promotorName, qualityConfig, onUnlocked }: {
+  category: any; routeId: string; pdvName: string; brandName: string; promotorName?: string; qualityConfig?: PhotoQualityConfig; onUnlocked: () => void;
 }) {
   const setPointType = usePromotorSetPointType();
   const setCategoryPhoto = usePromotorCategoryPhoto();
@@ -156,18 +156,23 @@ function CategoryPreparation({ category, routeId, pdvName, brandName, onUnlocked
             <Label className="text-xs font-semibold flex items-center gap-1">
               <Camera className="h-3.5 w-3.5" /> Foto obrigatória da categoria (ANTES da execução)
             </Label>
-            <FileUploadInput
-              value={photoUrl}
-              onChange={setPhotoUrl}
-              accept="image/*,.jpg,.jpeg,.png,.webp"
-              placeholder="Tire a foto da categoria"
-              previewType="image"
-              customTokenGetter={() => localStorage.getItem('promotor_token')}
-            />
-            <Button className="w-full" onClick={handleUploadPhoto} disabled={!photoUrl || setCategoryPhoto.isPending}>
-              <ImagePlus className="h-4 w-4 mr-2" />
-              {setCategoryPhoto.isPending ? 'Enviando...' : 'Registrar foto e liberar produtos'}
-            </Button>
+            {photoUrl ? (
+              <div className="space-y-2">
+                <img src={photoUrl} alt="Foto categoria" className="w-full rounded-lg border max-h-48 object-cover" />
+                <Button className="w-full" onClick={handleUploadPhoto} disabled={setCategoryPhoto.isPending}>
+                  <ImagePlus className="h-4 w-4 mr-2" />
+                  {setCategoryPhoto.isPending ? 'Enviando...' : 'Registrar foto e liberar produtos'}
+                </Button>
+              </div>
+            ) : (
+              <CameraCapture
+                onCapture={(url) => { setPhotoUrl(url); }}
+                watermark={{ pdvName, brandName, promotorName, photoType: 'Categoria (antes)' }}
+                customTokenGetter={() => localStorage.getItem('promotor_token')}
+                buttonLabel="Tirar foto da categoria"
+                qualityConfig={qualityConfig}
+              />
+            )}
           </div>
         )}
 
@@ -201,6 +206,17 @@ export default function PromotorRota() {
   const addValidity = usePromotorAddValidity();
   const reportDiscard = usePromotorReportDiscard();
   const pdvCheckout = usePromotorPdvCheckout();
+  const [photoQualityConfig, setPhotoQualityConfig] = useState<PhotoQualityConfig | undefined>();
+
+  // Load photo quality config
+  useEffect(() => {
+    const url = `${(import.meta.env.VITE_API_URL || '').replace(/\/$/, '')}/api/merchandising/photo-quality-config`;
+    const token = localStorage.getItem('promotor_token');
+    fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+      .then(r => r.json())
+      .then(d => { if (d?.config) setPhotoQualityConfig(d.config); })
+      .catch(() => {});
+  }, []);
 
   const [activeAction, setActiveAction] = useState<ActionType>(null);
   const [selectedExec, setSelectedExec] = useState<any>(null);
@@ -380,14 +396,20 @@ export default function PromotorRota() {
                 <Camera className="h-4 w-4 text-primary" />
                 Foto obrigatória para check-in
               </div>
-              <FileUploadInput
-                value={checkinPhotoUrl}
-                onChange={setCheckinPhotoUrl}
-                accept="image/*,.jpg,.jpeg,.png,.webp"
-                placeholder="Envie a foto do check-in"
-                previewType="image"
-                customTokenGetter={() => localStorage.getItem('promotor_token')}
-              />
+              {checkinPhotoUrl ? (
+                <div className="space-y-2">
+                  <img src={checkinPhotoUrl} alt="Check-in" className="w-full rounded-lg border max-h-48 object-cover" />
+                  <Button variant="outline" size="sm" onClick={() => setCheckinPhotoUrl('')}>Tirar outra foto</Button>
+                </div>
+              ) : (
+                <CameraCapture
+                  onCapture={setCheckinPhotoUrl}
+                  watermark={{ pdvName: route.pdv_name, brandName: route.brand_name, photoType: 'Check-in' }}
+                  customTokenGetter={() => localStorage.getItem('promotor_token')}
+                  buttonLabel="Tirar foto de check-in"
+                  qualityConfig={photoQualityConfig}
+                />
+              )}
             </CardContent>
           </Card>
         )}
@@ -424,6 +446,8 @@ export default function PromotorRota() {
                       routeId={id!}
                       pdvName={route.pdv_name}
                       brandName={route.brand_name}
+                      promotorName={route.promotor_name}
+                      qualityConfig={photoQualityConfig}
                       onUnlocked={() => refetch()}
                     />
                   )}
@@ -613,16 +637,22 @@ export default function PromotorRota() {
               </Card>
 
               {route.require_checkout_photo && (
-                <div>
+                <div className="space-y-2">
                   <Label className="text-xs">Foto final da loja (obrigatória)</Label>
-                  <FileUploadInput
-                    value={pdvCheckoutPhoto}
-                    onChange={setPdvCheckoutPhoto}
-                    accept="image/*,.jpg,.jpeg,.png,.webp"
-                    placeholder="Tire a foto de saída da loja"
-                    previewType="image"
-                    customTokenGetter={() => localStorage.getItem('promotor_token')}
-                  />
+                  {pdvCheckoutPhoto ? (
+                    <div className="space-y-2">
+                      <img src={pdvCheckoutPhoto} alt="Checkout" className="w-full rounded-lg border max-h-48 object-cover" />
+                      <Button variant="outline" size="sm" onClick={() => setPdvCheckoutPhoto('')}>Tirar outra foto</Button>
+                    </div>
+                  ) : (
+                    <CameraCapture
+                      onCapture={setPdvCheckoutPhoto}
+                      watermark={{ pdvName: route.pdv_name, brandName: route.brand_name, photoType: 'Checkout PDV' }}
+                      customTokenGetter={() => localStorage.getItem('promotor_token')}
+                      buttonLabel="Tirar foto de saída da loja"
+                      qualityConfig={photoQualityConfig}
+                    />
+                  )}
                 </div>
               )}
 

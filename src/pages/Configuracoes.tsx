@@ -25,6 +25,7 @@ import { NotificationConnectionSettings } from "@/components/settings/Notificati
 import { ThemeCustomizer } from "@/components/admin/ThemeCustomizer";
 import { GoogleCalendarPanel } from "@/components/crm/GoogleCalendarPanel";
 import { api as apiCall } from "@/lib/api";
+import { PhotoQualityConfigPanel } from "@/components/admin/PhotoQualityConfigPanel";
 
 const Configuracoes = () => {
   const { user } = useAuth();
@@ -158,6 +159,12 @@ const Configuracoes = () => {
           {/* General Settings Tab */}
           <TabsContent value="geral" className="mt-6">
             <div className="grid gap-6 lg:grid-cols-2">
+              {/* Photo Quality Config for admin */}
+              {isAdminOrOwner && (
+                <div className="lg:col-span-2">
+                  <PhotoQualityConfigPanel />
+                </div>
+              )}
               {/* Profile Settings */}
               <Card className="animate-fade-in shadow-card">
                 <CardHeader>
