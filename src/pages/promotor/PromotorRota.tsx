@@ -245,9 +245,9 @@ export default function PromotorRota() {
     const url = `${(import.meta.env.VITE_API_URL || '').replace(/\/$/, '')}/api/merchandising/photo-quality-config`;
     const token = localStorage.getItem('promotor_token');
     fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
-      .then(r => r.json())
+      .then(r => { if (!r.ok) throw new Error('not ok'); return r.json(); })
       .then(d => { if (d?.config) setPhotoQualityConfig(d.config); })
-      .catch(() => {});
+      .catch(() => { /* use defaults */ });
   }, []);
 
   const [activeAction, setActiveAction] = useState<ActionType>(null);

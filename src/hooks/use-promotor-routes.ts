@@ -34,6 +34,11 @@ export function usePromotorRouteDetail(id?: string) {
     queryKey: ['promotor-route', id],
     queryFn: () => promotorApi<any>(`/api/merch/promotor/routes/${id}`),
     enabled: !!id,
+    retry: (failureCount, error) => {
+      // Don't retry on 404 (route not found) or 403
+      if (error?.message?.includes('not found') || error?.message?.includes('404')) return false;
+      return failureCount < 2;
+    },
   });
 }
 
