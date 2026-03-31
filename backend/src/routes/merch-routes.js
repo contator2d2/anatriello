@@ -1311,21 +1311,34 @@ router.post('/ai/approve', authenticate, async (req, res) => {
 
     const created = [];
     for (const s of suggestions) {
+      let effectiveChecklistId = s.checklist_id || null;
+      if (!effectiveChecklistId && s.brand_id) {
+        try {
+          const checklistRes = await query(
+            `SELECT id FROM brand_checklists
+             WHERE organization_id=$1 AND brand_id=$2 AND active=true
+             ORDER BY created_at DESC LIMIT 1`,
+            [orgId, s.brand_id]
+          );
+          effectiveChecklistId = checklistRes.rows[0]?.id || null;
+        } catch { /* ignore */ }
+      }
+
       const result = await query(
-        `INSERT INTO merch_routes (organization_id, promoter_id, pdv_id, brand_id,
+        `INSERT INTO merch_routes (organization_id, promoter_id, pdv_id, brand_id, checklist_id,
          visit_date, scheduled_time, estimated_duration_min, priority, visit_type, notes, created_by)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,'normal','regular',$8,$9) RETURNING *`,
-        [orgId, s.promoter_id, s.pdv_id, s.brand_id,
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'normal','regular',$9,$10) RETURNING *`,
+        [orgId, s.promoter_id, s.pdv_id, s.brand_id, effectiveChecklistId,
          s.visit_date, s.scheduled_time, s.estimated_duration_min || 60,
          `[IA] ${s.reason || ''}`, req.userId]
       );
       created.push(result.rows[0]);
 
-      // Auto-load products from mix
       try {
         const mixProducts = await query(
-          `SELECT pbp.product_id, p.category_id FROM pdv_brand_products pbp
-           JOIN products p ON p.id = pbp.product_id
+          `SELECT pbp.product_id, p.category_id
+           FROM merch_pdv_brand_products pbp
+           JOIN merch_products p ON p.id = pbp.product_id
            WHERE pbp.pdv_id=$1 AND pbp.brand_id=$2 AND pbp.active=true`,
           [s.pdv_id, s.brand_id]
         );
