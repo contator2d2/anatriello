@@ -206,6 +206,17 @@ export default function PromotorRota() {
   const addValidity = usePromotorAddValidity();
   const reportDiscard = usePromotorReportDiscard();
   const pdvCheckout = usePromotorPdvCheckout();
+  const [photoQualityConfig, setPhotoQualityConfig] = useState<PhotoQualityConfig | undefined>();
+
+  // Load photo quality config
+  useEffect(() => {
+    const url = `${(import.meta.env.VITE_API_URL || '').replace(/\/$/, '')}/api/merchandising/photo-quality-config`;
+    const token = localStorage.getItem('promotor_token');
+    fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+      .then(r => r.json())
+      .then(d => { if (d?.config) setPhotoQualityConfig(d.config); })
+      .catch(() => {});
+  }, []);
 
   const [activeAction, setActiveAction] = useState<ActionType>(null);
   const [selectedExec, setSelectedExec] = useState<any>(null);
