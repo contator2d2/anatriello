@@ -31,6 +31,36 @@ export default function MerchCategorias() {
   const createSub = useCreateSubcategory();
   const updateSub = useUpdateSubcategory();
   const deleteSub = useDeleteSubcategory();
+  const importCats = useImportCategories();
+
+  const handleImportCSV = async () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.csv';
+    input.onchange = async (e: any) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const text = await file.text();
+      const lines = text.split('\n').filter((l: string) => l.trim());
+      const items: { name: string; parent?: string; description?: string }[] = [];
+      // Skip header
+      for (let i = 1; i < lines.length; i++) {
+        const parts = lines[i].split(',').map((s: string) => s.trim());
+        if (!parts[0]) continue;
+        items.push({
+          name: parts[0],
+          parent: parts[1] || undefined,
+          description: parts[2] || undefined,
+        });
+      }
+      if (!items.length) { toast.error('Nenhum item encontrado no CSV'); return; }
+      try {
+        const result = await importCats.mutateAsync({ items });
+        toast.success(`Importado: ${result.categories_created} categorias e ${result.subcategories_created} subcategorias`);
+      } catch (err: any) { toast.error(err.message); }
+    };
+    input.click();
+  };
 
   const openNewCat = () => { setCatForm({ name: '', description: '', status: 'active' }); setEditingCatId(null); setCatDialogOpen(true); };
   const openEditCat = (c: any) => { setCatForm({ ...c }); setEditingCatId(c.id); setCatDialogOpen(true); };
