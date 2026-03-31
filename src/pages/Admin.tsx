@@ -23,6 +23,7 @@ import { toast } from 'sonner';
 import { Shield, Building2, Users, Plus, Trash2, Loader2, Pencil, Crown, Image, Package, CalendarIcon, UserPlus, Eye, MessageSquare, Receipt, Wifi, Upload, Palette, Bot, Clock, Briefcase, Search, AlertTriangle, Mail, Sparkles, Key, Server, Lock } from 'lucide-react';
 import { WapiInstancesTab } from '@/components/admin/WapiInstancesTab';
 import { GlobalAgentsTab } from '@/components/admin/GlobalAgentsTab';
+import { MerchImportTab } from '@/components/admin/MerchImportTab';
 import { api } from '@/lib/api';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
@@ -794,7 +795,7 @@ export default function Admin() {
         </div>
 
         <Tabs defaultValue="plans" className="space-y-6">
-          <TabsList className="grid w-full max-w-5xl grid-cols-7">
+          <TabsList className="grid w-full max-w-6xl grid-cols-8">
             <TabsTrigger value="plans" className="flex items-center gap-2">
               <Package className="h-4 w-4" />
               Planos
@@ -822,6 +823,10 @@ export default function Admin() {
             <TabsTrigger value="branding" className="flex items-center gap-2">
               <Palette className="h-4 w-4" />
               Branding
+            </TabsTrigger>
+            <TabsTrigger value="merch-import" className="flex items-center gap-2">
+              <Upload className="h-4 w-4" />
+              Importação
             </TabsTrigger>
           </TabsList>
 
@@ -2106,6 +2111,11 @@ export default function Admin() {
 
           {/* Branding Tab */}
           <BrandingTab />
+
+          {/* Merch Import Tab */}
+          <TabsContent value="merch-import">
+            <MerchImportTab />
+          </TabsContent>
         </Tabs>
       </div>
 

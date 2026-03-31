@@ -1,0 +1,312 @@
+import { useState, useRef } from "react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { api } from "@/lib/api";
+import { toast } from "sonner";
+import { Upload, FileSpreadsheet, CheckCircle2, XCircle, Loader2, Download, AlertTriangle, Tags, Package, FolderTree } from "lucide-react";
+import * as XLSX from "xlsx";
+
+type ImportType = "brands" | "categories" | "products";
+
+interface ParsedRow {
+  [key: string]: string;
+}
+
+interface ImportResult {
+  ok?: boolean;
+  created?: number;
+  skipped?: number;
+  categories_created?: number;
+  subcategories_created?: number;
+  success?: number;
+  errors?: { row: string; error: string }[];
+}
+
+export function MerchImportTab() {
+  const [importType, setImportType] = useState<ImportType>("brands");
+  const [parsedData, setParsedData] = useState<ParsedRow[]>([]);
+  const [fileName, setFileName] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [result, setResult] = useState<ImportResult | null>(null);
+  const [autoCreate, setAutoCreate] = useState(true);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setFileName(file.name);
+    setResult(null);
+
+    const isCSV = file.name.endsWith(".csv");
+    if (isCSV) {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const text = ev.target?.result as string;
+        const lines = text.split("\n").filter((l) => l.trim());
+        if (lines.length < 2) { toast.error("Arquivo vazio"); return; }
+        const headers = lines[0].split(",").map((h) => h.trim());
+        const rows: ParsedRow[] = [];
+        for (let i = 1; i < lines.length; i++) {
+          const vals = lines[i].split(",").map((v) => v.trim());
+          const row: ParsedRow = {};
+          headers.forEach((h, idx) => { row[h] = vals[idx] || ""; });
+          rows.push(row);
+        }
+        setParsedData(rows);
+      };
+      reader.readAsText(file);
+    } else {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const wb = XLSX.read(ev.target?.result, { type: "binary" });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const data = XLSX.utils.sheet_to_json<ParsedRow>(ws, { defval: "" });
+        setParsedData(data);
+      };
+      reader.readAsBinaryString(file);
+    }
+  };
+
+  const getExpectedColumns = () => {
+    switch (importType) {
+      case "brands": return ["name", "razao_social", "cnpj", "phone", "status"];
+      case "categories": return ["Nome", "Categoria Pai", "Descrição"];
+      case "products": return ["brand_name", "name", "sku", "barcode", "category_name", "subcategory_name", "status"];
+    }
+  };
+
+  const handleImport = async () => {
+    if (!parsedData.length) { toast.error("Nenhum dado para importar"); return; }
+    setImporting(true);
+    setResult(null);
+
+    try {
+      let res: ImportResult;
+      switch (importType) {
+        case "brands":
+          res = await api<ImportResult>("/api/merchandising/brands/import", {
+            method: "POST",
+            body: {
+              items: parsedData.map((r) => ({
+                name: r.name || r.Nome || r.descricao || "",
+                razao_social: r.razao_social || r["Razão Social"] || "",
+                cnpj: r.cnpj || r.CNPJ || "",
+                phone: r.phone || r.telefone || r.Telefone || "",
+                status: r.status || r.Status || "active",
+              })),
+            },
+          });
+          break;
+        case "categories":
+          res = await api<ImportResult>("/api/merchandising/categories/import", {
+            method: "POST",
+            body: {
+              items: parsedData.map((r) => ({
+                name: r.Nome || r.name || "",
+                parent: r["Categoria Pai"] || r.parent || undefined,
+                description: r["Descrição"] || r.description || undefined,
+              })),
+            },
+          });
+          break;
+        case "products":
+          res = await api<ImportResult>("/api/merchandising/products/import", {
+            method: "POST",
+            body: {
+              auto_create: autoCreate,
+              items: parsedData.map((r) => ({
+                brand_name: r.brand_name || r.Marca || "",
+                name: r.name || r.Nome || r.Produto || "",
+                sku: r.sku || r.SKU || r.codigo || "",
+                barcode: r.barcode || r["Código de Barras"] || r.codigo_barras || "",
+                category_name: r.category_name || r.Categoria || "",
+                subcategory_name: r.subcategory_name || r.Subcategoria || "",
+                image_url: r.image_url || "",
+              })),
+            },
+          });
+          break;
+      }
+      setResult(res);
+      const total = res.created ?? res.success ?? ((res.categories_created || 0) + (res.subcategories_created || 0));
+      toast.success(`Importação concluída: ${total} registros criados`);
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const downloadTemplate = () => {
+    const cols = getExpectedColumns();
+    const csv = cols.join(",") + "\n";
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `template_${importType}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const typeConfig = {
+    brands: { icon: Tags, label: "Marcas", color: "text-blue-500" },
+    categories: { icon: FolderTree, label: "Categorias & Subcategorias", color: "text-green-500" },
+    products: { icon: Package, label: "Produtos", color: "text-purple-500" },
+  };
+
+  const TypeIcon = typeConfig[importType].icon;
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Upload className="h-5 w-5" />
+            Importação em Massa - Merchandising
+          </CardTitle>
+          <CardDescription>
+            Importe marcas, categorias e produtos via CSV ou Excel (.xlsx)
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {/* Step 1: Select type */}
+          <div className="space-y-2">
+            <Label className="text-sm font-semibold">1. Tipo de importação</Label>
+            <div className="grid grid-cols-3 gap-3">
+              {(Object.entries(typeConfig) as [ImportType, typeof typeConfig.brands][]).map(([key, cfg]) => {
+                const Icon = cfg.icon;
+                return (
+                  <button
+                    key={key}
+                    onClick={() => { setImportType(key); setParsedData([]); setResult(null); setFileName(""); }}
+                    className={`p-4 rounded-lg border-2 transition-all text-left ${
+                      importType === key
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:border-muted-foreground/30"
+                    }`}
+                  >
+                    <Icon className={`h-5 w-5 mb-2 ${cfg.color}`} />
+                    <p className="font-medium text-sm">{cfg.label}</p>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Step 2: Upload file */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm font-semibold">2. Selecionar arquivo</Label>
+              <Button variant="ghost" size="sm" onClick={downloadTemplate}>
+                <Download className="h-4 w-4 mr-1" /> Baixar template
+              </Button>
+            </div>
+            <div
+              onClick={() => fileRef.current?.click()}
+              className="border-2 border-dashed rounded-lg p-8 text-center cursor-pointer hover:border-primary/50 transition-colors"
+            >
+              <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" onChange={handleFileSelect} className="hidden" />
+              <FileSpreadsheet className="h-10 w-10 mx-auto mb-2 text-muted-foreground" />
+              {fileName ? (
+                <p className="text-sm font-medium">{fileName} <span className="text-muted-foreground">({parsedData.length} linhas)</span></p>
+              ) : (
+                <p className="text-sm text-muted-foreground">Clique para selecionar CSV ou Excel</p>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Colunas esperadas: <code>{getExpectedColumns().join(", ")}</code>
+            </p>
+          </div>
+
+          {/* Options */}
+          {importType === "products" && (
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
+              <Switch checked={autoCreate} onCheckedChange={setAutoCreate} />
+              <Label className="text-sm">Auto-criar marcas, categorias e subcategorias ausentes</Label>
+            </div>
+          )}
+
+          {/* Preview */}
+          {parsedData.length > 0 && (
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold">3. Pré-visualização ({parsedData.length} registros)</Label>
+              <ScrollArea className="h-64 border rounded-lg">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      {Object.keys(parsedData[0]).map((h) => (
+                        <TableHead key={h} className="text-xs whitespace-nowrap">{h}</TableHead>
+                      ))}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {parsedData.slice(0, 50).map((row, i) => (
+                      <TableRow key={i}>
+                        {Object.values(row).map((v, j) => (
+                          <TableCell key={j} className="text-xs max-w-[200px] truncate">{String(v)}</TableCell>
+                        ))}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                {parsedData.length > 50 && (
+                  <p className="text-xs text-center text-muted-foreground py-2">
+                    Mostrando 50 de {parsedData.length} registros
+                  </p>
+                )}
+              </ScrollArea>
+            </div>
+          )}
+
+          {/* Import button */}
+          {parsedData.length > 0 && !result && (
+            <Button onClick={handleImport} disabled={importing} className="w-full" size="lg">
+              {importing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
+              Importar {parsedData.length} {typeConfig[importType].label}
+            </Button>
+          )}
+
+          {/* Results */}
+          {result && (
+            <div className="space-y-3">
+              <Alert className="border-green-500/30 bg-green-500/5">
+                <CheckCircle2 className="h-4 w-4 text-green-500" />
+                <AlertDescription>
+                  {importType === "brands" && `${result.created} marcas criadas, ${result.skipped} já existiam`}
+                  {importType === "categories" && `${result.categories_created} categorias e ${result.subcategories_created} subcategorias criadas`}
+                  {importType === "products" && `${result.success} produtos importados`}
+                </AlertDescription>
+              </Alert>
+
+              {result.errors && result.errors.length > 0 && (
+                <Alert className="border-amber-500/30 bg-amber-500/5">
+                  <AlertTriangle className="h-4 w-4 text-amber-500" />
+                  <AlertDescription>
+                    <p className="font-medium mb-2">{result.errors.length} erros:</p>
+                    <ScrollArea className="max-h-32">
+                      {result.errors.map((e, i) => (
+                        <p key={i} className="text-xs text-muted-foreground">{e.row}: {e.error}</p>
+                      ))}
+                    </ScrollArea>
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              <Button variant="outline" onClick={() => { setParsedData([]); setResult(null); setFileName(""); }} className="w-full">
+                Nova importação
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
