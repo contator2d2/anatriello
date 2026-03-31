@@ -263,6 +263,7 @@ export default function PromotorRota() {
   const [routeCompletionResult, setRouteCompletionResult] = useState<any>(null);
   const [showExtraPointDialog, setShowExtraPointDialog] = useState<{ catId: string; categoryName: string } | null>(null);
   const [selectedExtraProducts, setSelectedExtraProducts] = useState<string[]>([]);
+  const [showExtraPointCategoryPicker, setShowExtraPointCategoryPicker] = useState(false);
 
   // Build category status map
   const categoryStatusMap = useMemo(() => {
@@ -531,9 +532,6 @@ export default function PromotorRota() {
                   setShowExtraPointDialog({ catId: cats[0][1].catId, categoryName: cats[0][0] });
                   setSelectedExtraProducts([]);
                 } else {
-                  // If multiple categories, show picker (simple: use first for now, ideally show a select)
-                  setShowExtraPointDialog(null);
-                  // Will show category picker dialog
                   setShowExtraPointCategoryPicker(true);
                 }
               }}>
@@ -786,6 +784,80 @@ export default function PromotorRota() {
               </Button>
               <Button onClick={handlePdvCheckout} disabled={route.require_checkout_photo && !pdvCheckoutPhoto}>
                 Fazer Checkout
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Extra Point Category Picker Dialog */}
+        <Dialog open={showExtraPointCategoryPicker} onOpenChange={setShowExtraPointCategoryPicker}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader><DialogTitle className="text-sm">Selecione a Categoria</DialogTitle></DialogHeader>
+            <div className="space-y-2">
+              {Object.entries(groupedExecs).map(([category, { catId }]) => (
+                <Button key={catId} variant="outline" className="w-full justify-start" onClick={() => {
+                  setShowExtraPointCategoryPicker(false);
+                  setShowExtraPointDialog({ catId, categoryName: category });
+                  setSelectedExtraProducts([]);
+                }}>
+                  <Target className="h-4 w-4 mr-2 text-orange-600" /> {category}
+                </Button>
+              ))}
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Extra Point Product Selection Dialog */}
+        <Dialog open={!!showExtraPointDialog} onOpenChange={() => setShowExtraPointDialog(null)}>
+          <DialogContent className="max-w-sm max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="text-sm flex items-center gap-2">
+                <Target className="h-4 w-4 text-orange-600" /> Ponto Extra
+              </DialogTitle>
+              <p className="text-xs text-muted-foreground">
+                Selecione os produtos de <b>{showExtraPointDialog?.categoryName}</b> que estão neste ponto extra.
+              </p>
+            </DialogHeader>
+            <div className="space-y-2 max-h-60 overflow-y-auto">
+              {showExtraPointDialog && groupedExecs[showExtraPointDialog.categoryName]?.execs
+                .filter((e: any) => e.exposure_point !== 'extra')
+                .map((exec: any) => (
+                  <label key={exec.id} className="flex items-center gap-3 p-2 rounded-lg border cursor-pointer hover:bg-accent/50">
+                    <Checkbox
+                      checked={selectedExtraProducts.includes(exec.product_id)}
+                      onCheckedChange={(checked) => {
+                        setSelectedExtraProducts(prev =>
+                          checked ? [...prev, exec.product_id] : prev.filter(id => id !== exec.product_id)
+                        );
+                      }}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm font-medium">{exec.product_name}</span>
+                      {exec.sku && <span className="text-[10px] text-muted-foreground ml-2">SKU: {exec.sku}</span>}
+                    </div>
+                  </label>
+                ))}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowExtraPointDialog(null)}>Cancelar</Button>
+              <Button disabled={selectedExtraProducts.length === 0 || registerExtraPoint.isPending}
+                onClick={() => {
+                  if (!showExtraPointDialog) return;
+                  registerExtraPoint.mutate({
+                    routeId: id!,
+                    catId: showExtraPointDialog.catId,
+                    product_ids: selectedExtraProducts,
+                  }, {
+                    onSuccess: (data: any) => {
+                      toast.success(`${data.count} produto(s) duplicado(s) para ponto extra!`);
+                      setShowExtraPointDialog(null);
+                      setSelectedExtraProducts([]);
+                    },
+                    onError: (err: any) => toast.error(err.message),
+                  });
+                }}>
+                <Plus className="h-4 w-4 mr-1" />
+                {registerExtraPoint.isPending ? 'Registrando...' : `Registrar ${selectedExtraProducts.length} produto(s)`}
               </Button>
             </DialogFooter>
           </DialogContent>
