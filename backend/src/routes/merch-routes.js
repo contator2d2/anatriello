@@ -1027,4 +1027,301 @@ router.get('/promoters-team', authenticate, async (req, res) => {
   }
 });
 
+// ===== AI ROUTE OPTIMIZATION =====
+
+// Get optimization context data
+router.get('/ai/optimization-context', authenticate, async (req, res) => {
+  try {
+    const orgRes = await query('SELECT organization_id FROM organization_members WHERE user_id=$1 LIMIT 1', [req.userId]);
+    if (!orgRes.rows.length) return res.status(403).json({ error: 'Sem organização' });
+    const orgId = orgRes.rows[0].organization_id;
+
+    const { promoter_ids, brand_id, date_from, date_to, region } = req.query;
+
+    // Get promoters with home location and brand permissions
+    let promoterSql = `SELECT e.id, e.full_name, e.home_latitude, e.home_longitude, e.work_schedule,
+                        e.direct_manager_id as supervisor_id,
+                        COALESCE(
+                          (SELECT json_agg(bp.brand_id) FROM brand_promoters bp WHERE bp.employee_id = e.id), '[]'
+                        ) as brand_ids,
+                        (SELECT COUNT(*) FROM merch_routes mr WHERE mr.promoter_id = e.id 
+                         AND mr.visit_date >= $2 AND mr.visit_date <= $3 AND mr.status != 'cancelled') as existing_routes
+                       FROM employees e
+                       WHERE e.organization_id = $1 AND e.worker_profile IN ('promotor','operacional') AND e.status = 'ativo'`;
+    const promoterParams = [orgId, date_from || 'now()', date_to || 'now()'];
+    
+    if (promoter_ids) {
+      const ids = promoter_ids.split(',');
+      promoterSql += ` AND e.id = ANY($4)`;
+      promoterParams.push(ids);
+    }
+    promoterSql += ' ORDER BY e.full_name';
+    
+    // Get PDVs with brand mix info
+    let pdvSql = `SELECT p.id, p.name, p.address, p.city, p.state, p.latitude, p.longitude, p.radius_meters,
+                   COALESCE(
+                     (SELECT json_agg(json_build_object('brand_id', pbp.brand_id, 'product_count', 
+                       (SELECT COUNT(*) FROM pdv_brand_products pbp2 WHERE pbp2.pdv_id = p.id AND pbp2.brand_id = pbp.brand_id AND pbp2.active = true)
+                     )) FROM (SELECT DISTINCT brand_id FROM pdv_brand_products WHERE pdv_id = p.id AND active = true) pbp), '[]'
+                   ) as brands_mix,
+                   (SELECT AVG(EXTRACT(EPOCH FROM (mr.checkout_at - mr.checkin_at))/60) 
+                    FROM merch_routes mr WHERE mr.pdv_id = p.id AND mr.checkout_at IS NOT NULL 
+                    AND mr.checkin_at IS NOT NULL) as avg_visit_minutes
+                  FROM pdvs p WHERE p.organization_id = $1 AND p.active = true`;
+    const pdvParams = [orgId];
+    
+    if (brand_id) {
+      pdvSql += ` AND EXISTS (SELECT 1 FROM pdv_brand_products pbp WHERE pbp.pdv_id = p.id AND pbp.brand_id = $2 AND pbp.active = true)`;
+      pdvParams.push(brand_id);
+    }
+    if (region) {
+      pdvSql += ` AND p.city ILIKE $${pdvParams.length + 1}`;
+      pdvParams.push(`%${region}%`);
+    }
+    pdvSql += ' ORDER BY p.name';
+
+    // Get existing routes in period
+    const existingSql = `SELECT r.id, r.promoter_id, r.pdv_id, r.brand_id, r.visit_date, r.scheduled_time,
+                          r.estimated_duration_min, r.status, p.name as pdv_name, b.name as brand_name
+                         FROM merch_routes r
+                         LEFT JOIN pdvs p ON p.id = r.pdv_id
+                         LEFT JOIN brands b ON b.id = r.brand_id
+                         WHERE r.organization_id = $1 AND r.visit_date >= $2 AND r.visit_date <= $3 AND r.status != 'cancelled'
+                         ORDER BY r.visit_date, r.scheduled_time`;
+
+    // Get brands
+    const brandsSql = `SELECT id, name FROM brands WHERE organization_id = $1 ORDER BY name`;
+
+    const [promoters, pdvsList, existing, brands] = await Promise.all([
+      query(promoterSql, promoterParams),
+      query(pdvSql, pdvParams),
+      query(existingSql, [orgId, date_from || new Date().toISOString().split('T')[0], date_to || new Date().toISOString().split('T')[0]]),
+      query(brandsSql, [orgId]),
+    ]);
+
+    res.json({
+      promoters: promoters.rows,
+      pdvs: pdvsList.rows,
+      existing_routes: existing.rows,
+      brands: brands.rows,
+    });
+  } catch (err) {
+    logError('merch.ai.context', err);
+    if (err.code === '42P01') return res.json({ promoters: [], pdvs: [], existing_routes: [], brands: [] });
+    res.status(500).json({ error: 'Erro ao carregar contexto' });
+  }
+});
+
+// Generate AI route suggestions
+router.post('/ai/optimize', authenticate, async (req, res) => {
+  try {
+    const orgRes = await query('SELECT organization_id FROM organization_members WHERE user_id=$1 LIMIT 1', [req.userId]);
+    if (!orgRes.rows.length) return res.status(403).json({ error: 'Sem organização' });
+    const orgId = orgRes.rows[0].organization_id;
+
+    // Get org AI config
+    const orgConfig = await query('SELECT ai_provider, ai_model, ai_api_key FROM organizations WHERE id=$1', [orgId]);
+    if (!orgConfig.rows.length || !orgConfig.rows[0].ai_api_key || orgConfig.rows[0].ai_provider === 'none') {
+      return res.status(400).json({ error: 'Configure a IA da organização em Configurações > IA antes de usar o planejamento inteligente.' });
+    }
+
+    const { provider, model, apiKey } = {
+      provider: orgConfig.rows[0].ai_provider,
+      model: orgConfig.rows[0].ai_model,
+      apiKey: orgConfig.rows[0].ai_api_key,
+    };
+
+    const { promoters, pdvs, existing_routes, date_from, date_to, brand_id, rules } = req.body;
+
+    const systemPrompt = `Você é um assistente especializado em otimização de rotas de merchandising.
+Sua tarefa é gerar sugestões de rotas otimizadas para promotores de merchandising.
+
+REGRAS:
+- Cada promotor só pode atender marcas para as quais está habilitado
+- Distribua as visitas equilibradamente entre os dias do período
+- Minimize o tempo de deslocamento agrupando PDVs próximos no mesmo dia
+- Considere a localização da casa/base do promotor para a primeira e última visita do dia
+- Respeite o limite máximo de ${rules?.max_visits_per_day || 6} visitas por dia
+- Respeite o limite máximo de ${rules?.max_hours_per_day || 8} horas por dia
+- Duração estimada padrão por visita: ${rules?.default_visit_duration || 60} minutos
+- Tempo médio de deslocamento entre PDVs: 30 minutos (ajuste por distância se houver coordenadas)
+${rules?.additional_rules || ''}
+
+RESPONDA EXCLUSIVAMENTE em JSON válido com esta estrutura:
+{
+  "suggestions": [
+    {
+      "promoter_id": "uuid",
+      "promoter_name": "nome",
+      "pdv_id": "uuid",
+      "pdv_name": "nome",
+      "brand_id": "uuid",
+      "brand_name": "nome",
+      "visit_date": "YYYY-MM-DD",
+      "scheduled_time": "HH:MM",
+      "estimated_duration_min": 60,
+      "reason": "Motivo da sugestão"
+    }
+  ],
+  "insights": [
+    "Texto descritivo de cada insight/sugestão de melhoria"
+  ],
+  "metrics": {
+    "total_visits": 0,
+    "total_travel_hours_estimated": 0,
+    "avg_visits_per_day": 0,
+    "conflicts_avoided": 0
+  }
+}`;
+
+    const userPrompt = `Gere um plano de rotas otimizado para o período de ${date_from} a ${date_to}.
+
+PROMOTORES DISPONÍVEIS:
+${JSON.stringify(promoters.map((p) => ({
+  id: p.id, nome: p.full_name,
+  lat: p.home_latitude, lng: p.home_longitude,
+  marcas_autorizadas: p.brand_ids,
+  rotas_existentes: p.existing_routes,
+})), null, 2)}
+
+PDVs PARA ATENDER:
+${JSON.stringify(pdvs.map((p) => ({
+  id: p.id, nome: p.name, cidade: p.city,
+  lat: p.latitude, lng: p.longitude,
+  marcas: p.brands_mix,
+  tempo_medio_visita_min: p.avg_visit_minutes || rules?.default_visit_duration || 60,
+})), null, 2)}
+
+${brand_id ? `MARCA FOCO: ${brand_id}` : 'TODAS AS MARCAS'}
+
+ROTAS JÁ AGENDADAS NO PERÍODO (evitar conflitos):
+${JSON.stringify(existing_routes.map((r) => ({
+  promotor: r.promoter_id, pdv: r.pdv_id, data: r.visit_date, hora: r.scheduled_time,
+})), null, 2)}
+
+Gere as sugestões de rota otimizadas.`;
+
+    const { callAI: callAIFn } = await import('../lib/ai-caller.js');
+    const aiResult = await callAIFn(
+      { provider, model, apiKey },
+      [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      { temperature: 0.3, maxTokens: 4000, responseFormat: { type: 'json_object' } }
+    );
+
+    let parsed;
+    try {
+      parsed = JSON.parse(aiResult.content);
+    } catch {
+      // Try to extract JSON from response
+      const match = aiResult.content.match(/\{[\s\S]*\}/);
+      if (match) parsed = JSON.parse(match[0]);
+      else throw new Error('IA retornou resposta inválida');
+    }
+
+    // Log optimization run
+    try {
+      await query(
+        `INSERT INTO route_ai_optimization_runs (organization_id, run_by, date_from, date_to, brand_id,
+         promoter_count, pdv_count, suggestions_count, tokens_used, status)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'completed')`,
+        [orgId, req.userId, date_from, date_to, brand_id || null,
+         promoters.length, pdvs.length, parsed.suggestions?.length || 0, aiResult.tokensUsed || 0]
+      );
+    } catch { /* table might not exist yet */ }
+
+    res.json({
+      suggestions: parsed.suggestions || [],
+      insights: parsed.insights || [],
+      metrics: parsed.metrics || {},
+      tokens_used: aiResult.tokensUsed || 0,
+    });
+  } catch (err) {
+    logError('merch.ai.optimize', err);
+    res.status(500).json({ error: err.message || 'Erro na otimização com IA' });
+  }
+});
+
+// Approve AI suggestions (bulk create routes)
+router.post('/ai/approve', authenticate, async (req, res) => {
+  try {
+    const orgRes = await query('SELECT organization_id FROM organization_members WHERE user_id=$1 LIMIT 1', [req.userId]);
+    if (!orgRes.rows.length) return res.status(403).json({ error: 'Sem organização' });
+    const orgId = orgRes.rows[0].organization_id;
+
+    const { suggestions } = req.body;
+    if (!suggestions?.length) return res.status(400).json({ error: 'Nenhuma sugestão para aprovar' });
+
+    const created = [];
+    for (const s of suggestions) {
+      const result = await query(
+        `INSERT INTO merch_routes (organization_id, promoter_id, pdv_id, brand_id,
+         visit_date, scheduled_time, estimated_duration_min, priority, visit_type, notes, created_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,'normal','regular',$8,$9) RETURNING *`,
+        [orgId, s.promoter_id, s.pdv_id, s.brand_id,
+         s.visit_date, s.scheduled_time, s.estimated_duration_min || 60,
+         `[IA] ${s.reason || ''}`, req.userId]
+      );
+      created.push(result.rows[0]);
+
+      // Auto-load products from mix
+      try {
+        const mixProducts = await query(
+          `SELECT pbp.product_id, p.category_id FROM pdv_brand_products pbp
+           JOIN products p ON p.id = pbp.product_id
+           WHERE pbp.pdv_id=$1 AND pbp.brand_id=$2 AND pbp.active=true`,
+          [s.pdv_id, s.brand_id]
+        );
+        for (const mp of mixProducts.rows) {
+          await query(
+            `INSERT INTO route_product_executions (route_id, product_id, category_id) VALUES ($1,$2,$3)`,
+            [result.rows[0].id, mp.product_id, mp.category_id]
+          );
+        }
+      } catch { /* ignore */ }
+    }
+
+    res.json({ created: created.length, routes: created });
+  } catch (err) {
+    logError('merch.ai.approve', err);
+    res.status(500).json({ error: 'Erro ao aprovar sugestões' });
+  }
+});
+
+// Workload analysis
+router.get('/workload', authenticate, async (req, res) => {
+  try {
+    const orgRes = await query('SELECT organization_id FROM organization_members WHERE user_id=$1 LIMIT 1', [req.userId]);
+    if (!orgRes.rows.length) return res.status(403).json({ error: 'Sem organização' });
+    const orgId = orgRes.rows[0].organization_id;
+
+    const { promoter_id, date_from, date_to } = req.query;
+
+    const result = await query(
+      `SELECT r.visit_date, r.promoter_id, e.full_name as promoter_name,
+              COUNT(*) as visits,
+              SUM(COALESCE(r.estimated_duration_min, 60)) as total_minutes,
+              COUNT(CASE WHEN r.status = 'completed' THEN 1 END) as completed,
+              COUNT(CASE WHEN r.status = 'in_progress' THEN 1 END) as in_progress,
+              COUNT(CASE WHEN r.status = 'scheduled' THEN 1 END) as scheduled
+       FROM merch_routes r
+       LEFT JOIN employees e ON e.id = r.promoter_id
+       WHERE r.organization_id = $1 AND r.status != 'cancelled'
+       ${promoter_id ? 'AND r.promoter_id = $4' : ''}
+       AND r.visit_date >= $2 AND r.visit_date <= $3
+       GROUP BY r.visit_date, r.promoter_id, e.full_name
+       ORDER BY r.visit_date`,
+      promoter_id ? [orgId, date_from, date_to, promoter_id] : [orgId, date_from, date_to]
+    );
+
+    res.json(result.rows);
+  } catch (err) {
+    logError('merch.workload', err);
+    if (err.code === '42P01') return res.json([]);
+    res.status(500).json({ error: 'Erro' });
+  }
+});
+
 export default router;

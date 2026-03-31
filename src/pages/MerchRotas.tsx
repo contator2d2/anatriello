@@ -9,7 +9,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Calendar, ChevronLeft, ChevronRight, Plus, MapPin, Clock, User, Eye, Copy, Trash2, Edit, Filter, Repeat } from "lucide-react";
+import { Calendar, ChevronLeft, ChevronRight, Plus, MapPin, Clock, User, Eye, Copy, Trash2, Edit, Filter, Repeat, Sparkles } from "lucide-react";
+import AIRoutePlanner from "@/components/merch/AIRoutePlanner";
 import { useMerchRoutes, useCreateMerchRoute, useUpdateMerchRoute, useDeleteMerchRoute, useDuplicateMerchRoute, useBrandChecklists, useBrandPromoters } from "@/hooks/use-merch-routes";
 import { useBrands } from "@/hooks/use-merchandising";
 import { usePDVs } from "@/hooks/use-promotor";
@@ -44,6 +45,7 @@ export default function MerchRotas() {
   const [filterBrand, setFilterBrand] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [showFilters, setShowFilters] = useState(false);
+  const [showAIPlanner, setShowAIPlanner] = useState(false);
 
   // Calculate date range
   const dateRange = useMemo(() => {
@@ -113,6 +115,9 @@ export default function MerchRotas() {
             <p className="text-sm text-muted-foreground">Planejamento e acompanhamento de visitas</p>
           </div>
           <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => setShowAIPlanner(true)} className="border-primary/30 text-primary hover:bg-primary/10">
+              <Sparkles className="h-4 w-4 mr-1" /> Planejamento IA
+            </Button>
             <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)}>
               <Filter className="h-4 w-4 mr-1" /> Filtros
             </Button>
@@ -261,6 +266,9 @@ export default function MerchRotas() {
             duplicateRoute.mutate({ id: selectedRoute.id }, { onSuccess: () => { toast.success('Rota duplicada'); setSelectedRoute(null); } });
           } : undefined}
         />
+
+        {/* AI Route Planner */}
+        <AIRoutePlanner open={showAIPlanner} onClose={() => setShowAIPlanner(false)} />
       </div>
     </MainLayout>
   );

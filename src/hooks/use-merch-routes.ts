@@ -214,3 +214,48 @@ export function useMerchPromoters() {
     queryFn: () => api<any[]>('/api/merch/promoters-team'),
   });
 }
+
+// AI Route Optimization
+export function useOptimizationContext(filters?: {
+  promoter_ids?: string; brand_id?: string; date_from?: string; date_to?: string; region?: string;
+}) {
+  const params = new URLSearchParams();
+  if (filters?.promoter_ids) params.set('promoter_ids', filters.promoter_ids);
+  if (filters?.brand_id) params.set('brand_id', filters.brand_id);
+  if (filters?.date_from) params.set('date_from', filters.date_from);
+  if (filters?.date_to) params.set('date_to', filters.date_to);
+  if (filters?.region) params.set('region', filters.region);
+  const qs = params.toString();
+  return useQuery({
+    queryKey: ['ai-optimization-context', qs],
+    queryFn: () => api<any>(`/api/merch/ai/optimization-context${qs ? `?${qs}` : ''}`),
+    enabled: !!(filters?.date_from && filters?.date_to),
+  });
+}
+
+export function useAIOptimize() {
+  return useMutation({
+    mutationFn: (data: any) => api<any>('/api/merch/ai/optimize', { method: 'POST', body: data }),
+  });
+}
+
+export function useAIApprove() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: any) => api<any>('/api/merch/ai/approve', { method: 'POST', body: data }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['merch-routes'] }),
+  });
+}
+
+export function useWorkload(filters?: { promoter_id?: string; date_from?: string; date_to?: string }) {
+  const params = new URLSearchParams();
+  if (filters?.promoter_id) params.set('promoter_id', filters.promoter_id);
+  if (filters?.date_from) params.set('date_from', filters.date_from);
+  if (filters?.date_to) params.set('date_to', filters.date_to);
+  const qs = params.toString();
+  return useQuery({
+    queryKey: ['merch-workload', qs],
+    queryFn: () => api<any[]>(`/api/merch/workload${qs ? `?${qs}` : ''}`),
+    enabled: !!(filters?.date_from && filters?.date_to),
+  });
+}
