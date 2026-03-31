@@ -396,14 +396,20 @@ export default function PromotorRota() {
                 <Camera className="h-4 w-4 text-primary" />
                 Foto obrigatória para check-in
               </div>
-              <FileUploadInput
-                value={checkinPhotoUrl}
-                onChange={setCheckinPhotoUrl}
-                accept="image/*,.jpg,.jpeg,.png,.webp"
-                placeholder="Envie a foto do check-in"
-                previewType="image"
-                customTokenGetter={() => localStorage.getItem('promotor_token')}
-              />
+              {checkinPhotoUrl ? (
+                <div className="space-y-2">
+                  <img src={checkinPhotoUrl} alt="Check-in" className="w-full rounded-lg border max-h-48 object-cover" />
+                  <Button variant="outline" size="sm" onClick={() => setCheckinPhotoUrl('')}>Tirar outra foto</Button>
+                </div>
+              ) : (
+                <CameraCapture
+                  onCapture={setCheckinPhotoUrl}
+                  watermark={{ pdvName: route.pdv_name, brandName: route.brand_name, photoType: 'Check-in' }}
+                  customTokenGetter={() => localStorage.getItem('promotor_token')}
+                  buttonLabel="Tirar foto de check-in"
+                  qualityConfig={photoQualityConfig}
+                />
+              )}
             </CardContent>
           </Card>
         )}
