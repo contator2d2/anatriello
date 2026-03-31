@@ -18,7 +18,7 @@ import {
 import { toast } from "sonner";
 import {
   MapPin, Camera, Check, AlertTriangle, Archive, Clock,
-  CheckCircle2, Circle, Calendar as CalendarIcon, Trash2, MoreVertical
+  CheckCircle2, Circle, Calendar as CalendarIcon, Trash2, MoreVertical, Store, Info
 } from "lucide-react";
 
 const EXEC_STATUS_ICON: Record<string, any> = {
@@ -28,6 +28,23 @@ const EXEC_STATUS_ICON: Record<string, any> = {
 };
 
 type ActionType = 'validity' | 'rupture' | 'damage' | 'discard' | null;
+
+// PDV checkout hook
+const usePromotorPdvCheckout = () => {
+  const promotorApi = async (endpoint: string, options: any = {}) => {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const token = localStorage.getItem('promotor_token');
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const url = `${(import.meta.env.VITE_API_URL || '').replace(/\/$/, '')}${endpoint}`;
+    const response = await fetch(url, { method: options.method || 'GET', headers, body: options.body ? JSON.stringify(options.body) : undefined });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data?.error || 'Erro');
+    return data;
+  };
+  return {
+    checkout: (data: any) => promotorApi('/api/merch/promotor/pdv-checkout', { method: 'POST', body: data }),
+  };
+};
 
 export default function PromotorRota() {
   const { id } = useParams();
@@ -40,12 +57,16 @@ export default function PromotorRota() {
   const reportRupture = usePromotorReportRupture();
   const addValidity = usePromotorAddValidity();
   const reportDiscard = usePromotorReportDiscard();
+  const pdvCheckout = usePromotorPdvCheckout();
 
   const [activeAction, setActiveAction] = useState<ActionType>(null);
   const [selectedExec, setSelectedExec] = useState<any>(null);
   const [actionForm, setActionForm] = useState<any>({});
-  const [showCheckout, setShowCheckout] = useState(false);
+  const [showCompleteRoute, setShowCompleteRoute] = useState(false);
+  const [showPdvCheckout, setShowPdvCheckout] = useState(false);
+  const [pdvCheckoutPhoto, setPdvCheckoutPhoto] = useState('');
   const [checkinPhotoUrl, setCheckinPhotoUrl] = useState('');
+  const [routeCompletionResult, setRouteCompletionResult] = useState<any>(null);
 
   const groupedExecs = useMemo(() => {
     if (!route?.executions) return {};
@@ -83,13 +104,44 @@ export default function PromotorRota() {
     }
   }, [id, checkin, route?.require_checkin_photo, checkinPhotoUrl]);
 
-  const handleCheckout = useCallback(() => {
+  const handleCompleteRoute = useCallback(() => {
     if (!id) return;
     checkout.mutate({ id, notes: actionForm.notes }, {
-      onSuccess: () => { toast.success('Rota finalizada!'); navigate('/promotor/agenda'); },
+      onSuccess: (data: any) => {
+        toast.success('Rota finalizada!');
+        setShowCompleteRoute(false);
+        if (data.can_checkout_pdv) {
+          setRouteCompletionResult(data);
+          setShowPdvCheckout(true);
+        } else {
+          toast.info(data.pdv_checkout_message || `Ainda existem ${data.remaining_routes_at_pdv} rota(s) neste PDV.`);
+          navigate('/promotor/home');
+        }
+      },
       onError: (err: any) => toast.error(err.message),
     });
   }, [id, checkout, actionForm, navigate]);
+
+  const handlePdvCheckout = useCallback(async () => {
+    if (!route?.pdv_id) return;
+    try {
+      const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
+        navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000 })
+      );
+      await pdvCheckout.checkout({
+        pdv_id: route.pdv_id,
+        latitude: pos.coords.latitude,
+        longitude: pos.coords.longitude,
+        photo_url: pdvCheckoutPhoto || undefined,
+        notes: actionForm.pdv_notes,
+      });
+      toast.success('Checkout do PDV realizado!');
+      setShowPdvCheckout(false);
+      navigate('/promotor/home');
+    } catch (err: any) {
+      toast.error(err.message || 'Erro no checkout do PDV');
+    }
+  }, [route?.pdv_id, pdvCheckout, pdvCheckoutPhoto, actionForm, navigate]);
 
   const handleToggleExec = useCallback((exec: any) => {
     const newStatus = exec.status === 'completed' ? 'pending' : 'completed';
@@ -228,9 +280,14 @@ export default function PromotorRota() {
               );
             })}
 
-            <Button className="w-full h-12" onClick={() => setShowCheckout(true)} disabled={checkout.isPending}>
-              <Check className="h-5 w-5 mr-2" /> Finalizar Rota
+            {/* Complete Route button (NOT PDV checkout) */}
+            <Button className="w-full h-12" onClick={() => setShowCompleteRoute(true)} disabled={checkout.isPending}>
+              <Check className="h-5 w-5 mr-2" /> Concluir Rota
             </Button>
+            <p className="text-[10px] text-center text-muted-foreground">
+              <Info className="h-3 w-3 inline mr-1" />
+              Concluir a rota finaliza o checklist desta marca. O checkout da loja só será feito na última rota do PDV.
+            </p>
           </div>
         )}
 
@@ -240,11 +297,15 @@ export default function PromotorRota() {
             <p className="text-sm font-medium text-green-700">Rota concluída</p>
             <p className="text-xs text-muted-foreground">
               {route.checkin_at && `Check-in: ${new Date(route.checkin_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`}
-              {route.checkout_at && ` • Check-out: ${new Date(route.checkout_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`}
+              {route.checkout_at && ` • Checkout: ${new Date(route.checkout_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`}
             </p>
+            <Button variant="outline" size="sm" className="mt-3" onClick={() => navigate('/promotor/home')}>
+              Voltar para Início
+            </Button>
           </div>
         )}
 
+        {/* Product action menu */}
         <Dialog open={!!selectedExec && !activeAction} onOpenChange={() => setSelectedExec(null)}>
           <DialogContent className="max-w-sm">
             <DialogHeader><DialogTitle className="text-sm">{selectedExec?.product_name}</DialogTitle></DialogHeader>
@@ -268,6 +329,7 @@ export default function PromotorRota() {
           </DialogContent>
         </Dialog>
 
+        {/* Action detail dialog */}
         <Dialog open={!!activeAction} onOpenChange={() => setActiveAction(null)}>
           <DialogContent className="max-w-sm">
             <DialogHeader>
@@ -315,16 +377,71 @@ export default function PromotorRota() {
           </DialogContent>
         </Dialog>
 
-        <Dialog open={showCheckout} onOpenChange={setShowCheckout}>
+        {/* Complete Route Dialog (NOT checkout) */}
+        <Dialog open={showCompleteRoute} onOpenChange={setShowCompleteRoute}>
           <DialogContent className="max-w-sm">
-            <DialogHeader><DialogTitle>Finalizar Rota</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle>Concluir Rota</DialogTitle></DialogHeader>
+            <p className="text-xs text-muted-foreground">
+              Ao concluir esta rota, o checklist de <b>{route.brand_name}</b> será finalizado.
+              Se houver mais rotas neste PDV, o checkout da loja será feito depois.
+            </p>
             <div>
               <Label className="text-xs">Observação de encerramento</Label>
               <Textarea rows={3} placeholder="Observações finais..." onChange={e => setActionForm({ ...actionForm, notes: e.target.value })} />
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setShowCheckout(false)}>Cancelar</Button>
-              <Button onClick={handleCheckout} disabled={checkout.isPending}>Confirmar Finalização</Button>
+              <Button variant="outline" onClick={() => setShowCompleteRoute(false)}>Cancelar</Button>
+              <Button onClick={handleCompleteRoute} disabled={checkout.isPending}>
+                {checkout.isPending ? 'Concluindo...' : 'Confirmar Conclusão'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* PDV Checkout Dialog */}
+        <Dialog open={showPdvCheckout} onOpenChange={setShowPdvCheckout}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Store className="h-5 w-5 text-primary" /> Checkout da Loja
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              <Card className="border-green-500/30 bg-green-500/5">
+                <CardContent className="p-3">
+                  <p className="text-sm font-medium text-green-700">✅ Última rota concluída!</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Esta era a última rota neste PDV. Faça o checkout da loja para encerrar a visita.
+                  </p>
+                </CardContent>
+              </Card>
+
+              {route.require_checkout_photo && (
+                <div>
+                  <Label className="text-xs">Foto final da loja (obrigatória)</Label>
+                  <FileUploadInput
+                    value={pdvCheckoutPhoto}
+                    onChange={setPdvCheckoutPhoto}
+                    accept="image/*,.jpg,.jpeg,.png,.webp"
+                    placeholder="Tire a foto de saída da loja"
+                    previewType="image"
+                    customTokenGetter={() => localStorage.getItem('promotor_token')}
+                  />
+                </div>
+              )}
+
+              <div>
+                <Label className="text-xs">Observação</Label>
+                <Textarea rows={2} placeholder="Observações sobre a visita..." onChange={e => setActionForm({ ...actionForm, pdv_notes: e.target.value })} />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => { setShowPdvCheckout(false); navigate('/promotor/home'); }}>
+                Pular
+              </Button>
+              <Button onClick={handlePdvCheckout} disabled={route.require_checkout_photo && !pdvCheckoutPhoto}>
+                Fazer Checkout
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

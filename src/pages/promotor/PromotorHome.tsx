@@ -11,10 +11,25 @@ import { useToast } from "@/hooks/use-toast";
 import { usePromotorHome, usePromotorPunch, usePromotorOvertimeRequest } from "@/hooks/use-promotor";
 import { PromotorLayout } from "./PromotorLayout";
 import {
-  Clock, FileText, Bell, MapPin, Wifi, WifiOff, Navigation, AlertTriangle, CheckCircle2, Loader2, ShieldAlert, Timer
+  Clock, FileText, Bell, MapPin, Wifi, WifiOff, Navigation, AlertTriangle, CheckCircle2,
+  Loader2, ShieldAlert, Timer, ChevronRight, PlayCircle, Package
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+
+const STATUS_COLORS: Record<string, string> = {
+  scheduled: 'bg-blue-500/20 text-blue-700',
+  confirmed: 'bg-cyan-500/20 text-cyan-700',
+  in_progress: 'bg-orange-500/20 text-orange-700',
+  completed: 'bg-green-500/20 text-green-700',
+  not_done: 'bg-red-500/20 text-red-700',
+  cancelled: 'bg-muted text-muted-foreground',
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  scheduled: 'Agendada', confirmed: 'Confirmada', in_progress: 'Em Andamento',
+  completed: 'Concluída', not_done: 'Não Realizada', cancelled: 'Cancelada',
+};
 
 export default function PromotorHome() {
   const { data, isLoading } = usePromotorHome();
@@ -36,6 +51,12 @@ export default function PromotorHome() {
   const dailyAssignment = data?.daily_assignment;
   const availablePdvs = data?.available_pdvs || [];
   const scheduleStatus = data?.schedule_status;
+  const todayRoutes = data?.today_routes || [];
+  const activeRoute = data?.active_route;
+  const nextRoute = data?.next_route;
+  const hasRoutesToday = data?.has_routes_today || false;
+  const completedRoutesCount = data?.completed_routes_count || 0;
+  const pendingRoutesCount = data?.pending_routes_count || 0;
 
   useEffect(() => {
     const onOn = () => setIsOnline(true);
@@ -159,100 +180,213 @@ export default function PromotorHome() {
           <p className="text-sm text-muted-foreground">{employee?.position || employee?.worker_profile}</p>
         </div>
 
-        {/* Schedule Status */}
-        {scheduleStatus && (
-          <Card className={isOutsideSchedule && !scheduleStatus.has_overtime_approval ? 'border-destructive/50 bg-destructive/5' : 'border-primary/20 bg-primary/5'}>
-            <CardContent className="p-3 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Timer className={`h-5 w-5 ${isOutsideSchedule && !scheduleStatus.has_overtime_approval ? 'text-destructive' : 'text-primary'}`} />
-                <div>
-                  <p className="text-sm font-medium">
-                    Horário: {(() => {
-                      const start = scheduleStatus.schedule_start;
-                      const end = scheduleStatus.schedule_end;
-                      // If it's a JSON object/string, parse entry/exit
-                      try {
-                        const parsed = typeof start === 'string' && start.startsWith('{') ? JSON.parse(start) : null;
-                        if (parsed?.entry) return `${parsed.entry} - ${parsed.exit || end}`;
-                      } catch {}
-                      // Simple "HH:MM" format
-                      const s = String(start || '08:00');
-                      const e = String(end || '17:00');
-                      return `${s.slice(0, 5)} - ${e.slice(0, 5)}`;
-                    })()}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {scheduleStatus.is_within_schedule
-                      ? '✅ Dentro do horário de trabalho'
-                      : scheduleStatus.has_overtime_approval
-                        ? '✅ Hora extra autorizada'
-                        : '🚫 Fora do horário de trabalho'}
-                  </p>
-                </div>
-              </div>
-              {isOutsideSchedule && !scheduleStatus.has_overtime_approval && (
-                <Button size="sm" variant="outline" onClick={() => setOvertimeDialog(true)} className="text-xs gap-1">
-                  <ShieldAlert className="h-3.5 w-3.5" /> Solicitar HE
-                </Button>
+        {/* ======= SCENARIO 1: HAS ROUTES TODAY ======= */}
+        {hasRoutesToday && (
+          <>
+            {/* Route summary */}
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary" className="text-xs">
+                📋 {todayRoutes.length} rota{todayRoutes.length > 1 ? 's' : ''} hoje
+              </Badge>
+              {completedRoutesCount > 0 && (
+                <Badge className="bg-green-500/20 text-green-700 text-xs">
+                  ✅ {completedRoutesCount} concluída{completedRoutesCount > 1 ? 's' : ''}
+                </Badge>
               )}
-              {scheduleStatus.overtime_request?.status === 'pendente' && (
-                <Badge variant="secondary" className="text-[10px]">⏳ HE Pendente</Badge>
+              {pendingRoutesCount > 0 && (
+                <Badge className="bg-blue-500/20 text-blue-700 text-xs">
+                  ⏳ {pendingRoutesCount} pendente{pendingRoutesCount > 1 ? 's' : ''}
+                </Badge>
               )}
-            </CardContent>
-          </Card>
-        )}
+            </div>
 
-        {/* PDV do dia */}
-        {dailyAssignment && (
-          <Card className="bg-primary/5 border-primary/20">
-            <CardContent className="p-3 flex items-center gap-3">
-              <MapPin className="h-5 w-5 text-primary" />
-              <div>
-                <p className="text-sm font-medium">PDV do dia</p>
-                <p className="text-xs text-muted-foreground">{dailyAssignment.pdv_name}</p>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* PUNCH BUTTON */}
-        <Card className="overflow-hidden">
-          <CardContent className="p-0">
-            <Button
-              onClick={handlePunch}
-              disabled={punchLoading || gpsStatus !== 'active' || (!canPunch && isOutsideSchedule)}
-              className={`w-full h-24 rounded-none text-lg font-bold ${
-                !canPunch && isOutsideSchedule
-                  ? 'bg-muted text-muted-foreground cursor-not-allowed'
-                  : 'bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70'
-              }`}
-            >
-              {punchLoading ? <Loader2 className="h-6 w-6 animate-spin mr-2" /> : <Clock className="h-6 w-6 mr-2" />}
-              {!canPunch && isOutsideSchedule
-                ? '🔒 Fora do Horário'
-                : PUNCH_LABELS[getNextPunchType()] || 'Bater Ponto'}
-            </Button>
-            {!canPunch && isOutsideSchedule && (
-              <div className="p-3 border-t bg-destructive/5 text-center">
-                <p className="text-xs text-destructive font-medium">Ponto bloqueado fora do horário</p>
-                <Button variant="link" size="sm" className="text-xs h-6 p-0" onClick={() => setOvertimeDialog(true)}>
-                  Solicitar hora extra ao supervisor →
-                </Button>
-              </div>
-            )}
-            {todayPunches.length > 0 && (
-              <div className="p-3 border-t space-y-1">
-                <p className="text-xs font-medium text-muted-foreground">Registros de hoje:</p>
-                {todayPunches.map((p: any) => (
-                  <div key={p.id} className="flex items-center justify-between text-xs">
-                    <span>{PUNCH_LABELS[p.punch_type] || p.punch_type}</span>
-                    <span className="text-muted-foreground">{format(new Date(p.punched_at), 'HH:mm')}</span>
+            {/* Active route - primary focus */}
+            {activeRoute && (
+              <Card className="border-orange-400/50 bg-orange-50/50 dark:bg-orange-950/10 cursor-pointer active:scale-[0.98]"
+                onClick={() => navigate(`/promotor/rota/${activeRoute.id}`)}>
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <Badge className="bg-orange-500/20 text-orange-700 text-[10px]">🔥 EM ANDAMENTO</Badge>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
                   </div>
+                  <h3 className="font-bold text-base">{activeRoute.pdv_name}</h3>
+                  <p className="text-sm text-muted-foreground">{activeRoute.brand_name}</p>
+                  <div className="flex items-center gap-3 text-xs text-muted-foreground mt-2">
+                    <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{activeRoute.pdv_city || activeRoute.pdv_address?.slice(0, 30)}</span>
+                    <span className="flex items-center gap-1"><Package className="h-3 w-3" />{activeRoute.products_done || 0}/{activeRoute.product_count || 0} itens</span>
+                  </div>
+                  {(activeRoute.progress_pct > 0) && (
+                    <div className="mt-2">
+                      <div className="flex justify-between text-xs mb-0.5">
+                        <span>Progresso</span>
+                        <span className="font-mono font-bold">{Math.round(activeRoute.progress_pct || 0)}%</span>
+                      </div>
+                      <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+                        <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${activeRoute.progress_pct || 0}%` }} />
+                      </div>
+                    </div>
+                  )}
+                  <Button className="w-full mt-3" size="sm">
+                    <PlayCircle className="h-4 w-4 mr-2" /> Continuar Execução
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Next route */}
+            {!activeRoute && nextRoute && (
+              <Card className="border-primary/30 bg-primary/5 cursor-pointer active:scale-[0.98]"
+                onClick={() => navigate(`/promotor/rota/${nextRoute.id}`)}>
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <Badge className="bg-blue-500/20 text-blue-700 text-[10px]">📍 PRÓXIMA ROTA</Badge>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                  </div>
+                  <h3 className="font-bold text-base">{nextRoute.pdv_name}</h3>
+                  <p className="text-sm text-muted-foreground">{nextRoute.brand_name}</p>
+                  <div className="flex items-center gap-3 text-xs text-muted-foreground mt-2">
+                    <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{nextRoute.scheduled_time?.slice(0, 5) || '--:--'}</span>
+                    <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{nextRoute.pdv_city || nextRoute.pdv_address?.slice(0, 30)}</span>
+                    <span className="flex items-center gap-1"><Package className="h-3 w-3" />{nextRoute.product_count || 0} itens</span>
+                  </div>
+                  <Button className="w-full mt-3" size="sm" variant="outline">
+                    <MapPin className="h-4 w-4 mr-2" /> Fazer Check-in
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* All today's routes */}
+            <div>
+              <h3 className="text-sm font-semibold mb-2">Rotas do Dia</h3>
+              <div className="space-y-2">
+                {todayRoutes.map((r: any) => (
+                  <Card key={r.id}
+                    className={`cursor-pointer active:scale-[0.98] transition-all ${
+                      r.id === activeRoute?.id ? 'border-orange-400/50' :
+                      r.status === 'completed' ? 'opacity-60' : 'hover:border-primary/30'
+                    }`}
+                    onClick={() => {
+                      if (r.status !== 'cancelled' && r.status !== 'not_done') {
+                        navigate(`/promotor/rota/${r.id}`);
+                      }
+                    }}>
+                    <CardContent className="p-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium truncate">{r.pdv_name}</span>
+                            <Badge className={`${STATUS_COLORS[r.status] || 'bg-muted'} text-[9px]`}>
+                              {STATUS_LABELS[r.status] || r.status}
+                            </Badge>
+                          </div>
+                          <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
+                            <span>{r.brand_name}</span>
+                            <span>{r.scheduled_time?.slice(0, 5) || '--:--'}</span>
+                            <span>{r.product_count || 0} itens</span>
+                          </div>
+                        </div>
+                        <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                      </div>
+                    </CardContent>
+                  </Card>
                 ))}
               </div>
+            </div>
+          </>
+        )}
+
+        {/* ======= SCENARIO 2: NO ROUTES TODAY ======= */}
+        {!hasRoutesToday && (
+          <>
+            {/* Schedule Status */}
+            {scheduleStatus && (
+              <Card className={isOutsideSchedule && !scheduleStatus.has_overtime_approval ? 'border-destructive/50 bg-destructive/5' : 'border-primary/20 bg-primary/5'}>
+                <CardContent className="p-3 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Timer className={`h-5 w-5 ${isOutsideSchedule && !scheduleStatus.has_overtime_approval ? 'text-destructive' : 'text-primary'}`} />
+                    <div>
+                      <p className="text-sm font-medium">
+                        Horário: {(() => {
+                          const start = scheduleStatus.schedule_start;
+                          const end = scheduleStatus.schedule_end;
+                          try {
+                            const parsed = typeof start === 'string' && start.startsWith('{') ? JSON.parse(start) : null;
+                            if (parsed?.entry) return `${parsed.entry} - ${parsed.exit || end}`;
+                          } catch {}
+                          return `${String(start || '08:00').slice(0, 5)} - ${String(end || '17:00').slice(0, 5)}`;
+                        })()}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {scheduleStatus.is_within_schedule
+                          ? '✅ Dentro do horário de trabalho'
+                          : scheduleStatus.has_overtime_approval
+                            ? '✅ Hora extra autorizada'
+                            : '🚫 Fora do horário de trabalho'}
+                      </p>
+                    </div>
+                  </div>
+                  {isOutsideSchedule && !scheduleStatus.has_overtime_approval && (
+                    <Button size="sm" variant="outline" onClick={() => setOvertimeDialog(true)} className="text-xs gap-1">
+                      <ShieldAlert className="h-3.5 w-3.5" /> HE
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
             )}
-          </CardContent>
-        </Card>
+
+            {/* No routes message */}
+            <Card className="border-dashed">
+              <CardContent className="p-6 text-center">
+                <Clock className="h-10 w-10 mx-auto text-muted-foreground/30 mb-2" />
+                <p className="text-sm font-medium">Sem rotas para hoje</p>
+                <p className="text-xs text-muted-foreground mt-1">Verifique sua agenda para os próximos dias</p>
+                <Button variant="outline" size="sm" className="mt-3" onClick={() => navigate('/promotor/agenda')}>
+                  Ver Agenda
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* PUNCH BUTTON - prominent when no routes */}
+            <Card className="overflow-hidden">
+              <CardContent className="p-0">
+                <Button
+                  onClick={handlePunch}
+                  disabled={punchLoading || gpsStatus !== 'active' || (!canPunch && isOutsideSchedule)}
+                  className={`w-full h-24 rounded-none text-lg font-bold ${
+                    !canPunch && isOutsideSchedule
+                      ? 'bg-muted text-muted-foreground cursor-not-allowed'
+                      : 'bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70'
+                  }`}
+                >
+                  {punchLoading ? <Loader2 className="h-6 w-6 animate-spin mr-2" /> : <Clock className="h-6 w-6 mr-2" />}
+                  {!canPunch && isOutsideSchedule
+                    ? '🔒 Fora do Horário'
+                    : PUNCH_LABELS[getNextPunchType()] || 'Bater Ponto'}
+                </Button>
+                {!canPunch && isOutsideSchedule && (
+                  <div className="p-3 border-t bg-destructive/5 text-center">
+                    <p className="text-xs text-destructive font-medium">Ponto bloqueado fora do horário</p>
+                    <Button variant="link" size="sm" className="text-xs h-6 p-0" onClick={() => setOvertimeDialog(true)}>
+                      Solicitar hora extra ao supervisor →
+                    </Button>
+                  </div>
+                )}
+                {todayPunches.length > 0 && (
+                  <div className="p-3 border-t space-y-1">
+                    <p className="text-xs font-medium text-muted-foreground">Registros de hoje:</p>
+                    {todayPunches.map((p: any) => (
+                      <div key={p.id} className="flex items-center justify-between text-xs">
+                        <span>{PUNCH_LABELS[p.punch_type] || p.punch_type}</span>
+                        <span className="text-muted-foreground">{format(new Date(p.punched_at), 'HH:mm')}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </>
+        )}
 
         {/* Quick actions */}
         <div className="grid grid-cols-2 gap-3">
@@ -263,14 +397,42 @@ export default function PromotorHome() {
               {pendingDocs > 0 && <Badge variant="destructive" className="mt-1">{pendingDocs} pendentes</Badge>}
             </CardContent>
           </Card>
-          <Card className="cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => navigate('/promotor/ponto')}>
+          <Card className="cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => navigate('/promotor/agenda')}>
             <CardContent className="p-4 text-center">
               <Clock className="h-6 w-6 mx-auto mb-1 text-primary" />
-              <p className="text-sm font-medium">Meu Ponto</p>
-              <p className="text-xs text-muted-foreground">{todayPunches.length} registros</p>
+              <p className="text-sm font-medium">Agenda</p>
+              <p className="text-xs text-muted-foreground">{todayRoutes.length} rotas hoje</p>
             </CardContent>
           </Card>
         </div>
+
+        {/* Punch footer when routes exist - secondary */}
+        {hasRoutesToday && (
+          <Card className="border-muted">
+            <CardContent className="p-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-muted-foreground" />
+                  <div>
+                    <p className="text-xs font-medium">Ponto</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {todayPunches.length > 0
+                        ? `${todayPunches.length} registro${todayPunches.length > 1 ? 's' : ''} • Último: ${format(new Date(todayPunches[todayPunches.length - 1].punched_at), 'HH:mm')}`
+                        : 'Nenhum registro hoje'}
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  size="sm" variant="outline" className="text-xs h-8"
+                  onClick={handlePunch}
+                  disabled={punchLoading || gpsStatus !== 'active' || (!canPunch && isOutsideSchedule)}
+                >
+                  {punchLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : PUNCH_LABELS[getNextPunchType()]?.slice(2) || 'Ponto'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Notifications */}
         {notifications.length > 0 && (
@@ -288,11 +450,6 @@ export default function PromotorHome() {
                   </div>
                 </div>
               ))}
-              {notifications.length > 3 && (
-                <Button variant="ghost" size="sm" className="w-full text-xs" onClick={() => navigate('/promotor/notificacoes')}>
-                  Ver todas ({notifications.length})
-                </Button>
-              )}
             </CardContent>
           </Card>
         )}
@@ -308,7 +465,7 @@ export default function PromotorHome() {
           </DialogHeader>
           <div className="space-y-3">
             <p className="text-xs text-muted-foreground">
-              Seu horário de trabalho é <b>{scheduleStatus?.schedule_start || scheduleStatus?.entry || '--:--'} - {scheduleStatus?.schedule_end || scheduleStatus?.exit || '--:--'}</b>.
+              Seu horário de trabalho é <b>{scheduleStatus?.schedule_start || '--:--'} - {scheduleStatus?.schedule_end || '--:--'}</b>.
               Para registrar ponto fora desse horário, solicite autorização.
             </p>
             <div>
