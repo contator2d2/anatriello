@@ -1384,6 +1384,43 @@ router.post('/promotor/routes/:routeId/categories/:catId/photo', promotorAuth, a
   } catch (err) { logError('promotor.cat_photo', err); res.status(500).json({ error: 'Erro' }); }
 });
 
+// Promotor: Upload category AFTER photo (to complete/close category)
+router.post('/promotor/routes/:routeId/categories/:catId/after-photo', promotorAuth, async (req, res) => {
+  try {
+    const { photo_url, latitude, longitude } = req.body;
+    if (!photo_url) return res.status(400).json({ error: 'Foto obrigatória' });
+
+    const cat = await query(
+      `SELECT * FROM merch_execution_categories WHERE route_id=$1 AND category_id=$2`,
+      [req.params.routeId, req.params.catId]
+    );
+    if (!cat.rows.length) return res.status(404).json({ error: 'Categoria não encontrada' });
+    if (!cat.rows[0].products_unlocked) return res.status(400).json({ error: 'Produtos ainda não foram liberados (foto do ANTES necessária)' });
+
+    const result = await query(
+      `UPDATE merch_execution_categories SET category_after_photo=$3, category_after_photo_at=NOW(),
+       category_after_photo_latitude=$4, category_after_photo_longitude=$5,
+       completed=true, completed_at=NOW(), performed_by=$6, updated_at=NOW()
+       WHERE route_id=$1 AND category_id=$2 RETURNING *`,
+      [req.params.routeId, req.params.catId, photo_url, latitude, longitude, req.employeeId]
+    );
+
+    await query(
+      `INSERT INTO route_photos (route_id, photo_type, category_id, photo_url, latitude, longitude, upload_source, uploaded_by)
+       VALUES ($1,'category_after',$2,$3,$4,$5,'app',$6)`,
+      [req.params.routeId, req.params.catId, photo_url, latitude, longitude, req.employeeId]
+    );
+
+    await query(
+      `INSERT INTO route_execution_logs (route_id, action, details, performed_by, source)
+       VALUES ($1,'category_after_photo',$2,$3,'app')`,
+      [req.params.routeId, JSON.stringify({ category_id: req.params.catId, photo_url }), req.employeeId]
+    );
+
+    res.json(result.rows[0]);
+  } catch (err) { logError('promotor.cat_after_photo', err); res.status(500).json({ error: 'Erro' }); }
+});
+
 // Promotor: Upload photo
 router.post('/promotor/routes/:id/photos', promotorAuth, async (req, res) => {
   try {
