@@ -2,6 +2,15 @@ import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
 
+// Force-clear stale service worker caches on every load
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then(regs =>
+    Promise.all(regs.map(r => r.unregister()))
+  ).then(() =>
+    caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k))))
+  ).catch(() => {});
+}
+
 // Initialize PWA install prompt handler
 import "./lib/pwa";
 
