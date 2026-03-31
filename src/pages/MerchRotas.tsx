@@ -351,7 +351,7 @@ function RouteFormDialog({ open, route, onClose, pdvs, employees, onSave, onDele
             <Select value={form.brand_id || ''} onValueChange={v => setForm({ ...form, brand_id: v })}>
               <SelectTrigger><SelectValue placeholder="Selecione a marca" /></SelectTrigger>
               <SelectContent>
-                {(brands || []).map((b: any) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                {(brands || []).filter((b: any) => b?.id).map((b: any) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
