@@ -99,6 +99,14 @@ export function useUpdatePayslip() {
   });
 }
 
+export function useImportPayslip() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: any) => api<any>('/api/rh/payslips/import', { method: 'POST', body: data }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['rh-payslips'] }),
+  });
+}
+
 // ===== ABSENCES =====
 export function useAbsences(employeeId?: string) {
   const params = employeeId ? `?employee_id=${employeeId}` : '';

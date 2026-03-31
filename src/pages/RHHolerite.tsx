@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
-import { usePayslips, useCreatePayslip, useUpdatePayslip, useEmployees } from "@/hooks/use-rh";
+import { usePayslips, useCreatePayslip, useUpdatePayslip, useImportPayslip, useEmployees } from "@/hooks/use-rh";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -9,9 +9,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, FileText, DollarSign, TrendingDown, TrendingUp } from "lucide-react";
+import { Plus, FileText, Upload, PenTool } from "lucide-react";
 import { format } from "date-fns";
+import { api } from "@/lib/api";
 
 const STATUS_COLORS: Record<string, string> = {
   rascunho: "bg-yellow-500/10 text-yellow-700 border-yellow-200",
@@ -23,11 +25,19 @@ export default function RHHolerite() {
   const [monthFilter, setMonthFilter] = useState(format(new Date(), "yyyy-MM"));
   const [employeeFilter, setEmployeeFilter] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [form, setForm] = useState<any>({
     employee_id: "", reference_month: format(new Date(), "yyyy-MM"), payment_type: "mensal",
     gross_salary: 0, earnings: [], total_earnings: 0, deductions: [], total_deductions: 0,
     net_salary: 0, fgts_value: 0, inss_value: 0, irrf_value: 0, payment_date: "", status: "rascunho", notes: "",
   });
+  const [importForm, setImportForm] = useState<any>({
+    employee_id: "", reference_month: format(new Date(), "yyyy-MM"), payment_type: "mensal",
+    notes: "", send_for_signature: true,
+  });
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   const { data: payslips = [], isLoading } = usePayslips({
@@ -36,7 +46,7 @@ export default function RHHolerite() {
   });
   const { data: employees = [] } = useEmployees({ status: "ativo" });
   const createMut = useCreatePayslip();
-  const updateMut = useUpdatePayslip();
+  const importMut = useImportPayslip();
 
   const fmtCurrency = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v || 0);
 
@@ -49,9 +59,38 @@ export default function RHHolerite() {
     } catch { toast({ title: "Erro ao criar holerite", variant: "destructive" }); }
   };
 
+  const handleImport = async () => {
+    if (!importForm.employee_id || !importForm.reference_month || !importFile) {
+      toast({ title: "Selecione colaborador, mês e arquivo PDF", variant: "destructive" });
+      return;
+    }
+    setImporting(true);
+    try {
+      // Upload file first
+      const formData = new FormData();
+      formData.append("file", importFile);
+      const uploadRes = await fetch("/api/uploads", { method: "POST", body: formData, credentials: "include" });
+      if (!uploadRes.ok) throw new Error("Upload falhou");
+      const uploadData = await uploadRes.json();
+      const pdf_url = uploadData.url || uploadData.file_url || uploadData.path;
+
+      await importMut.mutateAsync({
+        ...importForm,
+        pdf_url,
+      });
+      toast({ title: "Holerite importado!", description: importForm.send_for_signature ? "Enviado para assinatura" : undefined });
+      setImportDialogOpen(false);
+      setImportFile(null);
+      setImportForm({ employee_id: "", reference_month: format(new Date(), "yyyy-MM"), payment_type: "mensal", notes: "", send_for_signature: true });
+    } catch {
+      toast({ title: "Erro ao importar holerite", variant: "destructive" });
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const setField = (k: string, v: any) => setForm((p: any) => ({ ...p, [k]: v }));
 
-  // Recalc net
   const recalcNet = (f: any) => {
     const net = (parseFloat(f.gross_salary) || 0) + (parseFloat(f.total_earnings) || 0) - (parseFloat(f.total_deductions) || 0);
     return Math.max(0, net);
@@ -68,7 +107,10 @@ export default function RHHolerite() {
             <h1 className="text-2xl font-bold text-foreground flex items-center gap-2"><FileText className="h-6 w-6 text-primary" /> Holerites</h1>
             <p className="text-sm text-muted-foreground">Demonstrativos de pagamento</p>
           </div>
-          <Button onClick={() => setDialogOpen(true)} className="gap-2"><Plus className="h-4 w-4" /> Gerar Holerite</Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setImportDialogOpen(true)} className="gap-2"><Upload className="h-4 w-4" /> Importar PDF</Button>
+            <Button onClick={() => setDialogOpen(true)} className="gap-2"><Plus className="h-4 w-4" /> Gerar Holerite</Button>
+          </div>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -101,13 +143,14 @@ export default function RHHolerite() {
                   <TableHead className="hidden lg:table-cell">Descontos</TableHead>
                   <TableHead>Líquido</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead className="hidden md:table-cell">PDF</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
-                  <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Carregando...</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">Carregando...</TableCell></TableRow>
                 ) : payslips.length === 0 ? (
-                  <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Nenhum holerite encontrado</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">Nenhum holerite encontrado</TableCell></TableRow>
                 ) : payslips.map((p: any) => (
                   <TableRow key={p.id}>
                     <TableCell className="font-medium">{p.employee_name}</TableCell>
@@ -117,6 +160,13 @@ export default function RHHolerite() {
                     <TableCell className="hidden lg:table-cell text-red-600">{fmtCurrency(p.total_deductions)}</TableCell>
                     <TableCell className="font-medium text-green-700">{fmtCurrency(p.net_salary)}</TableCell>
                     <TableCell><Badge className={STATUS_COLORS[p.status] || ""}>{p.status}</Badge></TableCell>
+                    <TableCell className="hidden md:table-cell">
+                      {p.pdf_url ? (
+                        <a href={p.pdf_url} target="_blank" rel="noreferrer" className="text-primary hover:underline text-sm flex items-center gap-1">
+                          <PenTool className="h-3 w-3" /> Ver PDF
+                        </a>
+                      ) : "—"}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -125,6 +175,7 @@ export default function RHHolerite() {
         </Card>
       </div>
 
+      {/* Generate Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader><DialogTitle>Gerar Holerite</DialogTitle></DialogHeader>
@@ -178,6 +229,82 @@ export default function RHHolerite() {
           <div className="flex justify-end gap-2 mt-4">
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
             <Button onClick={handleSave} disabled={createMut.isPending}>{createMut.isPending ? "Salvando..." : "Gerar"}</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Import Dialog */}
+      <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><Upload className="h-5 w-5" /> Importar Holerite (PDF)</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div><Label>Colaborador *</Label>
+              <Select value={importForm.employee_id} onValueChange={v => setImportForm((p: any) => ({ ...p, employee_id: v }))}>
+                <SelectTrigger><SelectValue placeholder="Selecionar colaborador" /></SelectTrigger>
+                <SelectContent>
+                  {employees.map((e: any) => <SelectItem key={e.id} value={e.id}>{e.full_name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>Mês Referência *</Label><Input type="month" value={importForm.reference_month} onChange={e => setImportForm((p: any) => ({ ...p, reference_month: e.target.value }))} /></div>
+              <div><Label>Tipo</Label>
+                <Select value={importForm.payment_type} onValueChange={v => setImportForm((p: any) => ({ ...p, payment_type: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="mensal">Mensal</SelectItem>
+                    <SelectItem value="adiantamento">Adiantamento</SelectItem>
+                    <SelectItem value="13o">13º Salário</SelectItem>
+                    <SelectItem value="ferias">Férias</SelectItem>
+                    <SelectItem value="rescisao">Rescisão</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div>
+              <Label>Arquivo PDF *</Label>
+              <div
+                className="mt-1 border-2 border-dashed border-muted-foreground/30 rounded-lg p-6 text-center cursor-pointer hover:border-primary/50 transition-colors"
+                onClick={() => fileInputRef.current?.click()}
+                onDragOver={e => { e.preventDefault(); e.stopPropagation(); }}
+                onDrop={e => { e.preventDefault(); e.stopPropagation(); const f = e.dataTransfer.files[0]; if (f?.type === 'application/pdf') setImportFile(f); }}
+              >
+                <input ref={fileInputRef} type="file" accept=".pdf" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) setImportFile(f); }} />
+                {importFile ? (
+                  <div className="flex items-center justify-center gap-2 text-primary">
+                    <FileText className="h-5 w-5" />
+                    <span className="font-medium">{importFile.name}</span>
+                    <span className="text-xs text-muted-foreground">({(importFile.size / 1024).toFixed(0)} KB)</span>
+                  </div>
+                ) : (
+                  <div>
+                    <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                    <p className="text-sm text-muted-foreground">Clique ou arraste o PDF do holerite aqui</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+              <div className="flex items-center gap-2">
+                <PenTool className="h-4 w-4 text-primary" />
+                <div>
+                  <p className="text-sm font-medium">Enviar para assinatura</p>
+                  <p className="text-xs text-muted-foreground">O colaborador receberá o holerite para assinar digitalmente</p>
+                </div>
+              </div>
+              <Switch
+                checked={importForm.send_for_signature}
+                onCheckedChange={v => setImportForm((p: any) => ({ ...p, send_for_signature: v }))}
+              />
+            </div>
+
+            <div><Label>Observações</Label><Input value={importForm.notes} onChange={e => setImportForm((p: any) => ({ ...p, notes: e.target.value }))} placeholder="Opcional" /></div>
+          </div>
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="outline" onClick={() => setImportDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={handleImport} disabled={importing}>{importing ? "Importando..." : "Importar e Enviar"}</Button>
           </div>
         </DialogContent>
       </Dialog>

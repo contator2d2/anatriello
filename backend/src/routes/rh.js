@@ -796,6 +796,7 @@ router.get('/payslips', async (req, res) => {
 router.post('/payslips', async (req, res) => {
   try {
     const orgId = req.body.organization_id || await getUserOrgId(req.userId);
+    if (!orgId) return res.status(400).json({ error: 'Organização não encontrada' });
     const d = req.body;
     const result = await query(
       `INSERT INTO payslips (organization_id, employee_id, reference_month, payment_type, gross_salary, earnings, total_earnings, deductions, total_deductions, net_salary, fgts_base, fgts_value, inss_base, inss_value, irrf_base, irrf_value, payment_date, status, notes, generated_by)
@@ -827,6 +828,67 @@ router.put('/payslips/:id', async (req, res) => {
   } catch (err) {
     logError('rh.payslips.update', err);
     res.status(500).json({ error: 'Erro' });
+  }
+});
+
+// Import payslip (PDF already uploaded via /api/uploads)
+router.post('/payslips/import', async (req, res) => {
+  try {
+    const orgId = req.body.organization_id || await getUserOrgId(req.userId);
+    if (!orgId) return res.status(400).json({ error: 'Organização não encontrada' });
+    const { employee_id, reference_month, payment_type, pdf_url, notes, send_for_signature } = req.body;
+    if (!employee_id || !reference_month || !pdf_url) {
+      return res.status(400).json({ error: 'employee_id, reference_month e pdf_url são obrigatórios' });
+    }
+
+    // Create payslip record with imported PDF
+    const result = await query(
+      `INSERT INTO payslips (organization_id, employee_id, reference_month, payment_type, pdf_url, status, notes, generated_by)
+       VALUES ($1,$2,$3,$4,$5,'gerado',$6,$7) RETURNING *`,
+      [orgId, employee_id, reference_month, payment_type || 'mensal', pdf_url, notes || '', req.userId]
+    );
+    const payslip = result.rows[0];
+
+    // If send_for_signature, create a doc_signature_document and signer
+    if (send_for_signature) {
+      try {
+        // Get employee info for signer
+        const empRes = await query('SELECT full_name, email, cpf, phone FROM employees WHERE id=$1', [employee_id]);
+        const emp = empRes.rows[0];
+        if (emp) {
+          // Create signature document
+          const docRes = await query(
+            `INSERT INTO doc_signature_documents (organization_id, title, description, file_url, status, created_by)
+             VALUES ($1,$2,$3,$4,'pendente',$5) RETURNING *`,
+            [orgId, `Holerite ${reference_month} - ${emp.full_name}`, `Demonstrativo de pagamento ref. ${reference_month}`, pdf_url, req.userId]
+          );
+          const doc = docRes.rows[0];
+
+          // Add employee as signer
+          const crypto = await import('crypto');
+          const token = crypto.randomBytes(32).toString('hex');
+          await query(
+            `INSERT INTO doc_signature_signers (document_id, name, email, cpf, phone, sign_order, token)
+             VALUES ($1,$2,$3,$4,$5,1,$6)`,
+            [doc.id, emp.full_name, emp.email, emp.cpf, emp.phone, token]
+          );
+
+          // Update payslip with signature doc reference
+          await query('UPDATE payslips SET notes = COALESCE(notes,\'\') || $2 WHERE id=$1',
+            [payslip.id, `\n[Assinatura: ${doc.id}]`]);
+
+          payslip.signature_document_id = doc.id;
+        }
+      } catch (sigErr) {
+        logError('rh.payslips.import.signature', sigErr);
+        // Don't fail the import if signature creation fails
+      }
+    }
+
+    res.json(payslip);
+  } catch (err) {
+    logError('rh.payslips.import', err);
+    res.status(500).json({ error: 'Erro ao importar holerite' });
   }
 });
 

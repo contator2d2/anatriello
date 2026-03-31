@@ -458,6 +458,7 @@ router.get('/routes/:id', authenticate, async (req, res) => {
 router.get('/routes/live', authenticate, async (req, res) => {
   try {
     const orgRes = await query('SELECT organization_id FROM organization_members WHERE user_id=$1 LIMIT 1', [req.userId]);
+    if (!orgRes.rows.length) return res.json([]);
     const orgId = orgRes.rows[0].organization_id;
 
     const result = await query(
