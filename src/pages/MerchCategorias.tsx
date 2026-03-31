@@ -146,10 +146,14 @@ export default function MerchCategorias() {
         <TabsContent value="subcategorias">
           <Card><CardContent className="p-0">
             <Table>
-              <TableHeader><TableRow><TableHead>Nome</TableHead><TableHead>Categoria</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader>
+              <TableHeader><TableRow>
+                <TableHead className="w-10"><Checkbox checked={subcategories.length > 0 && selectedSubIds.size === subcategories.length} onCheckedChange={() => setSelectedSubIds(selectedSubIds.size === subcategories.length ? new Set() : new Set(subcategories.map((s: any) => s.id)))} /></TableHead>
+                <TableHead>Nome</TableHead><TableHead>Categoria</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Ações</TableHead>
+              </TableRow></TableHeader>
               <TableBody>
                 {subcategories.map((s: any) => (
-                  <TableRow key={s.id}>
+                  <TableRow key={s.id} className={selectedSubIds.has(s.id) ? 'bg-primary/5' : ''}>
+                    <TableCell><Checkbox checked={selectedSubIds.has(s.id)} onCheckedChange={() => { const n = new Set(selectedSubIds); if (n.has(s.id)) n.delete(s.id); else n.add(s.id); setSelectedSubIds(n); }} /></TableCell>
                     <TableCell className="font-medium">{s.name}</TableCell>
                     <TableCell>{s.category_name}</TableCell>
                     <TableCell><Badge variant={s.status === 'active' ? 'default' : 'secondary'}>{s.status === 'active' ? 'Ativo' : 'Inativo'}</Badge></TableCell>
@@ -159,7 +163,7 @@ export default function MerchCategorias() {
                     </TableCell>
                   </TableRow>
                 ))}
-                {subcategories.length === 0 && <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">Nenhuma subcategoria</TableCell></TableRow>}
+                {subcategories.length === 0 && <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">Nenhuma subcategoria</TableCell></TableRow>}
               </TableBody>
             </Table>
           </CardContent></Card>
