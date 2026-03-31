@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -6,13 +6,14 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { usePromotorHome, usePromotorPunch, usePromotorOvertimeRequest } from "@/hooks/use-promotor";
+import { CameraCapture } from "@/components/promotor/CameraCapture";
 import { PromotorLayout } from "./PromotorLayout";
 import {
   Clock, FileText, Bell, MapPin, Wifi, WifiOff, Navigation, AlertTriangle, CheckCircle2,
-  Loader2, ShieldAlert, Timer, ChevronRight, PlayCircle, Package
+  Loader2, ShieldAlert, Timer, ChevronRight, PlayCircle, Package, Store
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -43,6 +44,11 @@ export default function PromotorHome() {
   const [punchLoading, setPunchLoading] = useState(false);
   const [overtimeDialog, setOvertimeDialog] = useState(false);
   const [otForm, setOtForm] = useState({ reason: '', requested_start: '', requested_end: '' });
+  const [showPdvCheckout, setShowPdvCheckout] = useState(false);
+  const [pdvCheckoutPhoto, setPdvCheckoutPhoto] = useState('');
+  const [pdvCheckoutNotes, setPdvCheckoutNotes] = useState('');
+  const [pdvCheckoutLoading, setPdvCheckoutLoading] = useState(false);
+  const [actionPdv, setActionPdv] = useState<{ pdv_id: string; pdv_name: string } | null>(null);
 
   const employee = data?.employee;
   const todayPunches = data?.today_punches || [];
@@ -57,6 +63,55 @@ export default function PromotorHome() {
   const hasRoutesToday = data?.has_routes_today || false;
   const completedRoutesCount = data?.completed_routes_count || 0;
   const pendingRoutesCount = data?.pending_routes_count || 0;
+  const pdvVisits = data?.pdv_visits || [];
+
+  // Detect PDVs where all routes are completed but no checkout was done
+  const pdvsNeedingCheckout = useMemo(() => {
+    if (!todayRoutes.length) return [];
+    const pdvMap: Record<string, { pdv_id: string; pdv_name: string; routes: any[] }> = {};
+    todayRoutes.forEach((r: any) => {
+      if (!pdvMap[r.pdv_id]) pdvMap[r.pdv_id] = { pdv_id: r.pdv_id, pdv_name: r.pdv_name, routes: [] };
+      pdvMap[r.pdv_id].routes.push(r);
+    });
+    return Object.values(pdvMap).filter(p => {
+      const allCompleted = p.routes.length > 0 && p.routes.every((r: any) => r.status === 'completed');
+      const hasCheckout = pdvVisits.some((v: any) => v.pdv_id === p.pdv_id && v.checkout_at);
+      return allCompleted && !hasCheckout;
+    });
+  }, [todayRoutes, pdvVisits]);
+
+  const handlePdvCheckout = useCallback(async (pdvId: string) => {
+    setPdvCheckoutLoading(true);
+    try {
+      const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
+        navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000 })
+      );
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      const token = localStorage.getItem('promotor_token');
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const url = `${(import.meta.env.VITE_API_URL || '').replace(/\/$/, '')}/api/merch/promotor/pdv-checkout`;
+      const response = await fetch(url, {
+        method: 'POST', headers,
+        body: JSON.stringify({
+          pdv_id: pdvId,
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
+          photo_url: pdvCheckoutPhoto || undefined,
+          notes: pdvCheckoutNotes || undefined,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result?.error || 'Erro');
+      toast({ title: 'Checkout do PDV realizado!' });
+      setShowPdvCheckout(false);
+      setPdvCheckoutPhoto('');
+      setPdvCheckoutNotes('');
+    } catch (err: any) {
+      toast({ title: 'Erro no checkout', description: err.message, variant: 'destructive' });
+    } finally {
+      setPdvCheckoutLoading(false);
+    }
+  }, [pdvCheckoutPhoto, pdvCheckoutNotes, toast]);
 
   useEffect(() => {
     const onOn = () => setIsOnline(true);
@@ -388,6 +443,26 @@ export default function PromotorHome() {
           </>
         )}
 
+        {/* PDV Checkout Pending */}
+        {pdvsNeedingCheckout.length > 0 && (
+          <div className="space-y-2">
+            {pdvsNeedingCheckout.map(pdv => (
+              <Card key={pdv.pdv_id} className="border-primary/40 bg-primary/5">
+                <CardContent className="p-3 flex items-center gap-3">
+                  <Store className="h-6 w-6 text-primary flex-shrink-0" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">{pdv.pdv_name}</p>
+                    <p className="text-[10px] text-muted-foreground">Todas as rotas concluídas — checkout pendente</p>
+                  </div>
+                  <Button size="sm" onClick={() => { setShowPdvCheckout(true); setActionPdv(pdv); }}>
+                    Checkout
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+
         {/* Quick actions */}
         <div className="grid grid-cols-2 gap-3">
           <Card className="cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => navigate('/promotor/documentos')}>
@@ -494,6 +569,56 @@ export default function PromotorHome() {
               {overtimeReq.isPending ? 'Enviando...' : 'Enviar Solicitação'}
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* PDV Checkout Dialog */}
+      <Dialog open={showPdvCheckout} onOpenChange={(open) => { if (!open) { setShowPdvCheckout(false); setActionPdv(null); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Store className="h-5 w-5 text-primary" /> Checkout da Loja
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Card className="border-primary/30 bg-primary/5">
+              <CardContent className="p-3">
+                <p className="text-sm font-medium">{actionPdv?.pdv_name}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Todas as rotas foram concluídas. Faça o checkout para encerrar a visita.
+                </p>
+              </CardContent>
+            </Card>
+
+            <div className="space-y-2">
+              <Label className="text-xs">Foto de saída (opcional)</Label>
+              {pdvCheckoutPhoto ? (
+                <div className="space-y-2">
+                  <img src={pdvCheckoutPhoto} alt="Checkout" className="w-full rounded-lg border max-h-48 object-cover" />
+                  <Button variant="outline" size="sm" onClick={() => setPdvCheckoutPhoto('')}>Tirar outra foto</Button>
+                </div>
+              ) : (
+                <CameraCapture
+                  onCapture={setPdvCheckoutPhoto}
+                  watermark={{ pdvName: actionPdv?.pdv_name || '', brandName: '', photoType: 'Checkout PDV' }}
+                  customTokenGetter={() => localStorage.getItem('promotor_token')}
+                  buttonLabel="Tirar foto de saída da loja"
+                />
+              )}
+            </div>
+
+            <div>
+              <Label className="text-xs">Observação</Label>
+              <Textarea rows={2} placeholder="Observações sobre a visita..." value={pdvCheckoutNotes} onChange={e => setPdvCheckoutNotes(e.target.value)} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setShowPdvCheckout(false); setActionPdv(null); }}>Cancelar</Button>
+            <Button onClick={() => actionPdv && handlePdvCheckout(actionPdv.pdv_id)} disabled={pdvCheckoutLoading}>
+              {pdvCheckoutLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Fazer Checkout
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </PromotorLayout>

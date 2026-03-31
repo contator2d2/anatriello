@@ -44,6 +44,18 @@ export function PromotorLayout({ children }: PromotorLayoutProps) {
   // Track location every 60s during work hours
   useLocationTracking();
 
+  // Apply saved promotor theme on mount
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('promotor-theme') || 'auto';
+    const root = document.documentElement;
+    let effective: 'light' | 'dark';
+    if (savedTheme === 'claro') effective = 'light';
+    else if (savedTheme === 'escuro') effective = 'dark';
+    else effective = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    root.classList.remove('light', 'dark');
+    root.classList.add(effective);
+  }, []);
+
   useEffect(() => {
     const token = localStorage.getItem('promotor_token');
     if (!token && !location.pathname.includes('/promotor/login')) {
