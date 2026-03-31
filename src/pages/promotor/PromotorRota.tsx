@@ -322,20 +322,7 @@ export default function PromotorRota() {
     setActiveAction(null);
   }, [categoryStatusMap]);
 
-  const handleSubmitAction = useCallback(() => {
-    if (!selectedExec || !activeAction) return;
-    const execId = selectedExec.id;
-
-    if (activeAction === 'validity') {
-      addValidity.mutate({ executionId: execId, ...actionForm }, { onSuccess: () => { toast.success('Validade registrada'); setActiveAction(null); } });
-    } else if (activeAction === 'rupture') {
-      reportRupture.mutate({ executionId: execId, ...actionForm }, { onSuccess: () => { toast.success('Ruptura registrada'); setActiveAction(null); } });
-    } else if (activeAction === 'damage') {
-      reportDamage.mutate({ executionId: execId, ...actionForm }, { onSuccess: () => { toast.success('Avaria registrada'); setActiveAction(null); } });
-    } else if (activeAction === 'discard') {
-      reportDiscard.mutate({ executionId: execId, ...actionForm }, { onSuccess: () => { toast.success('Descarte registrado'); setActiveAction(null); } });
-    }
-  }, [selectedExec, activeAction, actionForm, addValidity, reportRupture, reportDamage, reportDiscard]);
+  // handleSubmitAction removed - logic inlined in dialogs
 
   if (isLoading) return <PromotorLayout><div className="flex items-center justify-center h-64"><div className="animate-spin h-8 w-8 border-2 border-primary border-t-transparent rounded-full" /></div></PromotorLayout>;
   if (!route) return <PromotorLayout><div className="text-center py-12 text-muted-foreground">Rota não encontrada</div></PromotorLayout>;
