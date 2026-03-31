@@ -153,11 +153,11 @@ export function PromotorLayout({ children }: PromotorLayoutProps) {
         </header>
       )}
 
-      <main className="flex-1 pb-16 overflow-y-auto">{children}</main>
+      <main className="flex-1 pb-20 overflow-y-auto">{children}</main>
 
       {!isLoginPage && (
-        <nav className="fixed bottom-0 left-0 right-0 bg-card border-t border-border z-50">
-          <div className="flex items-center justify-around h-14 max-w-lg mx-auto">
+        <nav className="fixed bottom-0 left-0 right-0 bg-card border-t border-border z-50" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+          <div className="flex items-center justify-around h-16 max-w-lg mx-auto">
             {navItems.map((item) => {
               const active = location.pathname === item.path;
               return (
