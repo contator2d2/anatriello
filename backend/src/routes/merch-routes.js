@@ -784,20 +784,28 @@ router.get('/promotor/routes/:id', promotorAuth, async (req, res) => {
 router.post('/promotor/routes/:id/checkin', promotorAuth, async (req, res) => {
   try {
     const { latitude, longitude, device, photo_url } = req.body;
-    const route = await query('SELECT * FROM merch_routes WHERE id=$1 AND promoter_id=$2', [req.params.id, req.employeeId]);
+    const route = await query(
+      `SELECT r.*, bc.require_checkin_photo
+       FROM merch_routes r
+       LEFT JOIN brand_checklists bc ON bc.id = r.checklist_id
+       WHERE r.id=$1 AND r.promoter_id=$2`,
+      [req.params.id, req.employeeId]
+    );
     if (!route.rows.length) return res.status(404).json({ error: 'Rota não encontrada' });
     if (route.rows[0].status !== 'scheduled' && route.rows[0].status !== 'confirmed') {
       return res.status(400).json({ error: 'Rota não pode receber check-in neste status' });
+    }
+    if (route.rows[0].require_checkin_photo && !photo_url) {
+      return res.status(400).json({ error: 'Esta rota exige foto obrigatória no check-in' });
     }
 
     const result = await query(
       `UPDATE merch_routes SET status='in_progress', checkin_at=NOW(), checkin_latitude=$2,
        checkin_longitude=$3, checkin_device=$4, checkin_photo_url=$5, updated_at=NOW()
        WHERE id=$1 RETURNING *`,
-      [req.params.id, latitude, longitude, device, photo_url]
+      [req.params.id, latitude, longitude, device, photo_url || null]
     );
 
-    // Save checkin photo
     if (photo_url) {
       await query(
         `INSERT INTO route_photos (route_id, photo_type, photo_url, latitude, longitude, upload_source, uploaded_by)
@@ -806,11 +814,10 @@ router.post('/promotor/routes/:id/checkin', promotorAuth, async (req, res) => {
       );
     }
 
-    // Log
     await query(
       `INSERT INTO route_execution_logs (route_id, action, details, performed_by, source)
        VALUES ($1,'checkin',$2,$3,'app')`,
-      [req.params.id, JSON.stringify({ latitude, longitude }), req.employeeId]
+      [req.params.id, JSON.stringify({ latitude, longitude, has_photo: !!photo_url }), req.employeeId]
     );
 
     res.json(result.rows[0]);
