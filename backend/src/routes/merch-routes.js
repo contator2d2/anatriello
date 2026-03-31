@@ -22,7 +22,7 @@ router.get('/routes', authenticate, async (req, res) => {
                LEFT JOIN pdvs p ON p.id = r.pdv_id
                LEFT JOIN merch_brands b ON b.id = r.brand_id
                LEFT JOIN employees sv ON sv.id = r.supervisor_id
-               LEFT JOIN merch_brand_checklists bc ON bc.id = r.checklist_id
+               LEFT JOIN brand_checklists bc ON bc.id = r.checklist_id
                WHERE r.organization_id = $1`;
     const params = [orgId];
     let idx = 2;
@@ -892,7 +892,7 @@ router.get('/promotor/agenda', promotorAuth, async (req, res) => {
                FROM merch_routes r
                LEFT JOIN pdvs p ON p.id = r.pdv_id
                LEFT JOIN merch_brands b ON b.id = r.brand_id
-               LEFT JOIN merch_brand_checklists bc ON bc.id = r.checklist_id
+               LEFT JOIN brand_checklists bc ON bc.id = r.checklist_id
                WHERE r.promoter_id = $1 AND r.organization_id = $2`;
     const params = [req.employeeId, req.orgId];
     let idx = 3;
@@ -919,7 +919,7 @@ router.get('/promotor/routes/:id', promotorAuth, async (req, res) => {
        FROM merch_routes r
        LEFT JOIN pdvs p ON p.id = r.pdv_id
        LEFT JOIN merch_brands b ON b.id = r.brand_id
-       LEFT JOIN merch_brand_checklists bc ON bc.id = r.checklist_id
+       LEFT JOIN brand_checklists bc ON bc.id = r.checklist_id
        WHERE r.id=$1 AND r.promoter_id=$2`, [req.params.id, req.employeeId]
     );
     if (!route.rows.length) return res.status(404).json({ error: 'Rota não encontrada' });
@@ -961,7 +961,7 @@ router.post('/promotor/routes/:id/checkin', promotorAuth, async (req, res) => {
     const route = await query(
       `SELECT r.*, bc.require_checkin_photo
        FROM merch_routes r
-       LEFT JOIN merch_brand_checklists bc ON bc.id = r.checklist_id
+       LEFT JOIN brand_checklists bc ON bc.id = r.checklist_id
        WHERE r.id=$1 AND r.promoter_id=$2`,
       [req.params.id, req.employeeId]
     );
