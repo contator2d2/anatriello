@@ -20,9 +20,9 @@ router.get('/routes', authenticate, async (req, res) => {
                FROM merch_routes r
                LEFT JOIN employees e ON e.id = r.promoter_id
                LEFT JOIN pdvs p ON p.id = r.pdv_id
-               LEFT JOIN merch_brands b ON b.id = r.brand_id
+               LEFT JOIN brands b ON b.id = r.brand_id
                LEFT JOIN employees sv ON sv.id = r.supervisor_id
-               LEFT JOIN merch_brand_checklists bc ON bc.id = r.checklist_id
+               LEFT JOIN brand_checklists bc ON bc.id = r.checklist_id
                WHERE r.organization_id = $1`;
     const params = [orgId];
     let idx = 2;
@@ -132,8 +132,8 @@ router.post('/routes', authenticate, async (req, res) => {
       try {
         const mixProducts = await query(
           `SELECT pbp.product_id, p.category_id
-           FROM merch_pdv_brand_products pbp
-           JOIN merch_products p ON p.id = pbp.product_id
+           FROM pdv_brand_products pbp
+           JOIN products p ON p.id = pbp.product_id
            WHERE pbp.pdv_id=$1 AND pbp.brand_id=$2 AND pbp.active=true`,
           [pdv_id, brand_id]
         );
@@ -230,8 +230,8 @@ router.put('/routes/:id', authenticate, async (req, res) => {
         await query(`DELETE FROM route_product_executions WHERE route_id=$1 AND (status IS NULL OR status='pending')`, [req.params.id]);
         const mixProducts = await query(
           `SELECT pbp.product_id, p.category_id
-           FROM merch_pdv_brand_products pbp
-           JOIN merch_products p ON p.id = pbp.product_id
+           FROM pdv_brand_products pbp
+           JOIN products p ON p.id = pbp.product_id
            WHERE pbp.pdv_id=$1 AND pbp.brand_id=$2 AND pbp.active=true`,
           [newPdv, newBrand]
         );
@@ -285,10 +285,10 @@ router.get('/routes/mix-preview', authenticate, async (req, res) => {
       `SELECT pbp.id as mix_id, pbp.product_id, pbp.mandatory, pbp.priority,
        p.name as product_name, p.sku, p.barcode, p.image_url,
        pc.name as category_name, ps.name as subcategory_name
-       FROM merch_pdv_brand_products pbp
-       JOIN merch_products p ON p.id = pbp.product_id
-       LEFT JOIN merch_categories pc ON pc.id = p.category_id
-       LEFT JOIN merch_subcategories ps ON ps.id = p.subcategory_id
+       FROM pdv_brand_products pbp
+       JOIN products p ON p.id = pbp.product_id
+       LEFT JOIN product_categories pc ON pc.id = p.category_id
+       LEFT JOIN product_subcategories ps ON ps.id = p.subcategory_id
        WHERE pbp.pdv_id=$1 AND pbp.brand_id=$2 AND pbp.active=true
        ORDER BY pc.name, ps.name, p.name`,
       [pdv_id, brand_id]
@@ -307,9 +307,9 @@ router.get('/routes/:id/products', authenticate, async (req, res) => {
       `SELECT rpe.*, p.name as product_name, p.sku, p.barcode, p.image_url,
        pc.name as category_name, ps.name as subcategory_name
        FROM route_product_executions rpe
-       JOIN merch_products p ON p.id = rpe.product_id
-       LEFT JOIN merch_categories pc ON pc.id = rpe.category_id
-       LEFT JOIN merch_subcategories ps ON ps.id = p.subcategory_id
+       JOIN products p ON p.id = rpe.product_id
+       LEFT JOIN product_categories pc ON pc.id = rpe.category_id
+       LEFT JOIN product_subcategories ps ON ps.id = p.subcategory_id
        WHERE rpe.route_id=$1 ORDER BY pc.name, ps.name, p.name`, [req.params.id]
     );
     res.json(result.rows);
@@ -351,8 +351,8 @@ router.post('/routes/:id/sync-products', authenticate, async (req, res) => {
     
     const mixProducts = await query(
       `SELECT pbp.product_id, p.category_id
-       FROM merch_pdv_brand_products pbp
-       JOIN merch_products p ON p.id = pbp.product_id
+       FROM pdv_brand_products pbp
+       JOIN products p ON p.id = pbp.product_id
        WHERE pbp.pdv_id=$1 AND pbp.brand_id=$2 AND pbp.active=true`,
       [pdv_id, brand_id]
     );
@@ -367,9 +367,9 @@ router.post('/routes/:id/sync-products', authenticate, async (req, res) => {
       `SELECT rpe.*, p.name as product_name, p.sku, p.barcode, p.image_url,
        pc.name as category_name, ps.name as subcategory_name
        FROM route_product_executions rpe
-       JOIN merch_products p ON p.id = rpe.product_id
-       LEFT JOIN merch_categories pc ON pc.id = rpe.category_id
-       LEFT JOIN merch_subcategories ps ON ps.id = p.subcategory_id
+       JOIN products p ON p.id = rpe.product_id
+       LEFT JOIN product_categories pc ON pc.id = rpe.category_id
+       LEFT JOIN product_subcategories ps ON ps.id = p.subcategory_id
        WHERE rpe.route_id=$1 ORDER BY pc.name, ps.name, p.name`, [req.params.id]
     );
     res.json(result.rows);
@@ -416,7 +416,7 @@ router.get('/routes/:id', authenticate, async (req, res) => {
        FROM merch_routes r
        LEFT JOIN employees e ON e.id = r.promoter_id
        LEFT JOIN pdvs p ON p.id = r.pdv_id
-       LEFT JOIN merch_brands b ON b.id = r.brand_id
+       LEFT JOIN brands b ON b.id = r.brand_id
        WHERE r.id=$1`, [req.params.id]
     );
     if (!route.rows.length) return res.status(404).json({ error: 'Rota não encontrada' });
@@ -425,9 +425,9 @@ router.get('/routes/:id', authenticate, async (req, res) => {
       `SELECT rpe.*, pr.name as product_name, pr.sku, pr.barcode, pr.image_url,
        pc.name as category_name, ps.name as subcategory_name
        FROM route_product_executions rpe
-       JOIN merch_products pr ON pr.id = rpe.product_id
-       LEFT JOIN merch_categories pc ON pc.id = rpe.category_id
-       LEFT JOIN merch_subcategories ps ON ps.id = pr.subcategory_id
+       JOIN products pr ON pr.id = rpe.product_id
+       LEFT JOIN product_categories pc ON pc.id = rpe.category_id
+       LEFT JOIN product_subcategories ps ON ps.id = pr.subcategory_id
        WHERE rpe.route_id=$1 ORDER BY pc.name, ps.name, pr.name`, [req.params.id]
     );
 
@@ -437,8 +437,8 @@ router.get('/routes/:id', authenticate, async (req, res) => {
        LEFT JOIN employees e ON e.id = rel.performed_by
        WHERE rel.route_id=$1 ORDER BY rel.created_at`, [req.params.id]
     );
-    const damages = await query('SELECT pd.*, pr.name as product_name FROM product_damages pd JOIN merch_products pr ON pr.id=pd.product_id WHERE pd.route_id=$1', [req.params.id]);
-    const ruptures = await query('SELECT pr2.*, p.name as product_name FROM product_ruptures pr2 JOIN merch_products p ON p.id=pr2.product_id WHERE pr2.route_id=$1', [req.params.id]);
+    const damages = await query('SELECT pd.*, pr.name as product_name FROM product_damages pd JOIN products pr ON pr.id=pd.product_id WHERE pd.route_id=$1', [req.params.id]);
+    const ruptures = await query('SELECT pr2.*, p.name as product_name FROM product_ruptures pr2 JOIN products p ON p.id=pr2.product_id WHERE pr2.route_id=$1', [req.params.id]);
 
     res.json({
       ...route.rows[0],
@@ -462,7 +462,7 @@ router.get('/routes/live', authenticate, async (req, res) => {
        FROM merch_routes r
        LEFT JOIN employees e ON e.id = r.promoter_id
        LEFT JOIN pdvs p ON p.id = r.pdv_id
-       LEFT JOIN merch_brands b ON b.id = r.brand_id
+       LEFT JOIN brands b ON b.id = r.brand_id
        WHERE r.organization_id=$1 AND r.visit_date = CURRENT_DATE
        ORDER BY r.scheduled_time`, [orgId]
     );
@@ -497,7 +497,7 @@ router.get('/brand-checklists', authenticate, async (req, res) => {
       updated_at TIMESTAMPTZ DEFAULT NOW()
     )`);
 
-    let sql = 'SELECT bc.*, b.name as brand_name FROM brand_checklists bc LEFT JOIN merch_brands b ON b.id=bc.brand_id WHERE bc.organization_id=$1';
+    let sql = 'SELECT bc.*, b.name as brand_name FROM brand_checklists bc LEFT JOIN brands b ON b.id=bc.brand_id WHERE bc.organization_id=$1';
     const params = [orgId];
     if (brand_id) { sql += ' AND bc.brand_id=$2'; params.push(brand_id); }
     sql += ' ORDER BY b.name, bc.name';
@@ -570,9 +570,9 @@ router.get('/damages', authenticate, async (req, res) => {
     const { brand_id, pdv_id, product_id, status } = req.query;
     let sql = `SELECT pd.*, pr.name as product_name, p.name as pdv_name, b.name as brand_name, e.full_name as promoter_name
                FROM product_damages pd
-               JOIN merch_products pr ON pr.id=pd.product_id
+               JOIN products pr ON pr.id=pd.product_id
                JOIN pdvs p ON p.id=pd.pdv_id
-               JOIN merch_brands b ON b.id=pd.brand_id
+               JOIN brands b ON b.id=pd.brand_id
                JOIN employees e ON e.id=pd.promoter_id
                WHERE pd.organization_id=$1`;
     const params = [orgId];
@@ -622,7 +622,7 @@ router.get('/brand-promoters', authenticate, async (req, res) => {
     let sql = `SELECT bpa.*, e.full_name as promoter_name, b.name as brand_name
                FROM brand_promoter_assignments bpa
                JOIN employees e ON e.id=bpa.employee_id
-               JOIN merch_brands b ON b.id=bpa.brand_id
+               JOIN brands b ON b.id=bpa.brand_id
                WHERE bpa.organization_id=$1 AND bpa.active=true`;
     const params = [orgId];
     if (brand_id) { sql += ' AND bpa.brand_id=$2'; params.push(brand_id); }
@@ -827,8 +827,8 @@ router.get('/photo-book', authenticate, async (req, res) => {
     let sql = `SELECT lpb.*, e.full_name as promoter_name, pc.name as category_name, pr.name as product_name
                FROM live_photo_books lpb
                LEFT JOIN employees e ON e.id=lpb.promoter_id
-               LEFT JOIN merch_categories pc ON pc.id=lpb.category_id
-               LEFT JOIN merch_products pr ON pr.id=lpb.product_id
+               LEFT JOIN product_categories pc ON pc.id=lpb.category_id
+               LEFT JOIN products pr ON pr.id=lpb.product_id
                WHERE lpb.organization_id=$1`;
     const params = [orgId];
     let idx = 2;
@@ -855,7 +855,7 @@ router.get('/return-requests', authenticate, async (req, res) => {
        (SELECT json_agg(row_to_json(ri)) FROM return_invoices ri WHERE ri.request_id=drr.id) as invoices
        FROM damage_return_requests drr
        JOIN pdvs p ON p.id=drr.pdv_id
-       JOIN merch_brands b ON b.id=drr.brand_id
+       JOIN brands b ON b.id=drr.brand_id
        JOIN employees e ON e.id=drr.promoter_id
        WHERE drr.organization_id=$1
        ORDER BY drr.created_at DESC`, [orgId]
@@ -891,8 +891,8 @@ router.get('/promotor/agenda', promotorAuth, async (req, res) => {
                bc.name as checklist_name
                FROM merch_routes r
                LEFT JOIN pdvs p ON p.id = r.pdv_id
-               LEFT JOIN merch_brands b ON b.id = r.brand_id
-               LEFT JOIN merch_brand_checklists bc ON bc.id = r.checklist_id
+               LEFT JOIN brands b ON b.id = r.brand_id
+               LEFT JOIN brand_checklists bc ON bc.id = r.checklist_id
                WHERE r.promoter_id = $1 AND r.organization_id = $2`;
     const params = [req.employeeId, req.orgId];
     let idx = 3;
@@ -918,8 +918,8 @@ router.get('/promotor/routes/:id', promotorAuth, async (req, res) => {
        bc.require_validity_check, bc.require_extra_point
        FROM merch_routes r
        LEFT JOIN pdvs p ON p.id = r.pdv_id
-       LEFT JOIN merch_brands b ON b.id = r.brand_id
-       LEFT JOIN merch_brand_checklists bc ON bc.id = r.checklist_id
+       LEFT JOIN brands b ON b.id = r.brand_id
+       LEFT JOIN brand_checklists bc ON bc.id = r.checklist_id
        WHERE r.id=$1 AND r.promoter_id=$2`, [req.params.id, req.employeeId]
     );
     if (!route.rows.length) return res.status(404).json({ error: 'Rota não encontrada' });
@@ -928,9 +928,9 @@ router.get('/promotor/routes/:id', promotorAuth, async (req, res) => {
       `SELECT rpe.*, pr.name as product_name, pr.sku, pr.barcode, pr.image_url,
        pc.name as category_name, ps.name as subcategory_name
        FROM route_product_executions rpe
-       JOIN merch_products pr ON pr.id = rpe.product_id
-       LEFT JOIN merch_categories pc ON pc.id = rpe.category_id
-       LEFT JOIN merch_subcategories ps ON ps.id = pr.subcategory_id
+       JOIN products pr ON pr.id = rpe.product_id
+       LEFT JOIN product_categories pc ON pc.id = rpe.category_id
+       LEFT JOIN product_subcategories ps ON ps.id = pr.subcategory_id
        WHERE rpe.route_id=$1 ORDER BY pc.name, ps.name, pr.name`, [req.params.id]
     );
 
@@ -940,8 +940,8 @@ router.get('/promotor/routes/:id', promotorAuth, async (req, res) => {
     const postponed = await query(
       `SELECT rsp.*, pr.name as product_name, pc.name as category_name
        FROM route_stock_postponements rsp
-       LEFT JOIN merch_products pr ON pr.id=rsp.product_id
-       LEFT JOIN merch_categories pc ON pc.id=rsp.category_id
+       LEFT JOIN products pr ON pr.id=rsp.product_id
+       LEFT JOIN product_categories pc ON pc.id=rsp.category_id
        WHERE rsp.next_route_id=$1 AND rsp.status='pending'`, [req.params.id]
     );
 
@@ -961,7 +961,7 @@ router.post('/promotor/routes/:id/checkin', promotorAuth, async (req, res) => {
     const route = await query(
       `SELECT r.*, bc.require_checkin_photo
        FROM merch_routes r
-       LEFT JOIN merch_brand_checklists bc ON bc.id = r.checklist_id
+       LEFT JOIN brand_checklists bc ON bc.id = r.checklist_id
        WHERE r.id=$1 AND r.promoter_id=$2`,
       [req.params.id, req.employeeId]
     );
@@ -1152,9 +1152,9 @@ router.get('/promotor/damages', promotorAuth, async (req, res) => {
     const { status } = req.query;
     let sql = `SELECT pd.*, pr.name as product_name, p.name as pdv_name, b.name as brand_name
                FROM product_damages pd
-               JOIN merch_products pr ON pr.id=pd.product_id
+               JOIN products pr ON pr.id=pd.product_id
                JOIN pdvs p ON p.id=pd.pdv_id
-               JOIN merch_brands b ON b.id=pd.brand_id
+               JOIN brands b ON b.id=pd.brand_id
                WHERE pd.promoter_id=$1`;
     const params = [req.employeeId];
     if (status) { sql += ' AND pd.status=$2'; params.push(status); }
@@ -1290,8 +1290,8 @@ router.get('/ai/optimization-context', authenticate, async (req, res) => {
     let pdvSql = `SELECT p.id, p.name, p.address, p.city, p.state, p.latitude, p.longitude, p.radius_meters,
                    COALESCE(
                      (SELECT json_agg(json_build_object('brand_id', pbp.brand_id, 'product_count', 
-                       (SELECT COUNT(*) FROM merch_pdv_brand_products pbp2 WHERE pbp2.pdv_id = p.id AND pbp2.brand_id = pbp.brand_id AND pbp2.active = true)
-                     )) FROM (SELECT DISTINCT brand_id FROM merch_pdv_brand_products WHERE pdv_id = p.id AND active = true) pbp), '[]'
+                       (SELECT COUNT(*) FROM pdv_brand_products pbp2 WHERE pbp2.pdv_id = p.id AND pbp2.brand_id = pbp.brand_id AND pbp2.active = true)
+                     )) FROM (SELECT DISTINCT brand_id FROM pdv_brand_products WHERE pdv_id = p.id AND active = true) pbp), '[]'
                    ) as brands_mix,
                    (SELECT AVG(EXTRACT(EPOCH FROM (mr.checkout_at - mr.checkin_at))/60) 
                     FROM merch_routes mr WHERE mr.pdv_id = p.id AND mr.checkout_at IS NOT NULL 
@@ -1300,7 +1300,7 @@ router.get('/ai/optimization-context', authenticate, async (req, res) => {
     const pdvParams = [orgId];
     
     if (brand_id) {
-      pdvSql += ` AND EXISTS (SELECT 1 FROM merch_pdv_brand_products pbp WHERE pbp.pdv_id = p.id AND pbp.brand_id = $2 AND pbp.active = true)`;
+      pdvSql += ` AND EXISTS (SELECT 1 FROM pdv_brand_products pbp WHERE pbp.pdv_id = p.id AND pbp.brand_id = $2 AND pbp.active = true)`;
       pdvParams.push(brand_id);
     }
     if (region) {
@@ -1314,7 +1314,7 @@ router.get('/ai/optimization-context', authenticate, async (req, res) => {
                           r.estimated_duration_min, r.status, p.name as pdv_name, b.name as brand_name
                          FROM merch_routes r
                          LEFT JOIN pdvs p ON p.id = r.pdv_id
-                         LEFT JOIN merch_brands b ON b.id = r.brand_id
+                         LEFT JOIN brands b ON b.id = r.brand_id
                          WHERE r.organization_id = $1 AND r.visit_date >= $2 AND r.visit_date <= $3 AND r.status != 'cancelled'
                          ORDER BY r.visit_date, r.scheduled_time`;
 
