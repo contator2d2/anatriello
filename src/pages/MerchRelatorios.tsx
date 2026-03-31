@@ -16,7 +16,7 @@ export default function MerchRelatorios() {
   const [selectedPdvId, setSelectedPdvId] = useState('');
 
   const { data: brands = [] } = useBrands();
-  const { data: pdvs = [] } = useQuery({ queryKey: ['rh-pdvs-list'], queryFn: () => api<any[]>('/api/rh/pdvs') });
+  const { data: pdvs = [] } = useQuery({ queryKey: ['rh-pdvs-list'], queryFn: () => api<any[]>('/api/promotor/rh/pdvs') });
   const { data: brandReport = [] } = useBrandReport(selectedBrandId || undefined);
   const { data: pdvReport = [] } = usePdvReport(selectedPdvId || undefined);
 

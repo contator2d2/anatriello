@@ -25,7 +25,7 @@ export default function MerchMixPDV() {
   // Fetch PDVs from RH module
   const { data: pdvs = [] } = useQuery({
     queryKey: ['rh-pdvs-list'],
-    queryFn: () => api<any[]>('/api/rh/pdvs'),
+    queryFn: () => api<any[]>('/api/promotor/rh/pdvs'),
   });
 
   const { data: allBrands = [] } = useBrands({ status: 'active' });
