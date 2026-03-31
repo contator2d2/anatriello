@@ -1,5 +1,6 @@
 import { ReactNode, useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
+import { useBranding } from "@/hooks/use-branding";
 import { Home, FileText, Clock, Upload, Settings, LogOut, Bell, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePromotorNotifications, usePromotorMarkRead, useLocationTracking } from "@/hooks/use-promotor";
@@ -34,6 +35,7 @@ function parseSafe(val: unknown, mask: string) {
 export function PromotorLayout({ children }: PromotorLayoutProps) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { branding } = useBranding();
   const [showNotifications, setShowNotifications] = useState(false);
 
   const { data: notifications = [] } = usePromotorNotifications();
@@ -91,6 +93,7 @@ export function PromotorLayout({ children }: PromotorLayoutProps) {
           <div className="flex items-center justify-between h-14 px-4 max-w-lg mx-auto">
             <h2 className="text-sm font-bold text-foreground truncate">
               {navItems.find(i => location.pathname === i.path)?.label || 'Promotor'}
+              {branding.company_name && <span className="text-xs font-normal text-muted-foreground ml-2">· {branding.company_name}</span>}
             </h2>
             <button
               onClick={() => setShowNotifications(!showNotifications)}
