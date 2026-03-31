@@ -3,15 +3,16 @@ import { MainLayout } from "@/components/layout/MainLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useBrands, useCreateBrand, useUpdateBrand, useDeleteBrand } from "@/hooks/use-merchandising";
 import { FileUploadInput } from "@/components/ui/file-upload-input";
-import { Plus, Search, Pencil, Trash2, Building2, Package, Store } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, Building2 } from "lucide-react";
 import { toast } from "sonner";
 
 const emptyBrand = { name: '', razao_social: '', cnpj: '', logo_url: '', description: '', segment: '', responsible: '', phone: '', email: '', status: 'active', notes: '' };
@@ -22,6 +23,7 @@ export default function MerchMarcas() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState<any>(emptyBrand);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const { data: brands = [], isLoading } = useBrands({ search, status: statusFilter });
   const createBrand = useCreateBrand();
@@ -50,6 +52,31 @@ export default function MerchMarcas() {
     try { await deleteBrand.mutateAsync(id); toast.success('Excluída'); } catch (e: any) { toast.error(e.message); }
   };
 
+  const handleBulkDelete = async () => {
+    if (!selectedIds.size) return;
+    if (!confirm(`Excluir ${selectedIds.size} marca(s) selecionada(s)?`)) return;
+    let ok = 0, fail = 0;
+    for (const id of selectedIds) {
+      try { await deleteBrand.mutateAsync(id); ok++; } catch { fail++; }
+    }
+    setSelectedIds(new Set());
+    toast.success(`${ok} excluída(s)${fail ? `, ${fail} erro(s)` : ''}`);
+  };
+
+  const toggleAll = () => {
+    if (selectedIds.size === brands.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(brands.map((b: any) => b.id)));
+    }
+  };
+
+  const toggleOne = (id: string) => {
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    setSelectedIds(next);
+  };
+
   const set = (k: string, v: any) => setForm((p: any) => ({ ...p, [k]: v }));
 
   return (
@@ -70,7 +97,14 @@ export default function MerchMarcas() {
               </SelectContent>
             </Select>
           </div>
-          <Button onClick={openNew}><Plus className="h-4 w-4 mr-2" />Nova Marca</Button>
+          <div className="flex gap-2">
+            {selectedIds.size > 0 && (
+              <Button variant="destructive" onClick={handleBulkDelete}>
+                <Trash2 className="h-4 w-4 mr-2" />Excluir {selectedIds.size}
+              </Button>
+            )}
+            <Button onClick={openNew}><Plus className="h-4 w-4 mr-2" />Nova Marca</Button>
+          </div>
         </div>
 
         <Card>
@@ -78,6 +112,12 @@ export default function MerchMarcas() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-10">
+                    <Checkbox
+                      checked={brands.length > 0 && selectedIds.size === brands.length}
+                      onCheckedChange={toggleAll}
+                    />
+                  </TableHead>
                   <TableHead>Marca</TableHead>
                   <TableHead className="hidden md:table-cell">Segmento</TableHead>
                   <TableHead className="hidden md:table-cell">Responsável</TableHead>
@@ -87,7 +127,13 @@ export default function MerchMarcas() {
               </TableHeader>
               <TableBody>
                 {brands.map((b: any) => (
-                  <TableRow key={b.id}>
+                  <TableRow key={b.id} className={selectedIds.has(b.id) ? 'bg-primary/5' : ''}>
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedIds.has(b.id)}
+                        onCheckedChange={() => toggleOne(b.id)}
+                      />
+                    </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-3">
                         {b.logo_url ? (
@@ -119,7 +165,7 @@ export default function MerchMarcas() {
                   </TableRow>
                 ))}
                 {!isLoading && brands.length === 0 && (
-                  <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">Nenhuma marca cadastrada</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Nenhuma marca cadastrada</TableCell></TableRow>
                 )}
               </TableBody>
             </Table>
