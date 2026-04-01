@@ -1209,6 +1209,18 @@ router.post('/location-update', authenticatePromotor, async (req, res) => {
       throw e;
     }
 
+    // Also save to history for tracking/playback
+    try {
+      await query(
+        `INSERT INTO employee_location_history (organization_id, employee_id, latitude, longitude, accuracy_meters, battery_level, is_moving, recorded_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())`,
+        [req.organizationId, req.employeeId, latitude, longitude, accuracy_meters || null, battery_level || null, is_moving || false]
+      );
+    } catch (e) {
+      // table may not exist yet - silent
+      if (e.code !== '42P01') logError('promotor.location-history-insert', e);
+    }
+
     res.json({ tracked: true });
   } catch (err) {
     logError('promotor.location-update', err);
