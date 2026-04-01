@@ -13,7 +13,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import {
   Plus, Clock, Smartphone, MapPin, CheckCircle2, AlertTriangle, Wifi, WifiOff,
-  Download, FileSpreadsheet, CalendarDays, CalendarRange, Calendar, Filter
+  Download, FileSpreadsheet, CalendarDays, CalendarRange, Calendar, Filter,
+  TrendingUp, UserX
 } from "lucide-react";
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subDays, subMonths } from "date-fns";
 import * as XLSX from "xlsx";
@@ -96,6 +97,7 @@ export default function RHPonto() {
   const [customEnd, setCustomEnd] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [dialogOpen, setDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("consolidated");
+  const [reportType, setReportType] = useState<'todos' | 'horas_extras' | 'faltas'>('todos');
   const [form, setForm] = useState<any>({ employee_id: "", record_date: format(new Date(), "yyyy-MM-dd"), entry1: "08:00", exit1: "12:00", entry2: "13:00", exit2: "17:00", entry3: "", exit3: "", status: "normal", justification: "" });
   const { toast } = useToast();
 
@@ -115,6 +117,25 @@ export default function RHPonto() {
     if (!employeeFilter) return divergences;
     return divergences.filter((d: any) => d.employee_id === employeeFilter);
   }, [divergences, employeeFilter]);
+
+  const filteredConsolidated = useMemo(() => {
+    if (reportType === 'todos') return consolidated;
+    if (reportType === 'horas_extras') return consolidated.filter((c: any) => {
+      const hours = c.raw_hours ? Number(c.raw_hours) : 0;
+      return hours > 8;
+    });
+    // faltas
+    return consolidated.filter((c: any) => {
+      const hours = c.raw_hours ? Number(c.raw_hours) : 0;
+      return hours < 8;
+    });
+  }, [consolidated, reportType]);
+
+  const filteredRecords = useMemo(() => {
+    if (reportType === 'todos') return records;
+    if (reportType === 'horas_extras') return records.filter((r: any) => parseFloat(r.overtime_hours) > 0);
+    return records.filter((r: any) => r.status === 'falta' || (r.total_hours && parseFloat(r.total_hours) < 8));
+  }, [records, reportType]);
 
   const calcHours = (f: any) => {
     let total = 0;
@@ -284,6 +305,25 @@ export default function RHPonto() {
           )}
         </div>
 
+        <div className="flex flex-wrap gap-2 items-center">
+          <span className="text-xs text-muted-foreground font-medium">Relatório:</span>
+          {([
+            { key: 'todos' as const, label: 'Todos', icon: Clock },
+            { key: 'horas_extras' as const, label: 'Horas Extras', icon: TrendingUp },
+            { key: 'faltas' as const, label: 'Faltas / Horas Faltantes', icon: UserX },
+          ]).map(({ key, label, icon: Icon }) => (
+            <Button
+              key={key}
+              variant={reportType === key ? "default" : "outline"}
+              size="sm"
+              onClick={() => setReportType(key)}
+              className="gap-1.5 text-xs"
+            >
+              <Icon className="h-3.5 w-3.5" /> {label}
+            </Button>
+          ))}
+        </div>
+
         <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
           <Card><CardContent className="p-3 text-center"><p className="text-xl font-bold text-foreground">{consolidated.length}</p><p className="text-[10px] text-muted-foreground">Dias Registrados</p></CardContent></Card>
           <Card><CardContent className="p-3 text-center"><p className="text-xl font-bold text-foreground">{appPunches.length}</p><p className="text-[10px] text-muted-foreground">Registros App</p></CardContent></Card>
@@ -335,9 +375,9 @@ export default function RHPonto() {
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="flex-wrap h-auto">
-            <TabsTrigger value="consolidated" className="gap-2"><CalendarDays className="h-4 w-4" /> Consolidado ({consolidated.length})</TabsTrigger>
+            <TabsTrigger value="consolidated" className="gap-2"><CalendarDays className="h-4 w-4" /> Consolidado ({filteredConsolidated.length})</TabsTrigger>
             <TabsTrigger value="app" className="gap-2"><Smartphone className="h-4 w-4" /> App ({appPunches.length})</TabsTrigger>
-            <TabsTrigger value="manual" className="gap-2"><Clock className="h-4 w-4" /> Manual ({records.length})</TabsTrigger>
+            <TabsTrigger value="manual" className="gap-2"><Clock className="h-4 w-4" /> Manual ({filteredRecords.length})</TabsTrigger>
           </TabsList>
 
           <TabsContent value="consolidated">
@@ -360,9 +400,9 @@ export default function RHPonto() {
                   <TableBody>
                     {loadingConsolidated ? (
                       <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">Carregando...</TableCell></TableRow>
-                    ) : consolidated.length === 0 ? (
-                      <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">Nenhum registro consolidado encontrado</TableCell></TableRow>
-                    ) : consolidated.map((c: any, idx: number) => {
+                    ) : filteredConsolidated.length === 0 ? (
+                      <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">Nenhum registro encontrado para o filtro selecionado</TableCell></TableRow>
+                    ) : filteredConsolidated.map((c: any, idx: number) => {
                       const punches = Array.isArray(c.punches) ? c.punches : [];
                       const entrada = punches.find((p: any) => p.punch_type === 'entrada');
                       const saidaInt = punches.find((p: any) => p.punch_type === 'saida_intervalo');
@@ -486,9 +526,9 @@ export default function RHPonto() {
                   <TableBody>
                     {isLoading ? (
                       <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">Carregando...</TableCell></TableRow>
-                    ) : records.length === 0 ? (
-                      <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">Nenhum registro encontrado</TableCell></TableRow>
-                    ) : records.map((r: any) => (
+                    ) : filteredRecords.length === 0 ? (
+                      <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">Nenhum registro encontrado para o filtro selecionado</TableCell></TableRow>
+                    ) : filteredRecords.map((r: any) => (
                       <TableRow key={r.id}>
                         <TableCell className="font-medium">{formatDateValue(r.record_date, 'dd/MM/yyyy')}</TableCell>
                         <TableCell>{r.employee_name}</TableCell>
