@@ -526,9 +526,9 @@ export default function RHPonto() {
                   <TableBody>
                     {isLoading ? (
                       <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">Carregando...</TableCell></TableRow>
-                    ) : records.length === 0 ? (
-                      <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">Nenhum registro encontrado</TableCell></TableRow>
-                    ) : records.map((r: any) => (
+                    ) : filteredRecords.length === 0 ? (
+                      <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">Nenhum registro encontrado para o filtro selecionado</TableCell></TableRow>
+                    ) : filteredRecords.map((r: any) => (
                       <TableRow key={r.id}>
                         <TableCell className="font-medium">{formatDateValue(r.record_date, 'dd/MM/yyyy')}</TableCell>
                         <TableCell>{r.employee_name}</TableCell>
