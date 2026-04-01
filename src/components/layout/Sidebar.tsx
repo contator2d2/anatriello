@@ -125,6 +125,7 @@ const getNavSections = (hasConnections: boolean): NavSection[] => [
       { name: "Holerite", href: "/rh/holerite", icon: DollarSign, pageKey: 'rh_holerite', moduleKey: 'rh' },
       { name: "Feriados", href: "/rh/feriados", icon: CalendarDays, pageKey: 'rh_feriados', moduleKey: 'rh' },
       { name: "Mapa", href: "/rh/mapa", icon: MapPin, pageKey: 'rh_mapa', moduleKey: 'rh' },
+      { name: "Acessos App", href: "/rh/acessos", icon: Shield, pageKey: 'rh_acessos', moduleKey: 'rh' },
     ],
   },
   {
