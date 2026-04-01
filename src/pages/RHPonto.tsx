@@ -400,9 +400,9 @@ export default function RHPonto() {
                   <TableBody>
                     {loadingConsolidated ? (
                       <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">Carregando...</TableCell></TableRow>
-                    ) : consolidated.length === 0 ? (
-                      <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">Nenhum registro consolidado encontrado</TableCell></TableRow>
-                    ) : consolidated.map((c: any, idx: number) => {
+                    ) : filteredConsolidated.length === 0 ? (
+                      <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">Nenhum registro encontrado para o filtro selecionado</TableCell></TableRow>
+                    ) : filteredConsolidated.map((c: any, idx: number) => {
                       const punches = Array.isArray(c.punches) ? c.punches : [];
                       const entrada = punches.find((p: any) => p.punch_type === 'entrada');
                       const saidaInt = punches.find((p: any) => p.punch_type === 'saida_intervalo');
