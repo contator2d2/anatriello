@@ -117,6 +117,25 @@ export default function RHPonto() {
     return divergences.filter((d: any) => d.employee_id === employeeFilter);
   }, [divergences, employeeFilter]);
 
+  const filteredConsolidated = useMemo(() => {
+    if (reportType === 'todos') return consolidated;
+    if (reportType === 'horas_extras') return consolidated.filter((c: any) => {
+      const hours = c.raw_hours ? Number(c.raw_hours) : 0;
+      return hours > 8;
+    });
+    // faltas
+    return consolidated.filter((c: any) => {
+      const hours = c.raw_hours ? Number(c.raw_hours) : 0;
+      return hours < 8;
+    });
+  }, [consolidated, reportType]);
+
+  const filteredRecords = useMemo(() => {
+    if (reportType === 'todos') return records;
+    if (reportType === 'horas_extras') return records.filter((r: any) => parseFloat(r.overtime_hours) > 0);
+    return records.filter((r: any) => r.status === 'falta' || (r.total_hours && parseFloat(r.total_hours) < 8));
+  }, [records, reportType]);
+
   const calcHours = (f: any) => {
     let total = 0;
     const calc = (entry: string, exit: string) => {
