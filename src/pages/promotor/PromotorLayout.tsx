@@ -91,10 +91,14 @@ export function PromotorLayout({ children }: PromotorLayoutProps) {
       {!isLoginPage && (
         <header className="sticky top-0 z-50 bg-card border-b border-border" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
           <div className="flex items-center justify-between h-14 px-4 max-w-lg mx-auto">
-            <h2 className="text-sm font-bold text-foreground truncate">
-              {navItems.find(i => location.pathname === i.path)?.label || 'Promotor'}
-              {branding.company_name && <span className="text-xs font-normal text-muted-foreground ml-2">· {branding.company_name}</span>}
-            </h2>
+            <div className="flex items-center gap-2 min-w-0">
+              {(branding.logo_topbar || branding.logo) && (
+                <img src={branding.logo_topbar || branding.logo} alt="Logo" className="h-7 w-7 object-contain rounded flex-shrink-0" />
+              )}
+              <h2 className="text-sm font-bold text-foreground truncate">
+                {navItems.find(i => location.pathname === i.path)?.label || 'Promotor'}
+              </h2>
+            </div>
             <button
               onClick={() => setShowNotifications(!showNotifications)}
               className="relative p-2 rounded-lg hover:bg-muted transition-colors"
