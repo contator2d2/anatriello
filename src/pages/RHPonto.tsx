@@ -375,9 +375,9 @@ export default function RHPonto() {
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="flex-wrap h-auto">
-            <TabsTrigger value="consolidated" className="gap-2"><CalendarDays className="h-4 w-4" /> Consolidado ({consolidated.length})</TabsTrigger>
+            <TabsTrigger value="consolidated" className="gap-2"><CalendarDays className="h-4 w-4" /> Consolidado ({filteredConsolidated.length})</TabsTrigger>
             <TabsTrigger value="app" className="gap-2"><Smartphone className="h-4 w-4" /> App ({appPunches.length})</TabsTrigger>
-            <TabsTrigger value="manual" className="gap-2"><Clock className="h-4 w-4" /> Manual ({records.length})</TabsTrigger>
+            <TabsTrigger value="manual" className="gap-2"><Clock className="h-4 w-4" /> Manual ({filteredRecords.length})</TabsTrigger>
           </TabsList>
 
           <TabsContent value="consolidated">
