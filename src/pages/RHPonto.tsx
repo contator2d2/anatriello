@@ -96,6 +96,7 @@ export default function RHPonto() {
   const [customEnd, setCustomEnd] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [dialogOpen, setDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("consolidated");
+  const [reportType, setReportType] = useState<'todos' | 'horas_extras' | 'faltas'>('todos');
   const [form, setForm] = useState<any>({ employee_id: "", record_date: format(new Date(), "yyyy-MM-dd"), entry1: "08:00", exit1: "12:00", entry2: "13:00", exit2: "17:00", entry3: "", exit3: "", status: "normal", justification: "" });
   const { toast } = useToast();
 
