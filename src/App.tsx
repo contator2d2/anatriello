@@ -68,6 +68,7 @@ import RHDocumentos from "./pages/RHDocumentos";
 import RHPontoMonitor from "./pages/RHPontoMonitor";
 import RHPDVs from "./pages/RHPDVs";
 import RHFeriados from "./pages/RHFeriados";
+import RHAcessos from "./pages/RHAcessos";
 import RHMapaOperacional from "./pages/RHMapaOperacional";
 import LiveMaps from "./pages/LiveMaps";
 import MerchMarcas from "./pages/MerchMarcas";
