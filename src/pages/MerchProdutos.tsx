@@ -221,7 +221,7 @@ export default function MerchProdutos() {
                 <SelectContent className="z-[9999]">{categories.map((c: any) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
-            <div className="space-y-2"><Label>Subcategoria *</Label>
+            <div className="space-y-2"><Label>Subcategoria</Label>
               <Select value={form.subcategory_id || undefined} onValueChange={v => set('subcategory_id', v)}>
                 <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                 <SelectContent className="z-[9999]">{subcategories.map((s: any) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
