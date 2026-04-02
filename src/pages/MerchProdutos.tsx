@@ -212,19 +212,19 @@ export default function MerchProdutos() {
             <div className="space-y-2"><Label>Marca *</Label>
               <Select value={form.brand_id} onValueChange={v => set('brand_id', v)}>
                 <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                <SelectContent>{brands.map((b: any) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
+                <SelectContent className="z-[9999]">{brands.map((b: any) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="space-y-2"><Label>Categoria *</Label>
-              <Select value={form.category_id || ''} onValueChange={v => { setForm(prev => ({ ...prev, category_id: v, subcategory_id: '' })); }}>
+              <Select value={form.category_id || undefined} onValueChange={v => { setForm(prev => ({ ...prev, category_id: v, subcategory_id: '' })); }}>
                 <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                <SelectContent>{categories.map((c: any) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
+                <SelectContent className="z-[9999]">{categories.map((c: any) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="space-y-2"><Label>Subcategoria *</Label>
-              <Select value={form.subcategory_id} onValueChange={v => set('subcategory_id', v)}>
+              <Select value={form.subcategory_id || undefined} onValueChange={v => set('subcategory_id', v)}>
                 <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                <SelectContent>{subcategories.map((s: any) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
+                <SelectContent className="z-[9999]">{subcategories.map((s: any) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="space-y-2"><Label>SKU</Label><Input value={form.sku} onChange={e => set('sku', e.target.value)} /></div>
@@ -233,7 +233,7 @@ export default function MerchProdutos() {
             <div className="space-y-2"><Label>Unidade</Label>
               <Select value={form.unit} onValueChange={v => set('unit', v)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
+                <SelectContent className="z-[9999]">
                   <SelectItem value="un">Unidade</SelectItem>
                   <SelectItem value="cx">Caixa</SelectItem>
                   <SelectItem value="kg">Kg</SelectItem>
