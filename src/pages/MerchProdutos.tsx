@@ -216,7 +216,7 @@ export default function MerchProdutos() {
               </Select>
             </div>
             <div className="space-y-2"><Label>Categoria *</Label>
-              <Select key={`cat-${editingId || 'new'}-${form.category_id}`} value={form.category_id || undefined} onValueChange={v => { setForm(prev => ({ ...prev, category_id: v, subcategory_id: '' })); }}>
+              <Select value={form.category_id || ''} onValueChange={v => { setForm(prev => ({ ...prev, category_id: v, subcategory_id: '' })); }}>
                 <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                 <SelectContent>{categories.map((c: any) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
               </Select>
