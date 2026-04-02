@@ -45,7 +45,7 @@ export default function MerchProdutos() {
   const set = (k: string, v: any) => setForm((p: any) => ({ ...p, [k]: v }));
 
   const handleSave = async () => {
-    if (!form.name || !form.brand_id || !form.category_id || !form.subcategory_id) { toast.error('Preencha nome, marca, categoria e subcategoria'); return; }
+    if (!form.name || !form.brand_id || !form.category_id) { toast.error('Preencha nome, marca e categoria'); return; }
     try {
       if (editingId) { await updateProduct.mutateAsync({ id: editingId, ...form }); toast.success('Atualizado'); }
       else { await createProduct.mutateAsync(form); toast.success('Criado'); }
@@ -221,7 +221,7 @@ export default function MerchProdutos() {
                 <SelectContent className="z-[9999]">{categories.map((c: any) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
-            <div className="space-y-2"><Label>Subcategoria *</Label>
+            <div className="space-y-2"><Label>Subcategoria</Label>
               <Select value={form.subcategory_id || undefined} onValueChange={v => set('subcategory_id', v)}>
                 <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                 <SelectContent className="z-[9999]">{subcategories.map((s: any) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
