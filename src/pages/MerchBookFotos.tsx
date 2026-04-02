@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { usePhotoBook } from "@/hooks/use-merch-routes";
 import { useBrands } from "@/hooks/use-merchandising";
 import { usePDVs } from "@/hooks/use-promotor";
+import { resolveMediaUrl } from "@/lib/media";
 import { format, startOfMonth, endOfMonth } from "date-fns";
 import { Camera, Image, Download, Eye, Filter, Calendar, MapPin, Tag, User, ZoomIn } from "lucide-react";
 
@@ -128,11 +129,14 @@ export default function MerchBookFotos() {
                         <Badge variant="secondary" className="text-[10px]">{bPhotos.length} fotos</Badge>
                       </div>
                       <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
-                        {bPhotos.map((photo: any) => (
+                        {bPhotos.map((photo: any) => {
+                          const photoUrl = resolveMediaUrl(photo.photo_url);
+
+                          return (
                           <div key={photo.id} className="relative group cursor-pointer aspect-square rounded-lg overflow-hidden border bg-muted"
-                            onClick={() => setViewPhoto(photo)}>
-                            {photo.photo_url ? (
-                              <img src={photo.photo_url} alt="" className="w-full h-full object-cover" loading="lazy" />
+                            onClick={() => setViewPhoto({ ...photo, photo_url: photoUrl })}>
+                            {photoUrl ? (
+                              <img src={photoUrl} alt={photo.product_name || photo.category_name || 'Foto de execução'} className="w-full h-full object-cover" loading="lazy" />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center"><Image className="h-6 w-6 text-muted-foreground" /></div>
                             )}
@@ -146,7 +150,7 @@ export default function MerchBookFotos() {
                               <Badge className="absolute top-1 right-1 text-[8px] py-0 px-1 bg-orange-500 text-white">WEB</Badge>
                             )}
                           </div>
-                        ))}
+                        )})}
                       </div>
                     </div>
                   ))}

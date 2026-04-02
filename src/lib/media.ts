@@ -14,5 +14,16 @@ export function resolveMediaUrl(url?: string | null): string | null {
   if (u.startsWith("//")) return `https:${u}`;
 
   if (u.startsWith("/")) return `${API_URL}${u}`;
-  return `${API_URL}/${u}`;
+
+  const normalized = u.replace(/^\.\/?/, '');
+
+  if (normalized.startsWith('uploads/')) {
+    return `${API_URL}/${normalized}`;
+  }
+
+  if (/^[^/]+\.[a-z0-9]{2,5}([?#].*)?$/i.test(normalized)) {
+    return `${API_URL}/uploads/${normalized}`;
+  }
+
+  return `${API_URL}/${normalized}`;
 }
