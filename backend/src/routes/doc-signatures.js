@@ -21,6 +21,58 @@ async function getUserOrgId(userId) {
   return r.rows[0]?.id || null;
 }
 
+async function getContractCompanyInfo(orgId) {
+  const result = await query(
+    `SELECT * FROM contract_company_info WHERE organization_id = $1 LIMIT 1`,
+    [orgId]
+  );
+  return result.rows[0] || null;
+}
+
+async function getOrgResponsibleData(orgId) {
+  const result = await query(
+    `SELECT o.name AS organization_name,
+            o.logo_url,
+            cci.company_name,
+            cci.cnpj,
+            cci.address,
+            cci.city,
+            cci.state,
+            cci.zip_code,
+            cci.responsible_name AS company_responsible_name,
+            cci.responsible_cpf,
+            cci.responsible_email,
+            cci.responsible_phone,
+            u.name AS owner_name,
+            u.email AS owner_email
+     FROM organizations o
+     LEFT JOIN contract_company_info cci ON cci.organization_id = o.id
+     LEFT JOIN organization_members om ON om.organization_id = o.id AND om.role = 'owner'
+     LEFT JOIN users u ON u.id = om.user_id
+     WHERE o.id = $1
+     LIMIT 1`,
+    [orgId]
+  );
+
+  const row = result.rows[0];
+  if (!row) return null;
+
+  return {
+    org_name: row.company_name || row.organization_name || '',
+    company_name: row.company_name || row.organization_name || '',
+    logo_url: row.logo_url || null,
+    responsible_name: row.company_responsible_name || row.owner_name || '',
+    responsible_email: row.responsible_email || row.owner_email || '',
+    responsible_cpf: row.responsible_cpf || '',
+    responsible_phone: row.responsible_phone || '',
+    cnpj: row.cnpj || '',
+    address: row.address || '',
+    city: row.city || '',
+    state: row.state || '',
+    zip_code: row.zip_code || '',
+  };
+}
+
 // Helper: audit log
 async function auditLog(documentId, action, { name, email, ip, userAgent, geolocation, details }) {
   try {
@@ -1327,6 +1379,44 @@ router.get('/sign/:token/download', async (req, res) => {
 // ===========================
 router.use(authenticate);
 
+router.get('/company-info', async (req, res) => {
+  try {
+    const orgId = await getUserOrgId(req.userId);
+    if (!orgId) return res.status(403).json({ error: 'Sem organização' });
+
+    const companyInfo = await getContractCompanyInfo(orgId);
+    res.json(companyInfo || {});
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao buscar dados da empresa' });
+  }
+});
+
+router.get('/org-responsible', async (req, res) => {
+  try {
+    const orgId = await getUserOrgId(req.userId);
+    if (!orgId) return res.status(403).json({ error: 'Sem organização' });
+
+    const responsible = await getOrgResponsibleData(orgId);
+    res.json(responsible || {
+      org_name: '',
+      company_name: '',
+      responsible_name: '',
+      responsible_email: '',
+      responsible_cpf: '',
+      responsible_phone: '',
+      cnpj: '',
+      address: '',
+      city: '',
+      state: '',
+      zip_code: '',
+      logo_url: null,
+    });
+  } catch (error) {
+    console.error('[doc-signatures] Org responsible error:', error);
+    res.status(500).json({ error: 'Erro ao buscar dados da organização' });
+  }
+});
+
 // List documents
 router.get('/', async (req, res) => {
   try {
@@ -1864,18 +1954,6 @@ router.delete('/contract-templates/:templateId', async (req, res) => {
   }
 });
 
-// ======= Company Info (contratante) =======
-router.get('/company-info', async (req, res) => {
-  try {
-    const orgId = await getUserOrgId(req.userId);
-    if (!orgId) return res.status(403).json({ error: 'Sem organização' });
-    const result = await query(`SELECT * FROM contract_company_info WHERE organization_id = $1`, [orgId]);
-    res.json(result.rows[0] || {});
-  } catch (error) {
-    res.status(500).json({ error: 'Erro ao buscar dados da empresa' });
-  }
-});
-
 router.put('/company-info', async (req, res) => {
   try {
     const orgId = await getUserOrgId(req.userId);
@@ -1894,33 +1972,6 @@ router.put('/company-info', async (req, res) => {
   } catch (error) {
     console.error('[doc-signatures] Company info save error:', error);
     res.status(500).json({ error: 'Erro ao salvar dados da empresa' });
-  }
-});
-
-// Get org responsible data (for co-signing)
-router.get('/org-responsible', async (req, res) => {
-  try {
-    const orgId = await getUserOrgId(req.userId);
-    if (!orgId) return res.status(403).json({ error: 'Sem organização' });
-
-    const result = await query(
-      `SELECT o.name as org_name, o.logo_url,
-              u.name as responsible_name, u.email as responsible_email
-       FROM organizations o
-       JOIN organization_members om ON om.organization_id = o.id AND om.role = 'owner'
-       JOIN users u ON u.id = om.user_id
-       WHERE o.id = $1 LIMIT 1`,
-      [orgId]
-    );
-
-    if (result.rows.length === 0) {
-      return res.json({ org_name: '', responsible_name: '', responsible_email: '' });
-    }
-
-    res.json(result.rows[0]);
-  } catch (error) {
-    console.error('[doc-signatures] Org responsible error:', error);
-    res.status(500).json({ error: 'Erro ao buscar dados da organização' });
   }
 });
 
