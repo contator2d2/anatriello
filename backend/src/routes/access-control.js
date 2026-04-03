@@ -260,6 +260,28 @@ router.delete('/agencies/:id', authenticate, async (req, res) => {
   } catch (err) { logError('access.agencies.delete', err); res.status(500).json({ error: 'Erro ao excluir agência' }); }
 });
 
+// --- Agency Allowed Units ---
+router.get('/agencies/:id/allowed-units', authenticate, async (req, res) => {
+  try {
+    const r = await query(
+      `SELECT aau.*, su.name as unit_name, su.city, su.state FROM agency_allowed_units aau
+       JOIN supermarket_units su ON su.id = aau.supermarket_unit_id
+       WHERE aau.agency_id = $1 ORDER BY su.name`, [req.params.id]);
+    res.json(r.rows);
+  } catch (err) { logError('access.agency_units.list', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.put('/agencies/:id/allowed-units', authenticate, async (req, res) => {
+  try {
+    const { unit_ids } = req.body;
+    await query('DELETE FROM agency_allowed_units WHERE agency_id = $1', [req.params.id]);
+    for (const uid of (unit_ids || [])) {
+      await query('INSERT INTO agency_allowed_units (agency_id, supermarket_unit_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [req.params.id, uid]);
+    }
+    res.json({ ok: true });
+  } catch (err) { logError('access.agency_units.update', err); res.status(500).json({ error: 'Erro' }); }
+});
+
 // --- Agency Users CRUD (create login for agency) ---
 router.post('/agencies/:id/users', authenticate, async (req, res) => {
   try {
