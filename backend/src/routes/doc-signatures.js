@@ -137,6 +137,24 @@ async function ensureTables() {
     await query(`ALTER TABLE contract_templates ADD COLUMN IF NOT EXISTS header_text_color VARCHAR(20) DEFAULT '#FFFFFF'`);
     await query(`ALTER TABLE contract_templates ADD COLUMN IF NOT EXISTS is_default BOOLEAN DEFAULT false`);
 
+    // Company info for contracts (contratante data saved once)
+    await query(`CREATE TABLE IF NOT EXISTS contract_company_info (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE UNIQUE,
+      company_name VARCHAR(500),
+      cnpj VARCHAR(30),
+      address TEXT,
+      city VARCHAR(255),
+      state VARCHAR(50),
+      zip_code VARCHAR(20),
+      responsible_name VARCHAR(255),
+      responsible_cpf VARCHAR(20),
+      responsible_email VARCHAR(255),
+      responsible_phone VARCHAR(30),
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )`);
+
     await query(`ALTER TABLE doc_signature_signers ADD COLUMN IF NOT EXISTS role VARCHAR(20) DEFAULT 'signer'`);
     await query(`ALTER TABLE doc_signature_signers ADD COLUMN IF NOT EXISTS sign_order INTEGER DEFAULT 1`);
     await query(`ALTER TABLE doc_signature_signers ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'pending'`);
