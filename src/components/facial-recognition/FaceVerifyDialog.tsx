@@ -1,0 +1,229 @@
+import { useState, useRef, useCallback, useEffect } from "react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import { Loader2, CheckCircle2, XCircle, AlertTriangle, RotateCcw, ScanFace, ShieldCheck } from "lucide-react";
+import { loadFaceModels, detectFace, captureVideoFrame, compareFaces, drawLandmarks } from "@/lib/facial-recognition";
+
+interface Props {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  storedDescriptor: number[];
+  storedPhotoUrl?: string;
+  personName?: string;
+  threshold?: number;
+  onResult: (result: { match: boolean; score: number; imageDataUrl: string }) => void;
+}
+
+type Status = "loading" | "detecting" | "verifying" | "result" | "error";
+
+export const FaceVerifyDialog = ({ open, onOpenChange, storedDescriptor, storedPhotoUrl, personName, threshold = 70, onResult }: Props) => {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const animFrameRef = useRef<number>(0);
+
+  const [status, setStatus] = useState<Status>("loading");
+  const [score, setScore] = useState<number | null>(null);
+  const [matched, setMatched] = useState(false);
+  const [capturedImage, setCapturedImage] = useState("");
+  const [error, setError] = useState("");
+  const [faceDetected, setFaceDetected] = useState(false);
+
+  const stopCamera = useCallback(() => {
+    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    streamRef.current?.getTracks().forEach(t => t.stop());
+    streamRef.current = null;
+  }, []);
+
+  useEffect(() => {
+    if (!open) { stopCamera(); setStatus("loading"); setScore(null); setMatched(false); setCapturedImage(""); return; }
+
+    let cancelled = false;
+    (async () => {
+      setStatus("loading");
+      await loadFaceModels();
+      if (cancelled) return;
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
+        });
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play();
+          setStatus("detecting");
+        }
+      } catch {
+        setError("Câmera não disponível.");
+        setStatus("error");
+      }
+    })();
+
+    return () => { cancelled = true; stopCamera(); };
+  }, [open, stopCamera]);
+
+  const detectLoop = useCallback(async () => {
+    if (!videoRef.current || status !== "detecting") return;
+
+    const result = await detectFace(videoRef.current);
+    if (result && canvasRef.current) {
+      const canvas = canvasRef.current;
+      canvas.width = videoRef.current.videoWidth;
+      canvas.height = videoRef.current.videoHeight;
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawLandmarks(canvas, result.landmarks, result.box);
+      }
+      setFaceDetected(true);
+
+      // Auto-verify when face is detected with good confidence
+      if (result.confidence > 60) {
+        setStatus("verifying");
+        const matchScore = compareFaces(storedDescriptor, result.descriptor);
+        const isMatch = matchScore >= threshold;
+        const imageDataUrl = captureVideoFrame(videoRef.current);
+
+        setScore(matchScore);
+        setMatched(isMatch);
+        setCapturedImage(imageDataUrl);
+        setStatus("result");
+        stopCamera();
+
+        onResult({ match: isMatch, score: matchScore, imageDataUrl });
+        return;
+      }
+    } else {
+      setFaceDetected(false);
+      if (canvasRef.current) {
+        const ctx = canvasRef.current.getContext("2d");
+        ctx?.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+      }
+    }
+
+    animFrameRef.current = requestAnimationFrame(() => setTimeout(detectLoop, 300));
+  }, [status, storedDescriptor, threshold, onResult, stopCamera]);
+
+  useEffect(() => {
+    if (status === "detecting") detectLoop();
+  }, [status, detectLoop]);
+
+  const handleRetry = async () => {
+    setScore(null);
+    setMatched(false);
+    setCapturedImage("");
+    setFaceDetected(false);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+        setStatus("detecting");
+      }
+    } catch {
+      setError("Câmera não disponível.");
+      setStatus("error");
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <ShieldCheck className="h-5 w-5" /> Verificação Facial
+          </DialogTitle>
+        </DialogHeader>
+
+        {personName && (
+          <p className="text-sm text-muted-foreground">Verificando identidade de <strong>{personName}</strong></p>
+        )}
+
+        <div className="space-y-4">
+          {status === "loading" && (
+            <div className="flex flex-col items-center gap-3 py-8">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <p className="text-sm text-muted-foreground">Preparando verificação...</p>
+            </div>
+          )}
+
+          {status === "error" && (
+            <div className="flex flex-col items-center gap-3 py-8">
+              <AlertTriangle className="h-8 w-8 text-destructive" />
+              <p className="text-sm text-destructive">{error}</p>
+            </div>
+          )}
+
+          {(status === "detecting" || status === "verifying") && (
+            <div className="relative rounded-lg overflow-hidden bg-muted aspect-video">
+              <video ref={videoRef} className="w-full h-full object-cover" muted playsInline />
+              <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none" />
+              <div className="absolute top-2 right-2">
+                <Badge variant={faceDetected ? "default" : "secondary"} className="gap-1">
+                  {faceDetected ? <CheckCircle2 className="h-3 w-3" /> : <Loader2 className="h-3 w-3 animate-spin" />}
+                  {faceDetected ? "Rosto detectado" : "Procurando..."}
+                </Badge>
+              </div>
+              {status === "verifying" && (
+                <div className="absolute inset-0 flex items-center justify-center bg-background/60">
+                  <div className="flex flex-col items-center gap-2">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    <p className="text-sm font-medium">Comparando...</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {status === "result" && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                {storedPhotoUrl && (
+                  <div className="rounded-lg overflow-hidden border border-border">
+                    <p className="text-xs text-center py-1 bg-muted text-muted-foreground">Foto cadastrada</p>
+                    <img src={storedPhotoUrl} alt="Base" className="w-full aspect-square object-cover" />
+                  </div>
+                )}
+                <div className="rounded-lg overflow-hidden border border-border">
+                  <p className="text-xs text-center py-1 bg-muted text-muted-foreground">Captura atual</p>
+                  <img src={capturedImage} alt="Captura" className="w-full aspect-square object-cover" />
+                </div>
+              </div>
+
+              <div className={`rounded-lg p-4 text-center border ${matched ? "border-green-500 bg-green-50 dark:bg-green-950" : "border-destructive bg-destructive/10"}`}>
+                {matched ? (
+                  <div className="flex flex-col items-center gap-2">
+                    <CheckCircle2 className="h-10 w-10 text-green-600" />
+                    <p className="font-bold text-green-700 dark:text-green-400">Identidade Confirmada</p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center gap-2">
+                    <XCircle className="h-10 w-10 text-destructive" />
+                    <p className="font-bold text-destructive">Identidade Não Confirmada</p>
+                  </div>
+                )}
+                <p className="text-sm mt-1">Similaridade: <strong>{score?.toFixed(1)}%</strong> (mínimo: {threshold}%)</p>
+                <Progress value={score || 0} className="mt-2" />
+              </div>
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          {status === "result" && !matched && (
+            <Button variant="outline" onClick={handleRetry} className="gap-2">
+              <RotateCcw className="h-4 w-4" /> Tentar novamente
+            </Button>
+          )}
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Fechar</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+};
