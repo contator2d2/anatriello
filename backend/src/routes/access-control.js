@@ -324,22 +324,61 @@ router.put('/agencies/:id', authenticate, async (req, res) => {
   try {
     const orgId = await getOrgId(req.userId);
     const { name, cnpj, responsible_name, responsible_cpf, responsible_phone, responsible_email, address, city, state,
-            plan_name, max_promoters, price_per_promoter, auto_block_on_overdue, status, billing_status, notes } = req.body;
+            plan_name, max_promoters, price_per_promoter, auto_block_on_overdue, status, billing_status, notes, plan_id, contracted_promoters } = req.body;
     if (cnpj && !isValidCnpj(cnpj)) return res.status(400).json({ error: 'CNPJ inválido' });
     if (responsible_cpf && !isValidCpf(responsible_cpf)) return res.status(400).json({ error: 'CPF do responsável inválido' });
     if (responsible_phone && !isValidPhone(responsible_phone)) return res.status(400).json({ error: 'Telefone inválido' });
+
+    let finalPrice = price_per_promoter || null;
+    let finalPlanName = plan_name || null;
+    let finalMax = max_promoters || null;
+
+    if (plan_id) {
+      const plan = await query('SELECT * FROM agency_billing_plans WHERE id=$1 AND organization_id=$2', [plan_id, orgId]);
+      if (!plan.rows.length) return res.status(400).json({ error: 'Plano inválido para esta organização' });
+      finalPrice = plan.rows[0].price_per_promoter;
+      finalPlanName = plan.rows[0].name;
+      finalMax = contracted_promoters || plan.rows[0].max_promoters || max_promoters || 10;
+    }
+
     const r = await query(
       `UPDATE agencies SET name=COALESCE($1,name), cnpj=$2, responsible_name=$3, responsible_cpf=$4, responsible_phone=$5,
-       responsible_email=$6, address=$7, city=$8, state=$9, plan_name=$10, max_promoters=COALESCE($11,max_promoters),
+       responsible_email=$6, address=$7, city=$8, state=$9, plan_name=COALESCE($10, plan_name), max_promoters=COALESCE($11,max_promoters),
        price_per_promoter=COALESCE($12,price_per_promoter), auto_block_on_overdue=COALESCE($13,auto_block_on_overdue),
        status=COALESCE($14,status), billing_status=COALESCE($15,billing_status), notes=$16, updated_at=NOW()
        WHERE id=$17 AND organization_id=$18 RETURNING *`,
-      [name, onlyDigits(cnpj) || null, responsible_name||null, onlyDigits(responsible_cpf) || null, onlyDigits(responsible_phone) || null, responsible_email?.trim().toLowerCase() || null,
-       address||null, city||null, state||null, plan_name||null, max_promoters, price_per_promoter,
+      [name, onlyDigits(cnpj) || null, responsible_name||null, onlyDigits(responsible_cpf) || null, onlyDigits(responsible_phone) || null,
+       responsible_email?.trim().toLowerCase() || null, address||null, city||null, state||null, finalPlanName, finalMax, finalPrice,
        auto_block_on_overdue, status, billing_status, notes||null, req.params.id, orgId]
     );
     if (!r.rows.length) return res.status(404).json({ error: 'Agência não encontrada' });
-    res.json(r.rows[0]);
+
+    if (plan_id) {
+      const count = finalMax || contracted_promoters || 10;
+      const amount = (parseFloat(finalPrice) || 0) * (parseInt(count) || 0);
+      const sub = await query('SELECT id FROM agency_subscriptions WHERE agency_id=$1', [req.params.id]);
+      if (!sub.rows.length) {
+        await query(
+          'INSERT INTO agency_subscriptions (agency_id, plan_id, promoter_count, amount_due) VALUES ($1,$2,$3,$4)',
+          [req.params.id, plan_id, count, amount]
+        );
+      } else {
+        await query(
+          'UPDATE agency_subscriptions SET plan_id=$1, promoter_count=$2, amount_due=$3, updated_at=NOW() WHERE agency_id=$4',
+          [plan_id, count, amount, req.params.id]
+        );
+      }
+    }
+
+    const result = await query(
+      `SELECT a.*, s.plan_id, s.promoter_count as contracted_promoters
+       FROM agencies a
+       LEFT JOIN agency_subscriptions s ON s.agency_id = a.id
+       WHERE a.id=$1 AND a.organization_id=$2`,
+      [req.params.id, orgId]
+    );
+
+    res.json(result.rows[0]);
   } catch (err) { logError('access.agencies.update', err); res.status(500).json({ error: 'Erro ao atualizar agência' }); }
 });
 

@@ -98,8 +98,8 @@ const AgenciesTab = () => {
       address: a.address || "",
       city: a.city || "",
       state: a.state || "",
-      plan_id: "",
-      contracted_promoters: a.max_promoters?.toString() || "",
+      plan_id: a.plan_id || "",
+      contracted_promoters: a.contracted_promoters?.toString() || a.promoter_count?.toString() || a.max_promoters?.toString() || "",
     });
     setLoginEmail("");
     setLoginPassword("");
