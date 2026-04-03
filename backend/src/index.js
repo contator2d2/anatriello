@@ -49,6 +49,7 @@ import rhRoutes from './routes/rh.js';
 import promotorRoutes from './routes/promotor.js';
 import merchandisingRoutes from './routes/merchandising.js';
 import merchRoutesRoutes from './routes/merch-routes.js';
+import accessControlRoutes from './routes/access-control.js';
 import { initDatabase } from './init-db.js';
 import { executeNotifications } from './scheduler.js';
 import { executeCampaignMessages } from './campaign-scheduler.js';
@@ -427,6 +428,7 @@ app.use('/api/rh', rhRoutes);
 app.use('/api/promotor', promotorRoutes);
 app.use('/api/merchandising', merchandisingRoutes);
 app.use('/api/merch', merchRoutesRoutes);
+app.use('/api/access-control', accessControlRoutes);
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
