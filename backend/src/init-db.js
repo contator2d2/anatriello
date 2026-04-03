@@ -4316,6 +4316,7 @@ const migrationSteps = [
   { name: 'Access Control (Fase 5)', sql: step45AccessControl, critical: false },
   { name: 'Agency Billing', sql: step46AgencyBilling, critical: false },
   { name: 'Agency Allowed Units', sql: step45bAgencyAllowedUnits, critical: false },
+  { name: 'Visit Requests', sql: step47VisitRequests, critical: false },
 ];
 
 export async function initDatabase() {
