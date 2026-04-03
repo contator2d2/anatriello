@@ -54,7 +54,7 @@ const AgenciesTab = () => {
 
   const openNew = () => {
     setEditing(null);
-    setForm({ name: "", cnpj: "", responsible_name: "", contact_email: "", contact_phone: "", max_promoters: "50", is_active: true, address: "", city: "", state: "" });
+    setForm({ name: "", cnpj: "", responsible_name: "", contact_email: "", contact_phone: "", max_promoters: "50", is_active: true, address: "", city: "", state: "", plan_id: "", contracted_promoters: "" });
     setLoginEmail(""); setLoginPassword(""); setLoginName(""); setShowPw(false);
     setSelectedUnits([]);
     setDialogTab("dados");
