@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAgencies, useCreateAgency, useUpdateAgency, useUnits, useCreateAgencyUser, useSetAgencyUnits } from "@/hooks/use-access-control";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,13 +12,18 @@ import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Pencil, Users, Loader2, KeyRound, Eye, EyeOff, Store, FileSignature } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Plus, Pencil, Users, Loader2, KeyRound, Eye, EyeOff, Store, FileSignature, DollarSign } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api";
 
 const AgenciesTab = () => {
   const { data: agencies = [], isLoading } = useAgencies();
   const { data: units = [] } = useUnits();
+  const { data: plans = [] } = useQuery({
+    queryKey: ['billing-plans'],
+    queryFn: () => api<any[]>('/api/access-control/billing/plans'),
+  });
   const createMutation = useCreateAgency();
   const updateMutation = useUpdateAgency();
   const createUserMutation = useCreateAgencyUser();
@@ -29,6 +35,7 @@ const AgenciesTab = () => {
   const [form, setForm] = useState({
     name: "", cnpj: "", responsible_name: "", contact_email: "", contact_phone: "",
     max_promoters: "50", is_active: true, address: "", city: "", state: "",
+    plan_id: "", contracted_promoters: "",
   });
 
   // Login fields
@@ -47,7 +54,7 @@ const AgenciesTab = () => {
 
   const openNew = () => {
     setEditing(null);
-    setForm({ name: "", cnpj: "", responsible_name: "", contact_email: "", contact_phone: "", max_promoters: "50", is_active: true, address: "", city: "", state: "" });
+    setForm({ name: "", cnpj: "", responsible_name: "", contact_email: "", contact_phone: "", max_promoters: "50", is_active: true, address: "", city: "", state: "", plan_id: "", contracted_promoters: "" });
     setLoginEmail(""); setLoginPassword(""); setLoginName(""); setShowPw(false);
     setSelectedUnits([]);
     setDialogTab("dados");
@@ -61,6 +68,7 @@ const AgenciesTab = () => {
       contact_email: a.contact_email || a.responsible_email || "", contact_phone: a.contact_phone || a.responsible_phone || "",
       max_promoters: a.max_promoters?.toString() || "50", is_active: a.is_active !== false && a.status !== 'inactive',
       address: a.address || "", city: a.city || "", state: a.state || "",
+      plan_id: "", contracted_promoters: a.max_promoters?.toString() || "",
     });
     setLoginEmail(""); setLoginPassword(""); setLoginName(a.responsible_name || ""); setShowPw(false);
     setSelectedUnits([]);
@@ -90,6 +98,8 @@ const AgenciesTab = () => {
       max_promoters: parseInt(form.max_promoters) || 50,
       responsible_email: form.contact_email,
       responsible_phone: form.contact_phone,
+      plan_id: form.plan_id || undefined,
+      contracted_promoters: parseInt(form.contracted_promoters) || undefined,
     };
     let agencyId = editing?.id;
     if (editing) {
@@ -245,7 +255,43 @@ const AgenciesTab = () => {
                 <div><Label>Cidade</Label><Input value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} /></div>
                 <div><Label>UF</Label><Input value={form.state} onChange={e => setForm(f => ({ ...f, state: e.target.value }))} maxLength={2} /></div>
               </div>
-              <div><Label>Limite de Promotores</Label><Input value={form.max_promoters} onChange={e => setForm(f => ({ ...f, max_promoters: e.target.value }))} type="number" /></div>
+              <Separator />
+              <p className="text-sm font-medium flex items-center gap-2"><DollarSign className="h-4 w-4 text-primary" /> Plano e Cobrança</p>
+              <div>
+                <Label>Plano de Cobrança</Label>
+                <Select value={form.plan_id} onValueChange={v => {
+                  setForm(f => ({ ...f, plan_id: v }));
+                  const plan = (plans as any[])?.find((p: any) => p.id === v);
+                  if (plan) {
+                    setForm(f => ({ ...f, plan_id: v, max_promoters: plan.max_promoters?.toString() || f.max_promoters }));
+                  }
+                }}>
+                  <SelectTrigger><SelectValue placeholder="Selecione um plano..." /></SelectTrigger>
+                  <SelectContent>
+                    {(plans as any[])?.map((p: any) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name} — R$ {Number(p.price_per_promoter || 0).toFixed(2)}/promotor
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Qtd. Promotores Contratados</Label>
+                <Input type="number" value={form.contracted_promoters} onChange={e => setForm(f => ({ ...f, contracted_promoters: e.target.value }))} placeholder="Ex: 10" />
+                <p className="text-xs text-muted-foreground mt-1">Quantidade que a agência deseja contratar. As faturas serão geradas com base nesse número.</p>
+              </div>
+              {form.plan_id && form.contracted_promoters && (() => {
+                const plan = (plans as any[])?.find((p: any) => p.id === form.plan_id);
+                const total = (parseInt(form.contracted_promoters) || 0) * (parseFloat(plan?.price_per_promoter) || 0);
+                return (
+                  <div className="bg-muted/50 rounded-lg p-3 text-sm">
+                    <div className="flex justify-between"><span className="text-muted-foreground">Valor mensal estimado:</span><span className="font-bold text-primary">R$ {total.toFixed(2)}</span></div>
+                  </div>
+                );
+              })()}
+              <Separator />
+              <div><Label>Limite Máx. de Promotores</Label><Input value={form.max_promoters} onChange={e => setForm(f => ({ ...f, max_promoters: e.target.value }))} type="number" /></div>
               {editing && (
                 <div className="flex items-center gap-2">
                   <Switch checked={form.is_active} onCheckedChange={v => setForm(f => ({ ...f, is_active: v }))} />

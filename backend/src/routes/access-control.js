@@ -218,17 +218,44 @@ router.post('/agencies', authenticate, async (req, res) => {
   try {
     const orgId = await getOrgId(req.userId);
     const { name, cnpj, responsible_name, responsible_phone, responsible_email, address, city, state,
-            plan_name, max_promoters, price_per_promoter, auto_block_on_overdue, notes } = req.body;
+            plan_name, max_promoters, price_per_promoter, auto_block_on_overdue, notes, plan_id, contracted_promoters } = req.body;
     if (!name) return res.status(400).json({ error: 'Nome é obrigatório' });
+
+    // If plan_id provided, fetch plan to get price
+    let finalPrice = price_per_promoter || 0;
+    let finalPlanName = plan_name || null;
+    let finalMax = max_promoters || 10;
+    if (plan_id) {
+      const plan = await query('SELECT * FROM agency_billing_plans WHERE id=$1 AND organization_id=$2', [plan_id, orgId]);
+      if (plan.rows.length) {
+        finalPrice = plan.rows[0].price_per_promoter;
+        finalPlanName = plan.rows[0].name;
+        if (plan.rows[0].max_promoters) finalMax = plan.rows[0].max_promoters;
+      }
+    }
+    const contractedCount = contracted_promoters || finalMax;
+
     const r = await query(
       `INSERT INTO agencies (organization_id, name, cnpj, responsible_name, responsible_phone, responsible_email,
        address, city, state, plan_name, max_promoters, price_per_promoter, auto_block_on_overdue, notes)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
       [orgId, name, cnpj||null, responsible_name||null, responsible_phone||null, responsible_email||null,
-       address||null, city||null, state||null, plan_name||null, max_promoters||10, price_per_promoter||0,
+       address||null, city||null, state||null, finalPlanName, contractedCount, finalPrice,
        auto_block_on_overdue||false, notes||null]
     );
-    res.json(r.rows[0]);
+    const agency = r.rows[0];
+
+    // Auto-create subscription if plan_id provided
+    if (plan_id) {
+      const amount = contractedCount * parseFloat(finalPrice);
+      await query(
+        `INSERT INTO agency_subscriptions (agency_id, plan_id, promoter_count, amount_due)
+         VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING`,
+        [agency.id, plan_id, contractedCount, amount]
+      );
+    }
+
+    res.json(agency);
   } catch (err) { logError('access.agencies.create', err); res.status(500).json({ error: 'Erro ao criar agência' }); }
 });
 
@@ -1106,39 +1133,100 @@ router.post('/billing/invoices/:id/pay', authenticate, async (req, res) => {
 router.post('/billing/invoices/generate', authenticate, async (req, res) => {
   try {
     const orgId = await getOrgId(req.userId);
-    const { agency_id } = req.body;
+    const { agency_id, months_ahead } = req.body;
     if (!agency_id) return res.status(400).json({ error: 'Agência é obrigatória' });
     const agency = await query('SELECT * FROM agencies WHERE id=$1 AND organization_id=$2', [agency_id, orgId]);
     if (!agency.rows.length) return res.status(404).json({ error: 'Agência não encontrada' });
     const a = agency.rows[0];
-    const count = await query("SELECT COUNT(*) as c FROM agency_promoters WHERE agency_id=$1 AND status='active'", [agency_id]);
-    const promoterCount = parseInt(count.rows[0].c) || 0;
-    const unitPrice = parseFloat(a.price_per_promoter) || 0;
-    const total = promoterCount * unitPrice;
-    const now = new Date();
-    const refMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const dueDate = new Date(now.getFullYear(), now.getMonth() + 1, 10);
-    // Check subscription
-    let sub = await query('SELECT id FROM agency_subscriptions WHERE agency_id=$1', [agency_id]);
+
+    // Use contracted count from subscription or agency max_promoters
+    let sub = await query('SELECT * FROM agency_subscriptions WHERE agency_id=$1', [agency_id]);
     let subId;
+    const contractedCount = sub.rows.length ? parseInt(sub.rows[0].promoter_count) : parseInt(a.max_promoters) || 0;
+    const unitPrice = parseFloat(a.price_per_promoter) || 0;
+    const total = contractedCount * unitPrice;
+
     if (!sub.rows.length) {
       const s = await query(
         "INSERT INTO agency_subscriptions (agency_id, promoter_count, amount_due) VALUES ($1,$2,$3) RETURNING id",
-        [agency_id, promoterCount, total]
+        [agency_id, contractedCount, total]
       );
       subId = s.rows[0].id;
     } else {
       subId = sub.rows[0].id;
       await query('UPDATE agency_subscriptions SET promoter_count=$1, amount_due=$2, updated_at=NOW() WHERE id=$3',
-        [promoterCount, total, subId]);
+        [contractedCount, total, subId]);
     }
-    const inv = await query(
-      `INSERT INTO agency_invoices (subscription_id, agency_id, reference_month, promoter_count, unit_price, total_amount, final_amount, due_date)
-       VALUES ($1,$2,$3,$4,$5,$6,$6,$7) RETURNING *`,
-      [subId, agency_id, refMonth, promoterCount, unitPrice, total, dueDate]
-    );
-    res.json(inv.rows[0]);
+
+    // Generate invoices for current month + future months
+    const totalMonths = Math.min(Math.max(parseInt(months_ahead) || 1, 1), 12);
+    const now = new Date();
+    const generatedInvoices = [];
+
+    for (let m = 0; m < totalMonths; m++) {
+      const refMonth = new Date(now.getFullYear(), now.getMonth() + m, 1);
+      const dueDate = new Date(now.getFullYear(), now.getMonth() + m + 1, 10);
+
+      // Skip if invoice already exists for this month
+      const existing = await query(
+        'SELECT id FROM agency_invoices WHERE agency_id=$1 AND reference_month=$2',
+        [agency_id, refMonth]
+      );
+      if (existing.rows.length) continue;
+
+      const inv = await query(
+        `INSERT INTO agency_invoices (subscription_id, agency_id, reference_month, promoter_count, unit_price, total_amount, final_amount, due_date)
+         VALUES ($1,$2,$3,$4,$5,$6,$6,$7) RETURNING *`,
+        [subId, agency_id, refMonth, contractedCount, unitPrice, total, dueDate]
+      );
+      generatedInvoices.push(inv.rows[0]);
+
+      // Log
+      await query(
+        `INSERT INTO agency_billing_logs (agency_id, action, details) VALUES ($1,'invoice_created',$2)`,
+        [agency_id, JSON.stringify({ invoice_id: inv.rows[0].id, reference_month: refMonth, amount: total })]
+      );
+    }
+
+    res.json({ invoices: generatedInvoices, total_generated: generatedInvoices.length });
   } catch (err) { logError('billing.invoices.generate', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// Assign/update plan for agency subscription
+router.post('/billing/subscriptions/assign-plan', authenticate, async (req, res) => {
+  try {
+    const orgId = await getOrgId(req.userId);
+    const { agency_id, plan_id, contracted_promoters } = req.body;
+    if (!agency_id || !plan_id) return res.status(400).json({ error: 'Agência e plano são obrigatórios' });
+
+    const plan = await query('SELECT * FROM agency_billing_plans WHERE id=$1 AND organization_id=$2', [plan_id, orgId]);
+    if (!plan.rows.length) return res.status(404).json({ error: 'Plano não encontrado' });
+
+    const count = contracted_promoters || plan.rows[0].max_promoters || 10;
+    const amount = count * parseFloat(plan.rows[0].price_per_promoter);
+
+    // Update agency
+    await query(
+      'UPDATE agencies SET plan_name=$1, price_per_promoter=$2, max_promoters=$3, updated_at=NOW() WHERE id=$4 AND organization_id=$5',
+      [plan.rows[0].name, plan.rows[0].price_per_promoter, count, agency_id, orgId]
+    );
+
+    // Upsert subscription
+    let sub = await query('SELECT id FROM agency_subscriptions WHERE agency_id=$1', [agency_id]);
+    if (!sub.rows.length) {
+      sub = await query(
+        'INSERT INTO agency_subscriptions (agency_id, plan_id, promoter_count, amount_due) VALUES ($1,$2,$3,$4) RETURNING *',
+        [agency_id, plan_id, count, amount]
+      );
+    } else {
+      sub = await query(
+        'UPDATE agency_subscriptions SET plan_id=$1, promoter_count=$2, amount_due=$3, updated_at=NOW() WHERE agency_id=$4 RETURNING *',
+        [plan_id, count, amount, agency_id]
+      );
+    }
+
+    res.json(sub.rows[0]);
+  } catch (err) { logError('billing.assign_plan', err); res.status(500).json({ error: 'Erro' }); }
 });
 
 export default router;
