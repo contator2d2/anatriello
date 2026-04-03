@@ -165,6 +165,7 @@ export function PdfSignaturePositioner({
     if (readOnly) return;
     e.preventDefault();
     e.stopPropagation();
+    justDragged.current = false;
 
     const box = boxes.find(b => b.id === boxId);
     if (!box) return;
@@ -397,7 +398,7 @@ export function PdfSignaturePositioner({
                       cursor: readOnly ? 'default' : 'move',
                       zIndex: 10,
                     }}
-                    onMouseDown={(e) => handleMouseDown(e, box.id)}
+                    onPointerDown={(e) => handleMouseDown(e as unknown as React.MouseEvent, box.id)}
                     onClick={(e) => e.stopPropagation()}
                     onDragStart={(e) => e.preventDefault()}
                   >
@@ -438,7 +439,7 @@ export function PdfSignaturePositioner({
                         <div
                           className="absolute bottom-0 right-0 w-3 h-3 cursor-se-resize opacity-0 group-hover:opacity-100"
                           style={{ borderRight: `2px solid ${signerColor}`, borderBottom: `2px solid ${signerColor}` }}
-                          onMouseDown={(e) => handleMouseDown(e, box.id, true)}
+                          onPointerDown={(e) => handleMouseDown(e as unknown as React.MouseEvent, box.id, true)}
                         />
                       </>
                     )}

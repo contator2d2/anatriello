@@ -73,6 +73,15 @@ async function getOrgResponsibleData(orgId) {
   };
 }
 
+async function getDefaultContractTemplate(orgId) {
+  const result = await query(
+    `SELECT * FROM contract_templates WHERE organization_id = $1 ORDER BY is_default DESC, created_at ASC LIMIT 1`,
+    [orgId]
+  );
+
+  return result.rows[0] || null;
+}
+
 // Helper: audit log
 async function auditLog(documentId, action, { name, email, ip, userAgent, geolocation, details }) {
   try {
@@ -1396,8 +1405,15 @@ router.get('/org-responsible', async (req, res) => {
     const orgId = await getUserOrgId(req.userId);
     if (!orgId) return res.status(403).json({ error: 'Sem organização' });
 
-    const responsible = await getOrgResponsibleData(orgId);
-    res.json(responsible || {
+    const [responsible, defaultTemplate] = await Promise.all([
+      getOrgResponsibleData(orgId),
+      getDefaultContractTemplate(orgId),
+    ]);
+
+    res.json(responsible ? {
+      ...responsible,
+      default_template: defaultTemplate,
+    } : {
       org_name: '',
       company_name: '',
       responsible_name: '',
@@ -1410,6 +1426,7 @@ router.get('/org-responsible', async (req, res) => {
       state: '',
       zip_code: '',
       logo_url: null,
+      default_template: defaultTemplate,
     });
   } catch (error) {
     console.error('[doc-signatures] Org responsible error:', error);

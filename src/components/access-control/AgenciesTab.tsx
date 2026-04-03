@@ -257,7 +257,7 @@ const AgenciesTab = () => {
 
     setContractLoading(true);
     try {
-      const pdfBlob = generateAgencyContractPdfBlob({
+      const pdfBlob = await generateAgencyContractPdfBlob({
         agencyName: contractAgency.name,
         agencyCnpj: contractAgency.cnpj,
         responsibleName: contractSignerName.trim(),
@@ -268,9 +268,24 @@ const AgenciesTab = () => {
         city: contractAgency.city || "",
         state: contractAgency.state || "",
         planName: contractAgency.plan_name || "Plano comercial vigente",
-        contractedPromoters: Number(contractAgency.max_promoters || 0),
+        contractedPromoters: Number(contractAgency.contracted_promoters || contractAgency.max_promoters || 0),
         pricePerPromoter: Number(contractAgency.price_per_promoter || 0),
-        organizationName: "Ayratech",
+        organizationName: orgResponsible?.company_name || orgResponsible?.org_name || "Ayratech",
+        organizationCnpj: orgResponsible?.cnpj || "",
+        organizationAddress: orgResponsible?.address || "",
+        organizationCity: orgResponsible?.city || "",
+        organizationState: orgResponsible?.state || "",
+        organizationZipCode: orgResponsible?.zip_code || "",
+        organizationResponsibleName: orgResponsible?.responsible_name || "",
+        organizationResponsibleCpf: orgSignerCpf || orgResponsible?.responsible_cpf || "",
+        organizationResponsibleEmail: orgResponsible?.responsible_email || "",
+        organizationResponsiblePhone: orgResponsible?.responsible_phone || "",
+        logoUrl: orgResponsible?.logo_url || "",
+        headerText: orgResponsible?.default_template?.header_text || undefined,
+        footerText: orgResponsible?.default_template?.footer_text || undefined,
+        headerBgColor: orgResponsible?.default_template?.header_bg_color || undefined,
+        headerTextColor: orgResponsible?.default_template?.header_text_color || undefined,
+        bodyClauses: orgResponsible?.default_template?.body_clauses || undefined,
       });
 
       const safeAgencyName = contractAgency.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
@@ -345,7 +360,7 @@ const AgenciesTab = () => {
           : "O contrato foi criado. Redirecionando para Assinaturas...",
       });
       setContractDialogOpen(false);
-      setTimeout(() => navigate("/assinaturas"), 600);
+      setTimeout(() => navigate(`/assinaturas?doc=${document.id}&tab=positions`), 600);
     } catch (error: any) {
       toast({ title: "Erro ao gerar contrato", description: error?.message || "Tente novamente", variant: "destructive" });
     } finally {
