@@ -1750,4 +1750,127 @@ router.post('/:id/send-whatsapp', async (req, res) => {
   }
 });
 
+// ===========================
+// CONTRACT TEMPLATE ROUTES
+// ===========================
+
+// List templates
+router.get('/contract-templates/list', async (req, res) => {
+  try {
+    const orgId = await getUserOrgId(req.userId);
+    if (!orgId) return res.status(403).json({ error: 'Sem organização' });
+    const result = await query(
+      `SELECT * FROM contract_templates WHERE organization_id = $1 ORDER BY is_default DESC, created_at DESC`,
+      [orgId]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error('[doc-signatures] List templates error:', error);
+    res.status(500).json({ error: 'Erro ao listar templates' });
+  }
+});
+
+// Get single template
+router.get('/contract-templates/:templateId', async (req, res) => {
+  try {
+    const orgId = await getUserOrgId(req.userId);
+    const result = await query(
+      `SELECT * FROM contract_templates WHERE id = $1 AND organization_id = $2`,
+      [req.params.templateId, orgId]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Template não encontrado' });
+    res.json(result.rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao buscar template' });
+  }
+});
+
+// Create template
+router.post('/contract-templates', async (req, res) => {
+  try {
+    const orgId = await getUserOrgId(req.userId);
+    if (!orgId) return res.status(403).json({ error: 'Sem organização' });
+    const { name, logo_url, header_text, footer_text, body_clauses, header_bg_color, header_text_color, is_default } = req.body;
+
+    if (is_default) {
+      await query(`UPDATE contract_templates SET is_default = false WHERE organization_id = $1`, [orgId]);
+    }
+
+    const result = await query(
+      `INSERT INTO contract_templates (organization_id, name, logo_url, header_text, footer_text, body_clauses, header_bg_color, header_text_color, is_default)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+      [orgId, name || 'Padrão', logo_url || null, header_text || 'CONTRATO DE PRESTAÇÃO DE SERVIÇOS',
+       footer_text || '', JSON.stringify(body_clauses || []), header_bg_color || '#121624', header_text_color || '#FFFFFF', is_default || false]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error('[doc-signatures] Create template error:', error);
+    res.status(500).json({ error: 'Erro ao criar template' });
+  }
+});
+
+// Update template
+router.put('/contract-templates/:templateId', async (req, res) => {
+  try {
+    const orgId = await getUserOrgId(req.userId);
+    const { name, logo_url, header_text, footer_text, body_clauses, header_bg_color, header_text_color, is_default } = req.body;
+
+    if (is_default) {
+      await query(`UPDATE contract_templates SET is_default = false WHERE organization_id = $1`, [orgId]);
+    }
+
+    const result = await query(
+      `UPDATE contract_templates SET name=$1, logo_url=$2, header_text=$3, footer_text=$4, body_clauses=$5,
+       header_bg_color=$6, header_text_color=$7, is_default=$8, updated_at=NOW()
+       WHERE id=$9 AND organization_id=$10 RETURNING *`,
+      [name, logo_url || null, header_text, footer_text, JSON.stringify(body_clauses || []),
+       header_bg_color || '#121624', header_text_color || '#FFFFFF', is_default || false,
+       req.params.templateId, orgId]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Template não encontrado' });
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('[doc-signatures] Update template error:', error);
+    res.status(500).json({ error: 'Erro ao atualizar template' });
+  }
+});
+
+// Delete template
+router.delete('/contract-templates/:templateId', async (req, res) => {
+  try {
+    const orgId = await getUserOrgId(req.userId);
+    await query(`DELETE FROM contract_templates WHERE id = $1 AND organization_id = $2`, [req.params.templateId, orgId]);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao excluir template' });
+  }
+});
+
+// Get org responsible data (for co-signing)
+router.get('/org-responsible', async (req, res) => {
+  try {
+    const orgId = await getUserOrgId(req.userId);
+    if (!orgId) return res.status(403).json({ error: 'Sem organização' });
+
+    const result = await query(
+      `SELECT o.name as org_name, o.logo_url,
+              u.name as responsible_name, u.email as responsible_email
+       FROM organizations o
+       JOIN organization_members om ON om.organization_id = o.id AND om.role = 'owner'
+       JOIN users u ON u.id = om.user_id
+       WHERE o.id = $1 LIMIT 1`,
+      [orgId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.json({ org_name: '', responsible_name: '', responsible_email: '' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('[doc-signatures] Org responsible error:', error);
+    res.status(500).json({ error: 'Erro ao buscar dados da organização' });
+  }
+});
+
 export default router;
