@@ -1,5 +1,5 @@
 import { useState } from "react";
-import MainLayout from "@/components/layout/MainLayout";
+import { MainLayout } from "@/components/layout/MainLayout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Building2, Store, Users, ShieldCheck, ClipboardList } from "lucide-react";
 import AccessControlNetworks from "@/components/access-control/NetworksTab";
