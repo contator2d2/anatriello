@@ -96,6 +96,12 @@ import PromotorTrocarSenha from "./pages/promotor/PromotorTrocarSenha";
 import NotFound from "./pages/NotFound";
 import TotemAccess from "./pages/TotemAccess";
 import AccessControlAdmin from "./pages/AccessControlAdmin";
+import { AgencyAuthProvider } from "./contexts/AgencyAuthContext";
+import AgencyLogin from "./pages/agency/AgencyLogin";
+import AgencyLayout from "./pages/agency/AgencyLayout";
+import AgencyDashboard from "./pages/agency/AgencyDashboard";
+import AgencyPromoters from "./pages/agency/AgencyPromoters";
+import AgencyAccessRules from "./pages/agency/AgencyAccessRules";
 
 const queryClient = new QueryClient();
 
@@ -221,6 +227,13 @@ const App = () => (
             <Route path="/merch/auditoria" element={<ProtectedRoute><MerchAuditoria /></ProtectedRoute>} />
             <Route path="/controle-acesso" element={<ProtectedRoute><AccessControlAdmin /></ProtectedRoute>} />
             <Route path="/totem" element={<TotemAccess />} />
+            {/* Agency Portal */}
+            <Route path="/agencia/login" element={<AgencyAuthProvider><AgencyLogin /></AgencyAuthProvider>} />
+            <Route path="/agencia" element={<AgencyAuthProvider><AgencyLayout /></AgencyAuthProvider>}>
+              <Route path="dashboard" element={<AgencyDashboard />} />
+              <Route path="promotores" element={<AgencyPromoters />} />
+              <Route path="regras" element={<AgencyAccessRules />} />
+            </Route>
             {/* Promotor App */}
             <Route path="/promotor/login" element={<PromotorLogin />} />
             <Route path="/promotor/home" element={<PromotorHome />} />
