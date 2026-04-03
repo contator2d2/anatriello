@@ -225,6 +225,20 @@ const PromotersTab = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      <AuthorizationLetterDialog
+        open={letterDialogOpen}
+        onOpenChange={setLetterDialogOpen}
+        promoter={letterPromoter ? {
+          name: letterPromoter.full_name,
+          cpf: letterPromoter.cpf,
+          phone: letterPromoter.phone,
+          isInternal: !!letterPromoter.employee_id,
+        } : undefined}
+        agency={letterPromoter?.agency_name ? {
+          name: letterPromoter.agency_name,
+        } : undefined}
+      />
     </>
   );
 };
