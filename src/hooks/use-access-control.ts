@@ -239,6 +239,26 @@ export function useUpdateNetworkAuthSettings() {
   });
 }
 
+// ─── PDV Auth Override ───
+export function usePdvAuthOverride(unitId?: string) {
+  return useQuery({
+    queryKey: ["ac-pdv-auth-override", unitId],
+    queryFn: () => api<any>(`${BASE}/units/${unitId}/auth-override`),
+    enabled: !!unitId,
+  });
+}
+export function useUpdatePdvAuthOverride() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: ({ unitId, ...data }: any) => api(`${BASE}/units/${unitId}/auth-override`, { method: "PUT", body: data }),
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["ac-pdv-auth-override", vars.unitId] });
+      toast({ title: "Override de autenticação salvo" });
+    },
+  });
+}
+
 // ─── QR Tokens ───
 export function useQrTokens(filters?: { unit_id?: string }) {
   const qs = filters?.unit_id ? `?unit_id=${filters.unit_id}` : "";
