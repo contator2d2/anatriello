@@ -112,6 +112,30 @@ async function ensureTables() {
     await query(`ALTER TABLE doc_signature_documents ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()`);
     await query(`ALTER TABLE doc_signature_documents ADD COLUMN IF NOT EXISTS deal_id UUID`);
     await query(`ALTER TABLE doc_signature_documents ADD COLUMN IF NOT EXISTS require_cnh_validation BOOLEAN DEFAULT false`);
+    await query(`ALTER TABLE doc_signature_documents ADD COLUMN IF NOT EXISTS agency_id UUID`);
+
+    // Contract templates table
+    await query(`CREATE TABLE IF NOT EXISTS contract_templates (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
+      name VARCHAR(255) NOT NULL DEFAULT 'Padrão',
+      logo_url TEXT,
+      header_text TEXT DEFAULT 'CONTRATO DE PRESTAÇÃO DE SERVIÇOS',
+      footer_text TEXT DEFAULT 'Este documento poderá ser assinado eletronicamente, com validade jurídica.',
+      body_clauses JSONB DEFAULT '[]',
+      header_bg_color VARCHAR(20) DEFAULT '#121624',
+      header_text_color VARCHAR(20) DEFAULT '#FFFFFF',
+      is_default BOOLEAN DEFAULT false,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )`);
+    await query(`ALTER TABLE contract_templates ADD COLUMN IF NOT EXISTS logo_url TEXT`);
+    await query(`ALTER TABLE contract_templates ADD COLUMN IF NOT EXISTS header_text TEXT`);
+    await query(`ALTER TABLE contract_templates ADD COLUMN IF NOT EXISTS footer_text TEXT`);
+    await query(`ALTER TABLE contract_templates ADD COLUMN IF NOT EXISTS body_clauses JSONB DEFAULT '[]'`);
+    await query(`ALTER TABLE contract_templates ADD COLUMN IF NOT EXISTS header_bg_color VARCHAR(20) DEFAULT '#121624'`);
+    await query(`ALTER TABLE contract_templates ADD COLUMN IF NOT EXISTS header_text_color VARCHAR(20) DEFAULT '#FFFFFF'`);
+    await query(`ALTER TABLE contract_templates ADD COLUMN IF NOT EXISTS is_default BOOLEAN DEFAULT false`);
 
     await query(`ALTER TABLE doc_signature_signers ADD COLUMN IF NOT EXISTS role VARCHAR(20) DEFAULT 'signer'`);
     await query(`ALTER TABLE doc_signature_signers ADD COLUMN IF NOT EXISTS sign_order INTEGER DEFAULT 1`);
