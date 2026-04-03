@@ -4403,8 +4403,13 @@ export async function initDatabase() {
   } catch (e) {
     console.error('  ⚠️ Failed to promote superadmin:', e.message);
   }
+
+  try {
+    await pool.query(`ALTER TABLE agencies ADD COLUMN IF NOT EXISTS responsible_cpf VARCHAR(14)`);
+  } catch (e) {
+    console.error('  ⚠️ Failed to ensure agencies.responsible_cpf:', e.message);
+  }
   
   return true;
 }
 
-ALTER TABLE agencies ADD COLUMN IF NOT EXISTS responsible_cpf VARCHAR(14);
