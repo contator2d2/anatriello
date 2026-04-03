@@ -1388,4 +1388,86 @@ router.post('/billing/subscriptions/assign-plan', authenticate, async (req, res)
   } catch (err) { logError('billing.assign_plan', err); res.status(500).json({ error: 'Erro' }); }
 });
 
+// ============ SEND ACCESS CREDENTIALS (email / WhatsApp) ============
+router.post('/send-access', authenticate, async (req, res) => {
+  try {
+    const orgId = await getOrgId(req.userId);
+    if (!orgId) return res.status(403).json({ error: 'Sem organização' });
+
+    const { channel, recipient_email, recipient_phone, recipient_name, portal_type, portal_url, login_email } = req.body;
+
+    if (!channel || !portal_type || !portal_url) {
+      return res.status(400).json({ error: 'Campos obrigatórios: channel, portal_type, portal_url' });
+    }
+
+    const portalLabel = portal_type === 'agency' ? 'Portal da Agência' : 'Portal do Supermercado';
+    const messageBody = `Olá${recipient_name ? ' ' + recipient_name : ''}!\n\nSeu acesso ao ${portalLabel} está pronto.\n\n🔗 Link de acesso: ${portal_url}\n📧 E-mail: ${login_email || '(definido no cadastro)'}\n\nAcesse o portal para gerenciar suas operações.`;
+
+    if (channel === 'email') {
+      if (!recipient_email) return res.status(400).json({ error: 'E-mail do destinatário é obrigatório' });
+
+      // Use sendEmailImmediately from email-scheduler
+      const { sendEmailImmediately } = await import('../email-scheduler.js');
+      await sendEmailImmediately({
+        organizationId: orgId,
+        senderUserId: req.userId,
+        toEmail: recipient_email,
+        toName: recipient_name || '',
+        subject: `Acesso ao ${portalLabel} — Ayratech`,
+        bodyHtml: `
+          <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
+            <h2 style="color:#333;">Acesso ao ${portalLabel}</h2>
+            <p>Olá${recipient_name ? ' <strong>' + recipient_name + '</strong>' : ''},</p>
+            <p>Seu acesso ao portal está pronto. Utilize o link abaixo para entrar:</p>
+            <p style="margin:24px 0;">
+              <a href="${portal_url}" style="background-color:#2563eb;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;">
+                Acessar Portal
+              </a>
+            </p>
+            <p><strong>E-mail de acesso:</strong> ${login_email || '(definido no cadastro)'}</p>
+            <hr style="border:none;border-top:1px solid #eee;margin:24px 0;">
+            <p style="color:#999;font-size:12px;">Enviado por Ayratech</p>
+          </div>
+        `,
+        contextType: 'access_credentials',
+      });
+
+      return res.json({ success: true, message: `E-mail enviado para ${recipient_email}` });
+    }
+
+    if (channel === 'whatsapp') {
+      if (!recipient_phone) return res.status(400).json({ error: 'Telefone do destinatário é obrigatório' });
+
+      // Get default connection
+      const connResult = await query(
+        `SELECT c.* FROM connections c
+         JOIN organization_members om ON om.organization_id = c.organization_id
+         WHERE om.user_id = $1 AND c.status = 'connected'
+         ORDER BY c.is_default DESC, c.created_at ASC LIMIT 1`,
+        [req.userId]
+      );
+
+      if (!connResult.rows[0]) {
+        return res.status(400).json({ error: 'Nenhuma conexão WhatsApp ativa encontrada' });
+      }
+
+      const connection = connResult.rows[0];
+      const { sendMessage } = await import('../lib/whatsapp-provider.js');
+      const phone = onlyDigits(recipient_phone);
+      const result = await sendMessage(connection, phone, messageBody, 'text');
+
+      if (!result.success) {
+        return res.status(500).json({ error: result.error || 'Falha ao enviar mensagem' });
+      }
+
+      return res.json({ success: true, message: `Mensagem enviada via WhatsApp` });
+    }
+
+    return res.status(400).json({ error: 'Canal inválido. Use "email" ou "whatsapp".' });
+  } catch (err) {
+    logError('access.send_credentials', err);
+    res.status(500).json({ error: err.message || 'Erro ao enviar acesso' });
+  }
+});
+
 export default router;

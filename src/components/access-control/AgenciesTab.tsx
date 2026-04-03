@@ -13,7 +13,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Pencil, Users, Loader2, KeyRound, Eye, EyeOff, Store, FileSignature, DollarSign } from "lucide-react";
+import { Plus, Pencil, Users, Loader2, KeyRound, Eye, EyeOff, Store, FileSignature, DollarSign, Send } from "lucide-react";
+import SendAccessDialog from "./SendAccessDialog";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api";
 import { useUpload } from "@/hooks/use-upload";
@@ -67,6 +68,9 @@ const AgenciesTab = () => {
   const [contractSignerName, setContractSignerName] = useState("");
   const [contractSignerEmail, setContractSignerEmail] = useState("");
   const [contractSignerCpf, setContractSignerCpf] = useState("");
+
+  const [sendAccessOpen, setSendAccessOpen] = useState(false);
+  const [sendAccessAgency, setSendAccessAgency] = useState<any>(null);
 
   const openNew = () => {
     setEditing(null);
@@ -318,6 +322,9 @@ const AgenciesTab = () => {
                   </TableCell>
                   <TableCell>
                     <div className="flex gap-1">
+                      <Button size="icon" variant="ghost" onClick={() => { setSendAccessAgency(a); setSendAccessOpen(true); }} title="Enviar Acesso">
+                        <Send className="h-4 w-4 text-primary" />
+                      </Button>
                       <Button size="icon" variant="ghost" onClick={() => openContractDialog(a)} title="Gerar Contrato">
                         <FileSignature className="h-4 w-4 text-primary" />
                       </Button>
@@ -502,6 +509,16 @@ const AgenciesTab = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <SendAccessDialog
+        open={sendAccessOpen}
+        onOpenChange={setSendAccessOpen}
+        portalType="agency"
+        entityName={sendAccessAgency?.name || ""}
+        loginEmail={sendAccessAgency?.contact_email || sendAccessAgency?.responsible_email || ""}
+        contactEmail={sendAccessAgency?.contact_email || sendAccessAgency?.responsible_email || ""}
+        contactPhone={sendAccessAgency?.contact_phone || sendAccessAgency?.responsible_phone || ""}
+      />
     </Card>
   );
 };

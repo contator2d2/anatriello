@@ -9,7 +9,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { Plus, Pencil, Trash2, Store, Loader2, Copy, KeyRound, Eye, EyeOff, RefreshCw } from "lucide-react";
+import { Plus, Pencil, Trash2, Store, Loader2, Copy, KeyRound, Eye, EyeOff, RefreshCw, Send } from "lucide-react";
+import SendAccessDialog from "./SendAccessDialog";
 import { useToast } from "@/hooks/use-toast";
 import { formatCnpj, isValidCnpj, onlyDigits } from "@/lib/br-utils";
 
@@ -38,6 +39,9 @@ const UnitsTab = () => {
   const [loginForm, setLoginForm] = useState({ name: "", email: "", password: "" });
   const [showPw, setShowPw] = useState(false);
   const { data: supermarketUser, isLoading: isLoadingSupermarketUser } = useSupermarketUser(loginUnit?.id);
+
+  const [sendAccessOpen, setSendAccessOpen] = useState(false);
+  const [sendAccessUnit, setSendAccessUnit] = useState<any>(null);
 
   const openNew = () => { setEditing(null); setForm(defaultForm); setDialogOpen(true); };
   const openEdit = (u: any) => {
@@ -203,6 +207,9 @@ const UnitsTab = () => {
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-1">
+                         <Button size="icon" variant="ghost" onClick={() => { setSendAccessUnit(u); setSendAccessOpen(true); }} title="Enviar Acesso">
+                           <Send className="h-4 w-4 text-primary" />
+                         </Button>
                          <Button size="icon" variant="ghost" onClick={() => handleRegenerateTotemToken(u)} title={u.totem_token ? "Regenerar token do totem" : "Gerar token do totem"}>
                            <RefreshCw className="h-4 w-4 text-primary" />
                          </Button>
@@ -327,6 +334,16 @@ const UnitsTab = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <SendAccessDialog
+        open={sendAccessOpen}
+        onOpenChange={setSendAccessOpen}
+        portalType="supermarket"
+        entityName={sendAccessUnit?.name || ""}
+        loginEmail={supermarketUser?.email || ""}
+        contactEmail={supermarketUser?.email || ""}
+        contactPhone=""
+      />
     </Card>
   );
 };
