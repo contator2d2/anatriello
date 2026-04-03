@@ -511,13 +511,14 @@ const AgenciesTab = () => {
       </Dialog>
 
       <Dialog open={contractDialogOpen} onOpenChange={setContractDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
+        <DialogContent className="flex max-h-[90vh] max-w-2xl flex-col overflow-hidden p-0">
+          <DialogHeader className="border-b px-6 py-4">
             <DialogTitle className="flex items-center gap-2">
               <FileSignature className="h-5 w-5" /> Gerar Contrato
             </DialogTitle>
           </DialogHeader>
           {contractAgency && (
+            <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">
                 O sistema vai gerar o PDF do contrato da agência <strong>{contractAgency.name}</strong> e enviá-lo para assinatura digital.
@@ -555,8 +556,9 @@ const AgenciesTab = () => {
                 O contrato será criado no módulo de Assinaturas Digitais com as posições já configuradas. Ambas as partes receberão o link para assinar.
               </p>
             </div>
+            </div>
           )}
-          <DialogFooter>
+          <DialogFooter className="border-t px-6 py-4">
             <Button variant="outline" onClick={() => setContractDialogOpen(false)}>Cancelar</Button>
             <Button onClick={handleGenerateContract} disabled={contractLoading}>
               {contractLoading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
