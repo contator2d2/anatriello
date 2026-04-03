@@ -3980,6 +3980,222 @@ ALTER TABLE route_photos ADD COLUMN IF NOT EXISTS contingency_uploaded_by UUID;
 ALTER TABLE route_photos ADD COLUMN IF NOT EXISTS contingency_device TEXT;
 `;
 
+// ============================================
+// STEP 45: ACCESS CONTROL MODULE (Fase 5)
+// ============================================
+const step45AccessControl = `
+-- Redes de supermercados
+CREATE TABLE IF NOT EXISTS supermarket_networks (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  name VARCHAR(255) NOT NULL,
+  cnpj VARCHAR(20),
+  contact_name VARCHAR(255),
+  contact_phone VARCHAR(30),
+  contact_email VARCHAR(255),
+  notes TEXT,
+  active BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Unidades de supermercado
+CREATE TABLE IF NOT EXISTS supermarket_units (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  network_id UUID REFERENCES supermarket_networks(id) ON DELETE SET NULL,
+  pdv_id UUID REFERENCES pdvs(id) ON DELETE SET NULL,
+  name VARCHAR(255) NOT NULL,
+  cnpj VARCHAR(20),
+  address TEXT,
+  city VARCHAR(100),
+  state VARCHAR(2),
+  zip_code VARCHAR(10),
+  neighborhood VARCHAR(100),
+  latitude NUMERIC(10,7),
+  longitude NUMERIC(10,7),
+  radius_meters INTEGER DEFAULT 200,
+  opening_time TIME DEFAULT '06:00',
+  closing_time TIME DEFAULT '22:00',
+  operating_days JSONB DEFAULT '[1,2,3,4,5,6]',
+  access_rules JSONB DEFAULT '{}',
+  operational_requirements TEXT,
+  totem_enabled BOOLEAN DEFAULT false,
+  totem_token VARCHAR(255),
+  active BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Agências terceiras
+CREATE TABLE IF NOT EXISTS agencies (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  name VARCHAR(255) NOT NULL,
+  cnpj VARCHAR(20),
+  responsible_name VARCHAR(255),
+  responsible_phone VARCHAR(30),
+  responsible_email VARCHAR(255),
+  address TEXT,
+  city VARCHAR(100),
+  state VARCHAR(2),
+  plan_name VARCHAR(100),
+  max_promoters INTEGER DEFAULT 10,
+  price_per_promoter NUMERIC(10,2) DEFAULT 0,
+  billing_status VARCHAR(20) DEFAULT 'active',
+  auto_block_on_overdue BOOLEAN DEFAULT false,
+  status VARCHAR(20) DEFAULT 'active',
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Login separado para agências
+CREATE TABLE IF NOT EXISTS agency_users (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  agency_id UUID NOT NULL REFERENCES agencies(id) ON DELETE CASCADE,
+  email VARCHAR(255) NOT NULL UNIQUE,
+  password_hash VARCHAR(255) NOT NULL,
+  name VARCHAR(255) NOT NULL,
+  role VARCHAR(30) DEFAULT 'admin',
+  last_login TIMESTAMPTZ,
+  active BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Promotores vinculados a agências
+CREATE TABLE IF NOT EXISTS agency_promoters (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  agency_id UUID NOT NULL REFERENCES agencies(id) ON DELETE CASCADE,
+  employee_id UUID REFERENCES employees(id) ON DELETE SET NULL,
+  name VARCHAR(255) NOT NULL,
+  cpf VARCHAR(14) NOT NULL,
+  phone VARCHAR(30),
+  photo_url TEXT,
+  document_url TEXT,
+  status VARCHAR(20) DEFAULT 'active',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(agency_id, cpf)
+);
+CREATE INDEX IF NOT EXISTS idx_agency_promoters_cpf ON agency_promoters(cpf);
+
+-- Regras de acesso ao PDV
+CREATE TABLE IF NOT EXISTS pdv_access_rules (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  agency_promoter_id UUID REFERENCES agency_promoters(id) ON DELETE CASCADE,
+  employee_id UUID REFERENCES employees(id) ON DELETE CASCADE,
+  supermarket_unit_id UUID NOT NULL REFERENCES supermarket_units(id) ON DELETE CASCADE,
+  allowed_weekdays JSONB DEFAULT '[1,2,3,4,5]',
+  start_time TIME DEFAULT '08:00',
+  end_time TIME DEFAULT '18:00',
+  max_duration_minutes INTEGER,
+  require_active_route BOOLEAN DEFAULT false,
+  require_prior_approval BOOLEAN DEFAULT false,
+  approval_status VARCHAR(20) DEFAULT 'approved',
+  approved_by UUID,
+  approved_at TIMESTAMPTZ,
+  active BOOLEAN DEFAULT true,
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Permissões de marcas por regra de acesso
+CREATE TABLE IF NOT EXISTS promoter_brand_permissions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  access_rule_id UUID NOT NULL REFERENCES pdv_access_rules(id) ON DELETE CASCADE,
+  brand_id UUID NOT NULL REFERENCES brands(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(access_rule_id, brand_id)
+);
+
+-- Logs de entrada/saída
+CREATE TABLE IF NOT EXISTS pdv_entry_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  supermarket_unit_id UUID NOT NULL REFERENCES supermarket_units(id) ON DELETE CASCADE,
+  agency_promoter_id UUID REFERENCES agency_promoters(id) ON DELETE SET NULL,
+  employee_id UUID REFERENCES employees(id) ON DELETE SET NULL,
+  cpf VARCHAR(14) NOT NULL,
+  entry_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  exit_at TIMESTAMPTZ,
+  duration_minutes INTEGER,
+  status VARCHAR(20) NOT NULL DEFAULT 'authorized',
+  block_reason VARCHAR(100),
+  origin VARCHAR(20) DEFAULT 'totem',
+  latitude NUMERIC(10,7),
+  longitude NUMERIC(10,7),
+  device_info TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_pdv_entry_logs_cpf ON pdv_entry_logs(cpf);
+CREATE INDEX IF NOT EXISTS idx_pdv_entry_logs_unit ON pdv_entry_logs(supermarket_unit_id, entry_at);
+CREATE INDEX IF NOT EXISTS idx_pdv_entry_logs_date ON pdv_entry_logs(organization_id, entry_at);
+
+-- Auditoria completa
+CREATE TABLE IF NOT EXISTS access_audit_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  action VARCHAR(100) NOT NULL,
+  entity_type VARCHAR(50),
+  entity_id UUID,
+  supermarket_unit_id UUID REFERENCES supermarket_units(id) ON DELETE SET NULL,
+  agency_id UUID REFERENCES agencies(id) ON DELETE SET NULL,
+  agency_promoter_id UUID REFERENCES agency_promoters(id) ON DELETE SET NULL,
+  employee_id UUID REFERENCES employees(id) ON DELETE SET NULL,
+  performed_by UUID,
+  performed_by_type VARCHAR(20) DEFAULT 'system',
+  details JSONB DEFAULT '{}',
+  ip_address VARCHAR(45),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_access_audit_org ON access_audit_logs(organization_id, created_at);
+
+-- Login para supermercados
+CREATE TABLE IF NOT EXISTS supermarket_users (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  supermarket_unit_id UUID NOT NULL REFERENCES supermarket_units(id) ON DELETE CASCADE,
+  network_id UUID REFERENCES supermarket_networks(id) ON DELETE SET NULL,
+  email VARCHAR(255) NOT NULL UNIQUE,
+  password_hash VARCHAR(255) NOT NULL,
+  name VARCHAR(255) NOT NULL,
+  role VARCHAR(30) DEFAULT 'manager',
+  can_view_all_network BOOLEAN DEFAULT false,
+  last_login TIMESTAMPTZ,
+  active BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Sessões do totem
+CREATE TABLE IF NOT EXISTS totem_sessions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  supermarket_unit_id UUID NOT NULL REFERENCES supermarket_units(id) ON DELETE CASCADE,
+  token_hash VARCHAR(255) NOT NULL,
+  device_info TEXT,
+  ip_address VARCHAR(45),
+  expires_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Presença de marcas por dia
+CREATE TABLE IF NOT EXISTS daily_brand_presence (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  supermarket_unit_id UUID NOT NULL REFERENCES supermarket_units(id) ON DELETE CASCADE,
+  brand_id UUID NOT NULL REFERENCES brands(id) ON DELETE CASCADE,
+  presence_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  agency_id UUID REFERENCES agencies(id) ON DELETE SET NULL,
+  promoter_count INTEGER DEFAULT 0,
+  first_entry TIMESTAMPTZ,
+  last_exit TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(supermarket_unit_id, brand_id, presence_date)
+);
+`;
+
 const migrationSteps = [
   { name: 'Enums', sql: step1Enums, critical: true },
   { name: 'Core Tables (users, plans)', sql: step2CoreTables, critical: true },
