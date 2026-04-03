@@ -2591,7 +2591,7 @@ async function ensureIncidentsInfra() {
 router.get('/supermarket-portal/incidents', authenticateSupermarket, async (req, res) => {
   try {
     await ensureIncidentsInfra();
-    const r = await query(`SELECT i.*, ap.name AS promoter_name, a.name AS agency_name, u.name AS unit_name, (SELECT json_agg(ir ORDER BY ir.created_at) FROM incident_responses ir WHERE ir.incident_id = i.id) AS responses FROM incidents i LEFT JOIN agency_promoters ap ON ap.id = i.agency_promoter_id LEFT JOIN agencies a ON a.id = i.agency_id LEFT JOIN units u ON u.id = i.reported_by_unit_id WHERE i.reported_by_unit_id = $1 ORDER BY i.created_at DESC LIMIT 100`, [req.supermarketUser.unit_id]);
+    const r = await query(`SELECT i.*, ap.name AS promoter_name, a.name AS agency_name, u.name AS unit_name, (SELECT json_agg(ir ORDER BY ir.created_at) FROM incident_responses ir WHERE ir.incident_id = i.id) AS responses FROM incidents i LEFT JOIN agency_promoters ap ON ap.id = i.agency_promoter_id LEFT JOIN agencies a ON a.id = i.agency_id LEFT JOIN units u ON u.id = i.reported_by_unit_id WHERE i.reported_by_unit_id = $1 ORDER BY i.created_at DESC LIMIT 100`, [req.unitId]);
     res.json(r.rows);
   } catch (err) { logError('sm.incidents.list', err); res.status(500).json({ error: 'Erro' }); }
 });
@@ -2600,9 +2600,7 @@ router.post('/supermarket-portal/incidents', authenticateSupermarket, async (req
   try {
     await ensureIncidentsInfra();
     const { agency_promoter_id, agency_id, incident_type, severity, description, incident_date } = req.body;
-    const orgId = req.supermarketUser.organization_id;
-    const unitId = req.supermarketUser.unit_id;
-    const r = await query(`INSERT INTO incidents (organization_id, reported_by_unit_id, reported_by_user_name, agency_promoter_id, agency_id, incident_type, severity, description, incident_date) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`, [orgId, unitId, req.supermarketUser.unit_name || 'Supermercado', agency_promoter_id || null, agency_id || null, incident_type || 'other', severity || 'low', description, incident_date || new Date()]);
+    const r = await query(`INSERT INTO incidents (organization_id, reported_by_unit_id, reported_by_user_name, agency_promoter_id, agency_id, incident_type, severity, description, incident_date) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`, [req.orgId, req.unitId, 'Supermercado', agency_promoter_id || null, agency_id || null, incident_type || 'other', severity || 'low', description, incident_date || new Date()]);
     res.json(r.rows[0]);
   } catch (err) { logError('sm.incidents.create', err); res.status(500).json({ error: 'Erro' }); }
 });
@@ -2620,7 +2618,7 @@ router.post('/supermarket-portal/incidents/:id/respond', authenticateSupermarket
 router.get('/supermarket-portal/scores', authenticateSupermarket, async (req, res) => {
   try {
     await ensureIncidentsInfra();
-    const r = await query(`SELECT ps.*, ap.name AS promoter_name, a.name AS agency_name FROM promoter_scores ps JOIN agency_promoters ap ON ap.id = ps.agency_promoter_id LEFT JOIN agencies a ON a.id = ap.agency_id WHERE ps.organization_id = $1 ORDER BY ps.score DESC`, [req.supermarketUser.organization_id]);
+    const r = await query(`SELECT ps.*, ap.name AS promoter_name, a.name AS agency_name FROM promoter_scores ps JOIN agency_promoters ap ON ap.id = ps.agency_promoter_id LEFT JOIN agencies a ON a.id = ap.agency_id WHERE ps.organization_id = $1 ORDER BY ps.score DESC`, [req.orgId]);
     res.json(r.rows);
   } catch (err) { logError('sm.scores', err); res.status(500).json({ error: 'Erro' }); }
 });
@@ -2629,8 +2627,8 @@ router.get('/supermarket-portal/schedule', authenticateSupermarket, async (req, 
   try {
     const hasTable = await tableExists('visit_requests');
     if (!hasTable) return res.json({ today: [], tomorrow: [] });
-    const today = await query(`SELECT vr.*, ap.name AS promoter_name, a.name AS agency_name FROM visit_requests vr LEFT JOIN agency_promoters ap ON ap.id = vr.agency_promoter_id LEFT JOIN agencies a ON a.id = vr.agency_id WHERE vr.unit_id = $1 AND vr.visit_date = CURRENT_DATE ORDER BY vr.scheduled_time`, [req.supermarketUser.unit_id]);
-    const tomorrow = await query(`SELECT vr.*, ap.name AS promoter_name, a.name AS agency_name FROM visit_requests vr LEFT JOIN agency_promoters ap ON ap.id = vr.agency_promoter_id LEFT JOIN agencies a ON a.id = vr.agency_id WHERE vr.unit_id = $1 AND vr.visit_date = CURRENT_DATE + INTERVAL '1 day' ORDER BY vr.scheduled_time`, [req.supermarketUser.unit_id]);
+    const today = await query(`SELECT vr.*, ap.name AS promoter_name, a.name AS agency_name FROM visit_requests vr LEFT JOIN agency_promoters ap ON ap.id = vr.agency_promoter_id LEFT JOIN agencies a ON a.id = vr.agency_id WHERE vr.unit_id = $1 AND vr.visit_date = CURRENT_DATE ORDER BY vr.scheduled_time`, [req.unitId]);
+    const tomorrow = await query(`SELECT vr.*, ap.name AS promoter_name, a.name AS agency_name FROM visit_requests vr LEFT JOIN agency_promoters ap ON ap.id = vr.agency_promoter_id LEFT JOIN agencies a ON a.id = vr.agency_id WHERE vr.unit_id = $1 AND vr.visit_date = CURRENT_DATE + INTERVAL '1 day' ORDER BY vr.scheduled_time`, [req.unitId]);
     res.json({ today: today.rows, tomorrow: tomorrow.rows });
   } catch (err) { logError('sm.schedule', err); res.json({ today: [], tomorrow: [] }); }
 });
