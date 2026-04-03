@@ -47,9 +47,3 @@ const AccessControlAdmin = () => {
   );
 };
 
-export default AccessControlAdmin;
-    </MainLayout>
-  );
-};
-
-export default AccessControlAdmin;
