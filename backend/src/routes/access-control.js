@@ -340,7 +340,7 @@ router.get('/agencies/:id/users', authenticate, async (req, res) => {
 router.get('/agencies/:id/promoters', authenticate, async (req, res) => {
   try {
     const r = await query(
-      `SELECT ap.*, e.name as employee_name FROM agency_promoters ap
+      `SELECT ap.*, e.full_name as employee_name FROM agency_promoters ap
        LEFT JOIN employees e ON e.id = ap.employee_id
        WHERE ap.agency_id = $1 ORDER BY ap.name`, [req.params.id]);
     res.json(r.rows);
@@ -390,8 +390,8 @@ router.get('/access-rules', authenticate, async (req, res) => {
   try {
     const orgId = await getOrgId(req.userId);
     const { unit_id, agency_promoter_id, employee_id } = req.query;
-    let sql = `SELECT ar.*, su.name as unit_name, ap.name as promoter_name, ap.cpf,
-               a.name as agency_name, e.name as employee_name,
+      let sql = `SELECT ar.*, su.name as unit_name, ap.name as promoter_name, ap.cpf,
+                a.name as agency_name, e.full_name as employee_name,
                COALESCE(json_agg(json_build_object('id', bp.id, 'brand_id', bp.brand_id, 'brand_name', b.name))
                FILTER (WHERE bp.id IS NOT NULL), '[]') as brands
                FROM pdv_access_rules ar
@@ -406,7 +406,7 @@ router.get('/access-rules', authenticate, async (req, res) => {
     if (unit_id) { params.push(unit_id); sql += ` AND ar.supermarket_unit_id = $${params.length}`; }
     if (agency_promoter_id) { params.push(agency_promoter_id); sql += ` AND ar.agency_promoter_id = $${params.length}`; }
     if (employee_id) { params.push(employee_id); sql += ` AND ar.employee_id = $${params.length}`; }
-    sql += ' GROUP BY ar.id, su.name, ap.name, ap.cpf, a.name, e.name ORDER BY su.name, ap.name';
+    sql += ' GROUP BY ar.id, su.name, ap.name, ap.cpf, a.name, e.full_name ORDER BY su.name, ap.name';
     const r = await query(sql, params);
     res.json(r.rows);
   } catch (err) { logError('access.rules.list', err); res.status(500).json({ error: 'Erro ao listar regras' }); }
@@ -485,7 +485,7 @@ router.get('/entry-logs', authenticate, async (req, res) => {
     const orgId = await getOrgId(req.userId);
     const { unit_id, date, status } = req.query;
     let sql = `SELECT el.*, su.name as unit_name, ap.name as promoter_name, ap.cpf, ap.photo_url,
-               a.name as agency_name, e.name as employee_name
+               a.name as agency_name, e.full_name as employee_name
                FROM pdv_entry_logs el
                LEFT JOIN supermarket_units su ON su.id = el.supermarket_unit_id
                LEFT JOIN agency_promoters ap ON ap.id = el.agency_promoter_id
@@ -542,7 +542,7 @@ router.post('/totem/validate', authenticateTotem, async (req, res) => {
        JOIN agencies a ON a.id = ap.agency_id
        WHERE ap.cpf = $1
        UNION ALL
-       SELECT NULL as agency_promoter_id, e.name, e.photo_url, 'active' as promoter_status,
+       SELECT NULL as agency_promoter_id, e.full_name, e.photo_url, 'active' as promoter_status,
               NULL as agency_id, NULL as agency_name, 'active' as agency_status, 'active' as billing_status,
               e.id as employee_id
        FROM employees e WHERE e.cpf = $1
@@ -1020,7 +1020,7 @@ router.get('/logs', authenticate, async (req, res) => {
     const { unit_id, date, status } = req.query;
     let sql = `SELECT el.id, el.cpf, el.entry_at as entry_time, el.exit_at as exit_time,
                el.duration_minutes, el.status, el.block_reason,
-               COALESCE(ap.name, e.name) as promoter_name,
+               COALESCE(ap.name, e.full_name) as promoter_name,
                su.name as unit_name, a.name as agency_name,
                '[]'::jsonb as brands
                FROM pdv_entry_logs el
