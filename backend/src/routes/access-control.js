@@ -2571,4 +2571,125 @@ router.post('/totem/facial-compare', authenticateTotem, async (req, res) => {
   } catch (err) { logError('totem.facial_compare', err); res.status(500).json({ error: 'Erro na comparação facial' }); }
 });
 
+// ============ INCIDENTS INFRASTRUCTURE ============
+async function ensureIncidentsInfra() {
+  const exists = await tableExists('incidents');
+  if (exists) return;
+  try {
+    await query(`DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'incident_type') THEN CREATE TYPE incident_type AS ENUM ('delay','misconduct','non_execution','product_issue','other'); END IF; END $$`);
+    await query(`DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'incident_severity') THEN CREATE TYPE incident_severity AS ENUM ('low','medium','high'); END IF; END $$`);
+    await query(`DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'incident_status') THEN CREATE TYPE incident_status AS ENUM ('open','under_review','responded','resolved','escalated'); END IF; END $$`);
+  } catch(e) {}
+  await query(`CREATE TABLE IF NOT EXISTS incidents (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE, reported_by_unit_id UUID REFERENCES units(id) ON DELETE SET NULL, reported_by_user_name VARCHAR(200), agency_promoter_id UUID REFERENCES agency_promoters(id) ON DELETE SET NULL, agency_id UUID REFERENCES agencies(id) ON DELETE SET NULL, incident_type VARCHAR(30) NOT NULL DEFAULT 'other', severity VARCHAR(20) NOT NULL DEFAULT 'low', status VARCHAR(20) NOT NULL DEFAULT 'open', description TEXT, incident_date TIMESTAMPTZ DEFAULT NOW(), photo_urls TEXT[], created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW())`);
+  await query(`CREATE TABLE IF NOT EXISTS incident_responses (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), incident_id UUID NOT NULL REFERENCES incidents(id) ON DELETE CASCADE, responder_type VARCHAR(30) NOT NULL, responder_name VARCHAR(200), message TEXT NOT NULL, attachment_urls TEXT[], new_status VARCHAR(20), created_at TIMESTAMPTZ DEFAULT NOW())`);
+  await query(`CREATE TABLE IF NOT EXISTS promoter_scores (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE, agency_promoter_id UUID NOT NULL REFERENCES agency_promoters(id) ON DELETE CASCADE, score NUMERIC(5,2) DEFAULT 100.00, presence_score NUMERIC(5,2) DEFAULT 100.00, punctuality_score NUMERIC(5,2) DEFAULT 100.00, permanence_score NUMERIC(5,2) DEFAULT 100.00, identity_score NUMERIC(5,2) DEFAULT 100.00, incidents_score NUMERIC(5,2) DEFAULT 100.00, total_visits INTEGER DEFAULT 0, total_incidents INTEGER DEFAULT 0, total_blocks INTEGER DEFAULT 0, last_calculated_at TIMESTAMPTZ DEFAULT NOW(), created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW(), UNIQUE(organization_id, agency_promoter_id))`);
+  await query(`CREATE TABLE IF NOT EXISTS score_history (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), promoter_score_id UUID NOT NULL REFERENCES promoter_scores(id) ON DELETE CASCADE, score NUMERIC(5,2) NOT NULL, calculated_at TIMESTAMPTZ DEFAULT NOW())`);
+  logInfo('incidents', 'Incidents & scores infrastructure created');
+}
+
+// ============ SUPERMARKET PORTAL: Incidents ============
+router.get('/supermarket-portal/incidents', authenticateSupermarket, async (req, res) => {
+  try {
+    await ensureIncidentsInfra();
+    const r = await query(`SELECT i.*, ap.name AS promoter_name, a.name AS agency_name, u.name AS unit_name, (SELECT json_agg(ir ORDER BY ir.created_at) FROM incident_responses ir WHERE ir.incident_id = i.id) AS responses FROM incidents i LEFT JOIN agency_promoters ap ON ap.id = i.agency_promoter_id LEFT JOIN agencies a ON a.id = i.agency_id LEFT JOIN units u ON u.id = i.reported_by_unit_id WHERE i.reported_by_unit_id = $1 ORDER BY i.created_at DESC LIMIT 100`, [req.supermarketUser.unit_id]);
+    res.json(r.rows);
+  } catch (err) { logError('sm.incidents.list', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.post('/supermarket-portal/incidents', authenticateSupermarket, async (req, res) => {
+  try {
+    await ensureIncidentsInfra();
+    const { agency_promoter_id, agency_id, incident_type, severity, description, incident_date } = req.body;
+    const orgId = req.supermarketUser.organization_id;
+    const unitId = req.supermarketUser.unit_id;
+    const r = await query(`INSERT INTO incidents (organization_id, reported_by_unit_id, reported_by_user_name, agency_promoter_id, agency_id, incident_type, severity, description, incident_date) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`, [orgId, unitId, req.supermarketUser.unit_name || 'Supermercado', agency_promoter_id || null, agency_id || null, incident_type || 'other', severity || 'low', description, incident_date || new Date()]);
+    res.json(r.rows[0]);
+  } catch (err) { logError('sm.incidents.create', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.post('/supermarket-portal/incidents/:id/respond', authenticateSupermarket, async (req, res) => {
+  try {
+    await ensureIncidentsInfra();
+    const { message, new_status, responder_type, responder_name } = req.body;
+    await query(`INSERT INTO incident_responses (incident_id, responder_type, responder_name, message, new_status) VALUES ($1,$2,$3,$4,$5)`, [req.params.id, responder_type || 'supermarket', responder_name || 'Supermercado', message, new_status || null]);
+    if (new_status) await query(`UPDATE incidents SET status = $1, updated_at = NOW() WHERE id = $2`, [new_status, req.params.id]);
+    res.json({ ok: true });
+  } catch (err) { logError('sm.incidents.respond', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.get('/supermarket-portal/scores', authenticateSupermarket, async (req, res) => {
+  try {
+    await ensureIncidentsInfra();
+    const r = await query(`SELECT ps.*, ap.name AS promoter_name, a.name AS agency_name FROM promoter_scores ps JOIN agency_promoters ap ON ap.id = ps.agency_promoter_id LEFT JOIN agencies a ON a.id = ap.agency_id WHERE ps.organization_id = $1 ORDER BY ps.score DESC`, [req.supermarketUser.organization_id]);
+    res.json(r.rows);
+  } catch (err) { logError('sm.scores', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.get('/supermarket-portal/schedule', authenticateSupermarket, async (req, res) => {
+  try {
+    const hasTable = await tableExists('visit_requests');
+    if (!hasTable) return res.json({ today: [], tomorrow: [] });
+    const today = await query(`SELECT vr.*, ap.name AS promoter_name, a.name AS agency_name FROM visit_requests vr LEFT JOIN agency_promoters ap ON ap.id = vr.agency_promoter_id LEFT JOIN agencies a ON a.id = vr.agency_id WHERE vr.unit_id = $1 AND vr.visit_date = CURRENT_DATE ORDER BY vr.scheduled_time`, [req.supermarketUser.unit_id]);
+    const tomorrow = await query(`SELECT vr.*, ap.name AS promoter_name, a.name AS agency_name FROM visit_requests vr LEFT JOIN agency_promoters ap ON ap.id = vr.agency_promoter_id LEFT JOIN agencies a ON a.id = vr.agency_id WHERE vr.unit_id = $1 AND vr.visit_date = CURRENT_DATE + INTERVAL '1 day' ORDER BY vr.scheduled_time`, [req.supermarketUser.unit_id]);
+    res.json({ today: today.rows, tomorrow: tomorrow.rows });
+  } catch (err) { logError('sm.schedule', err); res.json({ today: [], tomorrow: [] }); }
+});
+
+// ============ AGENCY PORTAL: Incidents & Scores ============
+router.get('/agency/incidents', authenticateAgency, async (req, res) => {
+  try {
+    await ensureIncidentsInfra();
+    const r = await query(`SELECT i.*, ap.name AS promoter_name, a.name AS agency_name, u.name AS unit_name, (SELECT json_agg(ir ORDER BY ir.created_at) FROM incident_responses ir WHERE ir.incident_id = i.id) AS responses FROM incidents i LEFT JOIN agency_promoters ap ON ap.id = i.agency_promoter_id LEFT JOIN agencies a ON a.id = i.agency_id LEFT JOIN units u ON u.id = i.reported_by_unit_id WHERE i.agency_id = $1 ORDER BY i.created_at DESC LIMIT 100`, [req.agencyUser.agency_id]);
+    res.json(r.rows);
+  } catch (err) { logError('agency.incidents.list', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.post('/agency/incidents/:id/respond', authenticateAgency, async (req, res) => {
+  try {
+    await ensureIncidentsInfra();
+    const { message, new_status, responder_type, responder_name } = req.body;
+    await query(`INSERT INTO incident_responses (incident_id, responder_type, responder_name, message, new_status) VALUES ($1,$2,$3,$4,$5)`, [req.params.id, responder_type || 'agency', responder_name || 'Agência', message, new_status || null]);
+    if (new_status) await query(`UPDATE incidents SET status = $1, updated_at = NOW() WHERE id = $2`, [new_status, req.params.id]);
+    res.json({ ok: true });
+  } catch (err) { logError('agency.incidents.respond', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.get('/agency/scores', authenticateAgency, async (req, res) => {
+  try {
+    await ensureIncidentsInfra();
+    const r = await query(`SELECT ps.*, ap.name AS promoter_name FROM promoter_scores ps JOIN agency_promoters ap ON ap.id = ps.agency_promoter_id WHERE ap.agency_id = $1 ORDER BY ps.score DESC`, [req.agencyUser.agency_id]);
+    res.json(r.rows);
+  } catch (err) { logError('agency.scores', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.get('/agency/schedule', authenticateAgency, async (req, res) => {
+  try {
+    const hasTable = await tableExists('visit_requests');
+    if (!hasTable) return res.json({ today: [], tomorrow: [], week: [] });
+    const today = await query(`SELECT vr.*, ap.name AS promoter_name, u.name AS unit_name FROM visit_requests vr LEFT JOIN agency_promoters ap ON ap.id = vr.agency_promoter_id LEFT JOIN units u ON u.id = vr.unit_id WHERE vr.agency_id = $1 AND vr.visit_date = CURRENT_DATE ORDER BY vr.scheduled_time`, [req.agencyUser.agency_id]);
+    const tomorrow = await query(`SELECT vr.*, ap.name AS promoter_name, u.name AS unit_name FROM visit_requests vr LEFT JOIN agency_promoters ap ON ap.id = vr.agency_promoter_id LEFT JOIN units u ON u.id = vr.unit_id WHERE vr.agency_id = $1 AND vr.visit_date = CURRENT_DATE + INTERVAL '1 day' ORDER BY vr.scheduled_time`, [req.agencyUser.agency_id]);
+    const week = await query(`SELECT vr.*, ap.name AS promoter_name, u.name AS unit_name FROM visit_requests vr LEFT JOIN agency_promoters ap ON ap.id = vr.agency_promoter_id LEFT JOIN units u ON u.id = vr.unit_id WHERE vr.agency_id = $1 AND vr.visit_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '7 days' ORDER BY vr.visit_date, vr.scheduled_time`, [req.agencyUser.agency_id]);
+    res.json({ today: today.rows, tomorrow: tomorrow.rows, week: week.rows });
+  } catch (err) { logError('agency.schedule', err); res.json({ today: [], tomorrow: [], week: [] }); }
+});
+
+// ============ ADMIN: Incidents & Scores ============
+router.get('/incidents', authenticate, async (req, res) => {
+  try {
+    await ensureIncidentsInfra();
+    const orgId = await getOrgId(req.user.id);
+    const r = await query(`SELECT i.*, ap.name AS promoter_name, a.name AS agency_name, u.name AS unit_name, (SELECT json_agg(ir ORDER BY ir.created_at) FROM incident_responses ir WHERE ir.incident_id = i.id) AS responses FROM incidents i LEFT JOIN agency_promoters ap ON ap.id = i.agency_promoter_id LEFT JOIN agencies a ON a.id = i.agency_id LEFT JOIN units u ON u.id = i.reported_by_unit_id WHERE i.organization_id = $1 ORDER BY i.created_at DESC LIMIT 200`, [orgId]);
+    res.json(r.rows);
+  } catch (err) { logError('admin.incidents.list', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.get('/scores', authenticate, async (req, res) => {
+  try {
+    await ensureIncidentsInfra();
+    const orgId = await getOrgId(req.user.id);
+    const r = await query(`SELECT ps.*, ap.name AS promoter_name, a.name AS agency_name FROM promoter_scores ps JOIN agency_promoters ap ON ap.id = ps.agency_promoter_id LEFT JOIN agencies a ON a.id = ap.agency_id WHERE ps.organization_id = $1 ORDER BY ps.score DESC`, [orgId]);
+    res.json(r.rows);
+  } catch (err) { logError('admin.scores', err); res.status(500).json({ error: 'Erro' }); }
+});
+
 export default router;
