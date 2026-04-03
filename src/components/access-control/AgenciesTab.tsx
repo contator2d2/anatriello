@@ -98,6 +98,8 @@ const AgenciesTab = () => {
       max_promoters: parseInt(form.max_promoters) || 50,
       responsible_email: form.contact_email,
       responsible_phone: form.contact_phone,
+      plan_id: form.plan_id || undefined,
+      contracted_promoters: parseInt(form.contracted_promoters) || undefined,
     };
     let agencyId = editing?.id;
     if (editing) {
