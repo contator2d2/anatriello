@@ -11,6 +11,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Shield, QrCode, Camera, ScanFace, Lock, Loader2, AlertTriangle } from "lucide-react";
 import { useNetworkAuthSettings, useUpdateNetworkAuthSettings } from "@/hooks/use-access-control";
+import HelpPanel from "./HelpPanel";
 import { useToast } from "@/hooks/use-toast";
 
 interface Props {
