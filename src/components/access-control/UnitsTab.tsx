@@ -44,6 +44,7 @@ const UnitsTab = () => {
 
   const [sendAccessOpen, setSendAccessOpen] = useState(false);
   const [sendAccessUnit, setSendAccessUnit] = useState<any>(null);
+  const [authOverrideUnit, setAuthOverrideUnit] = useState<any>(null);
 
   const openNew = () => { setEditing(null); setForm(defaultForm); setDialogOpen(true); };
   const openEdit = (u: any) => {
