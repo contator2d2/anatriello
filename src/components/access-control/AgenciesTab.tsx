@@ -531,12 +531,28 @@ const AgenciesTab = () => {
               </div>
               <Separator />
               <div className="space-y-3">
+                <p className="text-sm font-medium">Signatário da Agência (Contratada)</p>
                 <div><Label>Responsável signatário *</Label><Input value={contractSignerName} onChange={e => setContractSignerName(e.target.value)} placeholder="Nome do responsável" /></div>
                 <div><Label>E-mail para assinatura *</Label><Input type="email" value={contractSignerEmail} onChange={e => setContractSignerEmail(e.target.value)} placeholder="responsavel@agencia.com" /></div>
                 <div><Label>CPF do signatário *</Label><Input value={contractSignerCpf} onChange={e => setContractSignerCpf(formatCpf(e.target.value))} placeholder="000.000.000-00" /></div>
               </div>
+              <Separator />
+              <div className="space-y-3">
+                <p className="text-sm font-medium">Signatário da {orgResponsible?.org_name || 'Organização'} (Contratante)</p>
+                {orgResponsible ? (
+                  <>
+                    <div className="bg-muted/50 rounded-lg p-3 text-sm space-y-1">
+                      <div className="flex justify-between"><span className="text-muted-foreground">Nome:</span><span className="font-medium">{orgResponsible.responsible_name}</span></div>
+                      <div className="flex justify-between"><span className="text-muted-foreground">E-mail:</span><span>{orgResponsible.responsible_email}</span></div>
+                    </div>
+                    <div><Label>CPF do contratante *</Label><Input value={orgSignerCpf} onChange={e => setOrgSignerCpf(formatCpf(e.target.value))} placeholder="000.000.000-00" /></div>
+                  </>
+                ) : (
+                  <p className="text-xs text-muted-foreground">Carregando dados do responsável...</p>
+                )}
+              </div>
               <p className="text-xs text-muted-foreground">
-                O contrato será criado no módulo de Assinaturas Digitais. Se o SMTP estiver configurado, o link seguirá por e-mail automaticamente.
+                O contrato será criado no módulo de Assinaturas Digitais com as posições já configuradas. Ambas as partes receberão o link para assinar.
               </p>
             </div>
           )}
