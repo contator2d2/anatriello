@@ -56,6 +56,36 @@ const NetworksTab = () => {
         <Button onClick={openNew} size="sm"><Plus className="h-4 w-4 mr-1" /> Nova Rede</Button>
       </CardHeader>
       <CardContent>
+        <HelpPanel
+          title="Como funcionam as Redes?"
+          sections={[
+            {
+              title: "O que é uma Rede?",
+              icon: "info",
+              content: [
+                "Uma Rede agrupa várias Unidades (PDVs) de um mesmo supermercado.",
+                "As regras de autenticação são definidas por Rede e herdadas por todas as Unidades.",
+              ],
+            },
+            {
+              title: "Configurar segurança",
+              icon: "check",
+              content: [
+                "Clique no ícone de escudo (🛡️) na coluna Ações para abrir as Regras de Autenticação.",
+                "Escolha um preset (Básico, Intermediário, Alto, Máximo) ou configure manualmente.",
+                "Métodos: CPF, QR Code, Selfie (entrada/saída), Reconhecimento Facial.",
+              ],
+            },
+            {
+              title: "Impacto nos promotores",
+              icon: "alert",
+              content: [
+                "Ao ativar métodos avançados (selfie, facial), promotores sem foto conforme serão bloqueados.",
+                "Agências são notificadas automaticamente para adequar o cadastro dos promotores.",
+              ],
+            },
+          ]}
+        />
         {isLoading ? (
           <div className="flex justify-center p-8"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
         ) : networks.length === 0 ? (

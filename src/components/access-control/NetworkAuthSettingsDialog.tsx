@@ -118,6 +118,60 @@ export const NetworkAuthSettingsDialog = ({ open, onOpenChange, networkId, netwo
           <div className="flex justify-center p-8"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
         ) : (
           <div className="space-y-6">
+            <HelpPanel
+              title="Como funciona a autenticação modular?"
+              sections={[
+                {
+                  title: "O que é?",
+                  icon: "info",
+                  content: [
+                    "A Rede define quais métodos de segurança os promotores devem usar para entrar e sair dos PDVs.",
+                    "Todas as Unidades (PDVs) vinculadas a esta Rede herdam automaticamente estas configurações.",
+                    "O Totem se adapta ao fluxo: exibe apenas as etapas que estão ativas aqui.",
+                  ],
+                },
+                {
+                  title: "Níveis de Segurança (Presets)",
+                  icon: "check",
+                  content: [
+                    "Básico — Apenas digitação de CPF no teclado virtual do Totem.",
+                    "Intermediário — QR Code dinâmico + selfie obrigatória na entrada.",
+                    "Alto — QR Code + selfie na entrada E na saída (compara as duas fotos).",
+                    "Máximo — QR Code + reconhecimento facial comparando selfie com foto cadastrada.",
+                  ],
+                },
+                {
+                  title: "Requisitos de Foto para Reconhecimento Facial",
+                  icon: "alert",
+                  content: [
+                    "A foto do promotor deve ser frontal, bem iluminada, sem óculos escuros, bonés ou máscaras.",
+                    "Resolução mínima recomendada: 480×480px, formato JPEG ou PNG.",
+                    "Agências e RH são notificados se a foto não atende aos requisitos (status 'não conforme').",
+                    "Promotores internos usam a foto do cadastro no RH; externos usam a foto do portal da agência.",
+                  ],
+                },
+                {
+                  title: "QR Code Dinâmico",
+                  icon: "info",
+                  content: [
+                    "QR gerado pelo sistema com validade configurável (ex: 60 min) e uso único.",
+                    "Vinculado ao promotor, PDV, data e horário — não pode ser reutilizado.",
+                    "Pode ser enviado via link, WhatsApp ou portal da agência (sem necessidade de app).",
+                  ],
+                },
+                {
+                  title: "Impacto nas Agências e Promotores",
+                  icon: "alert",
+                  content: [
+                    "Ao ativar selfie ou facial, o sistema verifica se cada promotor tem foto em conformidade.",
+                    "Promotores sem foto adequada ficam com status 'não conforme' e não conseguem fazer check-in.",
+                    "A agência recebe notificação automática para atualizar a foto do promotor.",
+                    "Promotores internos (CLT) seguem as mesmas regras — a foto é a do cadastro no RH.",
+                  ],
+                },
+              ]}
+            />
+
             {/* Security Level Presets */}
             <div>
               <Label className="text-sm font-semibold mb-2 block">Nível de Segurança (Preset)</Label>

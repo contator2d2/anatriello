@@ -166,6 +166,38 @@ const UnitsTab = () => {
         <Button onClick={openNew} size="sm"><Plus className="h-4 w-4 mr-1" /> Nova Unidade</Button>
       </CardHeader>
       <CardContent>
+        <HelpPanel
+          title="Como funcionam as Unidades?"
+          sections={[
+            {
+              title: "O que é uma Unidade (PDV)?",
+              icon: "info",
+              content: [
+                "Cada Unidade representa uma loja física do supermercado.",
+                "A Unidade herda as regras de autenticação da Rede à qual está vinculada.",
+                "Configure geofencing (latitude, longitude, raio) para validar presença física.",
+              ],
+            },
+            {
+              title: "Totem de entrada",
+              icon: "check",
+              content: [
+                "Habilite o Totem na edição da unidade para gerar o token exclusivo.",
+                "Use o ícone de recarregar (🔄) para regenerar o token a qualquer momento.",
+                "O Totem adapta o fluxo (CPF, QR, selfie) conforme as regras da Rede.",
+              ],
+            },
+            {
+              title: "Acesso do supermercado",
+              icon: "info",
+              content: [
+                "Clique no ícone de chave (🔑) para criar login do portal do supermercado.",
+                "O gerente da loja poderá ver promotores presentes e histórico de acessos.",
+                "Use o ícone de enviar (📤) para enviar os dados de acesso por e-mail.",
+              ],
+            },
+          ]}
+        />
         {isLoading ? (
           <div className="flex justify-center p-8"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
         ) : units.length === 0 ? (

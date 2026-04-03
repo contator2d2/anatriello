@@ -116,6 +116,37 @@ const PromotersTab = () => {
           <Button onClick={openNew} size="sm"><Plus className="h-4 w-4 mr-1" /> Novo Promotor</Button>
         </CardHeader>
         <CardContent>
+          <HelpPanel
+            title="Como cadastrar promotores?"
+            sections={[
+              {
+                title: "Tipos de promotor",
+                icon: "info",
+                content: [
+                  "Interno — Colaborador CLT da empresa; usa a foto do cadastro no RH.",
+                  "Externo — Vinculado a uma agência terceira; cadastrado com foto obrigatória pelo portal da agência.",
+                ],
+              },
+              {
+                title: "Foto para reconhecimento facial",
+                icon: "alert",
+                content: [
+                  "Se a Rede do PDV exige selfie ou facial, o promotor DEVE ter foto conforme.",
+                  "Requisitos: frontal, bem iluminada, sem óculos escuros/bonés, mínimo 480×480px.",
+                  "Promotores sem foto adequada ficam 'não conforme' e não conseguem fazer check-in no Totem.",
+                ],
+              },
+              {
+                title: "Regras de acesso",
+                icon: "check",
+                content: [
+                  "Clique no ícone de chave (🔑) para definir em quais PDVs, dias e horários o promotor pode entrar.",
+                  "É possível restringir por marcas autorizadas.",
+                  "Use a carta de autorização (📄) para gerar documento formal de permissão.",
+                ],
+              },
+            ]}
+          />
           {isLoading ? (
             <div className="flex justify-center p-8"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
           ) : promoters.length === 0 ? (
