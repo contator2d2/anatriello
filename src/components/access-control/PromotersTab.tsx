@@ -152,7 +152,7 @@ const PromotersTab = () => {
             <div><Label>Telefone</Label><Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} /></div>
             <div>
               <Label>Agência</Label>
-              <Select value={form.agency_id} onValueChange={v => setForm(f => ({ ...f, agency_id: v }))}>
+              <Select value={form.agency_id || "__none__"} onValueChange={v => setForm(f => ({ ...f, agency_id: v === "__none__" ? "" : v }))}>
                 <SelectTrigger><SelectValue placeholder="Interno (sem agência)" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none__">Interno</SelectItem>

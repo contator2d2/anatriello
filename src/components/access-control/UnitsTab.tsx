@@ -125,7 +125,7 @@ const UnitsTab = () => {
             <div><Label>CNPJ</Label><Input value={form.cnpj} onChange={e => setForm(f => ({ ...f, cnpj: e.target.value }))} /></div>
             <div>
               <Label>Rede</Label>
-              <Select value={form.network_id} onValueChange={v => setForm(f => ({ ...f, network_id: v }))}>
+              <Select value={form.network_id || "__none__"} onValueChange={v => setForm(f => ({ ...f, network_id: v === "__none__" ? "" : v }))}>
                 <SelectTrigger><SelectValue placeholder="Sem rede" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none__">Nenhuma</SelectItem>
