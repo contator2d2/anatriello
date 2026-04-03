@@ -213,6 +213,7 @@ const UnitsTab = () => {
                   <TableHead>Rede</TableHead>
                   <TableHead>Cidade/UF</TableHead>
                   <TableHead>Horário</TableHead>
+                  <TableHead>Autenticação</TableHead>
                   <TableHead>Token Totem</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="w-[140px]">Ações</TableHead>
