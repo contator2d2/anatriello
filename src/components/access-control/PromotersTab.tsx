@@ -9,7 +9,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Pencil, ShieldCheck, Loader2, Key, Trash2 } from "lucide-react";
+import { Plus, Pencil, ShieldCheck, Loader2, Key, Trash2, FileText } from "lucide-react";
+import { AuthorizationLetterDialog } from "./AuthorizationLetterDialog";
 
 const WEEKDAYS = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
 
@@ -24,8 +25,10 @@ const PromotersTab = () => {
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [rulesDialogOpen, setRulesDialogOpen] = useState(false);
+  const [letterDialogOpen, setLetterDialogOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
   const [selectedPromoter, setSelectedPromoter] = useState<any>(null);
+  const [letterPromoter, setLetterPromoter] = useState<any>(null);
   const [form, setForm] = useState({ full_name: "", cpf: "", phone: "", agency_id: "", is_active: true });
   const [ruleForm, setRuleForm] = useState({ unit_id: "", allowed_weekdays: [1, 2, 3, 4, 5], time_start: "08:00", time_end: "18:00", brands: "" });
 
@@ -126,7 +129,8 @@ const PromotersTab = () => {
                       <TableCell>
                         <div className="flex gap-1">
                           <Button size="icon" variant="ghost" onClick={() => openRules(p)} title="Regras de acesso"><Key className="h-4 w-4" /></Button>
-                          <Button size="icon" variant="ghost" onClick={() => openEdit(p)}><Pencil className="h-4 w-4" /></Button>
+                          <Button size="icon" variant="ghost" onClick={() => openEdit(p)} title="Editar"><Pencil className="h-4 w-4" /></Button>
+                          <Button size="icon" variant="ghost" onClick={() => { setLetterPromoter(p); setLetterDialogOpen(true); }} title="Carta de autorização"><FileText className="h-4 w-4" /></Button>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -221,6 +225,20 @@ const PromotersTab = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      <AuthorizationLetterDialog
+        open={letterDialogOpen}
+        onOpenChange={setLetterDialogOpen}
+        promoter={letterPromoter ? {
+          name: letterPromoter.full_name,
+          cpf: letterPromoter.cpf,
+          phone: letterPromoter.phone,
+          isInternal: !!letterPromoter.employee_id,
+        } : undefined}
+        agency={letterPromoter?.agency_name ? {
+          name: letterPromoter.agency_name,
+        } : undefined}
+      />
     </>
   );
 };

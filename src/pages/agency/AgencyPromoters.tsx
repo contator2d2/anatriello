@@ -8,7 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
-import { Plus, Search, Edit, Ban, CheckCircle, Users } from 'lucide-react';
+import { Plus, Search, Edit, Ban, CheckCircle, Users, FileText } from 'lucide-react';
+import { AuthorizationLetterDialog } from '@/components/access-control/AuthorizationLetterDialog';
 
 const getHeaders = () => {
   const token = localStorage.getItem('agency_auth_token');
@@ -21,6 +22,8 @@ export default function AgencyPromoters() {
   const qc = useQueryClient();
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [letterOpen, setLetterOpen] = useState(false);
+  const [letterPromoter, setLetterPromoter] = useState<any>(null);
   const [editing, setEditing] = useState<any>(null);
   const [form, setForm] = useState({ name: '', cpf: '', phone: '', photo_url: '' });
 
@@ -111,6 +114,9 @@ export default function AgencyPromoters() {
                   <Button size="sm" variant="outline" onClick={() => openEdit(p)}>
                     <Edit className="h-3 w-3 mr-1" /> Editar
                   </Button>
+                  <Button size="sm" variant="outline" onClick={() => { setLetterPromoter(p); setLetterOpen(true); }}>
+                    <FileText className="h-3 w-3 mr-1" /> Carta
+                  </Button>
                   {p.status === 'active' ? (
                     <Button size="sm" variant="outline" className="text-destructive" onClick={() => toggleMutation.mutate({ id: p.id, status: 'blocked' })}>
                       <Ban className="h-3 w-3 mr-1" /> Bloquear
@@ -154,6 +160,18 @@ export default function AgencyPromoters() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AuthorizationLetterDialog
+        open={letterOpen}
+        onOpenChange={setLetterOpen}
+        promoter={letterPromoter ? {
+          name: letterPromoter.name,
+          cpf: letterPromoter.cpf,
+          phone: letterPromoter.phone,
+          isInternal: false,
+        } : undefined}
+        agency={user ? { name: user.agency_name || '' } : undefined}
+      />
     </div>
   );
 }
