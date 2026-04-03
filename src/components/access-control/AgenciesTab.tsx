@@ -203,12 +203,17 @@ const AgenciesTab = () => {
     }
   };
 
-  const openContractDialog = (a: any) => {
+  const openContractDialog = async (a: any) => {
     setContractAgency(a);
     setContractSignerName(a.responsible_name || a.name || "");
     setContractSignerEmail((a.contact_email || a.responsible_email || "").trim().toLowerCase());
     setContractSignerCpf(formatCpf(a.responsible_cpf || ""));
     setContractDialogOpen(true);
+    // Fetch org responsible data
+    try {
+      const data = await api<any>("/api/doc-signatures/org-responsible");
+      setOrgResponsible(data);
+    } catch { setOrgResponsible(null); }
   };
 
   const handleGenerateContract = async () => {
