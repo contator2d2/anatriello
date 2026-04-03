@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Plus, Pencil, Trash2, Building2, Loader2, Shield } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { NetworkAuthSettingsDialog } from "./NetworkAuthSettingsDialog";
+import HelpPanel from "./HelpPanel";
 
 const NetworksTab = () => {
   const { data: networks = [], isLoading } = useNetworks();
