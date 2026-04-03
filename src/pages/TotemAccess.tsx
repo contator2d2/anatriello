@@ -77,6 +77,7 @@ const DEFAULT_AUTH: AuthConfig = {
   selfie_exit_required: false, facial_recognition_enabled: false,
   combined_validation: "cpf_only", security_level: "basic",
   require_lgpd_consent: false, consent_text: null,
+  facial_min_confidence: 70, allow_low_confidence_entry: false,
 };
 
 function loadSession(): TotemSession | null {
