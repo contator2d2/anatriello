@@ -40,6 +40,9 @@ const UnitsTab = () => {
   const [showPw, setShowPw] = useState(false);
   const { data: supermarketUser, isLoading: isLoadingSupermarketUser } = useSupermarketUser(loginUnit?.id);
 
+  const [sendAccessOpen, setSendAccessOpen] = useState(false);
+  const [sendAccessUnit, setSendAccessUnit] = useState<any>(null);
+
   const openNew = () => { setEditing(null); setForm(defaultForm); setDialogOpen(true); };
   const openEdit = (u: any) => {
     setEditing(u);
