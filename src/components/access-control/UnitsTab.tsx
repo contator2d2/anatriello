@@ -9,7 +9,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { Plus, Pencil, Trash2, Store, Loader2, Copy, KeyRound, Eye, EyeOff, RefreshCw } from "lucide-react";
+import { Plus, Pencil, Trash2, Store, Loader2, Copy, KeyRound, Eye, EyeOff, RefreshCw, Send } from "lucide-react";
+import SendAccessDialog from "./SendAccessDialog";
 import { useToast } from "@/hooks/use-toast";
 import { formatCnpj, isValidCnpj, onlyDigits } from "@/lib/br-utils";
 
