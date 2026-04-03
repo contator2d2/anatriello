@@ -1,12 +1,13 @@
 import { Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAgencyAuth } from '@/contexts/AgencyAuthContext';
-import { Loader2, LayoutDashboard, Users, LogOut, Building2, Shield } from 'lucide-react';
+import { Loader2, LayoutDashboard, Users, LogOut, Building2, Shield, CalendarDays } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 
 const navItems = [
   { path: '/agencia/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/agencia/promotores', label: 'Promotores', icon: Users },
+  { path: '/agencia/visitas', label: 'Solicitações de Visita', icon: CalendarDays },
   { path: '/agencia/regras', label: 'Regras de Acesso', icon: Shield },
 ];
 
