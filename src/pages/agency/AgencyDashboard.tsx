@@ -14,7 +14,7 @@ export default function AgencyDashboard() {
 
   const { data: stats } = useQuery({
     queryKey: ['agency-dashboard-stats'],
-    queryFn: () => api<any>('/api/access-control/agency-portal/stats', { headers }),
+    queryFn: () => api<any>('/api/access-control/agency/stats', { headers }),
     enabled: !!user,
   });
 
