@@ -69,7 +69,7 @@ export default function AgencyAccessRules() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => api(`/api/access-control/agency-portal/access-rules/${id}`, { method: 'DELETE', headers: getHeaders() }),
+    mutationFn: (id: string) => api(`/api/access-control/agency/access-rules/${id}`, { method: 'DELETE', headers: getHeaders() }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['agency-access-rules'] });
       toast({ title: 'Regra removida' });
