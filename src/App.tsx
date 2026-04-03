@@ -111,6 +111,7 @@ import SupermarketLayout from "./pages/supermarket/SupermarketLayout";
 import SupermarketDashboard from "./pages/supermarket/SupermarketDashboard";
 import SupermarketHistory from "./pages/supermarket/SupermarketHistory";
 import SupermarketVisitRequests from "./pages/supermarket/SupermarketVisitRequests";
+import SupermarketIncidents from "./pages/supermarket/SupermarketIncidents";
 
 const queryClient = new QueryClient();
 
