@@ -1371,11 +1371,22 @@ router.post('/', async (req, res) => {
     const userResult = await query(`SELECT name, email FROM users WHERE id = $1`, [req.userId]);
     const user = userResult.rows[0];
 
-    const result = await query(
-      `INSERT INTO doc_signature_documents (organization_id, title, description, file_url, created_by, deal_id, require_cnh_validation, hash_sha256)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-      [orgId, title, description || null, normalizedFileUrl, req.userId, deal_id || null, require_cnh_validation || false, hashSha256]
-    );
+    let result;
+    try {
+      result = await query(
+        `INSERT INTO doc_signature_documents (organization_id, title, description, file_url, created_by, deal_id, require_cnh_validation, hash_sha256)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+        [orgId, title, description || null, normalizedFileUrl, req.userId, deal_id || null, require_cnh_validation || false, hashSha256]
+      );
+    } catch (insertErr) {
+      // Fallback: try without optional columns that may not exist yet
+      console.log('[doc-signatures] Full insert failed, trying minimal:', insertErr.message);
+      result = await query(
+        `INSERT INTO doc_signature_documents (organization_id, title, description, file_url, created_by, hash_sha256)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+        [orgId, title, description || null, normalizedFileUrl, req.userId, hashSha256]
+      );
+    }
 
     const doc = result.rows[0];
 
