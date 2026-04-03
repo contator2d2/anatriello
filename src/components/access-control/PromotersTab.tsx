@@ -114,9 +114,15 @@ const PromotersTab = () => {
   return (
     <>
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
+        <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-2">
           <CardTitle className="flex items-center gap-2"><ShieldCheck className="h-5 w-5" /> Promotores</CardTitle>
-          <Button onClick={openNew} size="sm"><Plus className="h-4 w-4 mr-1" /> Novo Promotor</Button>
+          <div className="flex gap-2">
+            <Button onClick={() => checkAllConformityMutation.mutate()} size="sm" variant="outline" disabled={checkAllConformityMutation.isPending}>
+              {checkAllConformityMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <ScanFace className="h-4 w-4 mr-1" />}
+              Verificar Conformidade
+            </Button>
+            <Button onClick={openNew} size="sm"><Plus className="h-4 w-4 mr-1" /> Novo Promotor</Button>
+          </div>
         </CardHeader>
         <CardContent>
           <HelpPanel
