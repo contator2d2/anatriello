@@ -841,7 +841,7 @@ router.get('/promoters', authenticate, async (req, res) => {
        LEFT JOIN agencies a ON a.id = ap.agency_id
        WHERE a.organization_id = $1
        UNION ALL
-       SELECT e.id, e.name as full_name, e.cpf, e.phone, e.photo_url, 'active' as status,
+       SELECT e.id, e.full_name, e.cpf, e.phone, e.photo_url, 'active' as status,
               NULL as agency_id, NULL as agency_name, e.id as employee_id,
               true as is_active, e.created_at
        FROM employees e WHERE e.organization_id = $1
@@ -871,8 +871,12 @@ router.post('/promoters', authenticate, async (req, res) => {
       res.json(r.rows[0]);
     } else {
       const r = await query(
-        'INSERT INTO employees (organization_id, name, cpf, phone, role) VALUES ($1,$2,$3,$4,$5) RETURNING *, name as full_name, true as is_active',
-        [orgId, full_name, cpf, phone || null, 'promoter']
+        `INSERT INTO employees (organization_id, full_name, cpf, phone, worker_profile)
+         VALUES ($1,$2,$3,$4,$5)
+         RETURNING id, full_name, cpf, phone, photo_url, status,
+                   NULL::uuid as agency_id, NULL::text as agency_name, id as employee_id,
+                   true as is_active, created_at`,
+        [orgId, full_name, cpf, phone || null, 'operacional']
       );
       res.json(r.rows[0]);
     }
@@ -894,8 +898,11 @@ router.put('/promoters/:id', authenticate, async (req, res) => {
     );
     if (!r.rows.length) {
       r = await query(
-        `UPDATE employees SET name=COALESCE($1,name), cpf=COALESCE($2,cpf), phone=$3, updated_at=NOW()
-         WHERE id=$4 RETURNING *, name as full_name, true as is_active`,
+        `UPDATE employees SET full_name=COALESCE($1,full_name), cpf=COALESCE($2,cpf), phone=$3, updated_at=NOW()
+         WHERE id=$4
+         RETURNING id, full_name, cpf, phone, photo_url, status,
+                   NULL::uuid as agency_id, NULL::text as agency_name, id as employee_id,
+                   true as is_active, created_at`,
         [full_name, cpf, phone || null, req.params.id]
       );
     }
