@@ -69,6 +69,9 @@ const AgenciesTab = () => {
   const [contractSignerEmail, setContractSignerEmail] = useState("");
   const [contractSignerCpf, setContractSignerCpf] = useState("");
 
+  const [sendAccessOpen, setSendAccessOpen] = useState(false);
+  const [sendAccessAgency, setSendAccessAgency] = useState<any>(null);
+
   const openNew = () => {
     setEditing(null);
     setForm(defaultForm);
