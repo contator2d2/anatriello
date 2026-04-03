@@ -51,6 +51,7 @@ const AgenciesTab = () => {
   const setUnitsMutation = useSetAgencyUnits();
   const { uploadFile } = useUpload();
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
   const [dialogTab, setDialogTab] = useState("dados");
