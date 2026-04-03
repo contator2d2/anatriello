@@ -207,6 +207,9 @@ const UnitsTab = () => {
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-1">
+                         <Button size="icon" variant="ghost" onClick={() => { setSendAccessUnit(u); setSendAccessOpen(true); }} title="Enviar Acesso">
+                           <Send className="h-4 w-4 text-primary" />
+                         </Button>
                          <Button size="icon" variant="ghost" onClick={() => handleRegenerateTotemToken(u)} title={u.totem_token ? "Regenerar token do totem" : "Gerar token do totem"}>
                            <RefreshCw className="h-4 w-4 text-primary" />
                          </Button>
