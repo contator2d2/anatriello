@@ -221,3 +221,77 @@ export function useEntryLogs(filters?: { unit_id?: string; date?: string }) {
     queryFn: () => api<any[]>(`${BASE}/logs${qs ? `?${qs}` : ""}`),
   });
 }
+
+// ─── Network Auth Settings ───
+export function useNetworkAuthSettings(networkId?: string) {
+  return useQuery({
+    queryKey: ["ac-network-auth", networkId],
+    queryFn: () => api<any>(`${BASE}/networks/${networkId}/auth-settings`),
+    enabled: !!networkId,
+  });
+}
+export function useUpdateNetworkAuthSettings() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: ({ networkId, ...data }: any) => api(`${BASE}/networks/${networkId}/auth-settings`, { method: "PUT", body: data }),
+    onSuccess: (_d, vars) => { qc.invalidateQueries({ queryKey: ["ac-network-auth", vars.networkId] }); },
+  });
+}
+
+// ─── QR Tokens ───
+export function useQrTokens(filters?: { unit_id?: string }) {
+  const qs = filters?.unit_id ? `?unit_id=${filters.unit_id}` : "";
+  return useQuery({ queryKey: ["ac-qr-tokens", filters], queryFn: () => api<any[]>(`${BASE}/qr-tokens${qs}`) });
+}
+export function useCreateQrToken() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: (data: any) => api(`${BASE}/qr-tokens`, { method: "POST", body: data }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["ac-qr-tokens"] }); toast({ title: "QR Token gerado" }); },
+  });
+}
+export function useRevokeQrToken() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api(`${BASE}/qr-tokens/${id}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["ac-qr-tokens"] }),
+  });
+}
+
+// ─── Auth Attempts ───
+export function useAuthAttempts(filters?: { unit_id?: string; method?: string; result?: string; date?: string }) {
+  const params = new URLSearchParams();
+  if (filters?.unit_id) params.set("unit_id", filters.unit_id);
+  if (filters?.method) params.set("method", filters.method);
+  if (filters?.result) params.set("result", filters.result);
+  if (filters?.date) params.set("date", filters.date);
+  const qs = params.toString();
+  return useQuery({
+    queryKey: ["ac-auth-attempts", filters],
+    queryFn: () => api<any[]>(`${BASE}/auth-attempts${qs ? `?${qs}` : ""}`),
+  });
+}
+
+// ─── Fraud Logs ───
+export function useFraudLogs(filters?: { unit_id?: string; fraud_type?: string; severity?: string; resolved?: string }) {
+  const params = new URLSearchParams();
+  if (filters?.unit_id) params.set("unit_id", filters.unit_id);
+  if (filters?.fraud_type) params.set("fraud_type", filters.fraud_type);
+  if (filters?.severity) params.set("severity", filters.severity);
+  if (filters?.resolved) params.set("resolved", filters.resolved);
+  const qs = params.toString();
+  return useQuery({
+    queryKey: ["ac-fraud-logs", filters],
+    queryFn: () => api<any[]>(`${BASE}/fraud-logs${qs ? `?${qs}` : ""}`),
+  });
+}
+export function useResolveFraudLog() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: ({ id, ...data }: any) => api(`${BASE}/fraud-logs/${id}/resolve`, { method: "PUT", body: data }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["ac-fraud-logs"] }); toast({ title: "Log resolvido" }); },
+  });
+}

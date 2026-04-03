@@ -1856,4 +1856,372 @@ router.post('/send-access', authenticate, async (req, res) => {
   }
 });
 
+// =====================================================================
+// AUTH MODULE ROUTES — Network Auth Settings, QR Tokens, Audit
+// =====================================================================
+
+// --- Network Auth Settings CRUD ---
+router.get('/networks/:id/auth-settings', authenticate, async (req, res) => {
+  try {
+    const r = await query('SELECT * FROM network_auth_settings WHERE network_id = $1', [req.params.id]);
+    res.json(r.rows[0] || null);
+  } catch (err) { logError('access.auth_settings.get', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.put('/networks/:id/auth-settings', authenticate, async (req, res) => {
+  try {
+    const { cpf_entry_enabled, qr_entry_enabled, selfie_entry_required, selfie_exit_required,
+            facial_recognition_enabled, combined_validation, security_level,
+            facial_min_confidence, allow_low_confidence_entry, low_confidence_action,
+            qr_expiration_minutes, qr_single_use, require_lgpd_consent, consent_text } = req.body;
+    const r = await query(
+      `INSERT INTO network_auth_settings (network_id, cpf_entry_enabled, qr_entry_enabled, selfie_entry_required,
+       selfie_exit_required, facial_recognition_enabled, combined_validation, security_level,
+       facial_min_confidence, allow_low_confidence_entry, low_confidence_action,
+       qr_expiration_minutes, qr_single_use, require_lgpd_consent, consent_text)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+       ON CONFLICT (network_id) DO UPDATE SET
+       cpf_entry_enabled=EXCLUDED.cpf_entry_enabled, qr_entry_enabled=EXCLUDED.qr_entry_enabled,
+       selfie_entry_required=EXCLUDED.selfie_entry_required, selfie_exit_required=EXCLUDED.selfie_exit_required,
+       facial_recognition_enabled=EXCLUDED.facial_recognition_enabled, combined_validation=EXCLUDED.combined_validation,
+       security_level=EXCLUDED.security_level, facial_min_confidence=EXCLUDED.facial_min_confidence,
+       allow_low_confidence_entry=EXCLUDED.allow_low_confidence_entry, low_confidence_action=EXCLUDED.low_confidence_action,
+       qr_expiration_minutes=EXCLUDED.qr_expiration_minutes, qr_single_use=EXCLUDED.qr_single_use,
+       require_lgpd_consent=EXCLUDED.require_lgpd_consent, consent_text=EXCLUDED.consent_text,
+       updated_at=NOW()
+       RETURNING *`,
+      [req.params.id, cpf_entry_enabled ?? true, qr_entry_enabled ?? false, selfie_entry_required ?? false,
+       selfie_exit_required ?? false, facial_recognition_enabled ?? false, combined_validation || 'cpf_only',
+       security_level || 'basic', facial_min_confidence ?? 70, allow_low_confidence_entry ?? false,
+       low_confidence_action || 'alert', qr_expiration_minutes ?? 60, qr_single_use ?? true,
+       require_lgpd_consent ?? true, consent_text || null]
+    );
+    res.json(r.rows[0]);
+  } catch (err) { logError('access.auth_settings.upsert', err); res.status(500).json({ error: 'Erro ao salvar configurações' }); }
+});
+
+// --- PDV Auth Override ---
+router.get('/units/:id/auth-override', authenticate, async (req, res) => {
+  try {
+    const r = await query('SELECT * FROM pdv_auth_overrides WHERE supermarket_unit_id = $1', [req.params.id]);
+    res.json(r.rows[0] || null);
+  } catch (err) { logError('access.pdv_auth_override.get', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.put('/units/:id/auth-override', authenticate, async (req, res) => {
+  try {
+    const { cpf_entry_enabled, qr_entry_enabled, selfie_entry_required, selfie_exit_required,
+            facial_recognition_enabled, combined_validation, security_level,
+            facial_min_confidence, allow_low_confidence_entry } = req.body;
+    const r = await query(
+      `INSERT INTO pdv_auth_overrides (supermarket_unit_id, cpf_entry_enabled, qr_entry_enabled, selfie_entry_required,
+       selfie_exit_required, facial_recognition_enabled, combined_validation, security_level,
+       facial_min_confidence, allow_low_confidence_entry)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+       ON CONFLICT (supermarket_unit_id) DO UPDATE SET
+       cpf_entry_enabled=EXCLUDED.cpf_entry_enabled, qr_entry_enabled=EXCLUDED.qr_entry_enabled,
+       selfie_entry_required=EXCLUDED.selfie_entry_required, selfie_exit_required=EXCLUDED.selfie_exit_required,
+       facial_recognition_enabled=EXCLUDED.facial_recognition_enabled, combined_validation=EXCLUDED.combined_validation,
+       security_level=EXCLUDED.security_level, facial_min_confidence=EXCLUDED.facial_min_confidence,
+       allow_low_confidence_entry=EXCLUDED.allow_low_confidence_entry, updated_at=NOW()
+       RETURNING *`,
+      [req.params.id, cpf_entry_enabled, qr_entry_enabled, selfie_entry_required,
+       selfie_exit_required, facial_recognition_enabled, combined_validation,
+       security_level, facial_min_confidence, allow_low_confidence_entry]
+    );
+    res.json(r.rows[0]);
+  } catch (err) { logError('access.pdv_auth_override.upsert', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// --- QR Token Generation ---
+router.post('/qr-tokens', authenticate, async (req, res) => {
+  try {
+    const orgId = await getOrgId(req.userId);
+    const { agency_promoter_id, employee_id, supermarket_unit_id, valid_date, valid_from, valid_until } = req.body;
+    if (!supermarket_unit_id) return res.status(400).json({ error: 'Unidade é obrigatória' });
+    if (!agency_promoter_id && !employee_id) return res.status(400).json({ error: 'Promotor é obrigatório' });
+
+    // Get auth settings for this unit's network
+    const unitR = await query('SELECT network_id FROM supermarket_units WHERE id=$1', [supermarket_unit_id]);
+    const networkId = unitR.rows[0]?.network_id;
+    let expirationMinutes = 60;
+    if (networkId) {
+      const settingsR = await query('SELECT qr_expiration_minutes FROM network_auth_settings WHERE network_id=$1', [networkId]);
+      if (settingsR.rows[0]) expirationMinutes = settingsR.rows[0].qr_expiration_minutes || 60;
+    }
+
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + expirationMinutes * 60 * 1000);
+
+    const r = await query(
+      `INSERT INTO qr_access_tokens (organization_id, agency_promoter_id, employee_id, supermarket_unit_id,
+       token, valid_date, valid_from, valid_until, expires_at, created_by, created_by_type)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'admin') RETURNING *`,
+      [orgId, agency_promoter_id || null, employee_id || null, supermarket_unit_id,
+       token, valid_date || new Date().toISOString().slice(0, 10), valid_from || null, valid_until || null,
+       expiresAt, req.userId]
+    );
+    res.json(r.rows[0]);
+  } catch (err) { logError('access.qr_tokens.create', err); res.status(500).json({ error: 'Erro ao gerar QR' }); }
+});
+
+router.get('/qr-tokens', authenticate, async (req, res) => {
+  try {
+    const orgId = await getOrgId(req.userId);
+    const { unit_id, status: statusFilter } = req.query;
+    let sql = `SELECT qt.*, su.name as unit_name, ap.name as promoter_name, ap.cpf,
+               e.full_name as employee_name
+               FROM qr_access_tokens qt
+               LEFT JOIN supermarket_units su ON su.id = qt.supermarket_unit_id
+               LEFT JOIN agency_promoters ap ON ap.id = qt.agency_promoter_id
+               LEFT JOIN employees e ON e.id = qt.employee_id
+               WHERE qt.organization_id = $1`;
+    const params = [orgId];
+    if (unit_id) { params.push(unit_id); sql += ` AND qt.supermarket_unit_id = $${params.length}`; }
+    if (statusFilter) { params.push(statusFilter); sql += ` AND qt.status = $${params.length}`; }
+    sql += ' ORDER BY qt.created_at DESC LIMIT 100';
+    const r = await query(sql, params);
+    res.json(r.rows);
+  } catch (err) { logError('access.qr_tokens.list', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.delete('/qr-tokens/:id', authenticate, async (req, res) => {
+  try {
+    const orgId = await getOrgId(req.userId);
+    await query("UPDATE qr_access_tokens SET status='revoked' WHERE id=$1 AND organization_id=$2", [req.params.id, orgId]);
+    res.json({ ok: true });
+  } catch (err) { logError('access.qr_tokens.revoke', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// --- Totem: Get auth config for this unit ---
+router.get('/totem/auth-config', authenticateTotem, async (req, res) => {
+  try {
+    // Get unit's network
+    const unitR = await query('SELECT network_id FROM supermarket_units WHERE id=$1', [req.unitId]);
+    const networkId = unitR.rows[0]?.network_id;
+
+    let settings = null;
+    if (networkId) {
+      const r = await query('SELECT * FROM network_auth_settings WHERE network_id=$1', [networkId]);
+      settings = r.rows[0] || null;
+    }
+
+    // Check for PDV override
+    const overrideR = await query('SELECT * FROM pdv_auth_overrides WHERE supermarket_unit_id=$1', [req.unitId]);
+    const override = overrideR.rows[0];
+
+    // Merge: override takes precedence over network settings
+    const effective = {
+      cpf_entry_enabled: override?.cpf_entry_enabled ?? settings?.cpf_entry_enabled ?? true,
+      qr_entry_enabled: override?.qr_entry_enabled ?? settings?.qr_entry_enabled ?? false,
+      selfie_entry_required: override?.selfie_entry_required ?? settings?.selfie_entry_required ?? false,
+      selfie_exit_required: override?.selfie_exit_required ?? settings?.selfie_exit_required ?? false,
+      facial_recognition_enabled: override?.facial_recognition_enabled ?? settings?.facial_recognition_enabled ?? false,
+      combined_validation: override?.combined_validation ?? settings?.combined_validation ?? 'cpf_only',
+      security_level: override?.security_level ?? settings?.security_level ?? 'basic',
+      facial_min_confidence: override?.facial_min_confidence ?? settings?.facial_min_confidence ?? 70,
+      allow_low_confidence_entry: override?.allow_low_confidence_entry ?? settings?.allow_low_confidence_entry ?? false,
+      require_lgpd_consent: settings?.require_lgpd_consent ?? true,
+      consent_text: settings?.consent_text || null,
+    };
+
+    res.json(effective);
+  } catch (err) { logError('totem.auth_config', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// --- Totem: Validate QR Token ---
+router.post('/totem/validate-qr', authenticateTotem, async (req, res) => {
+  try {
+    const { token } = req.body;
+    if (!token) return res.status(400).json({ error: 'Token QR é obrigatório' });
+
+    const r = await query(
+      `SELECT qt.*, ap.name as promoter_name, ap.photo_url, ap.cpf, ap.agency_id,
+              a.name as agency_name, a.status as agency_status, a.billing_status,
+              e.full_name as employee_name, e.photo_url as employee_photo, e.cpf as employee_cpf
+       FROM qr_access_tokens qt
+       LEFT JOIN agency_promoters ap ON ap.id = qt.agency_promoter_id
+       LEFT JOIN agencies a ON a.id = ap.agency_id
+       LEFT JOIN employees e ON e.id = qt.employee_id
+       WHERE qt.token = $1`,
+      [token]
+    );
+
+    if (!r.rows.length) {
+      await query(
+        `INSERT INTO qr_usage_logs (qr_token_id, supermarket_unit_id, action, reason) VALUES (NULL,$1,'rejected','token_not_found')`,
+        [req.unitId]
+      );
+      await query(
+        `INSERT INTO fraud_detection_logs (organization_id, supermarket_unit_id, fraud_type, severity, details)
+         VALUES ($1,$2,'qr_invalid','medium',$3)`,
+        [req.orgId, req.unitId, JSON.stringify({ token: token.substring(0, 8) + '...' })]
+      );
+      return res.json({ valid: false, reason: 'QR Code inválido' });
+    }
+
+    const qr = r.rows[0];
+
+    // Check if belongs to this unit
+    if (qr.supermarket_unit_id !== req.unitId) {
+      await query(`INSERT INTO qr_usage_logs (qr_token_id, supermarket_unit_id, action, reason) VALUES ($1,$2,'rejected','wrong_unit')`, [qr.id, req.unitId]);
+      await query(
+        `INSERT INTO fraud_detection_logs (organization_id, supermarket_unit_id, fraud_type, severity, details)
+         VALUES ($1,$2,'unauthorized_pdv','high',$3)`,
+        [req.orgId, req.unitId, JSON.stringify({ qr_id: qr.id, expected_unit: qr.supermarket_unit_id })]
+      );
+      return res.json({ valid: false, reason: 'QR Code não é válido para este PDV' });
+    }
+
+    // Check status
+    if (qr.status === 'used') {
+      await query(`INSERT INTO qr_usage_logs (qr_token_id, supermarket_unit_id, action, reason) VALUES ($1,$2,'rejected','already_used')`, [qr.id, req.unitId]);
+      await query(
+        `INSERT INTO fraud_detection_logs (organization_id, supermarket_unit_id, fraud_type, severity, details)
+         VALUES ($1,$2,'qr_reused','high',$3)`,
+        [req.orgId, req.unitId, JSON.stringify({ qr_id: qr.id })]
+      );
+      return res.json({ valid: false, reason: 'QR Code já foi utilizado' });
+    }
+
+    if (qr.status === 'expired' || qr.status === 'revoked') {
+      await query(`INSERT INTO qr_usage_logs (qr_token_id, supermarket_unit_id, action, reason) VALUES ($1,$2,'rejected','expired_or_revoked')`, [qr.id, req.unitId]);
+      await query(
+        `INSERT INTO fraud_detection_logs (organization_id, supermarket_unit_id, fraud_type, severity, details)
+         VALUES ($1,$2,'qr_expired','medium',$3)`,
+        [req.orgId, req.unitId, JSON.stringify({ qr_id: qr.id, status: qr.status })]
+      );
+      return res.json({ valid: false, reason: 'QR Code expirado ou revogado' });
+    }
+
+    // Check expiration
+    if (new Date() > new Date(qr.expires_at)) {
+      await query("UPDATE qr_access_tokens SET status='expired' WHERE id=$1", [qr.id]);
+      await query(`INSERT INTO qr_usage_logs (qr_token_id, supermarket_unit_id, action, reason) VALUES ($1,$2,'expired','time_expired')`, [qr.id, req.unitId]);
+      return res.json({ valid: false, reason: 'QR Code expirado' });
+    }
+
+    // Check date
+    const today = new Date().toISOString().slice(0, 10);
+    if (qr.valid_date && qr.valid_date.toISOString().slice(0, 10) !== today) {
+      return res.json({ valid: false, reason: 'QR Code não é válido para hoje' });
+    }
+
+    // Mark as used if single-use
+    const unitR2 = await query('SELECT network_id FROM supermarket_units WHERE id=$1', [req.unitId]);
+    const nid = unitR2.rows[0]?.network_id;
+    let singleUse = true;
+    if (nid) {
+      const sR = await query('SELECT qr_single_use FROM network_auth_settings WHERE network_id=$1', [nid]);
+      if (sR.rows[0]) singleUse = sR.rows[0].qr_single_use;
+    }
+    if (singleUse) {
+      await query("UPDATE qr_access_tokens SET status='used', used_at=NOW() WHERE id=$1", [qr.id]);
+    }
+
+    await query(`INSERT INTO qr_usage_logs (qr_token_id, supermarket_unit_id, action) VALUES ($1,$2,'validated')`, [qr.id, req.unitId]);
+
+    const name = qr.promoter_name || qr.employee_name;
+    const photo = qr.photo_url || qr.employee_photo;
+    const cpf = qr.cpf || qr.employee_cpf;
+
+    res.json({
+      valid: true,
+      promoter: { name, photo_url: photo, cpf, agency_name: qr.agency_name },
+      qr_token_id: qr.id,
+      agency_promoter_id: qr.agency_promoter_id,
+      employee_id: qr.employee_id,
+    });
+  } catch (err) { logError('totem.validate_qr', err); res.status(500).json({ error: 'Erro na validação do QR' }); }
+});
+
+// --- Totem: Save selfie capture ---
+router.post('/totem/selfie', authenticateTotem, async (req, res) => {
+  try {
+    const { entry_log_id, agency_promoter_id, employee_id, capture_type, image_url } = req.body;
+    if (!capture_type || !image_url) return res.status(400).json({ error: 'Tipo e imagem são obrigatórios' });
+    const r = await query(
+      `INSERT INTO selfie_captures (organization_id, entry_log_id, agency_promoter_id, employee_id,
+       supermarket_unit_id, capture_type, image_url)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [req.orgId, entry_log_id || null, agency_promoter_id || null, employee_id || null,
+       req.unitId, capture_type, image_url]
+    );
+    res.json(r.rows[0]);
+  } catch (err) { logError('totem.selfie', err); res.status(500).json({ error: 'Erro ao salvar selfie' }); }
+});
+
+// --- Totem: Log authentication attempt ---
+router.post('/totem/auth-attempt', authenticateTotem, async (req, res) => {
+  try {
+    const { agency_promoter_id, employee_id, cpf, method, auth_steps, overall_result,
+            confidence_level, block_reason, entry_log_id } = req.body;
+    const r = await query(
+      `INSERT INTO authentication_attempt_logs (organization_id, supermarket_unit_id, agency_promoter_id,
+       employee_id, cpf, method, auth_steps, overall_result, confidence_level, block_reason, entry_log_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+      [req.orgId, req.unitId, agency_promoter_id || null, employee_id || null, cpf || null,
+       method, JSON.stringify(auth_steps || []), overall_result, confidence_level || null,
+       block_reason || null, entry_log_id || null]
+    );
+    res.json(r.rows[0]);
+  } catch (err) { logError('totem.auth_attempt', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// --- Admin: Auth attempt logs ---
+router.get('/auth-attempts', authenticate, async (req, res) => {
+  try {
+    const orgId = await getOrgId(req.userId);
+    const { unit_id, method, result: resultFilter, date } = req.query;
+    let sql = `SELECT aal.*, su.name as unit_name, ap.name as promoter_name, e.full_name as employee_name
+               FROM authentication_attempt_logs aal
+               LEFT JOIN supermarket_units su ON su.id = aal.supermarket_unit_id
+               LEFT JOIN agency_promoters ap ON ap.id = aal.agency_promoter_id
+               LEFT JOIN employees e ON e.id = aal.employee_id
+               WHERE aal.organization_id = $1`;
+    const params = [orgId];
+    if (unit_id) { params.push(unit_id); sql += ` AND aal.supermarket_unit_id = $${params.length}`; }
+    if (method) { params.push(method); sql += ` AND aal.method = $${params.length}`; }
+    if (resultFilter) { params.push(resultFilter); sql += ` AND aal.overall_result = $${params.length}`; }
+    if (date) { params.push(date); sql += ` AND aal.created_at::date = $${params.length}`; }
+    sql += ' ORDER BY aal.created_at DESC LIMIT 200';
+    const r = await query(sql, params);
+    res.json(r.rows);
+  } catch (err) { logError('access.auth_attempts.list', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// --- Admin: Fraud detection logs ---
+router.get('/fraud-logs', authenticate, async (req, res) => {
+  try {
+    const orgId = await getOrgId(req.userId);
+    const { unit_id, fraud_type, severity, resolved } = req.query;
+    let sql = `SELECT fdl.*, su.name as unit_name, ap.name as promoter_name, e.full_name as employee_name
+               FROM fraud_detection_logs fdl
+               LEFT JOIN supermarket_units su ON su.id = fdl.supermarket_unit_id
+               LEFT JOIN agency_promoters ap ON ap.id = fdl.agency_promoter_id
+               LEFT JOIN employees e ON e.id = fdl.employee_id
+               WHERE fdl.organization_id = $1`;
+    const params = [orgId];
+    if (unit_id) { params.push(unit_id); sql += ` AND fdl.supermarket_unit_id = $${params.length}`; }
+    if (fraud_type) { params.push(fraud_type); sql += ` AND fdl.fraud_type = $${params.length}`; }
+    if (severity) { params.push(severity); sql += ` AND fdl.severity = $${params.length}`; }
+    if (resolved !== undefined) { params.push(resolved === 'true'); sql += ` AND fdl.resolved = $${params.length}`; }
+    sql += ' ORDER BY fdl.created_at DESC LIMIT 200';
+    const r = await query(sql, params);
+    res.json(r.rows);
+  } catch (err) { logError('access.fraud_logs.list', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.put('/fraud-logs/:id/resolve', authenticate, async (req, res) => {
+  try {
+    const { resolution_notes } = req.body;
+    const r = await query(
+      `UPDATE fraud_detection_logs SET resolved=true, resolved_by=$1, resolved_at=NOW(), resolution_notes=$2 WHERE id=$3 RETURNING *`,
+      [req.userId, resolution_notes || null, req.params.id]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'Log não encontrado' });
+    res.json(r.rows[0]);
+  } catch (err) { logError('access.fraud_logs.resolve', err); res.status(500).json({ error: 'Erro' }); }
+});
+
 export default router;
