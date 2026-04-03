@@ -49,6 +49,7 @@ import {
   Store,
   Camera,
   Navigation,
+  ShieldCheck,
 } from "lucide-react";
 import { API_URL, getAuthToken } from "@/lib/api";
 import ayratechLogo from "@/assets/ayratech_logo.jpg";
@@ -146,6 +147,14 @@ const getNavSections = (hasConnections: boolean): NavSection[] => [
       { name: "Book de Fotos", href: "/merch/book-fotos", icon: Camera, pageKey: 'merch_book_fotos' },
       { name: "Auditoria", href: "/merch/auditoria", icon: Shield, pageKey: 'merch_auditoria' },
       { name: "Relatórios", href: "/merch/relatorios", icon: BarChart3, pageKey: 'merch_relatorios' },
+    ],
+  },
+  {
+    title: "Controle Acesso",
+    icon: ShieldCheck,
+    adminOnly: true,
+    items: [
+      { name: "Painel Acesso", href: "/controle-acesso", icon: ShieldCheck, pageKey: 'controle_acesso', adminOnly: true },
     ],
   },
   {
