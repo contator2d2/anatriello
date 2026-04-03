@@ -54,7 +54,7 @@ export default function AgencyAccessRules() {
 
   const { data: units = [] } = useQuery({
     queryKey: ['agency-available-units'],
-    queryFn: () => api<any[]>('/api/access-control/agency-portal/available-units', { headers: getHeaders() }),
+    queryFn: () => api<any[]>('/api/access-control/agency/allowed-units', { headers: getHeaders() }),
     enabled: !!user,
   });
 
