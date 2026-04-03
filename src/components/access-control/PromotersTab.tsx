@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { usePromoters, useCreatePromoter, useUpdatePromoter, useAgencies, useUnits, useCreateAccessRule, useAccessRules, useDeleteAccessRule } from "@/hooks/use-access-control";
+import { usePromoters, useCreatePromoter, useUpdatePromoter, useAgencies, useUnits, useCreateAccessRule, useAccessRules, useDeleteAccessRule, useCheckPromoterConformity, useCheckAllConformity, usePromoterConformity } from "@/hooks/use-access-control";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
