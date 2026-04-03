@@ -251,18 +251,22 @@ const TotemAccess = () => {
   // ═══ Result screen ═══
   if (result) {
     const isAuthorized = result.status === "authorized";
+    const isCheckout = result.block_reason === "SAÍDA REGISTRADA";
+    const bgColor = isCheckout ? "#2563eb" : isAuthorized ? "#16a34a" : "#dc2626";
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-8 transition-colors duration-500"
-        style={{ background: isAuthorized ? "#16a34a" : "#dc2626" }}>
+        style={{ background: bgColor }}>
         <div className="text-center text-white max-w-lg w-full">
           {config.logoUrl && <img src={config.logoUrl} alt="Logo" className="h-16 mx-auto mb-6 object-contain" />}
-          {isAuthorized ? (
+          {isCheckout ? (
+            <LogOut className="h-32 w-32 mx-auto mb-6 animate-in zoom-in duration-500" />
+          ) : isAuthorized ? (
             <CheckCircle2 className="h-32 w-32 mx-auto mb-6 animate-in zoom-in duration-500" />
           ) : (
             <XCircle className="h-32 w-32 mx-auto mb-6 animate-in zoom-in duration-500" />
           )}
           <h1 className="text-5xl font-bold mb-4">
-            {isAuthorized ? "ACESSO LIBERADO" : "ACESSO BLOQUEADO"}
+            {isCheckout ? "SAÍDA REGISTRADA" : isAuthorized ? "ACESSO LIBERADO" : "ACESSO BLOQUEADO"}
           </h1>
           {isAuthorized && (
             <Card className="bg-white/20 backdrop-blur border-white/30 p-6 mt-6 text-white">
