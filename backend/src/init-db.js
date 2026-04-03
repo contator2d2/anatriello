@@ -4437,6 +4437,25 @@ export async function initDatabase() {
   } catch (e) {
     console.error('  ⚠️ Failed to ensure agencies.responsible_cpf:', e.message);
   }
+
+  // Expand agency_promoters with additional fields
+  try {
+    await pool.query(`
+      ALTER TABLE agency_promoters ADD COLUMN IF NOT EXISTS email VARCHAR(255);
+      ALTER TABLE agency_promoters ADD COLUMN IF NOT EXISTS whatsapp VARCHAR(30);
+      ALTER TABLE agency_promoters ADD COLUMN IF NOT EXISTS birth_date DATE;
+      ALTER TABLE agency_promoters ADD COLUMN IF NOT EXISTS rg VARCHAR(20);
+      ALTER TABLE agency_promoters ADD COLUMN IF NOT EXISTS gender VARCHAR(20);
+      ALTER TABLE agency_promoters ADD COLUMN IF NOT EXISTS address TEXT;
+      ALTER TABLE agency_promoters ADD COLUMN IF NOT EXISTS city VARCHAR(100);
+      ALTER TABLE agency_promoters ADD COLUMN IF NOT EXISTS state VARCHAR(2);
+      ALTER TABLE agency_promoters ADD COLUMN IF NOT EXISTS emergency_contact VARCHAR(255);
+      ALTER TABLE agency_promoters ADD COLUMN IF NOT EXISTS emergency_phone VARCHAR(30);
+      ALTER TABLE agency_promoters ADD COLUMN IF NOT EXISTS notes TEXT;
+    `);
+  } catch (e) {
+    console.error('  ⚠️ Failed to expand agency_promoters:', e.message);
+  }
   
   return true;
 }
