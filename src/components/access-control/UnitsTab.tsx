@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useUnits, useCreateUnit, useUpdateUnit, useDeleteUnit, useNetworks, useCreateSupermarketUser, useUpdateSupermarketUser, useSupermarketUser, useRegenerateTotemToken } from "@/hooks/use-access-control";
+import { useUnits, useCreateUnit, useUpdateUnit, useDeleteUnit, useNetworks, useCreateSupermarketUser, useUpdateSupermarketUser, useSupermarketUser, useRegenerateTotemToken, usePdvAuthOverrides } from "@/hooks/use-access-control";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,6 +25,8 @@ const defaultForm = {
 const UnitsTab = () => {
   const { data: units = [], isLoading } = useUnits();
   const { data: networks = [] } = useNetworks();
+  const unitIds = (units as any[]).map((u: any) => u.id);
+  const { data: overrides = {} } = usePdvAuthOverrides(unitIds);
   const createMutation = useCreateUnit();
   const updateMutation = useUpdateUnit();
   const deleteMutation = useDeleteUnit();
@@ -213,6 +215,7 @@ const UnitsTab = () => {
                   <TableHead>Rede</TableHead>
                   <TableHead>Cidade/UF</TableHead>
                   <TableHead>Horário</TableHead>
+                  <TableHead>Autenticação</TableHead>
                   <TableHead>Token Totem</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="w-[140px]">Ações</TableHead>
@@ -225,6 +228,25 @@ const UnitsTab = () => {
                     <TableCell>{u.network_name || "—"}</TableCell>
                     <TableCell>{u.city ? `${u.city}/${u.state}` : "—"}</TableCell>
                      <TableCell>{u.opening_time || "06:00"} - {u.closing_time || "22:00"}</TableCell>
+                    <TableCell>
+                      {(() => {
+                        const ov = (overrides as Record<string, any>)?.[u.id];
+                        if (ov && ov.id) {
+                          const level = ov.security_level || "custom";
+                          const labelMap: Record<string, string> = { basic: "Básico", intermediate: "Intermediário", high: "Alto", maximum: "Máximo" };
+                          return (
+                            <Badge variant="destructive" className="gap-1">
+                              <Shield className="h-3 w-3" /> Override: {labelMap[level] || level}
+                            </Badge>
+                          );
+                        }
+                        return (
+                          <Badge variant="outline" className="gap-1 text-muted-foreground">
+                            Herda da Rede
+                          </Badge>
+                        );
+                      })()}
+                    </TableCell>
                     <TableCell>
                        {u.totem_token ? (
                          <div className="flex items-center gap-2">

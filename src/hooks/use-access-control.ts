@@ -247,6 +247,22 @@ export function usePdvAuthOverride(unitId?: string) {
     enabled: !!unitId,
   });
 }
+export function usePdvAuthOverrides(unitIds: string[]) {
+  return useQuery({
+    queryKey: ["ac-pdv-auth-overrides", unitIds],
+    queryFn: async () => {
+      const results: Record<string, any> = {};
+      await Promise.all(unitIds.map(async (id) => {
+        try {
+          const data = await api<any>(`${BASE}/units/${id}/auth-override`);
+          results[id] = data;
+        } catch { results[id] = null; }
+      }));
+      return results;
+    },
+    enabled: unitIds.length > 0,
+  });
+}
 export function useUpdatePdvAuthOverride() {
   const qc = useQueryClient();
   const { toast } = useToast();
