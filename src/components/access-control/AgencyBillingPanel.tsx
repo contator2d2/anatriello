@@ -66,8 +66,14 @@ export function AgencyBillingPanel() {
   });
 
   const generateInvoiceMutation = useMutation({
-    mutationFn: (agencyId: string) => api('/api/access-control/billing/invoices/generate', { method: 'POST', body: { agency_id: agencyId } }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['agency-invoices'] }); toast({ title: 'Fatura gerada' }); setInvoiceDialog(false); },
+    mutationFn: ({ agencyId, months }: { agencyId: string; months: number }) =>
+      api('/api/access-control/billing/invoices/generate', { method: 'POST', body: { agency_id: agencyId, months_ahead: months } }),
+    onSuccess: (data: any) => {
+      qc.invalidateQueries({ queryKey: ['agency-invoices'] });
+      qc.invalidateQueries({ queryKey: ['agency-subscriptions'] });
+      toast({ title: 'Faturas geradas', description: `${data?.total_generated || 1} fatura(s) criada(s)` });
+      setInvoiceDialog(false);
+    },
   });
 
   const totalRevenue = invoices.filter((i: any) => i.status === 'paid').reduce((sum: number, i: any) => sum + Number(i.final_amount || 0), 0);
