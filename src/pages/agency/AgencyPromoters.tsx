@@ -160,6 +160,18 @@ export default function AgencyPromoters() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AuthorizationLetterDialog
+        open={letterOpen}
+        onOpenChange={setLetterOpen}
+        promoter={letterPromoter ? {
+          name: letterPromoter.name,
+          cpf: letterPromoter.cpf,
+          phone: letterPromoter.phone,
+          isInternal: false,
+        } : undefined}
+        agency={user ? { name: user.agency_name || '' } : undefined}
+      />
     </div>
   );
 }
