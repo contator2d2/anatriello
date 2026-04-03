@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useUnits, useCreateUnit, useUpdateUnit, useDeleteUnit, useNetworks, useCreateSupermarketUser } from "@/hooks/use-access-control";
+import { useEffect, useState } from "react";
+import { useUnits, useCreateUnit, useUpdateUnit, useDeleteUnit, useNetworks, useCreateSupermarketUser, useUpdateSupermarketUser, useSupermarketUser, useRegenerateTotemToken } from "@/hooks/use-access-control";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,14 +9,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { Plus, Pencil, Trash2, Store, Loader2, Copy, KeyRound, Eye, EyeOff } from "lucide-react";
+import { Plus, Pencil, Trash2, Store, Loader2, Copy, KeyRound, Eye, EyeOff, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatCnpj, isValidCnpj, onlyDigits } from "@/lib/br-utils";
 
 const defaultForm = {
   name: "", cnpj: "", address: "", city: "", state: "", network_id: "",
   latitude: "", longitude: "", radius_meters: "200",
-  operating_hours_start: "06:00", operating_hours_end: "22:00",
+  opening_time: "06:00", closing_time: "22:00", totem_enabled: false,
 };
 
 const UnitsTab = () => {
@@ -26,6 +26,8 @@ const UnitsTab = () => {
   const updateMutation = useUpdateUnit();
   const deleteMutation = useDeleteUnit();
   const createUserMutation = useCreateSupermarketUser();
+  const updateUserMutation = useUpdateSupermarketUser();
+  const regenerateTotemTokenMutation = useRegenerateTotemToken();
   const { toast } = useToast();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
@@ -35,6 +37,7 @@ const UnitsTab = () => {
   const [loginUnit, setLoginUnit] = useState<any>(null);
   const [loginForm, setLoginForm] = useState({ name: "", email: "", password: "" });
   const [showPw, setShowPw] = useState(false);
+  const { data: supermarketUser, isLoading: isLoadingSupermarketUser } = useSupermarketUser(loginUnit?.id);
 
   const openNew = () => { setEditing(null); setForm(defaultForm); setDialogOpen(true); };
   const openEdit = (u: any) => {
@@ -49,11 +52,22 @@ const UnitsTab = () => {
       latitude: u.latitude?.toString() || "",
       longitude: u.longitude?.toString() || "",
       radius_meters: u.radius_meters?.toString() || "200",
-      operating_hours_start: u.operating_hours_start || "06:00",
-      operating_hours_end: u.operating_hours_end || "22:00",
+      opening_time: u.opening_time || "06:00",
+      closing_time: u.closing_time || "22:00",
+      totem_enabled: !!u.totem_enabled,
     });
     setDialogOpen(true);
   };
+
+  useEffect(() => {
+    if (!loginDialogOpen || !loginUnit) return;
+    setLoginForm({
+      name: supermarketUser?.name || loginUnit.name || "",
+      email: supermarketUser?.email || "",
+      password: "",
+    });
+    setShowPw(false);
+  }, [supermarketUser, loginDialogOpen, loginUnit]);
 
   const handleSave = async () => {
     if (form.cnpj && !isValidCnpj(form.cnpj)) {
@@ -102,24 +116,41 @@ const UnitsTab = () => {
     setShowPw(true);
   };
 
-  const handleCreateLogin = async () => {
-    if (!loginForm.email || !loginForm.password || !loginForm.name) return;
-    if (loginForm.password.length < 6) {
+  const handleRegenerateTotemToken = async (unit: any) => {
+    try {
+      const data = await regenerateTotemTokenMutation.mutateAsync(unit.id);
+      copyTotemToken(data.totem_token);
+    } catch (error: any) {
+      toast({ title: "Erro ao gerar token", description: error?.message || "Tente novamente.", variant: "destructive" });
+    }
+  };
+
+  const handleSaveLogin = async () => {
+    if (!loginForm.email || !loginForm.name) return;
+    if (!supermarketUser?.id && !loginForm.password) return;
+    if (loginForm.password && loginForm.password.length < 6) {
       toast({ title: "Senha inválida", description: "A senha deve ter no mínimo 6 caracteres.", variant: "destructive" });
       return;
     }
 
     try {
-      await createUserMutation.mutateAsync({
+      const payload = {
         supermarket_unit_id: loginUnit.id,
         network_id: loginUnit.network_id || null,
         name: loginForm.name.trim(),
         email: loginForm.email.trim().toLowerCase(),
-        password: loginForm.password,
-      });
+        ...(loginForm.password ? { password: loginForm.password } : {}),
+      };
+
+      if (supermarketUser?.id) {
+        await updateUserMutation.mutateAsync({ id: supermarketUser.id, ...payload });
+      } else {
+        await createUserMutation.mutateAsync({ ...payload, password: loginForm.password });
+      }
+
       setLoginDialogOpen(false);
     } catch (error: any) {
-      toast({ title: "Erro ao criar acesso", description: error?.message || "Tente novamente.", variant: "destructive" });
+      toast({ title: "Erro ao salvar acesso", description: error?.message || "Tente novamente.", variant: "destructive" });
     }
   };
 
@@ -154,19 +185,27 @@ const UnitsTab = () => {
                     <TableCell className="font-medium">{u.name}</TableCell>
                     <TableCell>{u.network_name || "—"}</TableCell>
                     <TableCell>{u.city ? `${u.city}/${u.state}` : "—"}</TableCell>
-                    <TableCell>{u.operating_hours_start} - {u.operating_hours_end}</TableCell>
+                     <TableCell>{u.opening_time || "06:00"} - {u.closing_time || "22:00"}</TableCell>
                     <TableCell>
-                      {u.totem_token && (
-                        <Button size="sm" variant="outline" onClick={() => copyTotemToken(u.totem_token)} className="gap-1">
-                          <Copy className="h-3 w-3" /> Copiar
-                        </Button>
-                      )}
+                       {u.totem_token ? (
+                         <div className="flex items-center gap-2">
+                           <Badge variant={u.totem_enabled ? "default" : "secondary"}>{u.totem_enabled ? "Ativo" : "Gerado"}</Badge>
+                           <Button size="sm" variant="outline" onClick={() => copyTotemToken(u.totem_token)} className="gap-1">
+                             <Copy className="h-3 w-3" /> Copiar
+                           </Button>
+                         </div>
+                       ) : (
+                         <span className="text-sm text-muted-foreground">Não configurado</span>
+                       )}
                     </TableCell>
                     <TableCell>
-                      <Badge variant={u.is_active !== false ? "default" : "secondary"}>{u.is_active !== false ? "Ativa" : "Inativa"}</Badge>
+                       <Badge variant={u.active !== false ? "default" : "secondary"}>{u.active !== false ? "Ativa" : "Inativa"}</Badge>
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-1">
+                         <Button size="icon" variant="ghost" onClick={() => handleRegenerateTotemToken(u)} title={u.totem_token ? "Regenerar token do totem" : "Gerar token do totem"}>
+                           <RefreshCw className="h-4 w-4 text-primary" />
+                         </Button>
                         <Button size="icon" variant="ghost" onClick={() => openLoginDialog(u)} title="Criar acesso portal">
                           <KeyRound className="h-4 w-4 text-primary" />
                         </Button>
@@ -214,9 +253,23 @@ const UnitsTab = () => {
               <div><Label>Raio (m)</Label><Input value={form.radius_meters} onChange={e => setForm(f => ({ ...f, radius_meters: e.target.value }))} type="number" /></div>
             </div>
             <div className="grid grid-cols-2 gap-2">
-              <div><Label>Abertura</Label><Input value={form.operating_hours_start} onChange={e => setForm(f => ({ ...f, operating_hours_start: e.target.value }))} type="time" /></div>
-              <div><Label>Fechamento</Label><Input value={form.operating_hours_end} onChange={e => setForm(f => ({ ...f, operating_hours_end: e.target.value }))} type="time" /></div>
+              <div><Label>Abertura</Label><Input value={form.opening_time} onChange={e => setForm(f => ({ ...f, opening_time: e.target.value }))} type="time" /></div>
+              <div><Label>Fechamento</Label><Input value={form.closing_time} onChange={e => setForm(f => ({ ...f, closing_time: e.target.value }))} type="time" /></div>
             </div>
+             <div className="rounded-lg border border-border p-3 space-y-3">
+               <div className="flex items-center justify-between gap-3">
+                 <div>
+                   <Label>Totem do PDV</Label>
+                   <p className="text-xs text-muted-foreground">Habilite o terminal para check-in por CPF e gere o token exclusivo da unidade.</p>
+                 </div>
+                 <Button type="button" variant={form.totem_enabled ? "default" : "outline"} onClick={() => setForm(f => ({ ...f, totem_enabled: !f.totem_enabled }))}>
+                   {form.totem_enabled ? "Habilitado" : "Desabilitado"}
+                 </Button>
+               </div>
+               <p className="text-xs text-muted-foreground">
+                 {editing ? "Você também pode regenerar o token pela ação de recarregar na lista." : "Ao salvar com o totem habilitado, o token será gerado automaticamente."}
+               </p>
+             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
@@ -229,18 +282,22 @@ const UnitsTab = () => {
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <KeyRound className="h-5 w-5" /> Criar Acesso — Portal do Supermercado
+              <KeyRound className="h-5 w-5" /> {supermarketUser?.id ? "Editar Acesso" : "Criar Acesso"} — Portal do Supermercado
             </DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
             Crie um login para que o supermercado <strong>{loginUnit?.name}</strong> acesse o portal e acompanhe promotores em tempo real.
           </p>
           <Separator />
+          {isLoadingSupermarketUser ? (
+            <div className="flex justify-center py-6"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+          ) : (
           <div className="space-y-4">
             <div><Label>Nome do responsável *</Label><Input value={loginForm.name} onChange={e => setLoginForm(f => ({ ...f, name: e.target.value }))} placeholder="Gerente da loja" /></div>
             <div><Label>E-mail de acesso *</Label><Input type="email" value={loginForm.email} onChange={e => setLoginForm(f => ({ ...f, email: e.target.value }))} placeholder="gerente@supermercado.com" /></div>
             <div>
               <Label>Senha *</Label>
+               {supermarketUser?.id && <p className="text-xs text-muted-foreground mb-2">A senha atual não é exibida por segurança; preencha apenas se quiser redefinir.</p>}
               <div className="flex gap-2">
                 <div className="relative flex-1">
                   <Input
@@ -261,10 +318,11 @@ const UnitsTab = () => {
               )}
             </div>
           </div>
+          )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setLoginDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={handleCreateLogin} disabled={!loginForm.email || !loginForm.password || !loginForm.name || createUserMutation.isPending}>
-              Criar Acesso
+            <Button onClick={handleSaveLogin} disabled={!loginForm.email || !loginForm.name || isLoadingSupermarketUser || createUserMutation.isPending || updateUserMutation.isPending || (!supermarketUser?.id && !loginForm.password)}>
+              {supermarketUser?.id ? "Salvar Acesso" : "Criar Acesso"}
             </Button>
           </DialogFooter>
         </DialogContent>

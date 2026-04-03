@@ -127,12 +127,50 @@ export function useDeleteAccessRule() {
 }
 
 // ─── Supermarket Users ───
+export function useSupermarketUser(unitId?: string) {
+  return useQuery({
+    queryKey: ["ac-supermarket-user", unitId],
+    queryFn: () => api<any | null>(`${BASE}/units/${unitId}/supermarket-user`),
+    enabled: !!unitId,
+  });
+}
+
 export function useCreateSupermarketUser() {
   const qc = useQueryClient();
   const { toast } = useToast();
   return useMutation({
     mutationFn: (data: any) => api(`${BASE}/supermarket-users`, { method: "POST", body: data }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["ac-units"] }); toast({ title: "Acesso do supermercado criado" }); },
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({ queryKey: ["ac-units"] });
+      qc.invalidateQueries({ queryKey: ["ac-supermarket-user", variables.supermarket_unit_id] });
+      toast({ title: "Acesso do supermercado criado" });
+    },
+  });
+}
+
+export function useUpdateSupermarketUser() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: ({ id, ...data }: any) => api(`${BASE}/supermarket-users/${id}`, { method: "PUT", body: data }),
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({ queryKey: ["ac-units"] });
+      qc.invalidateQueries({ queryKey: ["ac-supermarket-user", variables.supermarket_unit_id] });
+      toast({ title: "Acesso do supermercado atualizado" });
+    },
+  });
+}
+
+export function useRegenerateTotemToken() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: (unitId: string) => api<{ totem_token: string }>(`${BASE}/units/${unitId}/regenerate-token`, { method: "POST" }),
+    onSuccess: (_data, unitId) => {
+      qc.invalidateQueries({ queryKey: ["ac-units"] });
+      qc.invalidateQueries({ queryKey: ["ac-supermarket-user", unitId] });
+      toast({ title: "Token do totem atualizado" });
+    },
   });
 }
 
