@@ -786,11 +786,46 @@ router.post('/totem/lookup', authenticateTotem, async (req, res) => {
 
     const hasOpenEntry = openEntry.rows.length > 0;
 
+    // Fetch today's authorized brands for this promoter at this unit
+    const ruleCondition = p.agency_promoter_id
+      ? 'ar.agency_promoter_id = $1'
+      : 'ar.employee_id = $1';
+    const ruleParam = p.agency_promoter_id || p.employee_id;
+
+    let brands = [];
+    if (ruleParam) {
+      const now = new Date();
+      const currentDay = now.getDay();
+      const currentTime = now.toTimeString().slice(0, 5);
+
+      const rules = await query(
+        `SELECT ar.id, ar.allowed_weekdays, ar.start_time, ar.end_time FROM pdv_access_rules ar
+         WHERE ${ruleCondition} AND ar.supermarket_unit_id = $2 AND ar.active = true AND ar.approval_status = 'approved'`,
+        [ruleParam, req.unitId]
+      );
+
+      for (const r of rules.rows) {
+        const weekdays = Array.isArray(r.allowed_weekdays) ? r.allowed_weekdays : JSON.parse(r.allowed_weekdays || '[]');
+        if (!weekdays.includes(currentDay)) continue;
+        if (currentTime < r.start_time || currentTime > r.end_time) continue;
+        const b = await query(
+          `SELECT b.id, b.name FROM promoter_brand_permissions bp
+           JOIN brands b ON b.id = bp.brand_id WHERE bp.access_rule_id = $1`,
+          [r.id]
+        );
+        brands.push(...b.rows);
+      }
+      // Deduplicate
+      const seen = new Set();
+      brands = brands.filter(b => { if (seen.has(b.id)) return false; seen.add(b.id); return true; });
+    }
+
     res.json({
       found: true,
       has_open_entry: hasOpenEntry,
       open_entry_id: hasOpenEntry ? openEntry.rows[0].id : null,
       entry_at: hasOpenEntry ? openEntry.rows[0].entry_at : null,
+      brands,
       promoter: {
         name: p.name,
         photo_url: p.photo_url,

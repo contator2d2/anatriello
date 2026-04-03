@@ -382,7 +382,20 @@ const TotemAccess = () => {
               </div>
             )}
             <p className="text-white text-2xl font-bold mb-1">{lookupResult.name}</p>
-            {lookupResult.agency_name && <p className="text-white/70 text-lg">Agência: {lookupResult.agency_name}</p>}
+            {lookupResult.agency_name && <p className="text-white/70 text-lg mb-2">Agência: {lookupResult.agency_name}</p>}
+
+            {lookupResult.brands.length > 0 && (
+              <div className="mt-2 mb-2">
+                <p className="text-white/50 text-xs uppercase tracking-wider mb-2">Marcas de hoje</p>
+                <div className="flex flex-wrap gap-2 justify-center">
+                  {lookupResult.brands.map((brand) => (
+                    <Badge key={brand} className="text-white text-sm px-3 py-1" style={{ backgroundColor: `${config.primaryColor}55` }}>
+                      {brand}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {lookupResult.has_open_entry && lookupResult.entry_at && (
               <p className="text-amber-300/80 text-sm mt-2">
