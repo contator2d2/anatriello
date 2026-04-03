@@ -4243,6 +4243,7 @@ const migrationSteps = [
   { name: 'Promotor App (Fase 2)', sql: step43PromotorApp, critical: false },
   { name: 'Merchandising Phase 4 (Routes)', sql: step44MerchPhase4, critical: false },
   { name: 'Access Control (Fase 5)', sql: step45AccessControl, critical: false },
+  { name: 'Agency Billing', sql: step46AgencyBilling, critical: false },
 ];
 
 export async function initDatabase() {
