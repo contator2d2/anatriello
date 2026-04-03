@@ -322,6 +322,9 @@ const AgenciesTab = () => {
                   </TableCell>
                   <TableCell>
                     <div className="flex gap-1">
+                      <Button size="icon" variant="ghost" onClick={() => { setSendAccessAgency(a); setSendAccessOpen(true); }} title="Enviar Acesso">
+                        <Send className="h-4 w-4 text-primary" />
+                      </Button>
                       <Button size="icon" variant="ghost" onClick={() => openContractDialog(a)} title="Gerar Contrato">
                         <FileSignature className="h-4 w-4 text-primary" />
                       </Button>
