@@ -1944,6 +1944,8 @@ async function ensureFaceEnrollColumn() {
   faceEnrollColumnReady = true;
 }
 
+const ACTIVE_EMPLOYEE_STATUS_SQL = `COALESCE(e.status::text, '') IN ('ativo', 'active')`;
+
 // List employees with facial enrollment status
 router.get('/facial-recognition/employees', async (req, res) => {
   try {
@@ -1957,7 +1959,7 @@ router.get('/facial-recognition/employees', async (req, res) => {
                       e.face_descriptor IS NOT NULL as face_enrolled,
                       e.face_photo_url, e.face_enrolled_at
                FROM employees e
-               WHERE e.organization_id = $1 AND e.status = 'active'`;
+               WHERE e.organization_id = $1 AND ${ACTIVE_EMPLOYEE_STATUS_SQL}`;
 
     if (filter === 'enrolled') sql += ` AND e.face_descriptor IS NOT NULL`;
     else if (filter === 'pending') sql += ` AND e.face_descriptor IS NULL`;
