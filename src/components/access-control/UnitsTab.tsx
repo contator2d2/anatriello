@@ -227,6 +227,24 @@ const UnitsTab = () => {
                     <TableCell>{u.city ? `${u.city}/${u.state}` : "—"}</TableCell>
                      <TableCell>{u.opening_time || "06:00"} - {u.closing_time || "22:00"}</TableCell>
                     <TableCell>
+                      {(() => {
+                        const ov = (overrides as Record<string, any>)?.[u.id];
+                        if (ov && ov.id) {
+                          const level = ov.security_level || "custom";
+                          const labelMap: Record<string, string> = { basic: "Básico", intermediate: "Intermediário", high: "Alto", maximum: "Máximo" };
+                          return (
+                            <Badge variant="outline" className="gap-1 border-amber-500 text-amber-700 bg-amber-50 dark:bg-amber-950 dark:text-amber-400">
+                              <Shield className="h-3 w-3" /> Override: {labelMap[level] || level}
+                            </Badge>
+                          );
+                        }
+                        return (
+                          <Badge variant="outline" className="gap-1 text-muted-foreground">
+                            Herda da Rede
+                          </Badge>
+                        );
+                      })()}
+                    </TableCell>
                        {u.totem_token ? (
                          <div className="flex items-center gap-2">
                            <Badge variant={u.totem_enabled ? "default" : "secondary"}>{u.totem_enabled ? "Ativo" : "Gerado"}</Badge>
