@@ -9,7 +9,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { Plus, Pencil, Trash2, Store, Loader2, Copy, KeyRound, Eye, EyeOff, RefreshCw, Send } from "lucide-react";
+import { Plus, Pencil, Trash2, Store, Loader2, Copy, KeyRound, Eye, EyeOff, RefreshCw, Send, Shield } from "lucide-react";
+import { PdvAuthOverrideDialog } from "./PdvAuthOverrideDialog";
 import SendAccessDialog from "./SendAccessDialog";
 import { useToast } from "@/hooks/use-toast";
 import { formatCnpj, isValidCnpj, onlyDigits } from "@/lib/br-utils";
@@ -43,6 +44,7 @@ const UnitsTab = () => {
 
   const [sendAccessOpen, setSendAccessOpen] = useState(false);
   const [sendAccessUnit, setSendAccessUnit] = useState<any>(null);
+  const [authOverrideUnit, setAuthOverrideUnit] = useState<any>(null);
 
   const openNew = () => { setEditing(null); setForm(defaultForm); setDialogOpen(true); };
   const openEdit = (u: any) => {
@@ -240,9 +242,12 @@ const UnitsTab = () => {
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-1">
-                         <Button size="icon" variant="ghost" onClick={() => { setSendAccessUnit(u); setSendAccessOpen(true); }} title="Enviar Acesso">
-                           <Send className="h-4 w-4 text-primary" />
-                         </Button>
+                          <Button size="icon" variant="ghost" onClick={() => { setSendAccessUnit(u); setSendAccessOpen(true); }} title="Enviar Acesso">
+                            <Send className="h-4 w-4 text-primary" />
+                          </Button>
+                          <Button size="icon" variant="ghost" onClick={() => setAuthOverrideUnit(u)} title="Override de autenticação">
+                            <Shield className="h-4 w-4 text-primary" />
+                          </Button>
                          <Button size="icon" variant="ghost" onClick={() => handleRegenerateTotemToken(u)} title={u.totem_token ? "Regenerar token do totem" : "Gerar token do totem"}>
                            <RefreshCw className="h-4 w-4 text-primary" />
                          </Button>
@@ -377,6 +382,17 @@ const UnitsTab = () => {
         contactEmail={supermarketUser?.email || ""}
         contactPhone=""
       />
+
+      {authOverrideUnit && (
+        <PdvAuthOverrideDialog
+          open={!!authOverrideUnit}
+          onOpenChange={(v) => { if (!v) setAuthOverrideUnit(null); }}
+          unitId={authOverrideUnit.id}
+          unitName={authOverrideUnit.name}
+          networkId={authOverrideUnit.network_id}
+          networkName={authOverrideUnit.network_name}
+        />
+      )}
     </Card>
   );
 };
