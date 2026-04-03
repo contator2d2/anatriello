@@ -509,6 +509,16 @@ const AgenciesTab = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <SendAccessDialog
+        open={sendAccessOpen}
+        onOpenChange={setSendAccessOpen}
+        portalType="agency"
+        entityName={sendAccessAgency?.name || ""}
+        loginEmail={sendAccessAgency?.contact_email || sendAccessAgency?.responsible_email || ""}
+        contactEmail={sendAccessAgency?.contact_email || sendAccessAgency?.responsible_email || ""}
+        contactPhone={sendAccessAgency?.contact_phone || sendAccessAgency?.responsible_phone || ""}
+      />
     </Card>
   );
 };
