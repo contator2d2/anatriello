@@ -1808,8 +1808,52 @@ router.get('/pdvs', async (req, res) => {
 });
 
 // ─── Facial Recognition Config ───
+let facialRecognitionInfraReady = false;
+
+async function ensureFacialRecognitionInfra() {
+  if (facialRecognitionInfraReady) return;
+  await query(`CREATE EXTENSION IF NOT EXISTS pgcrypto`);
+  await query(`
+    CREATE TABLE IF NOT EXISTS facial_recognition_config (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+      enabled BOOLEAN DEFAULT false,
+      use_for_attendance BOOLEAN DEFAULT false,
+      use_for_checkin BOOLEAN DEFAULT false,
+      min_confidence NUMERIC(5,2) DEFAULT 70.00,
+      require_photo_registration BOOLEAN DEFAULT true,
+      auto_verify_on_clock_in BOOLEAN DEFAULT false,
+      allow_manual_fallback BOOLEAN DEFAULT true,
+      photo_quality_check BOOLEAN DEFAULT true,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(organization_id)
+    )
+  `);
+  await query(`
+    CREATE TABLE IF NOT EXISTS face_verification_logs (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+      employee_id UUID REFERENCES employees(id) ON DELETE SET NULL,
+      agency_promoter_id UUID REFERENCES agency_promoters(id) ON DELETE SET NULL,
+      verification_context VARCHAR(30) NOT NULL,
+      confidence_score NUMERIC(5,2),
+      result VARCHAR(20) NOT NULL,
+      captured_image_url TEXT,
+      device_info TEXT,
+      ip_address VARCHAR(45),
+      processing_time_ms INTEGER,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_face_verify_org ON face_verification_logs(organization_id, created_at)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_face_verify_employee ON face_verification_logs(employee_id, created_at)`);
+  facialRecognitionInfraReady = true;
+}
+
 router.get('/facial-recognition/config', async (req, res) => {
   try {
+    await ensureFacialRecognitionInfra();
     const orgId = req.query.org_id || await getUserOrgId(req.userId);
     if (!orgId) return res.json({ enabled: false });
     const result = await query(
@@ -1818,25 +1862,45 @@ router.get('/facial-recognition/config', async (req, res) => {
     );
     if (result.rows.length === 0) {
       return res.json({
-        enabled: false, use_for_attendance: false, use_for_checkin: false,
-        min_confidence: 70, require_photo_registration: true,
-        auto_verify_on_clock_in: false, allow_manual_fallback: true, photo_quality_check: true,
+        enabled: false,
+        use_for_attendance: false,
+        use_for_checkin: false,
+        min_confidence: 70,
+        require_photo_registration: true,
+        auto_verify_on_clock_in: false,
+        allow_manual_fallback: true,
+        photo_quality_check: true,
       });
     }
     res.json(result.rows[0]);
   } catch (err) {
     logError('rh.facial-config.get', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: err.message || 'Erro ao carregar configuração da biometria facial' });
   }
 });
 
 router.put('/facial-recognition/config', async (req, res) => {
   try {
+    await ensureFacialRecognitionInfra();
     const orgId = req.body.organization_id || await getUserOrgId(req.userId);
     if (!orgId) return res.status(400).json({ error: 'Organização não encontrada' });
-    const d = req.body;
+
+    const d = {
+      enabled: !!req.body.enabled,
+      use_for_attendance: !!req.body.use_for_attendance,
+      use_for_checkin: !!req.body.use_for_checkin,
+      min_confidence: Number(req.body.min_confidence) || 70,
+      require_photo_registration: req.body.require_photo_registration !== false,
+      auto_verify_on_clock_in: !!req.body.auto_verify_on_clock_in,
+      allow_manual_fallback: req.body.allow_manual_fallback !== false,
+      photo_quality_check: req.body.photo_quality_check !== false,
+    };
+
     const result = await query(
-      `INSERT INTO facial_recognition_config (organization_id, enabled, use_for_attendance, use_for_checkin, min_confidence, require_photo_registration, auto_verify_on_clock_in, allow_manual_fallback, photo_quality_check)
+      `INSERT INTO facial_recognition_config (
+         organization_id, enabled, use_for_attendance, use_for_checkin, min_confidence,
+         require_photo_registration, auto_verify_on_clock_in, allow_manual_fallback, photo_quality_check
+       )
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
        ON CONFLICT (organization_id) DO UPDATE SET
          enabled = EXCLUDED.enabled,
@@ -1849,12 +1913,22 @@ router.put('/facial-recognition/config', async (req, res) => {
          photo_quality_check = EXCLUDED.photo_quality_check,
          updated_at = NOW()
        RETURNING *`,
-      [orgId, d.enabled, d.use_for_attendance, d.use_for_checkin, d.min_confidence, d.require_photo_registration, d.auto_verify_on_clock_in, d.allow_manual_fallback, d.photo_quality_check]
+      [
+        orgId,
+        d.enabled,
+        d.use_for_attendance,
+        d.use_for_checkin,
+        d.min_confidence,
+        d.require_photo_registration,
+        d.auto_verify_on_clock_in,
+        d.allow_manual_fallback,
+        d.photo_quality_check,
+      ]
     );
     res.json(result.rows[0]);
   } catch (err) {
     logError('rh.facial-config.put', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: err.message || 'Erro ao salvar configuração da biometria facial' });
   }
 });
 
