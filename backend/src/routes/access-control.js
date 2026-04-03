@@ -1,5 +1,6 @@
 import express from 'express';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { query } from '../db.js';
 import { authenticate } from '../middleware/auth.js';
@@ -174,7 +175,7 @@ router.post('/units', authenticate, async (req, res) => {
             radius_meters, opening_time, closing_time, operating_days, operational_requirements, totem_enabled } = req.body;
     if (!name) return res.status(400).json({ error: 'Nome é obrigatório' });
     if (cnpj && !isValidCnpj(cnpj)) return res.status(400).json({ error: 'CNPJ inválido' });
-    const totemToken = totem_enabled ? require('crypto').randomBytes(32).toString('hex') : null;
+    const totemToken = totem_enabled ? crypto.randomBytes(32).toString('hex') : null;
     const r = await query(
       `INSERT INTO supermarket_units (organization_id, name, cnpj, network_id, pdv_id, address, city, state, zip_code,
        neighborhood, latitude, longitude, radius_meters, opening_time, closing_time, operating_days,
@@ -196,8 +197,8 @@ router.put('/units/:id', authenticate, async (req, res) => {
     if (cnpj && !isValidCnpj(cnpj)) return res.status(400).json({ error: 'CNPJ inválido' });
     let totemToken = undefined;
     if (totem_enabled) {
-      const existing = await query('SELECT totem_token FROM supermarket_units WHERE id=$1', [req.params.id]);
-      if (!existing.rows[0]?.totem_token) totemToken = require('crypto').randomBytes(32).toString('hex');
+        const existing = await query('SELECT totem_token FROM supermarket_units WHERE id=$1', [req.params.id]);
+       if (!existing.rows[0]?.totem_token) totemToken = crypto.randomBytes(32).toString('hex');
     }
     const r = await query(
       `UPDATE supermarket_units SET name=COALESCE($1,name), cnpj=$2, network_id=$3, pdv_id=$4, address=$5,
@@ -229,14 +230,31 @@ router.delete('/units/:id', authenticate, async (req, res) => {
 router.post('/units/:id/regenerate-token', authenticate, async (req, res) => {
   try {
     const orgId = await getOrgId(req.userId);
-    const newToken = require('crypto').randomBytes(32).toString('hex');
+    const newToken = crypto.randomBytes(32).toString('hex');
     const r = await query(
-      'UPDATE supermarket_units SET totem_token=$1, updated_at=NOW() WHERE id=$2 AND organization_id=$3 RETURNING totem_token',
+      'UPDATE supermarket_units SET totem_token=$1, totem_enabled=true, updated_at=NOW() WHERE id=$2 AND organization_id=$3 RETURNING totem_token',
       [newToken, req.params.id, orgId]
     );
     if (!r.rows.length) return res.status(404).json({ error: 'Unidade não encontrada' });
     res.json({ totem_token: r.rows[0].totem_token });
   } catch (err) { logError('access.units.regen_token', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.get('/units/:id/supermarket-user', authenticate, async (req, res) => {
+  try {
+    const orgId = await getOrgId(req.userId);
+    const r = await query(
+      `SELECT su_user.id, su_user.email, su_user.name, su_user.role, su_user.can_view_all_network,
+              su_user.active, su_user.supermarket_unit_id, su_user.network_id, su_user.created_at
+       FROM supermarket_users su_user
+       JOIN supermarket_units su ON su.id = su_user.supermarket_unit_id
+       WHERE su_user.supermarket_unit_id = $1 AND su.organization_id = $2
+       ORDER BY su_user.created_at DESC
+       LIMIT 1`,
+      [req.params.id, orgId]
+    );
+    res.json(r.rows[0] || null);
+  } catch (err) { logError('access.supermarket_user.get', err); res.status(500).json({ error: 'Erro ao carregar acesso do supermercado' }); }
 });
 
 // --- Agencies CRUD ---
@@ -874,19 +892,80 @@ router.get('/supermarket/me', authenticateSupermarket, async (req, res) => {
 // Supermarket: create user (admin)
 router.post('/supermarket-users', authenticate, async (req, res) => {
   try {
+    const orgId = await getOrgId(req.userId);
     const { supermarket_unit_id, network_id, email, password, name, role, can_view_all_network } = req.body;
     if (!email || !password || !name || !supermarket_unit_id) return res.status(400).json({ error: 'Dados obrigatórios faltando' });
     if (String(password).length < 6) return res.status(400).json({ error: 'Senha deve ter no mínimo 6 caracteres' });
+    const unit = await query(
+      'SELECT id, network_id FROM supermarket_units WHERE id=$1 AND organization_id=$2',
+      [supermarket_unit_id, orgId]
+    );
+    if (!unit.rows.length) return res.status(404).json({ error: 'Unidade não encontrada' });
     const hash = await bcrypt.hash(password, 10);
     const r = await query(
       `INSERT INTO supermarket_users (supermarket_unit_id, network_id, email, password_hash, name, role, can_view_all_network)
        VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id, email, name, role`,
-      [supermarket_unit_id, network_id||null, String(email).trim().toLowerCase(), hash, String(name).trim(), role||'manager', can_view_all_network||false]
+      [supermarket_unit_id, network_id ?? unit.rows[0].network_id ?? null, String(email).trim().toLowerCase(), hash, String(name).trim(), role||'manager', can_view_all_network||false]
     );
     res.json(r.rows[0]);
   } catch (err) {
     if (err.code === '23505') return res.status(400).json({ error: 'Email já cadastrado' });
     logError('supermarket.users.create', err); res.status(500).json({ error: 'Erro' });
+  }
+});
+
+router.put('/supermarket-users/:id', authenticate, async (req, res) => {
+  try {
+    const orgId = await getOrgId(req.userId);
+    const { supermarket_unit_id, network_id, email, password, name, role, can_view_all_network, active } = req.body;
+    if (!email || !name || !supermarket_unit_id) return res.status(400).json({ error: 'Nome, email e unidade são obrigatórios' });
+    if (password && String(password).length < 6) return res.status(400).json({ error: 'Senha deve ter no mínimo 6 caracteres' });
+
+    const existing = await query(
+      `SELECT su_user.id
+       FROM supermarket_users su_user
+       JOIN supermarket_units su ON su.id = su_user.supermarket_unit_id
+       WHERE su_user.id = $1 AND su.organization_id = $2`,
+      [req.params.id, orgId]
+    );
+    if (!existing.rows.length) return res.status(404).json({ error: 'Acesso não encontrado' });
+
+    const unit = await query(
+      'SELECT id, network_id FROM supermarket_units WHERE id=$1 AND organization_id=$2',
+      [supermarket_unit_id, orgId]
+    );
+    if (!unit.rows.length) return res.status(404).json({ error: 'Unidade não encontrada' });
+
+    const passwordHash = password ? await bcrypt.hash(password, 10) : null;
+    const r = await query(
+      `UPDATE supermarket_users
+       SET supermarket_unit_id = $1,
+           network_id = $2,
+           email = $3,
+           password_hash = COALESCE($4, password_hash),
+           name = $5,
+           role = $6,
+           can_view_all_network = $7,
+           active = COALESCE($8, active),
+           updated_at = NOW()
+       WHERE id = $9
+       RETURNING id, email, name, role, can_view_all_network, active, supermarket_unit_id, network_id`,
+      [
+        supermarket_unit_id,
+        network_id ?? unit.rows[0].network_id ?? null,
+        String(email).trim().toLowerCase(),
+        passwordHash,
+        String(name).trim(),
+        role || 'manager',
+        can_view_all_network || false,
+        active,
+        req.params.id,
+      ]
+    );
+    res.json(r.rows[0]);
+  } catch (err) {
+    if (err.code === '23505') return res.status(400).json({ error: 'Email já cadastrado' });
+    logError('supermarket.users.update', err); res.status(500).json({ error: 'Erro ao atualizar acesso do supermercado' });
   }
 });
 
