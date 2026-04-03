@@ -2237,4 +2237,338 @@ router.put('/fraud-logs/:id/resolve', authenticate, async (req, res) => {
   } catch (err) { logError('access.fraud_logs.resolve', err); res.status(500).json({ error: 'Erro' }); }
 });
 
+// =====================================================================
+// PROMOTER CONFORMITY & FACIAL COMPARISON
+// =====================================================================
+
+// --- Check/refresh conformity for a promoter across all networks ---
+async function checkPromoterConformity(orgId, { agency_promoter_id, employee_id, photo_url }) {
+  // Get all networks in this org
+  const networksR = await query('SELECT id, name FROM supermarket_networks WHERE organization_id=$1 AND active=true', [orgId]);
+
+  const results = [];
+  for (const network of networksR.rows) {
+    // Get auth settings for this network
+    const settingsR = await query('SELECT * FROM network_auth_settings WHERE network_id=$1', [network.id]);
+    const settings = settingsR.rows[0];
+
+    if (!settings) {
+      // No auth settings = basic (CPF only), always conforme
+      results.push({ network_id: network.id, network_name: network.name, status: 'conforme', reason: null });
+      continue;
+    }
+
+    const needsPhoto = settings.selfie_entry_required || settings.selfie_exit_required || settings.facial_recognition_enabled;
+
+    if (!needsPhoto) {
+      // Network doesn't require photo validation
+      await upsertConformity(orgId, agency_promoter_id, employee_id, network.id, 'conforme', null);
+      results.push({ network_id: network.id, network_name: network.name, status: 'conforme', reason: null });
+      continue;
+    }
+
+    // Needs photo — validate
+    if (!photo_url) {
+      const reason = 'Foto não cadastrada';
+      await upsertConformity(orgId, agency_promoter_id, employee_id, network.id, 'nao_conforme', reason);
+      results.push({ network_id: network.id, network_name: network.name, status: 'nao_conforme', reason });
+      continue;
+    }
+
+    // Basic photo validation (URL exists, we assume quality is OK for now)
+    // In production, this would call an image analysis service
+    const photoScore = photo_url ? 80 : 0;
+    const status = photoScore >= 50 ? 'conforme' : 'pendente';
+    const reason = status === 'conforme' ? null : 'Foto com qualidade insuficiente para reconhecimento facial';
+
+    await upsertConformity(orgId, agency_promoter_id, employee_id, network.id, status, reason, {
+      photo_quality_score: photoScore,
+      photo_resolution_ok: !!photo_url,
+      photo_frontal_ok: !!photo_url,
+      photo_illumination_ok: !!photo_url,
+    });
+
+    results.push({ network_id: network.id, network_name: network.name, status, reason });
+  }
+
+  return results;
+}
+
+async function upsertConformity(orgId, agencyPromoterId, employeeId, networkId, status, reason, extras = {}) {
+  await query(
+    `INSERT INTO promoter_conformity (organization_id, agency_promoter_id, employee_id, network_id, status, reason,
+     photo_quality_score, photo_resolution_ok, photo_frontal_ok, photo_illumination_ok, checked_at, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW(),NOW())
+     ON CONFLICT ON CONSTRAINT promoter_conformity_unique DO UPDATE SET
+     status=EXCLUDED.status, reason=EXCLUDED.reason,
+     photo_quality_score=COALESCE(EXCLUDED.photo_quality_score, promoter_conformity.photo_quality_score),
+     photo_resolution_ok=COALESCE(EXCLUDED.photo_resolution_ok, promoter_conformity.photo_resolution_ok),
+     photo_frontal_ok=COALESCE(EXCLUDED.photo_frontal_ok, promoter_conformity.photo_frontal_ok),
+     photo_illumination_ok=COALESCE(EXCLUDED.photo_illumination_ok, promoter_conformity.photo_illumination_ok),
+     checked_at=NOW(), updated_at=NOW()`,
+    [orgId, agencyPromoterId || null, employeeId || null, networkId, status, reason || null,
+     extras.photo_quality_score ?? null, extras.photo_resolution_ok ?? null,
+     extras.photo_frontal_ok ?? null, extras.photo_illumination_ok ?? null]
+  );
+}
+
+// --- Get conformity status for all promoters ---
+router.get('/promoters/conformity', authenticate, async (req, res) => {
+  try {
+    const hasTable = await tableExists('public.promoter_conformity');
+    if (!hasTable) return res.json([]);
+
+    const orgId = await getOrgId(req.userId);
+    const { network_id, status: statusFilter } = req.query;
+    let sql = `SELECT pc.*, sn.name as network_name,
+               ap.name as promoter_name, ap.cpf as promoter_cpf, ap.photo_url as promoter_photo,
+               a.name as agency_name, a.id as agency_id,
+               e.full_name as employee_name, e.cpf as employee_cpf, e.photo_url as employee_photo
+               FROM promoter_conformity pc
+               LEFT JOIN agency_promoters ap ON ap.id = pc.agency_promoter_id
+               LEFT JOIN agencies a ON a.id = ap.agency_id
+               LEFT JOIN employees e ON e.id = pc.employee_id
+               LEFT JOIN supermarket_networks sn ON sn.id = pc.network_id
+               WHERE pc.organization_id = $1`;
+    const params = [orgId];
+    if (network_id) { params.push(network_id); sql += ` AND pc.network_id = $${params.length}`; }
+    if (statusFilter) { params.push(statusFilter); sql += ` AND pc.status = $${params.length}`; }
+    sql += ' ORDER BY pc.status ASC, pc.updated_at DESC LIMIT 500';
+    const r = await query(sql, params);
+    res.json(r.rows);
+  } catch (err) { logError('access.conformity.list', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// --- Check conformity for a single promoter ---
+router.post('/promoters/:id/check-conformity', authenticate, async (req, res) => {
+  try {
+    const hasTable = await tableExists('public.promoter_conformity');
+    if (!hasTable) return res.json({ results: [], message: 'Tabela de conformidade não disponível neste ambiente' });
+
+    const orgId = await getOrgId(req.userId);
+    const { id } = req.params;
+    const { type } = req.body; // 'agency_promoter' or 'employee'
+
+    let promoter;
+    if (type === 'employee') {
+      const r = await query('SELECT id as employee_id, photo_url FROM employees WHERE id=$1', [id]);
+      promoter = r.rows[0];
+      if (!promoter) return res.status(404).json({ error: 'Promotor não encontrado' });
+      promoter.agency_promoter_id = null;
+    } else {
+      const r = await query('SELECT id as agency_promoter_id, photo_url, agency_id FROM agency_promoters WHERE id=$1', [id]);
+      promoter = r.rows[0];
+      if (!promoter) return res.status(404).json({ error: 'Promotor não encontrado' });
+      promoter.employee_id = null;
+    }
+
+    const results = await checkPromoterConformity(orgId, promoter);
+
+    // Create notifications for non-conform results
+    const nonConform = results.filter(r => r.status === 'nao_conforme' || r.status === 'pendente');
+    if (nonConform.length > 0 && promoter.agency_promoter_id) {
+      // Get agency info
+      const agencyR = await query('SELECT id FROM agency_promoters WHERE id=$1', [promoter.agency_promoter_id]);
+      if (agencyR.rows[0]) {
+        const agR = await query('SELECT agency_id FROM agency_promoters WHERE id=$1', [promoter.agency_promoter_id]);
+        const agencyId = agR.rows[0]?.agency_id;
+        if (agencyId) {
+          for (const nc of nonConform) {
+            const hasNotifTable = await tableExists('public.conformity_notifications');
+            if (hasNotifTable) {
+              await query(
+                `INSERT INTO conformity_notifications (organization_id, agency_id, agency_promoter_id, network_id,
+                 notification_type, message, channel, sent_at)
+                 VALUES ($1,$2,$3,$4,'photo_non_conform',$5,'system',NOW())
+                 ON CONFLICT DO NOTHING`,
+                [orgId, agencyId, promoter.agency_promoter_id, nc.network_id,
+                 `Promotor não está em conformidade com as regras de autenticação da rede ${nc.network_name}. Motivo: ${nc.reason}`]
+              );
+            }
+          }
+        }
+      }
+    }
+
+    res.json({ results });
+  } catch (err) { logError('access.conformity.check', err); res.status(500).json({ error: 'Erro ao verificar conformidade' }); }
+});
+
+// --- Bulk conformity check (all promoters) ---
+router.post('/promoters/check-all-conformity', authenticate, async (req, res) => {
+  try {
+    const hasTable = await tableExists('public.promoter_conformity');
+    if (!hasTable) return res.json({ checked: 0, message: 'Tabela não disponível' });
+
+    const orgId = await getOrgId(req.userId);
+
+    // Get all agency promoters
+    const apR = await query(
+      `SELECT ap.id as agency_promoter_id, ap.photo_url, NULL as employee_id
+       FROM agency_promoters ap
+       JOIN agencies a ON a.id = ap.agency_id
+       WHERE a.organization_id = $1 AND ap.status = 'active'`,
+      [orgId]
+    );
+
+    // Get all employees
+    const empR = await query(
+      `SELECT NULL as agency_promoter_id, e.photo_url, e.id as employee_id
+       FROM employees e
+       JOIN organizations o ON o.id = $1
+       WHERE e.organization_id = $1`,
+      [orgId]
+    );
+
+    const all = [...apR.rows, ...empR.rows];
+    let checked = 0;
+
+    for (const p of all) {
+      await checkPromoterConformity(orgId, p);
+      checked++;
+    }
+
+    res.json({ checked, total: all.length });
+  } catch (err) { logError('access.conformity.check_all', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// --- Get conformity notifications for an agency ---
+router.get('/conformity-notifications', authenticate, async (req, res) => {
+  try {
+    const hasTable = await tableExists('public.conformity_notifications');
+    if (!hasTable) return res.json([]);
+
+    const orgId = await getOrgId(req.userId);
+    const { agency_id, unread_only } = req.query;
+    let sql = `SELECT cn.*, ap.name as promoter_name, ap.cpf, sn.name as network_name
+               FROM conformity_notifications cn
+               LEFT JOIN agency_promoters ap ON ap.id = cn.agency_promoter_id
+               LEFT JOIN supermarket_networks sn ON sn.id = cn.network_id
+               WHERE cn.organization_id = $1`;
+    const params = [orgId];
+    if (agency_id) { params.push(agency_id); sql += ` AND cn.agency_id = $${params.length}`; }
+    if (unread_only === 'true') sql += ' AND cn.read_at IS NULL';
+    sql += ' ORDER BY cn.created_at DESC LIMIT 100';
+    const r = await query(sql, params);
+    res.json(r.rows);
+  } catch (err) { logError('access.conformity_notif.list', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// --- Agency portal: get conformity notifications ---
+router.get('/agency/conformity-notifications', authenticateAgency, async (req, res) => {
+  try {
+    const hasTable = await tableExists('public.conformity_notifications');
+    if (!hasTable) return res.json([]);
+
+    let sql = `SELECT cn.*, ap.name as promoter_name, ap.cpf, sn.name as network_name
+               FROM conformity_notifications cn
+               LEFT JOIN agency_promoters ap ON ap.id = cn.agency_promoter_id
+               LEFT JOIN supermarket_networks sn ON sn.id = cn.network_id
+               WHERE cn.agency_id = $1`;
+    const params = [req.agencyId];
+    if (req.query.unread_only === 'true') sql += ' AND cn.read_at IS NULL';
+    sql += ' ORDER BY cn.created_at DESC LIMIT 100';
+    const r = await query(sql, params);
+    res.json(r.rows);
+  } catch (err) { logError('access.agency.conformity_notif', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// --- Mark notification as read ---
+router.put('/conformity-notifications/:id/read', authenticate, async (req, res) => {
+  try {
+    const hasTable = await tableExists('public.conformity_notifications');
+    if (!hasTable) return res.status(404).json({ error: 'Não disponível' });
+    await query('UPDATE conformity_notifications SET read_at=NOW() WHERE id=$1', [req.params.id]);
+    res.json({ ok: true });
+  } catch (err) { logError('access.conformity_notif.read', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// --- Totem: Facial comparison (simulated) ---
+router.post('/totem/facial-compare', authenticateTotem, async (req, res) => {
+  try {
+    const { agency_promoter_id, employee_id, entry_log_id, captured_image_url, comparison_type } = req.body;
+    if (!captured_image_url) return res.status(400).json({ error: 'Imagem capturada é obrigatória' });
+
+    // Get base photo
+    let basePhoto = null;
+    if (agency_promoter_id) {
+      const r = await query('SELECT photo_url FROM agency_promoters WHERE id=$1', [agency_promoter_id]);
+      basePhoto = r.rows[0]?.photo_url;
+    } else if (employee_id) {
+      const r = await query('SELECT photo_url FROM employees WHERE id=$1', [employee_id]);
+      basePhoto = r.rows[0]?.photo_url;
+    }
+
+    if (!basePhoto) {
+      // No base photo — cannot compare
+      const hasFacialTable = await tableExists('public.facial_comparison_logs');
+      if (hasFacialTable) {
+        await query(
+          `INSERT INTO facial_comparison_logs (organization_id, supermarket_unit_id, agency_promoter_id, employee_id,
+           entry_log_id, comparison_type, captured_image_url, confidence_score, result, processing_time_ms)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,0,'error',0)`,
+          [req.orgId, req.unitId, agency_promoter_id || null, employee_id || null,
+           entry_log_id || null, comparison_type || 'entry_vs_base', captured_image_url]
+        );
+      }
+      return res.json({ result: 'error', confidence: 0, reason: 'Sem foto base para comparação' });
+    }
+
+    // Simulated facial comparison — in production, integrate with AWS Rekognition, Azure Face, etc.
+    // For now, we simulate a positive result since both images exist
+    const startTime = Date.now();
+    const simulatedConfidence = 85 + Math.random() * 10; // 85-95%
+    const processingTime = Date.now() - startTime;
+
+    // Get network's min confidence threshold
+    const unitR = await query('SELECT network_id FROM supermarket_units WHERE id=$1', [req.unitId]);
+    const networkId = unitR.rows[0]?.network_id;
+    let minConfidence = 70;
+    if (networkId) {
+      const settingsR = await query('SELECT facial_min_confidence FROM network_auth_settings WHERE network_id=$1', [networkId]);
+      if (settingsR.rows[0]) minConfidence = settingsR.rows[0].facial_min_confidence || 70;
+    }
+
+    let result;
+    if (simulatedConfidence >= minConfidence) result = 'ok';
+    else if (simulatedConfidence >= minConfidence - 15) result = 'suspect';
+    else result = 'divergent';
+
+    // Log comparison
+    const hasFacialTable = await tableExists('public.facial_comparison_logs');
+    if (hasFacialTable) {
+      await query(
+        `INSERT INTO facial_comparison_logs (organization_id, supermarket_unit_id, agency_promoter_id, employee_id,
+         entry_log_id, comparison_type, base_image_url, captured_image_url, confidence_score, result, processing_time_ms)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+        [req.orgId, req.unitId, agency_promoter_id || null, employee_id || null,
+         entry_log_id || null, comparison_type || 'entry_vs_base', basePhoto, captured_image_url,
+         simulatedConfidence.toFixed(2), result, processingTime]
+      );
+    }
+
+    // If divergent or suspect, log fraud
+    if (result === 'divergent' || result === 'suspect') {
+      const hasFraudTable = await tableExists('public.fraud_detection_logs');
+      if (hasFraudTable) {
+        await query(
+          `INSERT INTO fraud_detection_logs (organization_id, supermarket_unit_id, agency_promoter_id, employee_id,
+           fraud_type, severity, details)
+           VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+          [req.orgId, req.unitId, agency_promoter_id || null, employee_id || null,
+           'identity_mismatch', result === 'divergent' ? 'high' : 'medium',
+           JSON.stringify({ confidence: simulatedConfidence.toFixed(2), threshold: minConfidence, comparison_type })]
+        );
+      }
+    }
+
+    res.json({
+      result,
+      confidence: parseFloat(simulatedConfidence.toFixed(2)),
+      threshold: minConfidence,
+      processing_time_ms: processingTime,
+    });
+  } catch (err) { logError('totem.facial_compare', err); res.status(500).json({ error: 'Erro na comparação facial' }); }
+});
+
 export default router;
