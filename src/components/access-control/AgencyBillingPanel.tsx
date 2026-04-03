@@ -256,22 +256,52 @@ export function AgencyBillingPanel() {
       {/* Dialog gerar fatura */}
       <Dialog open={invoiceDialog} onOpenChange={setInvoiceDialog}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Gerar Fatura</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Gerar Faturas</DialogTitle></DialogHeader>
           <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">Selecione a agência para gerar a fatura do mês atual com base no número de promotores ativos.</p>
+            <p className="text-sm text-muted-foreground">Selecione a agência e quantos meses deseja gerar faturas antecipadamente com base nos promotores contratados.</p>
             <Select value={selectedAgency} onValueChange={setSelectedAgency}>
               <SelectTrigger><SelectValue placeholder="Selecione a agência..." /></SelectTrigger>
               <SelectContent>
                 {subscriptions.map((s: any) => (
-                  <SelectItem key={s.agency_id} value={s.agency_id}>{s.agency_name} ({s.promoter_count} promotores)</SelectItem>
+                  <SelectItem key={s.agency_id} value={s.agency_id}>
+                    {s.agency_name} ({s.promoter_count} promotores — R$ {Number(s.amount_due || 0).toFixed(2)}/mês)
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Meses a gerar</label>
+              <Select value={monthsAhead} onValueChange={setMonthsAhead}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => (
+                    <SelectItem key={m} value={m.toString()}>{m} {m === 1 ? 'mês' : 'meses'}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {selectedAgency && (() => {
+              const sub = subscriptions.find((s: any) => s.agency_id === selectedAgency);
+              if (!sub) return null;
+              const months = parseInt(monthsAhead) || 1;
+              const totalPreview = Number(sub.amount_due || 0) * months;
+              return (
+                <div className="bg-muted/50 rounded-lg p-3 space-y-1 text-sm">
+                  <div className="flex justify-between"><span className="text-muted-foreground">Plano:</span><span>{sub.plan_name || 'Sem plano'}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Promotores contratados:</span><span>{sub.promoter_count}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Valor/mês:</span><span>R$ {Number(sub.amount_due || 0).toFixed(2)}</span></div>
+                  <div className="flex justify-between font-bold"><span>Total ({months} {months === 1 ? 'mês' : 'meses'}):</span><span className="text-primary">R$ {totalPreview.toFixed(2)}</span></div>
+                </div>
+              );
+            })()}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setInvoiceDialog(false)}>Cancelar</Button>
-            <Button onClick={() => generateInvoiceMutation.mutate(selectedAgency)} disabled={!selectedAgency || generateInvoiceMutation.isPending}>
-              Gerar Fatura
+            <Button
+              onClick={() => generateInvoiceMutation.mutate({ agencyId: selectedAgency, months: parseInt(monthsAhead) || 1 })}
+              disabled={!selectedAgency || generateInvoiceMutation.isPending}
+            >
+              Gerar {parseInt(monthsAhead) || 1} Fatura(s)
             </Button>
           </DialogFooter>
         </DialogContent>
