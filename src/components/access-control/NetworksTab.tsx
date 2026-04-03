@@ -7,8 +7,9 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Pencil, Trash2, Building2, Loader2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Building2, Loader2, Shield } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
+import { NetworkAuthSettingsDialog } from "./NetworkAuthSettingsDialog";
 
 const NetworksTab = () => {
   const { data: networks = [], isLoading } = useNetworks();
@@ -18,6 +19,7 @@ const NetworksTab = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
   const [form, setForm] = useState({ name: "", cnpj: "", contact_email: "", contact_phone: "", notes: "" });
+  const [authSettingsNetwork, setAuthSettingsNetwork] = useState<any>(null);
 
   const openNew = () => {
     setEditing(null);
@@ -65,7 +67,7 @@ const NetworksTab = () => {
                 <TableHead>CNPJ</TableHead>
                 <TableHead>Contato</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="w-[100px]">Ações</TableHead>
+                <TableHead className="w-[140px]">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -75,12 +77,15 @@ const NetworksTab = () => {
                   <TableCell>{n.cnpj || "—"}</TableCell>
                   <TableCell>{n.contact_email || "—"}</TableCell>
                   <TableCell>
-                    <Badge variant={n.is_active ? "default" : "secondary"}>
-                      {n.is_active ? "Ativa" : "Inativa"}
+                    <Badge variant={n.is_active !== false ? "default" : "secondary"}>
+                      {n.is_active !== false ? "Ativa" : "Inativa"}
                     </Badge>
                   </TableCell>
                   <TableCell>
                     <div className="flex gap-1">
+                      <Button size="icon" variant="ghost" onClick={() => setAuthSettingsNetwork(n)} title="Regras de Autenticação">
+                        <Shield className="h-4 w-4 text-primary" />
+                      </Button>
                       <Button size="icon" variant="ghost" onClick={() => openEdit(n)}><Pencil className="h-4 w-4" /></Button>
                       <Button size="icon" variant="ghost" onClick={() => handleDelete(n.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                     </div>
@@ -113,6 +118,15 @@ const NetworksTab = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {authSettingsNetwork && (
+        <NetworkAuthSettingsDialog
+          open={!!authSettingsNetwork}
+          onOpenChange={(v) => { if (!v) setAuthSettingsNetwork(null); }}
+          networkId={authSettingsNetwork.id}
+          networkName={authSettingsNetwork.name}
+        />
+      )}
     </Card>
   );
 };
