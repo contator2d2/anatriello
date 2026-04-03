@@ -9,7 +9,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Pencil, ShieldCheck, Loader2, Key, Trash2 } from "lucide-react";
+import { Plus, Pencil, ShieldCheck, Loader2, Key, Trash2, FileText } from "lucide-react";
+import { AuthorizationLetterDialog } from "./AuthorizationLetterDialog";
 
 const WEEKDAYS = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
 
