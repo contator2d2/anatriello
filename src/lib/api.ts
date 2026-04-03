@@ -118,7 +118,8 @@ export const api = async <T>(endpoint: string, options: ApiOptions = {}): Promis
           }
 
           const baseMsg = data?.error || data?.message || `Erro na requisição (${response.status})`;
-          const details = data?.details ? `: ${data.details}` : '';
+          const detailValue = data?.details || data?.detail || '';
+          const details = detailValue ? `: ${detailValue}` : '';
           const logKey = `fail:${url}:${response.status}`;
           if (shouldLogNow(logKey)) {
             // eslint-disable-next-line no-console

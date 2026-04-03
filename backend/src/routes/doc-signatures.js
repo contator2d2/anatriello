@@ -23,11 +23,15 @@ async function getUserOrgId(userId) {
 
 // Helper: audit log
 async function auditLog(documentId, action, { name, email, ip, userAgent, geolocation, details }) {
-  await query(
-    `INSERT INTO doc_signature_audit (document_id, action, actor_name, actor_email, ip_address, user_agent, geolocation, details)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-    [documentId, action, name || null, email || null, ip || null, userAgent || null, geolocation || null, JSON.stringify(details || {})]
-  );
+  try {
+    await query(
+      `INSERT INTO doc_signature_audit (document_id, action, actor_name, actor_email, ip_address, user_agent, geolocation, details)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [documentId, action, name || null, email || null, ip || null, userAgent || null, geolocation || null, JSON.stringify(details || {})]
+    );
+  } catch (error) {
+    console.error('[doc-signatures] Audit log error:', error.message);
+  }
 }
 
 // Ensure tables exist
@@ -91,7 +95,45 @@ async function ensureTables() {
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     )`);
 
+    await query(`CREATE INDEX IF NOT EXISTS idx_doc_sig_docs_org ON doc_signature_documents(organization_id)`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_doc_sig_docs_status ON doc_signature_documents(status)`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_doc_sig_signers_doc ON doc_signature_signers(document_id)`);
     await query(`CREATE INDEX IF NOT EXISTS idx_doc_sig_signers_token ON doc_signature_signers(sign_token)`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_doc_sig_audit_doc ON doc_signature_audit(document_id)`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_doc_sig_positions_doc ON doc_signature_positions(document_id)`);
+
+    // Harden legacy databases by ensuring all columns required by the current routes exist
+    await query(`ALTER TABLE doc_signature_documents ADD COLUMN IF NOT EXISTS description TEXT`);
+    await query(`ALTER TABLE doc_signature_documents ADD COLUMN IF NOT EXISTS signed_file_url TEXT`);
+    await query(`ALTER TABLE doc_signature_documents ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'draft'`);
+    await query(`ALTER TABLE doc_signature_documents ADD COLUMN IF NOT EXISTS created_by UUID REFERENCES users(id) ON DELETE SET NULL`);
+    await query(`ALTER TABLE doc_signature_documents ADD COLUMN IF NOT EXISTS hash_sha256 VARCHAR(64)`);
+    await query(`ALTER TABLE doc_signature_documents ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()`);
+    await query(`ALTER TABLE doc_signature_documents ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()`);
+    await query(`ALTER TABLE doc_signature_documents ADD COLUMN IF NOT EXISTS deal_id UUID`);
+    await query(`ALTER TABLE doc_signature_documents ADD COLUMN IF NOT EXISTS require_cnh_validation BOOLEAN DEFAULT false`);
+
+    await query(`ALTER TABLE doc_signature_signers ADD COLUMN IF NOT EXISTS role VARCHAR(20) DEFAULT 'signer'`);
+    await query(`ALTER TABLE doc_signature_signers ADD COLUMN IF NOT EXISTS sign_order INTEGER DEFAULT 1`);
+    await query(`ALTER TABLE doc_signature_signers ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'pending'`);
+    await query(`ALTER TABLE doc_signature_signers ADD COLUMN IF NOT EXISTS signature_url TEXT`);
+    await query(`ALTER TABLE doc_signature_signers ADD COLUMN IF NOT EXISTS signed_at TIMESTAMP WITH TIME ZONE`);
+    await query(`ALTER TABLE doc_signature_signers ADD COLUMN IF NOT EXISTS sign_token VARCHAR(128)`);
+    await query(`ALTER TABLE doc_signature_signers ADD COLUMN IF NOT EXISTS ip_address VARCHAR(45)`);
+    await query(`ALTER TABLE doc_signature_signers ADD COLUMN IF NOT EXISTS user_agent TEXT`);
+    await query(`ALTER TABLE doc_signature_signers ADD COLUMN IF NOT EXISTS geolocation TEXT`);
+    await query(`ALTER TABLE doc_signature_signers ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()`);
+    await query(`ALTER TABLE doc_signature_signers ADD COLUMN IF NOT EXISTS phone VARCHAR(20)`);
+    await query(`ALTER TABLE doc_signature_signers ADD COLUMN IF NOT EXISTS cnh_validated BOOLEAN DEFAULT false`);
+    await query(`ALTER TABLE doc_signature_signers ADD COLUMN IF NOT EXISTS cnh_image_url TEXT`);
+
+    await query(`ALTER TABLE doc_signature_audit ADD COLUMN IF NOT EXISTS actor_name VARCHAR(255)`);
+    await query(`ALTER TABLE doc_signature_audit ADD COLUMN IF NOT EXISTS actor_email VARCHAR(255)`);
+    await query(`ALTER TABLE doc_signature_audit ADD COLUMN IF NOT EXISTS ip_address VARCHAR(45)`);
+    await query(`ALTER TABLE doc_signature_audit ADD COLUMN IF NOT EXISTS user_agent TEXT`);
+    await query(`ALTER TABLE doc_signature_audit ADD COLUMN IF NOT EXISTS geolocation TEXT`);
+    await query(`ALTER TABLE doc_signature_audit ADD COLUMN IF NOT EXISTS details JSONB DEFAULT '{}'`);
+    await query(`ALTER TABLE doc_signature_audit ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()`);
 
     // OTP verification table
     await query(`CREATE TABLE IF NOT EXISTS doc_signature_otp (
@@ -104,17 +146,12 @@ async function ensureTables() {
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     )`);
 
-    // Add phone column to signers if not exists
-    await query(`ALTER TABLE doc_signature_signers ADD COLUMN IF NOT EXISTS phone VARCHAR(20)`);
-    // Add deal_id to documents for CRM integration
-    await query(`ALTER TABLE doc_signature_documents ADD COLUMN IF NOT EXISTS deal_id UUID`);
+    await query(`ALTER TABLE doc_signature_otp ADD COLUMN IF NOT EXISTS verified BOOLEAN DEFAULT false`);
+    await query(`ALTER TABLE doc_signature_otp ADD COLUMN IF NOT EXISTS attempts INTEGER DEFAULT 0`);
+    await query(`ALTER TABLE doc_signature_otp ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP WITH TIME ZONE`);
+
     // Add doc_signatures_limit to plans (0 = unlimited)
     await query(`ALTER TABLE plans ADD COLUMN IF NOT EXISTS doc_signatures_limit INTEGER DEFAULT 0`);
-    // Add require_cnh_validation to documents
-    await query(`ALTER TABLE doc_signature_documents ADD COLUMN IF NOT EXISTS require_cnh_validation BOOLEAN DEFAULT false`);
-    // Add cnh_validated to signers
-    await query(`ALTER TABLE doc_signature_signers ADD COLUMN IF NOT EXISTS cnh_validated BOOLEAN DEFAULT false`);
-    await query(`ALTER TABLE doc_signature_signers ADD COLUMN IF NOT EXISTS cnh_image_url TEXT`);
 
   } catch (e) {
     console.error('[doc-signatures] Table init error:', e.message);
@@ -1316,6 +1353,7 @@ router.get('/:id', async (req, res) => {
 // Create document
 router.post('/', async (req, res) => {
   try {
+    await ensureTables();
     const orgId = await getUserOrgId(req.userId);
     if (!orgId) return res.status(403).json({ error: 'Sem organização' });
 
@@ -1405,13 +1443,14 @@ router.post('/', async (req, res) => {
     });
   } catch (error) {
     console.error('[doc-signatures] Create error:', error);
-    res.status(500).json({ error: 'Erro ao criar documento', detail: error.message });
+    res.status(500).json({ error: 'Erro ao criar documento', detail: error.message, details: error.message });
   }
 });
 
 // Add signer
 router.post('/:id/signers', async (req, res) => {
   try {
+    await ensureTables();
     const orgId = await getUserOrgId(req.userId);
     const docCheck = await query(`SELECT id, status FROM doc_signature_documents WHERE id = $1 AND organization_id = $2`, [req.params.id, orgId]);
     if (docCheck.rows.length === 0) return res.status(404).json({ error: 'Documento não encontrado' });

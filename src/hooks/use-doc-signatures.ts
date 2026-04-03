@@ -204,7 +204,7 @@ export function useDocSignatures() {
       });
       if (!res.ok) {
         const err = await res.json();
-        throw new Error(err.error || 'Erro ao criar documento');
+        throw new Error(err.error || err.details || err.detail || err.message || 'Erro ao criar documento');
       }
       const created = await res.json();
       return {
