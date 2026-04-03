@@ -3322,6 +3322,16 @@ CREATE INDEX IF NOT EXISTS idx_push_log_user ON push_notification_log(user_id);
 CREATE INDEX IF NOT EXISTS idx_push_log_created ON push_notification_log(created_at DESC);
 `;
 
+const step45bAgencyAllowedUnits = `
+CREATE TABLE IF NOT EXISTS agency_allowed_units (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  agency_id UUID NOT NULL REFERENCES agencies(id) ON DELETE CASCADE,
+  supermarket_unit_id UUID NOT NULL REFERENCES supermarket_units(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(agency_id, supermarket_unit_id)
+);
+`;
+
 
 // ============================================
 // STEP 39: GLOBAL AI AGENTS
