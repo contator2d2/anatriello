@@ -21,6 +21,7 @@ import { api } from "@/lib/api";
 import { useUpload } from "@/hooks/use-upload";
 import { generateAgencyContractPdfBlob } from "@/lib/agency-contract-pdf";
 import { formatCnpj, formatCpf, formatPhone, isValidCnpj, isValidCpf, isValidPhone, onlyDigits } from "@/lib/br-utils";
+import HelpPanel from "./HelpPanel";
 
 const defaultForm = {
   name: "",
