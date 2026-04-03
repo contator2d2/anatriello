@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -31,6 +32,7 @@ const statusConfig: Record<string, { label: string; variant: 'default' | 'second
 };
 
 export default function Assinaturas() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [documents, setDocuments] = useState<DocSignatureDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
@@ -58,6 +60,20 @@ export default function Assinaturas() {
   const { listDocuments, getDocument, createDocument, addSigner, removeSigner, sendForSignature, cancelDocument, savePositions, downloadSignedPdf, sendSigningLinkWhatsApp, loading: actionLoading } = useDocSignatures();
 
   useEffect(() => { loadDocuments(); }, []);
+
+  useEffect(() => {
+    const docId = searchParams.get('doc');
+    const requestedTab = searchParams.get('tab');
+    if (!docId || documents.length === 0 || selectedDoc?.id === docId) return;
+
+    const exists = documents.some((doc) => doc.id === docId);
+    if (!exists) return;
+
+    loadDocumentDetail(docId).then(() => {
+      if (requestedTab) setActiveTab(requestedTab);
+      setSearchParams({}, { replace: true });
+    });
+  }, [documents, searchParams, selectedDoc?.id, setSearchParams]);
 
   const loadDocuments = async () => {
     setLoading(true);

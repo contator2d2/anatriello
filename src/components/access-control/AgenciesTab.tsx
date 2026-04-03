@@ -280,7 +280,7 @@ const AgenciesTab = () => {
         organizationResponsibleCpf: orgSignerCpf || orgResponsible?.responsible_cpf || "",
         organizationResponsibleEmail: orgResponsible?.responsible_email || "",
         organizationResponsiblePhone: orgResponsible?.responsible_phone || "",
-        logoUrl: orgResponsible?.logo_url || "",
+        logoUrl: orgResponsible?.default_template?.logo_url || orgResponsible?.logo_url || "",
         headerText: orgResponsible?.default_template?.header_text || undefined,
         footerText: orgResponsible?.default_template?.footer_text || undefined,
         headerBgColor: orgResponsible?.default_template?.header_bg_color || undefined,
