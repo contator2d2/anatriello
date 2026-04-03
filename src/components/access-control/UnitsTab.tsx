@@ -13,6 +13,7 @@ import { Plus, Pencil, Trash2, Store, Loader2, Copy, KeyRound, Eye, EyeOff, Refr
 import SendAccessDialog from "./SendAccessDialog";
 import { useToast } from "@/hooks/use-toast";
 import { formatCnpj, isValidCnpj, onlyDigits } from "@/lib/br-utils";
+import HelpPanel from "./HelpPanel";
 
 const defaultForm = {
   name: "", cnpj: "", address: "", city: "", state: "", network_id: "",
