@@ -14,6 +14,26 @@ function safeFormatDate(value: any, fmt: string, fallback = '—'): string {
   return d && !Number.isNaN(d.getTime()) ? format(d, fmt) : fallback;
 }
 
+function formatWorkSchedule(ws: any): string {
+  if (!ws) return '—';
+  try {
+    const obj = typeof ws === 'string' ? JSON.parse(ws) : ws;
+    if (obj.entry && obj.exit) {
+      const days = obj.days;
+      const activeDays = days
+        ? Object.entries(days)
+            .filter(([, v]) => v)
+            .map(([k]) => k.charAt(0).toUpperCase() + k.slice(1))
+            .join(', ')
+        : '';
+      return `${obj.entry}–${obj.exit}${activeDays ? ` (${activeDays})` : ''}`;
+    }
+    return String(ws);
+  } catch {
+    return String(ws);
+  }
+}
+
 interface Props {
   statusFilter?: string;
   compact?: boolean;
