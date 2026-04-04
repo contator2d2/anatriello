@@ -358,7 +358,7 @@ router.post('/punch', authenticatePromotor, async (req, res) => {
 
     if (!isWithinSchedule) {
       // Check for approved overtime request for today
-      const today = now.toISOString().slice(0, 10);
+      const today = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
       const otReq = await query(
         `SELECT id, requested_start, requested_end FROM overtime_requests
          WHERE employee_id = $1 AND request_date = $2 AND status = 'aprovado'
