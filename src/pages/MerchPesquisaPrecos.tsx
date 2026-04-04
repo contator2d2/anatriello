@@ -497,6 +497,7 @@ function ModelEditorDialog({ rule, brands, open, onClose }: { rule: any; brands:
                                 <p className="text-sm font-medium truncate">{comp.name}</p>
                                 <p className="text-xs text-muted-foreground">{comp.brand}</p>
                                 {comp.description && <p className="text-xs text-muted-foreground truncate">{comp.description}</p>}
+                                {comp.ean && <p className="text-xs text-muted-foreground font-mono">EAN: {comp.ean}</p>}
                               </div>
                               <div className="flex gap-1 flex-shrink-0">
                                 {comp.photo_url && (
