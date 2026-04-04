@@ -27,6 +27,10 @@ interface EmployeeFace {
   face_enrolled_at?: string;
 }
 
+interface FacialConfig {
+  min_confidence: number;
+}
+
 const RHBiometria = () => {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -36,6 +40,18 @@ const RHBiometria = () => {
   const [enrollingName, setEnrollingName] = useState("");
   const [testingEmp, setTestingEmp] = useState<EmployeeFace | null>(null);
   const [testDescriptor, setTestDescriptor] = useState<number[]>([]);
+
+  const { data: facialConfig } = useQuery({
+    queryKey: ["rh-facial-config-threshold"],
+    queryFn: async () => {
+      try {
+        return await api<FacialConfig>("/api/rh/facial-recognition/config");
+      } catch {
+        return { min_confidence: 70 };
+      }
+    },
+    staleTime: 300000,
+  });
 
   const { data: employees = [], isLoading } = useQuery({
     queryKey: ["rh-facial-employees", filter],
@@ -263,7 +279,7 @@ const RHBiometria = () => {
         storedDescriptor={testDescriptor}
         storedPhotoUrl={testingEmp?.face_photo_url || testingEmp?.photo_url}
         personName={testingEmp?.full_name}
-        threshold={70}
+        threshold={facialConfig?.min_confidence ?? 70}
         onResult={(result) => {
           toast({
             title: result.match ? '✅ Teste aprovado!' : '❌ Teste reprovado',

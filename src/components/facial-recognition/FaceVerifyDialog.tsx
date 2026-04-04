@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Loader2, CheckCircle2, XCircle, AlertTriangle, RotateCcw, ScanFace, ShieldCheck } from "lucide-react";
-import { loadFaceModels, detectFace, captureVideoFrame, compareFaces, drawLandmarks } from "@/lib/facial-recognition";
+import { loadFaceModels, detectFace, captureVideoFrame, compareFaces, drawLandmarks, facesMatch } from "@/lib/facial-recognition";
 
 interface Props {
   open: boolean;
@@ -126,7 +126,7 @@ export const FaceVerifyDialog = ({ open, onOpenChange, storedDescriptor, storedP
         if (result.confidence > 60) {
           setStatus("verifying");
           const matchScore = compareFaces(storedDescriptor, result.descriptor);
-          const isMatch = matchScore >= threshold;
+          const isMatch = facesMatch(storedDescriptor, result.descriptor, threshold);
           const imageDataUrl = captureVideoFrame(videoRef.current);
 
           setScore(matchScore);
