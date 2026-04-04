@@ -133,6 +133,11 @@ const TotemAccess = () => {
   const [lgpdAccepted, setLgpdAccepted] = useState(false);
   const [showLgpd, setShowLgpd] = useState(false);
 
+  // Facial verification
+  const [showFacialVerify, setShowFacialVerify] = useState(false);
+  const [facialVerified, setFacialVerified] = useState(false);
+  const [facialPendingAction, setFacialPendingAction] = useState<"checkin" | "checkout" | null>(null);
+
   const API_URL = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
 
   useEffect(() => {
