@@ -3196,9 +3196,7 @@ router.post('/whatsapp-assistant/process', authenticate, async (req, res) => {
 // ============ WHATSAPP AGENT CONFIG: Save/Load ============
 router.get('/whatsapp-agent-config', authenticate, async (req, res) => {
   try {
-    await ensureIncidentsInfra();
     const orgId = await getOrgId(req.userId);
-    // Ensure table exists
     await query(`CREATE TABLE IF NOT EXISTS whatsapp_agent_config (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       organization_id UUID NOT NULL,
@@ -3212,8 +3210,8 @@ router.get('/whatsapp-agent-config', authenticate, async (req, res) => {
       max_tokens INTEGER DEFAULT 1000,
       greeting_message TEXT,
       fallback_message TEXT,
-      capabilities JSONB DEFAULT '[]',
-      personality_traits JSONB DEFAULT '[]',
+      capabilities JSONB DEFAULT '[]'::jsonb,
+      personality_traits JSONB DEFAULT '[]'::jsonb,
       language TEXT DEFAULT 'pt-BR',
       context_window INTEGER DEFAULT 10,
       working_hours JSONB,
@@ -3229,7 +3227,6 @@ router.get('/whatsapp-agent-config', authenticate, async (req, res) => {
 
 router.post('/whatsapp-agent-config', authenticate, async (req, res) => {
   try {
-    await ensureIncidentsInfra();
     const orgId = await getOrgId(req.userId);
     const { name, is_active, connection_id, ai_provider, ai_model, system_prompt, temperature, max_tokens, greeting_message, fallback_message, capabilities, personality_traits, language, context_window, working_hours, notification_rules } = req.body;
     
@@ -3247,8 +3244,8 @@ router.post('/whatsapp-agent-config', authenticate, async (req, res) => {
       max_tokens INTEGER DEFAULT 1000,
       greeting_message TEXT,
       fallback_message TEXT,
-      capabilities JSONB DEFAULT '[]',
-      personality_traits JSONB DEFAULT '[]',
+      capabilities JSONB DEFAULT '[]'::jsonb,
+      personality_traits JSONB DEFAULT '[]'::jsonb,
       language TEXT DEFAULT 'pt-BR',
       context_window INTEGER DEFAULT 10,
       working_hours JSONB,
