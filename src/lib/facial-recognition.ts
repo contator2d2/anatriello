@@ -186,6 +186,44 @@ function normalizeFaceDescriptor(input: FaceDescriptorPayload): number[] {
     .filter((value) => Number.isFinite(value));
 }
 
+function getFaceDistance(descriptor1: FaceDescriptorPayload, descriptor2: FaceDescriptorPayload): number | null {
+  const normalizedDescriptor1 = normalizeFaceDescriptor(descriptor1);
+  const normalizedDescriptor2 = normalizeFaceDescriptor(descriptor2);
+
+  if (!normalizedDescriptor1.length || normalizedDescriptor1.length !== normalizedDescriptor2.length) {
+    return null;
+  }
+
+  return faceapi.euclideanDistance(
+    new Float32Array(normalizedDescriptor1),
+    new Float32Array(normalizedDescriptor2)
+  );
+}
+
+function scoreFromFaceDistance(distance: number): number {
+  if (!Number.isFinite(distance) || distance < 0) return 0;
+
+  if (distance <= 0.6) {
+    return 100 - (distance / 0.6) * 40;
+  }
+
+  if (distance <= 1) {
+    return 60 - ((distance - 0.6) / 0.4) * 60;
+  }
+
+  return 0;
+}
+
+function maxDistanceForThreshold(threshold: number): number {
+  const safeThreshold = Math.max(0, Math.min(100, threshold));
+
+  if (safeThreshold >= 60) {
+    return ((100 - safeThreshold) / 40) * 0.6;
+  }
+
+  return 0.6 + ((60 - safeThreshold) / 60) * 0.4;
+}
+
 /**
  * Detect face from an HTMLVideoElement or HTMLImageElement and extract descriptor
  */
@@ -209,19 +247,10 @@ export async function detectFace(
  * Returns a similarity score 0-100 (100 = identical)
  */
 export function compareFaces(descriptor1: number[], descriptor2: number[]): number {
-  const normalizedDescriptor1 = normalizeFaceDescriptor(descriptor1);
-  const normalizedDescriptor2 = normalizeFaceDescriptor(descriptor2);
+  const distance = getFaceDistance(descriptor1, descriptor2);
+  if (distance === null) return 0;
 
-  if (!normalizedDescriptor1.length || normalizedDescriptor1.length !== normalizedDescriptor2.length) return 0;
-
-  const distance = faceapi.euclideanDistance(
-    new Float32Array(normalizedDescriptor1),
-    new Float32Array(normalizedDescriptor2)
-  );
-
-  // face-api.js distance: 0 = identical, ~0.6+ = different person
-  // Convert to 0-100 score where 100 = identical
-  const score = Math.max(0, Math.min(100, (1 - distance / 0.8) * 100));
+  const score = scoreFromFaceDistance(distance);
   return Math.round(score * 100) / 100;
 }
 
@@ -229,7 +258,10 @@ export function compareFaces(descriptor1: number[], descriptor2: number[]): numb
  * Check if two faces match based on a threshold
  */
 export function facesMatch(descriptor1: number[], descriptor2: number[], threshold = 70): boolean {
-  return compareFaces(descriptor1, descriptor2) >= threshold;
+  const distance = getFaceDistance(descriptor1, descriptor2);
+  if (distance === null) return false;
+
+  return distance <= maxDistanceForThreshold(threshold);
 }
 
 /**
