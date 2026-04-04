@@ -191,9 +191,9 @@ router.delete('/product-mappings/:id', authenticate, async (req, res) => {
 router.post('/competitor-products', authenticate, async (req, res) => {
   try {
     await ensureTables();
-    const { mapping_id, competitor_id, competitor_product_name, category, subcategory, unit_measure } = req.body;
-    const r = await query('INSERT INTO price_research_competitor_products (mapping_id, competitor_id, competitor_product_name, category, subcategory, unit_measure) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
-      [mapping_id, competitor_id, competitor_product_name, category, subcategory, unit_measure]);
+    const { mapping_id, competitor_id, competitor_product_name, category, subcategory, unit_measure, photo_url } = req.body;
+    const r = await query('INSERT INTO price_research_competitor_products (mapping_id, competitor_id, competitor_product_name, category, subcategory, unit_measure, photo_url) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *',
+      [mapping_id, competitor_id, competitor_product_name, category, subcategory, unit_measure, photo_url]);
     res.json(r.rows[0]);
   } catch (err) { logError('price-research.competitor-products.create', err); res.status(500).json({ error: 'Erro' }); }
 });
