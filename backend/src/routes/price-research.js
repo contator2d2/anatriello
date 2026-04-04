@@ -27,7 +27,11 @@ async function ensureTables() {
   await query(`CREATE TABLE IF NOT EXISTS price_research_competitor_products (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(), mapping_id UUID NOT NULL, competitor_id UUID NOT NULL,
     competitor_product_name VARCHAR(255) NOT NULL, category VARCHAR(100), subcategory VARCHAR(100),
-    unit_measure VARCHAR(50), active BOOLEAN DEFAULT true, created_at TIMESTAMPTZ DEFAULT NOW())`);
+    unit_measure VARCHAR(50), photo_url TEXT, active BOOLEAN DEFAULT true, created_at TIMESTAMPTZ DEFAULT NOW())`);
+  // Ensure photo_url column exists
+  try { await query('ALTER TABLE price_research_competitor_products ADD COLUMN IF NOT EXISTS photo_url TEXT'); } catch {}
+  // Ensure frequency 'once' is supported
+  try { await query("ALTER TABLE price_research_rules DROP CONSTRAINT IF EXISTS price_research_rules_frequency_check"); } catch {}
   await query(`CREATE TABLE IF NOT EXISTS price_research_executions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL, schedule_id UUID,
     route_id UUID NOT NULL, brand_id UUID NOT NULL, pdv_id UUID NOT NULL, promoter_id UUID NOT NULL,
