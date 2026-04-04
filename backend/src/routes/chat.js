@@ -51,6 +51,20 @@ async function hasColumn(tableName, columnName) {
   return Boolean(result.rows[0]?.exists_column);
 }
 
+async function hasTable(tableName) {
+  const result = await query(
+    `SELECT EXISTS (
+       SELECT 1
+       FROM information_schema.tables
+       WHERE table_schema = 'public'
+         AND table_name = $1
+     ) AS exists_table`,
+    [tableName]
+  );
+
+  return Boolean(result.rows[0]?.exists_table);
+}
+
 // ==========================================
 // CONVERSATIONS
 // ==========================================
@@ -407,10 +421,28 @@ router.get('/messages/search', authenticate, async (req, res) => {
 router.get('/conversations/unread', authenticate, async (req, res) => {
   try {
     const connectionIds = await getUserConnections(req.userId);
+    const [hasAttendanceStatus, hasIsGroup, hasChatMessages] = await Promise.all([
+      hasColumn('conversations', 'attendance_status'),
+      hasColumn('conversations', 'is_group'),
+      hasTable('chat_messages'),
+    ]);
     
     if (connectionIds.length === 0) {
       return res.json([]);
     }
+
+    const attendanceStatusSelect = hasAttendanceStatus
+      ? 'conv.attendance_status'
+      : 'NULL::text as attendance_status';
+    const isGroupSelect = hasIsGroup
+      ? 'COALESCE(conv.is_group, false) as is_group'
+      : 'false as is_group';
+    const lastMessageSelect = hasChatMessages
+      ? '(SELECT content FROM chat_messages WHERE conversation_id = conv.id ORDER BY timestamp DESC LIMIT 1) as last_message,'
+      : 'NULL::text as last_message,';
+    const lastMessageTypeSelect = hasChatMessages
+      ? '(SELECT message_type FROM chat_messages WHERE conversation_id = conv.id ORDER BY timestamp DESC LIMIT 1) as last_message_type'
+      : 'NULL::text as last_message_type';
 
     const result = await query(`
       SELECT 
@@ -419,13 +451,13 @@ router.get('/conversations/unread', authenticate, async (req, res) => {
         conv.contact_phone,
         conv.unread_count,
         conv.last_message_at,
-        conv.attendance_status,
-        conv.is_group,
+        ${attendanceStatusSelect},
+        ${isGroupSelect},
         conv.created_at,
         conv.connection_id,
         conn.name as connection_name,
-        (SELECT content FROM chat_messages WHERE conversation_id = conv.id ORDER BY timestamp DESC LIMIT 1) as last_message,
-        (SELECT message_type FROM chat_messages WHERE conversation_id = conv.id ORDER BY timestamp DESC LIMIT 1) as last_message_type
+        ${lastMessageSelect}
+        ${lastMessageTypeSelect}
       FROM conversations conv
       JOIN connections conn ON conn.id = conv.connection_id
       WHERE conv.connection_id = ANY($1)

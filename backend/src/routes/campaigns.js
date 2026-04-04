@@ -17,10 +17,43 @@ async function getUserOrganization(userId) {
   return result.rows[0] || null;
 }
 
+async function hasTable(tableName) {
+  const result = await query(
+    `SELECT EXISTS (
+       SELECT 1
+       FROM information_schema.tables
+       WHERE table_schema = 'public'
+         AND table_name = $1
+     ) AS exists_table`,
+    [tableName]
+  );
+
+  return Boolean(result.rows[0]?.exists_table);
+}
+
+async function hasColumn(tableName, columnName) {
+  const result = await query(
+    `SELECT EXISTS (
+       SELECT 1
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = $1
+         AND column_name = $2
+     ) AS exists_column`,
+    [tableName, columnName]
+  );
+
+  return Boolean(result.rows[0]?.exists_column);
+}
+
 // List campaigns (user's own + organization's)
 router.get('/', async (req, res) => {
   try {
     const org = await getUserOrganization(req.userId);
+    const [campaignHasFlowId, flowsTableExists] = await Promise.all([
+      hasColumn('campaigns', 'flow_id'),
+      hasTable('flows'),
+    ]);
 
     let whereClause = 'c.user_id = $1';
     let params = [req.userId];
@@ -33,17 +66,24 @@ router.get('/', async (req, res) => {
       params = [req.userId, org.organization_id];
     }
 
+    const flowSelect = campaignHasFlowId && flowsTableExists
+      ? 'f.name as flow_name,'
+      : 'NULL::text as flow_name,';
+    const flowJoin = campaignHasFlowId && flowsTableExists
+      ? 'LEFT JOIN flows f ON c.flow_id = f.id'
+      : '';
+
     const result = await query(
       `SELECT c.*, 
               cl.name as list_name,
               mt.name as message_name,
-              f.name as flow_name,
+              ${flowSelect}
               conn.name as connection_name,
               u.name as created_by_name
        FROM campaigns c
        LEFT JOIN contact_lists cl ON c.list_id = cl.id
        LEFT JOIN message_templates mt ON c.message_id = mt.id
-       LEFT JOIN flows f ON c.flow_id = f.id
+       ${flowJoin}
        LEFT JOIN connections conn ON c.connection_id = conn.id
        LEFT JOIN users u ON c.user_id = u.id
        WHERE ${whereClause}
