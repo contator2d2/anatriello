@@ -1116,7 +1116,7 @@ function ExecutionDetailDialog({ id, open, onClose }: { id: string; open: boolea
   const { data: allProducts = [] } = useQuery({
     queryKey: ['merch-products-brand', brandId],
     queryFn: () => api<any[]>(`/api/merchandising/products?brand_id=${brandId}`),
-    enabled: !!brandId && editing,
+    enabled: !!brandId,
   });
   const { data: pdvs = [] } = useBrandPdvs(brandId || '');
 
