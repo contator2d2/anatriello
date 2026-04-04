@@ -965,27 +965,51 @@ router.get('/agency/me', authenticateAgency, async (req, res) => {
 // Agency: dashboard stats
 router.get('/agency/stats', authenticateAgency, async (req, res) => {
   try {
-    const totalP = await query('SELECT COUNT(*) as c FROM agency_promoters WHERE agency_id=$1', [req.agencyId]);
-    const activeP = await query("SELECT COUNT(*) as c FROM agency_promoters WHERE agency_id=$1 AND status='active'", [req.agencyId]);
-    const blockedP = await query("SELECT COUNT(*) as c FROM agency_promoters WHERE agency_id=$1 AND status='blocked'", [req.agencyId]);
-    const allowedUnits = await query('SELECT COUNT(*) as c FROM agency_allowed_units WHERE agency_id=$1', [req.agencyId]);
-    const entriesToday = await query(
-      `SELECT COUNT(*) as c FROM access_logs al
-       JOIN agency_promoters ap ON ap.cpf = al.cpf
-       WHERE ap.agency_id=$1 AND al.entry_at::date = CURRENT_DATE AND al.status='authorized'`, [req.agencyId]
-    );
-    const blockedToday = await query(
-      `SELECT COUNT(*) as c FROM access_logs al
-       JOIN agency_promoters ap ON ap.cpf = al.cpf
-       WHERE ap.agency_id=$1 AND al.entry_at::date = CURRENT_DATE AND al.status='blocked'`, [req.agencyId]
-    );
+    const [totalP, activeP, blockedP, allowedUnits, entriesToday, blockedToday, subscription] = await Promise.all([
+      query('SELECT COUNT(*) as c FROM agency_promoters WHERE agency_id=$1', [req.agencyId]),
+      query("SELECT COUNT(*) as c FROM agency_promoters WHERE agency_id=$1 AND status='active'", [req.agencyId]),
+      query("SELECT COUNT(*) as c FROM agency_promoters WHERE agency_id=$1 AND status='blocked'", [req.agencyId]),
+      query('SELECT COUNT(*) as c FROM agency_allowed_units WHERE agency_id=$1', [req.agencyId]),
+      query(
+        `SELECT COUNT(*) as c
+         FROM pdv_entry_logs el
+         JOIN agency_promoters ap ON ap.id = el.agency_promoter_id
+         WHERE ap.agency_id = $1
+           AND el.entry_at::date = CURRENT_DATE
+           AND el.status = 'authorized'`,
+        [req.agencyId]
+      ),
+      query(
+        `SELECT COUNT(*) as c
+         FROM pdv_entry_logs el
+         JOIN agency_promoters ap ON ap.id = el.agency_promoter_id
+         WHERE ap.agency_id = $1
+           AND el.entry_at::date = CURRENT_DATE
+           AND el.status = 'blocked'`,
+        [req.agencyId]
+      ),
+      query(
+        `SELECT s.plan_id, s.promoter_count, a.max_promoters
+         FROM agencies a
+         LEFT JOIN agency_subscriptions s ON s.agency_id = a.id
+         WHERE a.id = $1
+         ORDER BY s.created_at DESC NULLS LAST
+         LIMIT 1`,
+        [req.agencyId]
+      ).catch(() => ({ rows: [] }))
+    ]);
+
+    const subscriptionRow = subscription.rows[0] || {};
     res.json({
-      total_promoters: parseInt(totalP.rows[0].c),
-      active_promoters: parseInt(activeP.rows[0].c),
-      blocked_promoters: parseInt(blockedP.rows[0].c),
-      units_authorized: parseInt(allowedUnits.rows[0].c),
-      entries_today: parseInt(entriesToday.rows[0].c),
-      blocked_today: parseInt(blockedToday.rows[0].c),
+      total_promoters: parseInt(totalP.rows[0]?.c || 0, 10),
+      active_promoters: parseInt(activeP.rows[0]?.c || 0, 10),
+      blocked_promoters: parseInt(blockedP.rows[0]?.c || 0, 10),
+      units_authorized: parseInt(allowedUnits.rows[0]?.c || 0, 10),
+      entries_today: parseInt(entriesToday.rows[0]?.c || 0, 10),
+      blocked_today: parseInt(blockedToday.rows[0]?.c || 0, 10),
+      plan_limit: subscriptionRow.promoter_count ?? subscriptionRow.max_promoters ?? 0,
+      plan_usage: parseInt(activeP.rows[0]?.c || 0, 10),
+      plan_id: subscriptionRow.plan_id || null,
     });
   } catch (err) { logError('agency.stats', err); res.status(500).json({ error: 'Erro' }); }
 });
@@ -994,12 +1018,27 @@ router.get('/agency/stats', authenticateAgency, async (req, res) => {
 router.get('/agency/recent-entries', authenticateAgency, async (req, res) => {
   try {
     const r = await query(
-      `SELECT al.*, ap.name as promoter_name, su.name as unit_name
-       FROM access_logs al
-       JOIN agency_promoters ap ON ap.cpf = al.cpf
-       JOIN supermarket_units su ON su.id = al.supermarket_unit_id
-       WHERE ap.agency_id=$1
-       ORDER BY al.entry_at DESC LIMIT 20`, [req.agencyId]
+      `SELECT el.*, ap.name as promoter_name, su.name as unit_name,
+              COALESCE(dbp.brands, ARRAY[]::text[]) as brands_attending,
+              CASE
+                WHEN el.status = 'authorized' AND el.exit_at IS NULL
+                  THEN GREATEST(ROUND(EXTRACT(EPOCH FROM (NOW() - el.entry_at)) / 60.0), 0)::int
+                ELSE COALESCE(el.duration_minutes, 0)
+              END as duration_so_far
+       FROM pdv_entry_logs el
+       JOIN agency_promoters ap ON ap.id = el.agency_promoter_id
+       JOIN supermarket_units su ON su.id = el.supermarket_unit_id
+       LEFT JOIN (
+         SELECT dbp.supermarket_unit_id, dbp.agency_id, ARRAY_AGG(DISTINCT b.name ORDER BY b.name) as brands
+         FROM daily_brand_presence dbp
+         JOIN brands b ON b.id = dbp.brand_id
+         WHERE dbp.presence_date = CURRENT_DATE
+         GROUP BY dbp.supermarket_unit_id, dbp.agency_id
+       ) dbp ON dbp.supermarket_unit_id = el.supermarket_unit_id AND dbp.agency_id = ap.agency_id
+       WHERE ap.agency_id = $1
+       ORDER BY el.entry_at DESC
+       LIMIT 20`,
+      [req.agencyId]
     );
     res.json(r.rows);
   } catch (err) { logError('agency.recent_entries', err); res.status(500).json({ error: 'Erro' }); }
