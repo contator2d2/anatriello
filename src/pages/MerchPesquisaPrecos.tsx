@@ -898,6 +898,7 @@ function PesquisasTab({ brands }: { brands: any[] }) {
 function ExecutionDetailDialog({ id, open, onClose }: { id: string; open: boolean; onClose: () => void }) {
   const { data: exec, isLoading } = usePriceResearchExecutionDetail(id);
   const updateExecution = useUpdateExecution();
+  const qc = useQueryClient();
   const { data: employees = [] } = useEmployees();
   const { uploadFile, isUploading } = useUpload();
   const newCompFileRef = useRef<HTMLInputElement>(null);
