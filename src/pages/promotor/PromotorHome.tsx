@@ -527,6 +527,12 @@ export default function PromotorHome() {
         {/* Punch button - always visible */}
         <Card className="overflow-hidden">
           <CardContent className="p-0">
+            {isFacialActive && (
+              <div className="flex items-center gap-2 px-3 py-2 bg-primary/10 border-b text-xs text-primary">
+                <ScanFace className="h-4 w-4" />
+                <span className="font-medium">Verificação facial ativa para ponto</span>
+              </div>
+            )}
             <Button
               onClick={handlePunch}
               disabled={punchLoading || gpsStatus !== 'active' || (!canPunch && isOutsideSchedule)}
@@ -536,7 +542,7 @@ export default function PromotorHome() {
                   : 'bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70'
               }`}
             >
-              {punchLoading ? <Loader2 className="h-6 w-6 animate-spin mr-2" /> : <Clock className="h-6 w-6 mr-2" />}
+              {punchLoading ? <Loader2 className="h-6 w-6 animate-spin mr-2" /> : isFacialActive ? <ScanFace className="h-6 w-6 mr-2" /> : <Clock className="h-6 w-6 mr-2" />}
               {!canPunch && isOutsideSchedule
                 ? '🔒 Fora do Horário'
                 : PUNCH_LABELS[getNextPunchType()] || 'Bater Ponto'}
