@@ -59,6 +59,7 @@ CREATE TABLE IF NOT EXISTS price_research_competitor_products (
   category VARCHAR(100),
   subcategory VARCHAR(100),
   unit_measure VARCHAR(50),
+  photo_url TEXT,
   active BOOLEAN DEFAULT true,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
