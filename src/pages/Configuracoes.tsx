@@ -473,7 +473,12 @@ const Configuracoes = () => {
                           (window as any).deferredPrompt = null;
                         });
                       } else {
-                        toast.info('Use o menu do navegador para instalar o app');
+                         const isIOSDevice = /iPad|iPhone|iPod/.test(navigator.userAgent);
+                         if (isIOSDevice) {
+                           toast.info('No Safari, toque em 📤 (Compartilhar) e depois em "Adicionar à Tela de Início"');
+                         } else {
+                           toast.info('No menu do navegador (⋮), toque em "Instalar app" ou "Adicionar à tela inicial"');
+                         }
                       }
                     }}
                   >
