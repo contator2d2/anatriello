@@ -1519,7 +1519,7 @@ router.get('/supervisor/overtime-requests', authenticatePromotor, requireSupervi
 });
 
 // Approve/reject overtime request
-router.put('/supervisor/overtime-requests/:id', requireSupervisor, async (req, res) => {
+router.put('/supervisor/overtime-requests/:id', authenticatePromotor, requireSupervisor, async (req, res) => {
   try {
     const { status, supervisor_notes } = req.body;
     if (!['aprovado', 'recusado'].includes(status)) return res.status(400).json({ error: 'Status inválido' });
