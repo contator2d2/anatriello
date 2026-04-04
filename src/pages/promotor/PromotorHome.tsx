@@ -569,6 +569,7 @@ export default function PromotorHome() {
             )}
           </CardContent>
         </Card>
+        )}
 
         {/* Notifications */}
         {notifications.length > 0 && (
