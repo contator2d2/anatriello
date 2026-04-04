@@ -292,6 +292,7 @@ export default function RHDashboard() {
             { label: "Afastados", value: summary.on_leave || 0, icon: ShieldAlert, color: "text-yellow-600" },
             { label: "Atrasados Hoje", value: lateArrivals.length, icon: Clock, color: "text-orange-600" },
             { label: "Ausentes Hoje", value: absencesToday.length, icon: UserX, color: "text-red-600" },
+            { label: "HE Pendentes", value: overtimePendingCount, icon: ShieldAlert, color: "text-purple-600" },
           ].map(s => (
             <Card key={s.label}>
               <CardContent className="p-4 flex items-center gap-3">
