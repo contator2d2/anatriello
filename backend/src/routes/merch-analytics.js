@@ -1,0 +1,484 @@
+import express from 'express';
+import { query } from '../db.js';
+import { authenticate } from '../middleware/auth.js';
+import { logInfo, logError } from '../logger.js';
+
+const router = express.Router();
+
+async function getOrgId(userId) {
+  const r = await query('SELECT organization_id FROM organization_members WHERE user_id=$1 LIMIT 1', [userId]);
+  return r.rows[0]?.organization_id;
+}
+
+async function ensureTables() {
+  await query(`CREATE TABLE IF NOT EXISTS merchan_kpi_snapshots (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL,
+    snapshot_date DATE NOT NULL, total_routes INT DEFAULT 0, completed_routes INT DEFAULT 0,
+    partial_routes INT DEFAULT 0, pending_routes INT DEFAULT 0, total_products INT DEFAULT 0,
+    executed_products INT DEFAULT 0, brands_served INT DEFAULT 0, pdvs_served INT DEFAULT 0,
+    active_promoters INT DEFAULT 0, photos_captured INT DEFAULT 0, damages_registered INT DEFAULT 0,
+    stockouts_registered INT DEFAULT 0, price_research_completed INT DEFAULT 0, price_research_pending INT DEFAULT 0,
+    stock_counts INT DEFAULT 0, expiry_counts INT DEFAULT 0, avg_visit_duration_min NUMERIC(6,1),
+    avg_photos_per_route NUMERIC(5,1), operational_score NUMERIC(5,2), metadata JSONB,
+    created_at TIMESTAMPTZ DEFAULT NOW(), UNIQUE(organization_id, snapshot_date)
+  )`);
+  await query(`CREATE TABLE IF NOT EXISTS merchan_ai_summaries (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL,
+    summary_type VARCHAR(50) NOT NULL, reference_id UUID, reference_type VARCHAR(50),
+    period_start DATE, period_end DATE, summary TEXT NOT NULL, highlights JSONB,
+    filters_applied JSONB, generated_at TIMESTAMPTZ DEFAULT NOW(), created_at TIMESTAMPTZ DEFAULT NOW()
+  )`);
+  await query(`CREATE TABLE IF NOT EXISTS merchan_ai_alerts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL,
+    alert_type VARCHAR(50) NOT NULL, severity VARCHAR(20) DEFAULT 'medium', title VARCHAR(255) NOT NULL,
+    description TEXT, reference_id UUID, reference_type VARCHAR(50), data JSONB,
+    acknowledged BOOLEAN DEFAULT false, acknowledged_by UUID, acknowledged_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+  )`);
+  await query(`CREATE TABLE IF NOT EXISTS merchan_operational_scores (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL,
+    entity_type VARCHAR(50) NOT NULL, entity_id UUID, score_date DATE NOT NULL,
+    score NUMERIC(5,2) NOT NULL, breakdown JSONB, created_at TIMESTAMPTZ DEFAULT NOW()
+  )`);
+}
+
+// Helper: build date filter
+function buildDateFilter(params, paramIdx, dateFrom, dateTo, dateCol = 'r.visit_date') {
+  let sql = '';
+  if (dateFrom) { sql += ` AND ${dateCol} >= $${paramIdx}`; params.push(dateFrom); paramIdx++; }
+  if (dateTo) { sql += ` AND ${dateCol} <= $${paramIdx}`; params.push(dateTo); paramIdx++; }
+  return { sql, paramIdx };
+}
+
+// ===== Dashboard KPIs (real-time from existing tables) =====
+router.get('/dashboard', authenticate, async (req, res) => {
+  try {
+    await ensureTables();
+    const orgId = await getOrgId(req.userId);
+    if (!orgId) return res.status(403).json({ error: 'Sem organização' });
+
+    const { date_from, date_to, brand_id, pdv_id, promoter_id } = req.query;
+    const params = [orgId];
+    let idx = 2;
+    let dateFilter = '';
+    let brandFilter = '';
+    let pdvFilter = '';
+    let promoterFilter = '';
+
+    if (date_from) { dateFilter += ` AND r.visit_date >= $${idx}`; params.push(date_from); idx++; }
+    if (date_to) { dateFilter += ` AND r.visit_date <= $${idx}`; params.push(date_to); idx++; }
+    if (brand_id) { brandFilter = ` AND r.brand_id = $${idx}`; params.push(brand_id); idx++; }
+    if (pdv_id) { pdvFilter = ` AND r.pdv_id = $${idx}`; params.push(pdv_id); idx++; }
+    if (promoter_id) { promoterFilter = ` AND r.promoter_id = $${idx}`; params.push(promoter_id); idx++; }
+
+    const extraFilter = dateFilter + brandFilter + pdvFilter + promoterFilter;
+
+    // Route KPIs
+    const routeKpis = (await query(`
+      SELECT 
+        COUNT(*) as total_routes,
+        COUNT(*) FILTER (WHERE r.status = 'completed') as completed_routes,
+        COUNT(*) FILTER (WHERE r.status = 'in_progress') as partial_routes,
+        COUNT(*) FILTER (WHERE r.status IN ('scheduled','confirmed','pending')) as pending_routes,
+        COUNT(*) FILTER (WHERE r.status NOT IN ('completed','in_progress','scheduled','confirmed','pending')) as other_routes,
+        COUNT(DISTINCT r.brand_id) as brands_served,
+        COUNT(DISTINCT r.pdv_id) as pdvs_served,
+        COUNT(DISTINCT r.promoter_id) as active_promoters,
+        AVG(EXTRACT(EPOCH FROM (r.checkout_at - r.checkin_at))/60) FILTER (WHERE r.checkin_at IS NOT NULL AND r.checkout_at IS NOT NULL) as avg_visit_min
+      FROM merch_routes r WHERE r.organization_id = $1 ${extraFilter}
+    `, params)).rows[0];
+
+    // Product execution KPIs
+    let productKpis = { total_products: 0, executed_products: 0 };
+    try {
+      const pRes = (await query(`
+        SELECT COUNT(*) as total_products,
+          COUNT(*) FILTER (WHERE rpe.status = 'completed') as executed_products
+        FROM route_product_executions rpe
+        JOIN merch_routes r ON r.id = rpe.route_id
+        WHERE r.organization_id = $1 ${extraFilter}
+      `, params)).rows[0];
+      productKpis = pRes;
+    } catch {}
+
+    // Photo count
+    let photosCount = 0;
+    try {
+      const phRes = (await query(`
+        SELECT COUNT(*) as cnt FROM route_photos rp
+        JOIN merch_routes r ON r.id = rp.route_id
+        WHERE r.organization_id = $1 ${extraFilter}
+      `, params)).rows[0];
+      photosCount = parseInt(phRes.cnt) || 0;
+    } catch {}
+
+    // Damages & stockouts
+    let damages = 0, stockouts = 0, stockCounts = 0, expiryCounts = 0;
+    try {
+      const dRes = (await query(`
+        SELECT 
+          COALESCE(SUM(rpe.damage_qty_store + rpe.damage_qty_stock), 0) as damages,
+          COALESCE(SUM(rpe.stockout_qty_store + rpe.stockout_qty_stock), 0) as stockouts,
+          COUNT(*) FILTER (WHERE rpe.stock_qty_store > 0 OR rpe.stock_qty_stock > 0) as stock_counts,
+          COUNT(*) FILTER (WHERE rpe.expiry_qty_store > 0 OR rpe.expiry_qty_stock > 0) as expiry_counts
+        FROM route_product_executions rpe
+        JOIN merch_routes r ON r.id = rpe.route_id
+        WHERE r.organization_id = $1 ${extraFilter}
+      `, params)).rows[0];
+      damages = parseInt(dRes.damages) || 0;
+      stockouts = parseInt(dRes.stockouts) || 0;
+      stockCounts = parseInt(dRes.stock_counts) || 0;
+      expiryCounts = parseInt(dRes.expiry_counts) || 0;
+    } catch {}
+
+    // Price research
+    let priceCompleted = 0, pricePending = 0;
+    try {
+      const prRes = (await query(`
+        SELECT 
+          COUNT(*) FILTER (WHERE e.status IN ('completed','validated')) as completed,
+          COUNT(*) FILTER (WHERE e.status IN ('pending','scheduled')) as pending
+        FROM price_research_executions e
+        WHERE e.organization_id = $1
+      `, [orgId])).rows[0];
+      priceCompleted = parseInt(prRes.completed) || 0;
+      pricePending = parseInt(prRes.pending) || 0;
+    } catch {}
+
+    // Derived metrics
+    const totalRoutes = parseInt(routeKpis.total_routes) || 0;
+    const completedRoutes = parseInt(routeKpis.completed_routes) || 0;
+    const totalProducts = parseInt(productKpis.total_products) || 0;
+    const executedProducts = parseInt(productKpis.executed_products) || 0;
+
+    const completionRate = totalRoutes > 0 ? Math.round((completedRoutes / totalRoutes) * 100) : 0;
+    const productExecutionRate = totalProducts > 0 ? Math.round((executedProducts / totalProducts) * 100) : 0;
+    const avgPhotosPerRoute = totalRoutes > 0 ? Math.round((photosCount / totalRoutes) * 10) / 10 : 0;
+
+    // Operational score (weighted average)
+    const routeScore = completionRate;
+    const productScore = productExecutionRate;
+    const damageScore = totalProducts > 0 ? Math.max(0, 100 - (damages / totalProducts) * 100) : 100;
+    const stockoutScore = totalProducts > 0 ? Math.max(0, 100 - (stockouts / totalProducts) * 100) : 100;
+    const operationalScore = Math.round((routeScore * 0.3 + productScore * 0.3 + damageScore * 0.2 + stockoutScore * 0.2));
+
+    res.json({
+      kpis: {
+        total_routes: totalRoutes,
+        completed_routes: completedRoutes,
+        partial_routes: parseInt(routeKpis.partial_routes) || 0,
+        pending_routes: parseInt(routeKpis.pending_routes) || 0,
+        total_products: totalProducts,
+        executed_products: executedProducts,
+        brands_served: parseInt(routeKpis.brands_served) || 0,
+        pdvs_served: parseInt(routeKpis.pdvs_served) || 0,
+        active_promoters: parseInt(routeKpis.active_promoters) || 0,
+        photos_captured: photosCount,
+        damages_registered: damages,
+        stockouts_registered: stockouts,
+        price_research_completed: priceCompleted,
+        price_research_pending: pricePending,
+        stock_counts: stockCounts,
+        expiry_counts: expiryCounts,
+      },
+      derived: {
+        completion_rate: completionRate,
+        product_execution_rate: productExecutionRate,
+        avg_visit_duration_min: Math.round(parseFloat(routeKpis.avg_visit_min) || 0),
+        avg_photos_per_route: avgPhotosPerRoute,
+        damage_rate: totalProducts > 0 ? Math.round((damages / totalProducts) * 10000) / 100 : 0,
+        stockout_rate: totalProducts > 0 ? Math.round((stockouts / totalProducts) * 10000) / 100 : 0,
+        operational_score: operationalScore,
+      },
+    });
+  } catch (err) { logError('merch-analytics.dashboard', err); res.status(500).json({ error: 'Erro ao carregar dashboard' }); }
+});
+
+// ===== Report by PDV =====
+router.get('/report/pdv', authenticate, async (req, res) => {
+  try {
+    const orgId = await getOrgId(req.userId);
+    if (!orgId) return res.status(403).json({ error: 'Sem organização' });
+    const { date_from, date_to, pdv_id } = req.query;
+    const params = [orgId];
+    let idx = 2;
+    let filters = '';
+    if (date_from) { filters += ` AND r.visit_date >= $${idx}`; params.push(date_from); idx++; }
+    if (date_to) { filters += ` AND r.visit_date <= $${idx}`; params.push(date_to); idx++; }
+    if (pdv_id) { filters += ` AND r.pdv_id = $${idx}`; params.push(pdv_id); idx++; }
+
+    const rows = (await query(`
+      SELECT p.id as pdv_id, p.name as pdv_name, p.city, p.network,
+        COUNT(DISTINCT r.id) as total_visits,
+        COUNT(DISTINCT r.brand_id) as brands_served,
+        COUNT(DISTINCT r.promoter_id) as promoters,
+        COUNT(*) FILTER (WHERE r.status = 'completed') as completed,
+        AVG(EXTRACT(EPOCH FROM (r.checkout_at - r.checkin_at))/60) FILTER (WHERE r.checkin_at IS NOT NULL AND r.checkout_at IS NOT NULL) as avg_duration_min
+      FROM merch_routes r
+      JOIN pdvs p ON p.id = r.pdv_id
+      WHERE r.organization_id = $1 ${filters}
+      GROUP BY p.id, p.name, p.city, p.network
+      ORDER BY total_visits DESC
+      LIMIT 200
+    `, params)).rows;
+
+    // Enrich with product execution stats
+    for (const row of rows) {
+      try {
+        const pStats = (await query(`
+          SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE rpe.status='completed') as executed,
+            COALESCE(SUM(rpe.damage_qty_store + rpe.damage_qty_stock), 0) as damages,
+            COALESCE(SUM(rpe.stockout_qty_store + rpe.stockout_qty_stock), 0) as stockouts
+          FROM route_product_executions rpe
+          JOIN merch_routes r ON r.id = rpe.route_id
+          WHERE r.pdv_id = $1 AND r.organization_id = $2 ${filters.replace(/r\.pdv_id[^A]+/g, '')}
+        `, [row.pdv_id, orgId, ...(date_from ? [date_from] : []), ...(date_to ? [date_to] : [])])).rows[0];
+        row.total_products = parseInt(pStats?.total) || 0;
+        row.executed_products = parseInt(pStats?.executed) || 0;
+        row.damages = parseInt(pStats?.damages) || 0;
+        row.stockouts = parseInt(pStats?.stockouts) || 0;
+      } catch { row.total_products = 0; row.executed_products = 0; row.damages = 0; row.stockouts = 0; }
+      row.score = row.total_visits > 0 ? Math.round((parseInt(row.completed) / parseInt(row.total_visits)) * 100) : 0;
+    }
+    res.json(rows);
+  } catch (err) { logError('merch-analytics.report.pdv', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// ===== Report by Brand =====
+router.get('/report/brand', authenticate, async (req, res) => {
+  try {
+    const orgId = await getOrgId(req.userId);
+    if (!orgId) return res.status(403).json({ error: 'Sem organização' });
+    const { date_from, date_to, brand_id } = req.query;
+    const params = [orgId];
+    let idx = 2;
+    let filters = '';
+    if (date_from) { filters += ` AND r.visit_date >= $${idx}`; params.push(date_from); idx++; }
+    if (date_to) { filters += ` AND r.visit_date <= $${idx}`; params.push(date_to); idx++; }
+    if (brand_id) { filters += ` AND r.brand_id = $${idx}`; params.push(brand_id); idx++; }
+
+    const rows = (await query(`
+      SELECT b.id as brand_id, b.name as brand_name,
+        COUNT(DISTINCT r.id) as total_routes,
+        COUNT(DISTINCT r.pdv_id) as pdvs_served,
+        COUNT(DISTINCT r.promoter_id) as promoters,
+        COUNT(*) FILTER (WHERE r.status = 'completed') as completed
+      FROM merch_routes r
+      JOIN merch_brands b ON b.id = r.brand_id
+      WHERE r.organization_id = $1 ${filters}
+      GROUP BY b.id, b.name
+      ORDER BY total_routes DESC
+    `, params)).rows;
+
+    for (const row of rows) {
+      try {
+        const ps = (await query(`
+          SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE rpe.status='completed') as executed,
+            COALESCE(SUM(rpe.damage_qty_store + rpe.damage_qty_stock),0) as damages,
+            COALESCE(SUM(rpe.stockout_qty_store + rpe.stockout_qty_stock),0) as stockouts
+          FROM route_product_executions rpe JOIN merch_routes r ON r.id = rpe.route_id
+          WHERE r.brand_id = $1 AND r.organization_id = $2
+        `, [row.brand_id, orgId])).rows[0];
+        row.total_products = parseInt(ps?.total) || 0;
+        row.executed_products = parseInt(ps?.executed) || 0;
+        row.damages = parseInt(ps?.damages) || 0;
+        row.stockouts = parseInt(ps?.stockouts) || 0;
+      } catch { row.total_products = 0; row.executed_products = 0; row.damages = 0; row.stockouts = 0; }
+      row.score = parseInt(row.total_routes) > 0 ? Math.round((parseInt(row.completed) / parseInt(row.total_routes)) * 100) : 0;
+    }
+    res.json(rows);
+  } catch (err) { logError('merch-analytics.report.brand', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// ===== Report by Promoter =====
+router.get('/report/promoter', authenticate, async (req, res) => {
+  try {
+    const orgId = await getOrgId(req.userId);
+    if (!orgId) return res.status(403).json({ error: 'Sem organização' });
+    const { date_from, date_to, promoter_id } = req.query;
+    const params = [orgId];
+    let idx = 2;
+    let filters = '';
+    if (date_from) { filters += ` AND r.visit_date >= $${idx}`; params.push(date_from); idx++; }
+    if (date_to) { filters += ` AND r.visit_date <= $${idx}`; params.push(date_to); idx++; }
+    if (promoter_id) { filters += ` AND r.promoter_id = $${idx}`; params.push(promoter_id); idx++; }
+
+    const rows = (await query(`
+      SELECT e.id as promoter_id, e.full_name as promoter_name,
+        COUNT(DISTINCT r.id) as total_routes,
+        COUNT(*) FILTER (WHERE r.status = 'completed') as completed_routes,
+        COUNT(*) FILTER (WHERE r.status IN ('scheduled','confirmed','pending')) as pending_routes,
+        COUNT(DISTINCT r.brand_id) as brands_served,
+        COUNT(DISTINCT r.pdv_id) as pdvs_visited,
+        AVG(EXTRACT(EPOCH FROM (r.checkout_at - r.checkin_at))/60) FILTER (WHERE r.checkin_at IS NOT NULL AND r.checkout_at IS NOT NULL) as avg_visit_min
+      FROM merch_routes r
+      JOIN employees e ON e.id = r.promoter_id
+      WHERE r.organization_id = $1 ${filters}
+      GROUP BY e.id, e.full_name
+      ORDER BY total_routes DESC
+    `, params)).rows;
+
+    for (const row of rows) {
+      try {
+        const ps = (await query(`
+          SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE rpe.status='completed') as executed,
+            COALESCE(SUM(rpe.damage_qty_store + rpe.damage_qty_stock),0) as damages,
+            COALESCE(SUM(rpe.stockout_qty_store + rpe.stockout_qty_stock),0) as stockouts
+          FROM route_product_executions rpe JOIN merch_routes r ON r.id = rpe.route_id
+          WHERE r.promoter_id = $1 AND r.organization_id = $2
+        `, [row.promoter_id, orgId])).rows[0];
+        row.products_executed = parseInt(ps?.executed) || 0;
+        row.damages = parseInt(ps?.damages) || 0;
+        row.stockouts = parseInt(ps?.stockouts) || 0;
+      } catch { row.products_executed = 0; row.damages = 0; row.stockouts = 0; }
+
+      // Photos
+      try {
+        const ph = (await query(`SELECT COUNT(*) as cnt FROM route_photos rp JOIN merch_routes r ON r.id = rp.route_id WHERE r.promoter_id=$1 AND r.organization_id=$2`, [row.promoter_id, orgId])).rows[0];
+        row.photos = parseInt(ph?.cnt) || 0;
+      } catch { row.photos = 0; }
+
+      row.score = parseInt(row.total_routes) > 0 ? Math.round((parseInt(row.completed_routes) / parseInt(row.total_routes)) * 100) : 0;
+    }
+    res.json(rows);
+  } catch (err) { logError('merch-analytics.report.promoter', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// ===== Report by Product =====
+router.get('/report/product', authenticate, async (req, res) => {
+  try {
+    const orgId = await getOrgId(req.userId);
+    if (!orgId) return res.status(403).json({ error: 'Sem organização' });
+    const { date_from, date_to, brand_id, product_id } = req.query;
+    const params = [orgId];
+    let idx = 2;
+    let filters = '';
+    if (date_from) { filters += ` AND r.visit_date >= $${idx}`; params.push(date_from); idx++; }
+    if (date_to) { filters += ` AND r.visit_date <= $${idx}`; params.push(date_to); idx++; }
+    if (brand_id) { filters += ` AND r.brand_id = $${idx}`; params.push(brand_id); idx++; }
+    if (product_id) { filters += ` AND rpe.product_id = $${idx}`; params.push(product_id); idx++; }
+
+    const rows = (await query(`
+      SELECT p.id as product_id, p.name as product_name, p.sku, p.photo_url,
+        COUNT(DISTINCT r.pdv_id) as pdvs,
+        COUNT(DISTINCT r.id) as routes,
+        COUNT(*) FILTER (WHERE rpe.status='completed') as executed,
+        COALESCE(SUM(rpe.stock_qty_store),0) as stock_store,
+        COALESCE(SUM(rpe.stock_qty_stock),0) as stock_stock,
+        COALESCE(SUM(rpe.damage_qty_store + rpe.damage_qty_stock),0) as damages,
+        COALESCE(SUM(rpe.stockout_qty_store + rpe.stockout_qty_stock),0) as stockouts,
+        COALESCE(SUM(rpe.expiry_qty_store + rpe.expiry_qty_stock),0) as expiries
+      FROM route_product_executions rpe
+      JOIN merch_routes r ON r.id = rpe.route_id
+      JOIN products p ON p.id = rpe.product_id
+      WHERE r.organization_id = $1 ${filters}
+      GROUP BY p.id, p.name, p.sku, p.photo_url
+      ORDER BY routes DESC
+      LIMIT 200
+    `, params)).rows;
+    res.json(rows);
+  } catch (err) { logError('merch-analytics.report.product', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// ===== Report by Category =====
+router.get('/report/category', authenticate, async (req, res) => {
+  try {
+    const orgId = await getOrgId(req.userId);
+    if (!orgId) return res.status(403).json({ error: 'Sem organização' });
+    const { date_from, date_to } = req.query;
+    const params = [orgId];
+    let idx = 2;
+    let filters = '';
+    if (date_from) { filters += ` AND r.visit_date >= $${idx}`; params.push(date_from); idx++; }
+    if (date_to) { filters += ` AND r.visit_date <= $${idx}`; params.push(date_to); idx++; }
+
+    const rows = (await query(`
+      SELECT c.id as category_id, c.name as category_name,
+        COUNT(DISTINCT p.id) as total_products,
+        COUNT(DISTINCT rpe.id) as total_executions,
+        COUNT(*) FILTER (WHERE rpe.status='completed') as executed,
+        COALESCE(SUM(rpe.damage_qty_store + rpe.damage_qty_stock),0) as damages,
+        COALESCE(SUM(rpe.stockout_qty_store + rpe.stockout_qty_stock),0) as stockouts,
+        COALESCE(SUM(rpe.stock_qty_store + rpe.stock_qty_stock),0) as total_stock,
+        COALESCE(SUM(rpe.expiry_qty_store + rpe.expiry_qty_stock),0) as expiries
+      FROM route_product_executions rpe
+      JOIN merch_routes r ON r.id = rpe.route_id
+      JOIN products p ON p.id = rpe.product_id
+      LEFT JOIN merch_categories c ON c.id = p.category_id
+      WHERE r.organization_id = $1 ${filters}
+      GROUP BY c.id, c.name
+      ORDER BY total_executions DESC
+    `, params)).rows;
+    res.json(rows);
+  } catch (err) { logError('merch-analytics.report.category', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// ===== Charts: Route completion over time =====
+router.get('/charts/routes-timeline', authenticate, async (req, res) => {
+  try {
+    const orgId = await getOrgId(req.userId);
+    if (!orgId) return res.status(403).json({ error: 'Sem organização' });
+    const { date_from, date_to } = req.query;
+    const params = [orgId];
+    let idx = 2;
+    let filters = '';
+    if (date_from) { filters += ` AND r.visit_date >= $${idx}`; params.push(date_from); idx++; }
+    if (date_to) { filters += ` AND r.visit_date <= $${idx}`; params.push(date_to); idx++; }
+
+    const rows = (await query(`
+      SELECT r.visit_date::text as date,
+        COUNT(*) as total,
+        COUNT(*) FILTER (WHERE r.status='completed') as completed,
+        COUNT(*) FILTER (WHERE r.status='in_progress') as partial
+      FROM merch_routes r
+      WHERE r.organization_id = $1 ${filters}
+      GROUP BY r.visit_date ORDER BY r.visit_date
+    `, params)).rows;
+    res.json(rows);
+  } catch (err) { logError('merch-analytics.charts.routes', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// ===== Alerts =====
+router.get('/alerts', authenticate, async (req, res) => {
+  try {
+    await ensureTables();
+    const orgId = await getOrgId(req.userId);
+    if (!orgId) return res.status(403).json({ error: 'Sem organização' });
+    const rows = (await query(
+      'SELECT * FROM merchan_ai_alerts WHERE organization_id = $1 ORDER BY created_at DESC LIMIT 50', [orgId]
+    )).rows;
+    res.json(rows);
+  } catch (err) { logError('merch-analytics.alerts', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// ===== Ranking: Top PDVs by issues =====
+router.get('/ranking/issues', authenticate, async (req, res) => {
+  try {
+    const orgId = await getOrgId(req.userId);
+    if (!orgId) return res.status(403).json({ error: 'Sem organização' });
+    const { date_from, date_to } = req.query;
+    const params = [orgId];
+    let idx = 2;
+    let filters = '';
+    if (date_from) { filters += ` AND r.visit_date >= $${idx}`; params.push(date_from); idx++; }
+    if (date_to) { filters += ` AND r.visit_date <= $${idx}`; params.push(date_to); idx++; }
+
+    const rows = (await query(`
+      SELECT p.id as pdv_id, p.name as pdv_name,
+        COALESCE(SUM(rpe.damage_qty_store + rpe.damage_qty_stock),0) as damages,
+        COALESCE(SUM(rpe.stockout_qty_store + rpe.stockout_qty_stock),0) as stockouts,
+        COALESCE(SUM(rpe.damage_qty_store + rpe.damage_qty_stock + rpe.stockout_qty_store + rpe.stockout_qty_stock),0) as total_issues
+      FROM route_product_executions rpe
+      JOIN merch_routes r ON r.id = rpe.route_id
+      JOIN pdvs p ON p.id = r.pdv_id
+      WHERE r.organization_id = $1 ${filters}
+      GROUP BY p.id, p.name
+      HAVING SUM(rpe.damage_qty_store + rpe.damage_qty_stock + rpe.stockout_qty_store + rpe.stockout_qty_stock) > 0
+      ORDER BY total_issues DESC
+      LIMIT 20
+    `, params)).rows;
+    res.json(rows);
+  } catch (err) { logError('merch-analytics.ranking', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+export default router;
