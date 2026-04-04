@@ -461,9 +461,12 @@ router.get('/routes/live', authenticate, async (req, res) => {
     if (!orgRes.rows.length) return res.json([]);
     const orgId = orgRes.rows[0].organization_id;
 
-    // Check if supporting tables exist to avoid subquery crashes
+    // Check if supporting tables/columns exist to avoid schema drift crashes
     let hasExecCategories = false;
     let hasProductExecs = false;
+    let brandTable = 'brands';
+    let checkinPhotoColumn = 'checkin_photo_url';
+    let checkoutPhotoColumn = 'checkout_photo_url';
     try {
       await query(`SELECT 1 FROM merch_execution_categories LIMIT 0`);
       hasExecCategories = true;
@@ -471,6 +474,18 @@ router.get('/routes/live', authenticate, async (req, res) => {
     try {
       await query(`SELECT 1 FROM route_product_executions LIMIT 0`);
       hasProductExecs = true;
+    } catch {}
+    try {
+      await query(`SELECT 1 FROM merch_brands LIMIT 0`);
+      brandTable = 'merch_brands';
+    } catch {}
+    try {
+      await query(`SELECT checkin_photo FROM merch_routes LIMIT 0`);
+      checkinPhotoColumn = 'checkin_photo';
+    } catch {}
+    try {
+      await query(`SELECT checkout_photo FROM merch_routes LIMIT 0`);
+      checkoutPhotoColumn = 'checkout_photo';
     } catch {}
 
     const productCountSql = hasProductExecs
@@ -495,13 +510,15 @@ router.get('/routes/live', authenticate, async (req, res) => {
       `SELECT r.*, e.full_name as promoter_name, p.name as pdv_name, p.city as pdv_city, b.name as brand_name,
               COALESCE(bc.name,'') as checklist_name,
               r.checkin_at, r.checkout_at, r.completed_at, COALESCE(r.progress_pct, 0) as progress_pct,
+              r.${checkinPhotoColumn} as checkin_photo,
+              r.${checkoutPhotoColumn} as checkout_photo,
               ${productCountSql} as total_products,
               ${completedCountSql} as completed_products,
               ${categoryProgressSql} as category_progress
        FROM merch_routes r
        LEFT JOIN employees e ON e.id = r.promoter_id
        LEFT JOIN pdvs p ON p.id = r.pdv_id
-       LEFT JOIN merch_brands b ON b.id = r.brand_id
+       LEFT JOIN ${brandTable} b ON b.id = r.brand_id
        LEFT JOIN brand_checklists bc ON bc.id = r.checklist_id
        WHERE r.organization_id=$1 AND r.visit_date = CURRENT_DATE
        ORDER BY CASE r.status WHEN 'in_progress' THEN 0 WHEN 'scheduled' THEN 1 WHEN 'confirmed' THEN 2 ELSE 3 END, r.scheduled_time`, [orgId]
@@ -531,7 +548,7 @@ router.get('/routes/live', authenticate, async (req, res) => {
     res.json(rows);
   } catch (err) {
     logError('routes.live', err);
-    if (err.code === '42P01') return res.json([]);
+    if (err.code === '42P01' || err.code === '42703') return res.json([]);
     res.status(500).json({ error: 'Erro' });
   }
 });
