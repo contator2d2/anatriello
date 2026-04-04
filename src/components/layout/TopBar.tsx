@@ -77,6 +77,26 @@ export function TopBar() {
         {/* CRM Lead Alerts */}
         <CRMAlerts />
 
+        {/* Overtime Notifications */}
+        {overtimePendingCount > 0 && (
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="ghost" size="icon" className="relative">
+                <ShieldAlert className="h-5 w-5 text-purple-600" />
+                <Badge variant="destructive" className="absolute -top-1 -right-1 text-[10px] px-1 py-0 h-4 min-w-4 flex items-center justify-center">
+                  {overtimePendingCount}
+                </Badge>
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-96 max-h-96 overflow-y-auto" align="end">
+              <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                <ShieldAlert className="h-4 w-4 text-purple-600" /> Horas Extras Pendentes
+              </h4>
+              <OvertimeRequestsPanel statusFilter="pendente" compact />
+            </PopoverContent>
+          </Popover>
+        )}
+
         {/* Divider */}
         <div className="h-6 w-px bg-border" />
 

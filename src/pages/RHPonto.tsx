@@ -380,7 +380,24 @@ export default function RHPonto() {
             <TabsTrigger value="consolidated" className="gap-2"><CalendarDays className="h-4 w-4" /> Consolidado ({filteredConsolidated.length})</TabsTrigger>
             <TabsTrigger value="app" className="gap-2"><Smartphone className="h-4 w-4" /> App ({appPunches.length})</TabsTrigger>
             <TabsTrigger value="manual" className="gap-2"><Clock className="h-4 w-4" /> Manual ({filteredRecords.length})</TabsTrigger>
+            <TabsTrigger value="overtime" className="gap-2">
+              <ShieldAlert className="h-4 w-4" /> Horas Extras
+              {overtimePendingCount > 0 && <Badge variant="destructive" className="text-[10px] px-1.5 py-0 h-4 min-w-4">{overtimePendingCount}</Badge>}
+            </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="overtime">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <ShieldAlert className="h-4 w-4 text-purple-600" /> Solicitações de Hora Extra
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <OvertimeRequestsPanel statusFilter="all" />
+              </CardContent>
+            </Card>
+          </TabsContent>
 
           <TabsContent value="consolidated">
             <Card>

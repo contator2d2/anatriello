@@ -317,7 +317,20 @@ export default function RHDashboard() {
             <TabsTrigger value="documents">Documentos</TabsTrigger>
           </TabsList>
 
-          {/* DASHBOARD TAB */}
+          {/* OVERTIME TAB */}
+          <TabsContent value="overtime" className="space-y-4 mt-4">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <ShieldAlert className="h-4 w-4 text-purple-600" /> Solicitações de Hora Extra
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <OvertimeRequestsPanel statusFilter="all" />
+              </CardContent>
+            </Card>
+          </TabsContent>
+
           <TabsContent value="dashboard" className="space-y-4 mt-4">
             <div className="grid md:grid-cols-2 gap-4">
               {/* Late Arrivals */}
