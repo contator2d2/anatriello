@@ -431,6 +431,7 @@ app.use('/api/promotor', promotorRoutes);
 app.use('/api/merchandising', merchandisingRoutes);
 app.use('/api/merch', merchRoutesRoutes);
 app.use('/api/access-control', accessControlRoutes);
+app.use('/api/price-research', priceResearchRoutes);
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
