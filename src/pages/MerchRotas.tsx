@@ -323,10 +323,33 @@ export default function MerchRotas() {
                     <Package className="h-4 w-4 text-muted-foreground" />
                     <div>
                       <div className="text-[10px] text-muted-foreground">Marca</div>
-                      <div className="font-medium">{viewRoute.brand_name || '—'}</div>
+                      <div className="font-medium">
+                        {viewRoute.is_multi_brand
+                          ? `${viewRoute.route_brands?.length || 0} marcas`
+                          : (viewRoute.brand_name || '—')}
+                      </div>
                     </div>
                   </div>
-                  {viewRoute.checklist_name && (
+                  {/* Multi-brand list */}
+                  {viewRoute.is_multi_brand && viewRoute.route_brands?.length > 0 && (
+                    <div className="col-span-2 space-y-1">
+                      <div className="text-[10px] text-muted-foreground font-medium">Marcas da rota</div>
+                      {viewRoute.route_brands.map((rb: any) => (
+                        <div key={rb.id || rb.brand_id} className="flex items-center justify-between text-xs p-1.5 rounded bg-muted/30">
+                          <span className="font-medium">{rb.brand_name || rb.brand_id}</span>
+                          <div className="flex items-center gap-2">
+                            {rb.progress_pct != null && (
+                              <span className="text-[10px] font-mono">{Math.round(rb.progress_pct)}%</span>
+                            )}
+                            <Badge variant="outline" className="text-[9px] h-4">
+                              {rb.status === 'completed' ? '✅' : rb.status === 'in_progress' ? '🔄' : '⏳'} {rb.status || 'pending'}
+                            </Badge>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {!viewRoute.is_multi_brand && viewRoute.checklist_name && (
                     <div className="flex items-center gap-2 col-span-2">
                       <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
                       <div>
@@ -334,6 +357,7 @@ export default function MerchRotas() {
                         <div className="font-medium">{viewRoute.checklist_name}</div>
                       </div>
                     </div>
+                  )}
                   )}
                   {viewRoute.pdv_city && (
                     <div className="flex items-center gap-2 col-span-2">
