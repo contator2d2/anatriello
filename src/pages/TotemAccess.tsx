@@ -355,6 +355,12 @@ const TotemAccess = () => {
 
   const handleConfirmCheckout = async () => {
     if (!lookupResult?.open_entry_id) return;
+    // If facial recognition enabled and not yet verified, open facial dialog
+    if (authConfig.facial_recognition_enabled && lookupResult?.face_descriptor?.length && !facialVerified) {
+      setFacialPendingAction("checkout");
+      setShowFacialVerify(true);
+      return;
+    }
     if (selfieRequired && !selfieCapture) { startCamera(); return; }
     setLoading(true);
     try {
@@ -378,6 +384,23 @@ const TotemAccess = () => {
     finally { setLoading(false); setLookupResult(null); setSelfieRequired(false); setSelfieCapture(null); }
   };
 
+  const handleFacialResult = useCallback((result: { match: boolean; score: number; imageDataUrl: string }) => {
+    setShowFacialVerify(false);
+    if (result.match) {
+      setFacialVerified(true);
+      // Continue the pending action
+      if (facialPendingAction === "checkin") {
+        setTimeout(() => handleConfirmCheckin(), 100);
+      } else if (facialPendingAction === "checkout") {
+        setTimeout(() => handleConfirmCheckout(), 100);
+      }
+    } else {
+      setResult({ status: "blocked", block_reason: `Identidade facial não confirmada (${result.score.toFixed(1)}%)` });
+      setLookupResult(null);
+    }
+    setFacialPendingAction(null);
+  }, [facialPendingAction]);
+
   const handleCheckout = async () => {
     if (!result?.entry_id) return;
     try {
@@ -391,6 +414,7 @@ const TotemAccess = () => {
   const handleReset = () => {
     setResult(null); setLookupResult(null); setLookupError(null); setCpfDigits("");
     setSelfieRequired(false); setSelfieCapture(null); setShowCamera(false); setLgpdAccepted(false); setShowLgpd(false);
+    setFacialVerified(false); setFacialPendingAction(null); setShowFacialVerify(false);
     stopCamera();
     // Reset to mode selection if multiple modes available
     if (authConfig.cpf_entry_enabled && authConfig.qr_entry_enabled) setAuthMode("select");
