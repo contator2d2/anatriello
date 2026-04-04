@@ -309,6 +309,9 @@ export default function RHDashboard() {
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList>
             <TabsTrigger value="dashboard">Alertas</TabsTrigger>
+            <TabsTrigger value="overtime" className="gap-1">
+              HE {overtimePendingCount > 0 && <Badge variant="destructive" className="text-[10px] px-1.5 py-0 h-4 min-w-4">{overtimePendingCount}</Badge>}
+            </TabsTrigger>
             <TabsTrigger value="vacations">Férias</TabsTrigger>
             <TabsTrigger value="certificates">Atestados</TabsTrigger>
             <TabsTrigger value="documents">Documentos</TabsTrigger>
