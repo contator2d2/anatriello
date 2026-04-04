@@ -865,24 +865,44 @@ const TotemAccess = () => {
               </div>
             )}
 
+            {authConfig.facial_recognition_enabled && lookupResult.face_descriptor?.length && (
+              <div className="mt-3 flex items-center justify-center gap-2 text-white/60 text-sm">
+                <ScanFace className="h-4 w-4" />
+                <span>{facialVerified ? "✓ Identidade facial confirmada" : "Verificação facial obrigatória"}</span>
+              </div>
+            )}
+
             <div className="flex gap-3 mt-6">
               <Button onClick={handleReset} variant="outline" className="flex-1 h-14 text-lg border-white/30 text-white hover:bg-white/10">Não sou eu</Button>
               {lookupResult.has_open_entry ? (
                 <Button onClick={handleConfirmCheckout} disabled={loading}
                   className="flex-1 h-14 text-lg font-bold bg-amber-500 hover:bg-amber-600 text-white">
-                  {loading ? <Loader2 className="h-5 w-5 animate-spin mr-2" /> : <LogOut className="h-5 w-5 mr-2" />}
-                  {loading ? "Saindo..." : selfieRequired ? "Selfie + Check-out" : "Check-out"}
+                  {loading ? <Loader2 className="h-5 w-5 animate-spin mr-2" /> : (authConfig.facial_recognition_enabled && lookupResult.face_descriptor?.length && !facialVerified) ? <ScanFace className="h-5 w-5 mr-2" /> : <LogOut className="h-5 w-5 mr-2" />}
+                  {loading ? "Saindo..." : (authConfig.facial_recognition_enabled && lookupResult.face_descriptor?.length && !facialVerified) ? "Verificar + Check-out" : selfieRequired ? "Selfie + Check-out" : "Check-out"}
                 </Button>
               ) : (
                 <Button onClick={handleConfirmCheckin} disabled={loading} className="flex-1 h-14 text-lg font-bold" style={btnStyle}>
-                  {loading ? <Loader2 className="h-5 w-5 animate-spin mr-2" /> : <LogIn className="h-5 w-5 mr-2" />}
-                  {loading ? "Validando..." : selfieRequired ? "Selfie + Check-in" : "Check-in"}
+                  {loading ? <Loader2 className="h-5 w-5 animate-spin mr-2" /> : (authConfig.facial_recognition_enabled && lookupResult.face_descriptor?.length && !facialVerified) ? <ScanFace className="h-5 w-5 mr-2" /> : <LogIn className="h-5 w-5 mr-2" />}
+                  {loading ? "Validando..." : (authConfig.facial_recognition_enabled && lookupResult.face_descriptor?.length && !facialVerified) ? "Verificar + Check-in" : selfieRequired ? "Selfie + Check-in" : "Check-in"}
                 </Button>
               )}
             </div>
           </div>
         )}
       </div>
+
+      {/* Facial Verification Dialog */}
+      {lookupResult?.face_descriptor?.length && (
+        <FaceVerifyDialog
+          open={showFacialVerify}
+          onOpenChange={(open) => { if (!open) { setShowFacialVerify(false); setFacialPendingAction(null); } }}
+          storedDescriptor={lookupResult.face_descriptor}
+          storedPhotoUrl={lookupResult.face_photo_url || lookupResult.photo_url}
+          personName={lookupResult.name}
+          threshold={authConfig.facial_min_confidence || 70}
+          onResult={handleFacialResult}
+        />
+      )}
 
       {renderConfigDialog()}
     </div>
