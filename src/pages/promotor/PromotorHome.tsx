@@ -681,6 +681,17 @@ export default function PromotorHome() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Facial Verification Dialog for Punch */}
+      <FaceVerifyDialog
+        open={showFaceVerify}
+        onOpenChange={setShowFaceVerify}
+        storedDescriptor={facialConfig?.descriptor || []}
+        storedPhotoUrl={facialConfig?.photo_url}
+        personName={employee?.full_name}
+        threshold={facialConfig?.min_confidence || 70}
+        onResult={handleFaceVerifyResult}
+      />
     </PromotorLayout>
   );
 }
