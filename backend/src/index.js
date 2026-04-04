@@ -433,6 +433,7 @@ app.use('/api/merchandising', merchandisingRoutes);
 app.use('/api/merch', merchRoutesRoutes);
 app.use('/api/access-control', accessControlRoutes);
 app.use('/api/price-research', priceResearchRoutes);
+app.use('/api/merch-analytics', merchAnalyticsRoutes);
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
