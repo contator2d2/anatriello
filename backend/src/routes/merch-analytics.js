@@ -387,7 +387,7 @@ router.get('/report/product', authenticate, async (req, res) => {
     }
 
     const rows = (await query(`
-      SELECT p.id as product_id, p.name as product_name, p.sku, p.photo_url,
+      SELECT p.id as product_id, p.name as product_name, p.sku, p.image_url as photo_url,
         COUNT(DISTINCT r.pdv_id) as pdvs,
         COUNT(DISTINCT r.id) as routes,
         COUNT(*) FILTER (WHERE rpe.status='completed') as executed,
