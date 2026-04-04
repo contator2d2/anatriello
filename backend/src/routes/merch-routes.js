@@ -74,6 +74,7 @@ router.post('/routes', authenticate, async (req, res) => {
            WHERE organization_id=$1 AND brand_id=$2 AND active=true
            ORDER BY created_at DESC LIMIT 1`,
           [orgId, brand_id]
+          [orgId, primaryBrandId]
         );
         effectiveChecklistId = checklistRes.rows[0]?.id || null;
       } catch { /* brand_checklists may not exist yet */ }
