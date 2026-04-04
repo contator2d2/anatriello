@@ -1474,7 +1474,7 @@ function requireSupervisor(req, res, next) {
 }
 
 // Get subordinates (team)
-router.get('/supervisor/team', requireSupervisor, async (req, res) => {
+router.get('/supervisor/team', authenticatePromotor, requireSupervisor, async (req, res) => {
   try {
     const result = await query(
       `SELECT e.id, e.full_name, e.position, e.photo_url, e.worker_profile, e.work_schedule,
@@ -1501,7 +1501,7 @@ router.get('/supervisor/team', requireSupervisor, async (req, res) => {
 });
 
 // Get pending overtime requests from subordinates
-router.get('/supervisor/overtime-requests', requireSupervisor, async (req, res) => {
+router.get('/supervisor/overtime-requests', authenticatePromotor, requireSupervisor, async (req, res) => {
   try {
     const result = await query(
       `SELECT otr.*, e.full_name as employee_name, e.position, e.work_schedule
@@ -1519,7 +1519,7 @@ router.get('/supervisor/overtime-requests', requireSupervisor, async (req, res) 
 });
 
 // Approve/reject overtime request
-router.put('/supervisor/overtime-requests/:id', requireSupervisor, async (req, res) => {
+router.put('/supervisor/overtime-requests/:id', authenticatePromotor, requireSupervisor, async (req, res) => {
   try {
     const { status, supervisor_notes } = req.body;
     if (!['aprovado', 'recusado'].includes(status)) return res.status(400).json({ error: 'Status inválido' });
@@ -1549,7 +1549,7 @@ router.put('/supervisor/overtime-requests/:id', requireSupervisor, async (req, r
 });
 
 // Send notification to specific promoter
-router.post('/supervisor/send-notification', requireSupervisor, async (req, res) => {
+router.post('/supervisor/send-notification', authenticatePromotor, requireSupervisor, async (req, res) => {
   try {
     const { employee_id, title, message } = req.body;
     if (!employee_id || !title) return res.status(400).json({ error: 'employee_id e title obrigatórios' });
@@ -1570,7 +1570,7 @@ router.post('/supervisor/send-notification', requireSupervisor, async (req, res)
 });
 
 // Send document/file to RH
-router.post('/supervisor/send-to-rh', requireSupervisor, async (req, res) => {
+router.post('/supervisor/send-to-rh', authenticatePromotor, requireSupervisor, async (req, res) => {
   try {
     const { title, message, file_url, category } = req.body;
     if (!title) return res.status(400).json({ error: 'Título obrigatório' });
