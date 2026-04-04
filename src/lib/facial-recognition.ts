@@ -10,15 +10,115 @@ import * as faceapi from 'face-api.js';
 const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model';
 
 let modelsLoaded = false;
+let modelsLoadingPromise: Promise<void> | null = null;
+let activeFaceBackend: string | null = null;
+
+type FaceApiTensorflowBackend = {
+  getBackend?: () => string;
+  ready?: () => Promise<void>;
+  setBackend?: (backend: string) => Promise<boolean> | boolean;
+};
+
+function getFaceTensorflowBackend(): FaceApiTensorflowBackend | undefined {
+  return (faceapi as typeof faceapi & { tf?: FaceApiTensorflowBackend }).tf;
+}
+
+async function ensureFaceBackend(preferredBackends: string[] = ['webgl', 'cpu']): Promise<string> {
+  const tf = getFaceTensorflowBackend();
+  if (!tf) {
+    activeFaceBackend = 'unknown';
+    return activeFaceBackend;
+  }
+
+  const currentBackend = tf.getBackend?.();
+  if (currentBackend) {
+    await tf.ready?.();
+    activeFaceBackend = currentBackend;
+    return currentBackend;
+  }
+
+  let lastError: unknown;
+
+  for (const backend of preferredBackends) {
+    try {
+      const changed = await tf.setBackend?.(backend);
+      if (changed === false) continue;
+
+      await tf.ready?.();
+      activeFaceBackend = tf.getBackend?.() || backend;
+      return activeFaceBackend;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  const fallbackBackend = tf.getBackend?.();
+  if (fallbackBackend) {
+    activeFaceBackend = fallbackBackend;
+    return fallbackBackend;
+  }
+
+  throw lastError instanceof Error ? lastError : new Error('Nenhum backend facial disponível no navegador.');
+}
+
+async function switchFaceBackend(backend: string): Promise<boolean> {
+  const tf = getFaceTensorflowBackend();
+  if (!tf?.setBackend) return false;
+
+  try {
+    const changed = await tf.setBackend(backend);
+    if (changed === false) return false;
+
+    await tf.ready?.();
+    activeFaceBackend = tf.getBackend?.() || backend;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function runFaceDetection(
+  input: HTMLVideoElement | HTMLImageElement | HTMLCanvasElement
+): Promise<FaceDetectionResult | null> {
+  const detection = await faceapi
+    .detectSingleFace(input, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 }))
+    .withFaceLandmarks()
+    .withFaceDescriptor();
+
+  if (!detection) return null;
+
+  const landmarks = detection.landmarks.positions.map(p => [p.x, p.y]);
+  const descriptor = Array.from(detection.descriptor);
+  const box = detection.detection.box;
+
+  return {
+    descriptor,
+    landmarks,
+    box: { x: box.x, y: box.y, width: box.width, height: box.height },
+    confidence: detection.detection.score * 100,
+  };
+}
 
 export async function loadFaceModels(): Promise<void> {
   if (modelsLoaded) return;
-  await Promise.all([
-    faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
-    faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
-    faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
-  ]);
-  modelsLoaded = true;
+  if (modelsLoadingPromise) return modelsLoadingPromise;
+
+  modelsLoadingPromise = (async () => {
+    await ensureFaceBackend();
+    await Promise.all([
+      faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
+      faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+      faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
+    ]);
+    modelsLoaded = true;
+  })();
+
+  try {
+    await modelsLoadingPromise;
+  } catch (error) {
+    modelsLoadingPromise = null;
+    throw error;
+  }
 }
 
 export function areModelsLoaded(): boolean {
@@ -40,23 +140,14 @@ export async function detectFace(
 ): Promise<FaceDetectionResult | null> {
   await loadFaceModels();
 
-  const detection = await faceapi
-    .detectSingleFace(input, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 }))
-    .withFaceLandmarks()
-    .withFaceDescriptor();
+  try {
+    return await runFaceDetection(input);
+  } catch (error) {
+    const switchedToCpu = activeFaceBackend !== 'cpu' && await switchFaceBackend('cpu');
+    if (!switchedToCpu) throw error;
 
-  if (!detection) return null;
-
-  const landmarks = detection.landmarks.positions.map(p => [p.x, p.y]);
-  const descriptor = Array.from(detection.descriptor);
-  const box = detection.detection.box;
-
-  return {
-    descriptor,
-    landmarks,
-    box: { x: box.x, y: box.y, width: box.width, height: box.height },
-    confidence: detection.detection.score * 100,
-  };
+    return runFaceDetection(input);
+  }
 }
 
 /**
