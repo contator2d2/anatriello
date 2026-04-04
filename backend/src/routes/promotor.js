@@ -1457,4 +1457,143 @@ router.get('/facial-config', authenticatePromotor, async (req, res) => {
   }
 });
 
+// ===== SUPERVISOR ENDPOINTS (used by supervisor in promotor app) =====
+
+// Middleware to verify supervisor role
+function requireSupervisor(req, res, next) {
+  query(`SELECT worker_profile FROM employees WHERE id = $1`, [req.employeeId])
+    .then(r => {
+      const profile = r.rows[0]?.worker_profile;
+      if (profile === 'supervisor' || profile === 'administrativo') {
+        next();
+      } else {
+        res.status(403).json({ error: 'Acesso restrito a supervisores' });
+      }
+    })
+    .catch(err => res.status(500).json({ error: err.message }));
+}
+
+// Get subordinates (team)
+router.get('/supervisor/team', requireSupervisor, async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT e.id, e.full_name, e.position, e.photo_url, e.worker_profile, e.work_schedule,
+              e.status, e.phone,
+              lt.latitude as last_latitude, lt.longitude as last_longitude,
+              lt.is_moving, lt.battery_level, lt.recorded_at as last_location_at,
+              CASE WHEN lt.recorded_at > NOW() - interval '10 minutes' THEN 'online' ELSE 'offline' END as live_status,
+              (SELECT p2.pdv_name FROM attendance_punches p2 WHERE p2.employee_id = e.id AND p2.punched_at::date = CURRENT_DATE ORDER BY p2.punched_at DESC LIMIT 1) as last_pdv_name,
+              (SELECT COUNT(*) FROM merch_routes mr WHERE mr.promoter_id = e.id AND mr.visit_date = CURRENT_DATE) as today_routes_count
+       FROM employees e
+       LEFT JOIN LATERAL (
+         SELECT latitude, longitude, is_moving, battery_level, recorded_at
+         FROM location_tracking WHERE employee_id = e.id ORDER BY recorded_at DESC LIMIT 1
+       ) lt ON true
+       WHERE e.organization_id = $1 AND e.direct_manager_id = $2 AND e.status = 'ativo'
+       ORDER BY e.full_name`,
+      [req.organizationId, req.employeeId]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    logError('supervisor.team', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get pending overtime requests from subordinates
+router.get('/supervisor/overtime-requests', requireSupervisor, async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT otr.*, e.full_name as employee_name, e.position, e.work_schedule
+       FROM overtime_requests otr
+       JOIN employees e ON e.id = otr.employee_id
+       WHERE e.direct_manager_id = $1 AND otr.status = 'pendente'
+       ORDER BY otr.created_at DESC`,
+      [req.employeeId]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    logError('supervisor.overtime-requests', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Approve/reject overtime request
+router.put('/supervisor/overtime-requests/:id', requireSupervisor, async (req, res) => {
+  try {
+    const { status, supervisor_notes } = req.body;
+    if (!['aprovado', 'recusado'].includes(status)) return res.status(400).json({ error: 'Status inválido' });
+
+    const result = await query(
+      `UPDATE overtime_requests SET status = $1, supervisor_notes = $2, approved_by = $3, approved_at = NOW(), updated_at = NOW()
+       WHERE id = $4 RETURNING *`,
+      [status, supervisor_notes || '', req.employeeId, req.params.id]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Solicitação não encontrada' });
+
+    // Notify the employee
+    const ot = result.rows[0];
+    const supName = await query(`SELECT full_name FROM employees WHERE id = $1`, [req.employeeId]);
+    await query(
+      `INSERT INTO collaborator_notifications (organization_id, employee_id, title, message, type) VALUES ($1, $2, $3, $4, 'punch')`,
+      [req.organizationId, ot.employee_id,
+       status === 'aprovado' ? '✅ Hora Extra Aprovada' : '❌ Hora Extra Recusada',
+       `Supervisor ${supName.rows[0]?.full_name || ''}: ${supervisor_notes || 'Sem observação'}`]
+    );
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    logError('supervisor.approve-overtime', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Send notification to specific promoter
+router.post('/supervisor/send-notification', requireSupervisor, async (req, res) => {
+  try {
+    const { employee_id, title, message } = req.body;
+    if (!employee_id || !title) return res.status(400).json({ error: 'employee_id e title obrigatórios' });
+
+    // Verify subordinate
+    const emp = await query(`SELECT id FROM employees WHERE id = $1 AND direct_manager_id = $2`, [employee_id, req.employeeId]);
+    if (!emp.rows.length) return res.status(403).json({ error: 'Promotor não é seu subordinado' });
+
+    await query(
+      `INSERT INTO collaborator_notifications (organization_id, employee_id, title, message, type) VALUES ($1, $2, $3, $4, 'info')`,
+      [req.organizationId, employee_id, title, message || '']
+    );
+    res.json({ success: true });
+  } catch (err) {
+    logError('supervisor.send-notification', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Send document/file to RH
+router.post('/supervisor/send-to-rh', requireSupervisor, async (req, res) => {
+  try {
+    const { title, message, file_url, category } = req.body;
+    if (!title) return res.status(400).json({ error: 'Título obrigatório' });
+
+    const result = await query(
+      `INSERT INTO collaborator_inbound_documents (organization_id, employee_id, category, description, file_url, status)
+       VALUES ($1, $2, $3, $4, $5, 'pendente') RETURNING *`,
+      [req.organizationId, req.employeeId, category || 'geral', `${title}${message ? ': ' + message : ''}`, file_url || '']
+    );
+
+    // Notify RH admins
+    await query(
+      `INSERT INTO collaborator_notifications (organization_id, employee_id, title, message, type)
+       SELECT $1, e.id, 'Documento do supervisor', $3, 'document'
+       FROM employees e WHERE e.organization_id = $1 AND e.worker_profile IN ('administrativo') LIMIT 5`,
+      [req.organizationId, req.employeeId, title]
+    );
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    logError('supervisor.send-to-rh', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;
