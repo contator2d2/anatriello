@@ -256,6 +256,8 @@ const App = () => (
               <Route path="dashboard" element={<SupermarketDashboard />} />
               <Route path="ocorrencias" element={<SupermarketIncidents />} />
               <Route path="visitas" element={<SupermarketVisitRequests />} />
+              <Route path="contatos" element={<SupermarketContacts />} />
+              <Route path="assistente" element={<SupermarketAssistant />} />
               <Route path="historico" element={<SupermarketHistory />} />
             </Route>
             {/* Promotor App */}
