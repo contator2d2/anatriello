@@ -336,7 +336,9 @@ router.post('/punch', authenticatePromotor, async (req, res) => {
     // ===== WORK SCHEDULE VALIDATION =====
     const empRes = await query(`SELECT work_schedule FROM employees WHERE id = $1`, [req.employeeId]);
     const wsRaw = empRes.rows[0]?.work_schedule || '08:00-17:00';
-    const now = is_offline && offline_local_time ? new Date(offline_local_time) : new Date();
+    const now = is_offline && offline_local_time
+      ? new Date(offline_local_time)
+      : new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
     // Parse schedule — supports JSON {"entry":"HH:MM","exit":"HH:MM"} or plain "HH:MM-HH:MM"
@@ -356,7 +358,7 @@ router.post('/punch', authenticatePromotor, async (req, res) => {
 
     if (!isWithinSchedule) {
       // Check for approved overtime request for today
-      const today = now.toISOString().slice(0, 10);
+      const today = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
       const otReq = await query(
         `SELECT id, requested_start, requested_end FROM overtime_requests
          WHERE employee_id = $1 AND request_date = $2 AND status = 'aprovado'
