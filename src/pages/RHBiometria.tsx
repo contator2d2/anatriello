@@ -181,6 +181,27 @@ const RHBiometria = () => {
                           </Button>
                           <Button
                             size="sm"
+                            variant="secondary"
+                            className="gap-1"
+                            onClick={async () => {
+                              try {
+                                const data = await api<any>(`/api/rh/facial-recognition/descriptor/${emp.id}`);
+                                if (data?.descriptor) {
+                                  setTestDescriptor(data.descriptor);
+                                  setTestingEmp(emp);
+                                } else {
+                                  toast({ title: 'Sem dados faciais para testar', variant: 'destructive' });
+                                }
+                              } catch {
+                                toast({ title: 'Erro ao carregar dados faciais', variant: 'destructive' });
+                              }
+                            }}
+                          >
+                            <Play className="h-3.5 w-3.5" />
+                            Testar
+                          </Button>
+                          <Button
+                            size="sm"
                             variant="outline"
                             className="gap-1"
                             onClick={() => {
