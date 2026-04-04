@@ -272,3 +272,35 @@ export function usePriceHistory(filters?: { product_id?: string; brand_id?: stri
     enabled: !!(filters?.product_id || filters?.brand_id || filters?.pdv_id),
   });
 }
+
+// ===== Redes (Networks) =====
+export function useRedes() {
+  return useQuery({
+    queryKey: ['price-research-redes'],
+    queryFn: () => api<any[]>('/api/price-research/redes'),
+  });
+}
+
+export function useCreateRede() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: any) => api<any>('/api/price-research/redes', { method: 'POST', body: data }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['price-research-redes'] }),
+  });
+}
+
+export function useUpdateRede() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }: any) => api<any>(`/api/price-research/redes/${id}`, { method: 'PUT', body: data }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['price-research-redes'] }),
+  });
+}
+
+export function useDeleteRede() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api<any>(`/api/price-research/redes/${id}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['price-research-redes'] }),
+  });
+}
