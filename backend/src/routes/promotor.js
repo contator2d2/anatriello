@@ -1525,7 +1525,7 @@ router.put('/supervisor/overtime-requests/:id', authenticatePromotor, requireSup
     if (!['aprovado', 'recusado'].includes(status)) return res.status(400).json({ error: 'Status inválido' });
 
     const result = await query(
-      `UPDATE overtime_requests SET status = $1, supervisor_notes = $2, approved_by = $3, approved_at = NOW(), updated_at = NOW()
+      `UPDATE overtime_requests SET status = $1, supervisor_notes = $2, approved_by = $3, approved_at = NOW()
        WHERE id = $4 RETURNING *`,
       [status, supervisor_notes || '', req.employeeId, req.params.id]
     );
