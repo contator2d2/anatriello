@@ -693,9 +693,12 @@ function ModelEditorDialog({ rule, brands, open, onClose }: { rule: any; brands:
 function ScheduleResearchDialog({ rule, brands, open, onClose }: { rule: any; brands: any[]; open: boolean; onClose: () => void }) {
   const brandName = brands.find((b: any) => b.id === rule.brand_id)?.name || 'Marca';
   const { data: pdvs = [] } = useBrandPdvs(rule.brand_id);
+  const { data: redes = [] } = useRedes();
   const { data: employees = [] } = useEmployees();
   const qc = useQueryClient();
+  const [targetType, setTargetType] = useState<'pdv' | 'rede'>('pdv');
   const [pdvId, setPdvId] = useState('');
+  const [redeId, setRedeId] = useState('');
   const [promoterId, setPromoterId] = useState('');
   const [scheduleDate, setScheduleDate] = useState('');
   const [scheduleTime, setScheduleTime] = useState('');
@@ -703,8 +706,11 @@ function ScheduleResearchDialog({ rule, brands, open, onClose }: { rule: any; br
   const [recurrenceEndDate, setRecurrenceEndDate] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const selectedRede = redes.find((r: any) => r.id === redeId);
+
   const handleSchedule = async () => {
-    if (!pdvId) return toast.error('Selecione um PDV');
+    if (targetType === 'pdv' && !pdvId) return toast.error('Selecione um PDV');
+    if (targetType === 'rede' && !redeId) return toast.error('Selecione uma Rede');
     if (!promoterId) return toast.error('Selecione um promotor');
     if (!scheduleDate) return toast.error('Selecione uma data');
     if (recurrenceType !== 'once' && !recurrenceEndDate) return toast.error('Defina a data final da recorrência');
@@ -714,13 +720,17 @@ function ScheduleResearchDialog({ rule, brands, open, onClose }: { rule: any; br
         method: 'POST',
         body: {
           rule_id: rule.id, brand_id: rule.brand_id,
-          pdv_id: pdvId, promoter_id: promoterId,
+          pdv_id: targetType === 'pdv' ? pdvId : undefined,
+          rede_id: targetType === 'rede' ? redeId : undefined,
+          promoter_id: promoterId,
           scheduled_date: scheduleDate, scheduled_time: scheduleTime || null,
           recurrence_type: recurrenceType, recurrence_end_date: recurrenceEndDate || null,
         },
       });
       qc.invalidateQueries({ queryKey: ['price-research-executions'] });
-      toast.success('Pesquisa agendada!');
+      toast.success(targetType === 'rede' 
+        ? `Pesquisa agendada para ${selectedRede?.pdv_count || 0} PDVs da rede!` 
+        : 'Pesquisa agendada!');
       onClose();
     } catch (err: any) {
       toast.error(err.message || 'Erro ao agendar');
@@ -738,19 +748,49 @@ function ScheduleResearchDialog({ rule, brands, open, onClose }: { rule: any; br
               <p className="text-xs text-muted-foreground">{brandName}</p>
               <div className="flex gap-2 mt-1 text-xs flex-wrap">
                 <Badge variant="outline" className="text-[10px] h-5">{rule.selected_products?.length || 0} produtos</Badge>
-                <Badge variant="outline" className="text-[10px] h-5">{rule.selected_competitors?.length || 0} concorrentes</Badge>
+                <Badge variant="outline" className="text-[10px] h-5">
+                  {rule.competitor_config ? Object.values(rule.competitor_config as Record<string, any[]>).reduce((s: number, a: any[]) => s + (a?.length || 0), 0) : 0} concorrentes
+                </Badge>
                 {rule.block_route_completion && <Badge variant="destructive" className="text-[10px] h-5">Obrigatória</Badge>}
               </div>
             </CardContent>
           </Card>
 
+          {/* Target type: PDV or Rede */}
           <div>
-            <Label className="flex items-center gap-1"><MapPin className="h-3 w-3" />PDV *</Label>
-            <Select value={pdvId} onValueChange={setPdvId}>
-              <SelectTrigger><SelectValue placeholder="Selecione o PDV" /></SelectTrigger>
-              <SelectContent>{pdvs.map((p: any) => <SelectItem key={p.pdv_id || p.id} value={p.pdv_id || p.id}>{p.pdv_name || p.name}</SelectItem>)}</SelectContent>
-            </Select>
+            <Label className="mb-1 block">Aplicar a</Label>
+            <div className="flex gap-2">
+              <Button size="sm" variant={targetType === 'pdv' ? 'default' : 'outline'} onClick={() => setTargetType('pdv')}>
+                <MapPin className="h-3 w-3 mr-1" />PDV individual
+              </Button>
+              <Button size="sm" variant={targetType === 'rede' ? 'default' : 'outline'} onClick={() => setTargetType('rede')}>
+                <Globe className="h-3 w-3 mr-1" />Rede inteira
+              </Button>
+            </div>
           </div>
+
+          {targetType === 'pdv' ? (
+            <div>
+              <Label className="flex items-center gap-1"><MapPin className="h-3 w-3" />PDV *</Label>
+              <Select value={pdvId} onValueChange={setPdvId}>
+                <SelectTrigger><SelectValue placeholder="Selecione o PDV" /></SelectTrigger>
+                <SelectContent>{pdvs.map((p: any) => <SelectItem key={p.pdv_id || p.id} value={p.pdv_id || p.id}>{p.pdv_name || p.name}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+          ) : (
+            <div>
+              <Label className="flex items-center gap-1"><Globe className="h-3 w-3" />Rede *</Label>
+              <Select value={redeId} onValueChange={setRedeId}>
+                <SelectTrigger><SelectValue placeholder="Selecione a rede" /></SelectTrigger>
+                <SelectContent>{redes.map((r: any) => <SelectItem key={r.id} value={r.id}>{r.name} ({r.pdv_count} PDVs)</SelectItem>)}</SelectContent>
+              </Select>
+              {selectedRede && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Será criada uma pesquisa para cada um dos {selectedRede.pdv_count} PDVs desta rede.
+                </p>
+              )}
+            </div>
+          )}
 
           <div>
             <Label className="flex items-center gap-1"><User className="h-3 w-3" />Promotor *</Label>
@@ -792,6 +832,157 @@ function ScheduleResearchDialog({ rule, brands, open, onClose }: { rule: any; br
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ===== Redes Tab =====
+function RedesTab() {
+  const { data: redes = [], isLoading } = useRedes();
+  const createRede = useCreateRede();
+  const updateRede = useUpdateRede();
+  const deleteRede = useDeleteRede();
+  const [showEditor, setShowEditor] = useState(false);
+  const [editingRede, setEditingRede] = useState<any>(null);
+  const [redeName, setRedeName] = useState('');
+  const [redeDesc, setRedeDesc] = useState('');
+  const [selectedPdvIds, setSelectedPdvIds] = useState<string[]>([]);
+
+  // All PDVs
+  const { data: allPdvs = [] } = useQuery({
+    queryKey: ['all-pdvs-for-rede'],
+    queryFn: () => api<any[]>('/api/merchandising/pdvs'),
+  });
+
+  const openEditor = (rede?: any) => {
+    setEditingRede(rede || null);
+    setRedeName(rede?.name || '');
+    setRedeDesc(rede?.description || '');
+    setSelectedPdvIds(rede?.pdvs?.map((p: any) => p.pdv_id) || []);
+    setShowEditor(true);
+  };
+
+  const handleSave = () => {
+    if (!redeName.trim()) return toast.error('Nome obrigatório');
+    if (selectedPdvIds.length === 0) return toast.error('Selecione pelo menos um PDV');
+    const data = { name: redeName, description: redeDesc, pdv_ids: selectedPdvIds };
+    if (editingRede) {
+      updateRede.mutate({ id: editingRede.id, ...data }, {
+        onSuccess: () => { toast.success('Rede atualizada!'); setShowEditor(false); },
+      });
+    } else {
+      createRede.mutate(data, {
+        onSuccess: () => { toast.success('Rede criada!'); setShowEditor(false); },
+      });
+    }
+  };
+
+  const togglePdv = (pdvId: string) => {
+    setSelectedPdvIds(prev => prev.includes(pdvId) ? prev.filter(id => id !== pdvId) : [...prev, pdvId]);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-between items-center flex-wrap gap-2">
+        <div>
+          <p className="text-sm text-muted-foreground">Agrupe PDVs em redes para agendar pesquisas em lote.</p>
+        </div>
+        <Button onClick={() => openEditor()}>
+          <Plus className="h-4 w-4 mr-1" />Nova Rede
+        </Button>
+      </div>
+
+      <div className="grid gap-3">
+        {redes.map((rede: any) => (
+          <Card key={rede.id} className="hover:shadow-md transition-shadow">
+            <CardContent className="pt-4 pb-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Globe className="h-4 w-4 text-primary" />
+                    <h3 className="font-semibold">{rede.name}</h3>
+                    <Badge variant={rede.active ? 'default' : 'secondary'}>{rede.active ? 'Ativa' : 'Inativa'}</Badge>
+                  </div>
+                  {rede.description && <p className="text-xs text-muted-foreground mb-2">{rede.description}</p>}
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <MapPin className="h-3 w-3" />
+                    <span>{rede.pdv_count} PDV{rede.pdv_count !== 1 ? 's' : ''}</span>
+                  </div>
+                  {rede.pdvs?.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {rede.pdvs.slice(0, 5).map((p: any) => (
+                        <Badge key={p.pdv_id} variant="outline" className="text-[10px] h-5">{p.pdv_name}</Badge>
+                      ))}
+                      {rede.pdvs.length > 5 && <Badge variant="outline" className="text-[10px] h-5">+{rede.pdvs.length - 5}</Badge>}
+                    </div>
+                  )}
+                </div>
+                <div className="flex gap-1 flex-shrink-0">
+                  <Button size="icon" variant="ghost" onClick={() => openEditor(rede)}>
+                    <Edit className="h-4 w-4" />
+                  </Button>
+                  <Button size="icon" variant="ghost" onClick={() => { if (confirm('Excluir rede?')) deleteRede.mutate(rede.id); }}>
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+        {redes.length === 0 && !isLoading && (
+          <Card><CardContent className="py-12 text-center text-muted-foreground">
+            <Globe className="h-12 w-12 mx-auto mb-3 text-muted-foreground/50" />
+            Nenhuma rede criada. Clique em "Nova Rede" para agrupar PDVs.
+          </CardContent></Card>
+        )}
+      </div>
+
+      {showEditor && (
+        <Dialog open={showEditor} onOpenChange={() => setShowEditor(false)}>
+          <DialogContent className="max-w-lg max-h-[90vh]">
+            <DialogHeader><DialogTitle>{editingRede ? 'Editar Rede' : 'Nova Rede'}</DialogTitle></DialogHeader>
+            <ScrollArea className="max-h-[70vh] pr-4">
+              <div className="space-y-4">
+                <div>
+                  <Label>Nome da rede *</Label>
+                  <Input value={redeName} onChange={e => setRedeName(e.target.value)} placeholder="Ex: Rede Carrefour" />
+                </div>
+                <div>
+                  <Label>Descrição</Label>
+                  <Textarea value={redeDesc} onChange={e => setRedeDesc(e.target.value)} rows={2} placeholder="Opcional" />
+                </div>
+                <div>
+                  <Label>PDVs ({selectedPdvIds.length} selecionados)</Label>
+                  <div className="space-y-2 max-h-60 overflow-y-auto mt-2 border rounded p-2">
+                    {allPdvs.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">Nenhum PDV disponível</p>}
+                    {allPdvs.map((pdv: any) => (
+                      <label key={pdv.id} className="flex items-center gap-3 p-2 rounded hover:bg-muted/50 cursor-pointer">
+                        <Checkbox checked={selectedPdvIds.includes(pdv.id)} onCheckedChange={() => togglePdv(pdv.id)} />
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium truncate">{pdv.name}</p>
+                          <p className="text-xs text-muted-foreground">{[pdv.client_name, pdv.city, pdv.state].filter(Boolean).join(' • ')}</p>
+                        </div>
+                      </label>
+                    ))}
+                    {allPdvs.length > 0 && (
+                      <div className="flex gap-2 pt-2 border-t">
+                        <Button size="sm" variant="outline" onClick={() => setSelectedPdvIds(allPdvs.map((p: any) => p.id))}>Todos</Button>
+                        <Button size="sm" variant="outline" onClick={() => setSelectedPdvIds([])}>Limpar</Button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </ScrollArea>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowEditor(false)}>Cancelar</Button>
+              <Button onClick={handleSave} disabled={createRede.isPending || updateRede.isPending}>
+                {editingRede ? 'Salvar' : 'Criar Rede'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+    </div>
   );
 }
 
