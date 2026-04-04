@@ -76,7 +76,7 @@ export function PromotorLayout({ children }: PromotorLayoutProps) {
   };
 
   const employee = JSON.parse(localStorage.getItem('promotor_employee') || '{}');
-  const isSupervisor = employee?.worker_profile === 'supervisor' || employee?.worker_profile === 'administrativo';
+  const isSupervisor = employee?.worker_profile === 'supervisor' || employee?.worker_profile === 'administrativo' || employee?.profile === 'supervisor' || employee?.profile === 'administrativo';
 
   const navItems = [
     { path: '/promotor/home', icon: Home, label: 'Início' },
