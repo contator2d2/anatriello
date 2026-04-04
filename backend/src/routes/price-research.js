@@ -574,4 +574,24 @@ router.get('/brand-results/:ruleId', authenticate, async (req, res) => {
   } catch (err) { logError('price-research.brand-results.detail', err); res.status(500).json({ error: 'Erro' }); }
 });
 
+// ===== ADMIN: Schedule research from model =====
+router.post('/schedule', authenticate, async (req, res) => {
+  try {
+    await ensureTables();
+    const orgId = await getOrgId(req.userId);
+    if (!orgId) return res.status(403).json({ error: 'Sem organização' });
+    const { rule_id, brand_id, pdv_id, promoter_id, scheduled_date, scheduled_time } = req.body;
+    if (!rule_id || !brand_id || !pdv_id || !promoter_id || !scheduled_date) {
+      return res.status(400).json({ error: 'Campos obrigatórios: rule_id, brand_id, pdv_id, promoter_id, scheduled_date' });
+    }
+    const result = await query(
+      `INSERT INTO price_research_executions (organization_id, rule_id, brand_id, pdv_id, promoter_id, scheduled_date, scheduled_time, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,'scheduled') RETURNING *`,
+      [orgId, rule_id, brand_id, pdv_id, promoter_id, scheduled_date, scheduled_time || null]
+    );
+    logInfo('price-research.schedule', `Scheduled research rule=${rule_id} pdv=${pdv_id} promoter=${promoter_id} date=${scheduled_date}`);
+    res.json(result.rows[0]);
+  } catch (err) { logError('price-research.schedule', err); res.status(500).json({ error: 'Erro ao agendar pesquisa' }); }
+});
+
 export default router;
