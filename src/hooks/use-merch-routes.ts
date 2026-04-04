@@ -107,7 +107,9 @@ export function useLiveRoutes() {
   return useQuery({
     queryKey: ['merch-routes-live'],
     queryFn: () => api<any[]>('/api/merch/routes/live'),
-    refetchInterval: 15000,
+    refetchInterval: (query) => (query.state.status === 'error' ? false : 15000),
+    retry: false,
+    refetchOnWindowFocus: false,
   });
 }
 
