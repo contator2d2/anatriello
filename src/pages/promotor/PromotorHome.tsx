@@ -481,33 +481,44 @@ export default function PromotorHome() {
           </Card>
         </div>
 
-        {/* Punch footer when routes exist - secondary */}
-        {hasRoutesToday && (
-          <Card className="border-muted">
-            <CardContent className="p-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-muted-foreground" />
-                  <div>
-                    <p className="text-xs font-medium">Ponto</p>
-                    <p className="text-[10px] text-muted-foreground">
-                      {todayPunches.length > 0
-                        ? `${todayPunches.length} registro${todayPunches.length > 1 ? 's' : ''} • Último: ${format(new Date(todayPunches[todayPunches.length - 1].punched_at), 'HH:mm')}`
-                        : 'Nenhum registro hoje'}
-                    </p>
-                  </div>
-                </div>
-                <Button
-                  size="sm" variant="outline" className="text-xs h-8"
-                  onClick={handlePunch}
-                  disabled={punchLoading || gpsStatus !== 'active' || (!canPunch && isOutsideSchedule)}
-                >
-                  {punchLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : PUNCH_LABELS[getNextPunchType()]?.slice(2) || 'Ponto'}
+        {/* Punch button - always visible */}
+        <Card className="overflow-hidden">
+          <CardContent className="p-0">
+            <Button
+              onClick={handlePunch}
+              disabled={punchLoading || gpsStatus !== 'active' || (!canPunch && isOutsideSchedule)}
+              className={`w-full h-20 rounded-none text-lg font-bold ${
+                !canPunch && isOutsideSchedule
+                  ? 'bg-muted text-muted-foreground cursor-not-allowed'
+                  : 'bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70'
+              }`}
+            >
+              {punchLoading ? <Loader2 className="h-6 w-6 animate-spin mr-2" /> : <Clock className="h-6 w-6 mr-2" />}
+              {!canPunch && isOutsideSchedule
+                ? '🔒 Fora do Horário'
+                : PUNCH_LABELS[getNextPunchType()] || 'Bater Ponto'}
+            </Button>
+            {!canPunch && isOutsideSchedule && (
+              <div className="p-3 border-t bg-destructive/5 text-center">
+                <p className="text-xs text-destructive font-medium">Ponto bloqueado fora do horário</p>
+                <Button variant="link" size="sm" className="text-xs h-6 p-0" onClick={() => setOvertimeDialog(true)}>
+                  Solicitar hora extra ao supervisor →
                 </Button>
               </div>
-            </CardContent>
-          </Card>
-        )}
+            )}
+            {todayPunches.length > 0 && (
+              <div className="p-3 border-t space-y-1">
+                <p className="text-xs font-medium text-muted-foreground">Registros de hoje:</p>
+                {todayPunches.map((p: any) => (
+                  <div key={p.id} className="flex items-center justify-between text-xs">
+                    <span>{PUNCH_LABELS[p.punch_type] || p.punch_type}</span>
+                    <span className="text-muted-foreground">{format(new Date(p.punched_at), 'HH:mm')}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Notifications */}
         {notifications.length > 0 && (
