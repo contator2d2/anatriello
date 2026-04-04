@@ -10,6 +10,7 @@ import { PromoterScoreBadge } from '@/components/scores/PromoterScoreBadge';
 import { IncidentCreateDialog } from '@/components/incidents/IncidentCreateDialog';
 import { IncidentDetailDialog } from '@/components/incidents/IncidentDetailDialog';
 import { useIncidents, usePromoterScores } from '@/hooks/use-incidents';
+import DailySummaryWidget from '@/components/access-control/DailySummaryWidget';
 import { Users, CheckCircle, XCircle, Clock, Tag, ShieldAlert, CalendarDays, CalendarPlus, Star, AlertTriangle, Plus, ScanFace, QrCode, Fingerprint, CreditCard } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -35,7 +36,7 @@ export default function SupermarketDashboard() {
   const { user } = useSupermarketAuth();
   const [showCreateIncident, setShowCreateIncident] = useState(false);
   const [selectedIncident, setSelectedIncident] = useState<any>(null);
-  const { incidents, createIncident, respondIncident } = useIncidents('supermarket');
+  const { incidents, createIncident, respondIncident, analyzeIncident } = useIncidents('supermarket');
   const { scores } = usePromoterScores('supermarket');
 
   const { data: live } = useQuery({
@@ -71,6 +72,9 @@ export default function SupermarketDashboard() {
 
   return (
     <div className="p-4 md:p-6 space-y-6">
+      {/* AI Daily Summary */}
+      <DailySummaryWidget portal="supermarket" />
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Painel em Tempo Real</h1>
@@ -298,7 +302,9 @@ export default function SupermarketDashboard() {
       <IncidentDetailDialog open={!!selectedIncident} onOpenChange={() => setSelectedIncident(null)}
         incident={selectedIncident} canRespond responderType="supermarket"
         responderName={user?.unit_name}
-        onRespond={(data) => respondIncident.mutate(data)} />
+        onRespond={(data) => respondIncident.mutate(data)}
+        onAnalyze={(id) => analyzeIncident.mutate(id)}
+        isAnalyzing={analyzeIncident.isPending} />
     </div>
   );
 }

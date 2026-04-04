@@ -113,6 +113,8 @@ import SupermarketDashboard from "./pages/supermarket/SupermarketDashboard";
 import SupermarketHistory from "./pages/supermarket/SupermarketHistory";
 import SupermarketVisitRequests from "./pages/supermarket/SupermarketVisitRequests";
 import SupermarketIncidents from "./pages/supermarket/SupermarketIncidents";
+import SupermarketContacts from "./pages/supermarket/SupermarketContacts";
+import SupermarketAssistant from "./pages/supermarket/SupermarketAssistant";
 
 const queryClient = new QueryClient();
 
@@ -254,6 +256,8 @@ const App = () => (
               <Route path="dashboard" element={<SupermarketDashboard />} />
               <Route path="ocorrencias" element={<SupermarketIncidents />} />
               <Route path="visitas" element={<SupermarketVisitRequests />} />
+              <Route path="contatos" element={<SupermarketContacts />} />
+              <Route path="assistente" element={<SupermarketAssistant />} />
               <Route path="historico" element={<SupermarketHistory />} />
             </Route>
             {/* Promotor App */}

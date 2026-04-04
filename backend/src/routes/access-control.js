@@ -2580,11 +2580,186 @@ async function ensureIncidentsInfra() {
     await query(`DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'incident_severity') THEN CREATE TYPE incident_severity AS ENUM ('low','medium','high'); END IF; END $$`);
     await query(`DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'incident_status') THEN CREATE TYPE incident_status AS ENUM ('open','under_review','responded','resolved','escalated'); END IF; END $$`);
   } catch(e) {}
-  await query(`CREATE TABLE IF NOT EXISTS incidents (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE, reported_by_unit_id UUID REFERENCES units(id) ON DELETE SET NULL, reported_by_user_name VARCHAR(200), agency_promoter_id UUID REFERENCES agency_promoters(id) ON DELETE SET NULL, agency_id UUID REFERENCES agencies(id) ON DELETE SET NULL, incident_type VARCHAR(30) NOT NULL DEFAULT 'other', severity VARCHAR(20) NOT NULL DEFAULT 'low', status VARCHAR(20) NOT NULL DEFAULT 'open', description TEXT, incident_date TIMESTAMPTZ DEFAULT NOW(), photo_urls TEXT[], created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW())`);
+  await query(`CREATE TABLE IF NOT EXISTS incidents (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE, reported_by_unit_id UUID REFERENCES units(id) ON DELETE SET NULL, reported_by_user_name VARCHAR(200), agency_promoter_id UUID REFERENCES agency_promoters(id) ON DELETE SET NULL, agency_id UUID REFERENCES agencies(id) ON DELETE SET NULL, incident_type VARCHAR(30) NOT NULL DEFAULT 'other', severity VARCHAR(20) NOT NULL DEFAULT 'low', status VARCHAR(20) NOT NULL DEFAULT 'open', description TEXT, incident_date TIMESTAMPTZ DEFAULT NOW(), photo_urls TEXT[], ai_classification JSONB, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW())`);
   await query(`CREATE TABLE IF NOT EXISTS incident_responses (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), incident_id UUID NOT NULL REFERENCES incidents(id) ON DELETE CASCADE, responder_type VARCHAR(30) NOT NULL, responder_name VARCHAR(200), message TEXT NOT NULL, attachment_urls TEXT[], new_status VARCHAR(20), created_at TIMESTAMPTZ DEFAULT NOW())`);
   await query(`CREATE TABLE IF NOT EXISTS promoter_scores (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE, agency_promoter_id UUID NOT NULL REFERENCES agency_promoters(id) ON DELETE CASCADE, score NUMERIC(5,2) DEFAULT 100.00, presence_score NUMERIC(5,2) DEFAULT 100.00, punctuality_score NUMERIC(5,2) DEFAULT 100.00, permanence_score NUMERIC(5,2) DEFAULT 100.00, identity_score NUMERIC(5,2) DEFAULT 100.00, incidents_score NUMERIC(5,2) DEFAULT 100.00, total_visits INTEGER DEFAULT 0, total_incidents INTEGER DEFAULT 0, total_blocks INTEGER DEFAULT 0, last_calculated_at TIMESTAMPTZ DEFAULT NOW(), created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW(), UNIQUE(organization_id, agency_promoter_id))`);
   await query(`CREATE TABLE IF NOT EXISTS score_history (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), promoter_score_id UUID NOT NULL REFERENCES promoter_scores(id) ON DELETE CASCADE, score NUMERIC(5,2) NOT NULL, calculated_at TIMESTAMPTZ DEFAULT NOW())`);
-  logInfo('incidents', 'Incidents & scores infrastructure created');
+  await query(`CREATE TABLE IF NOT EXISTS promoter_behavior_analysis (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE, agency_promoter_id UUID NOT NULL REFERENCES agency_promoters(id) ON DELETE CASCADE, risk_level VARCHAR(20) DEFAULT 'low', risk_justification TEXT, trend VARCHAR(20) DEFAULT 'stable', alerts JSONB DEFAULT '[]', data_snapshot JSONB, analyzed_at TIMESTAMPTZ DEFAULT NOW(), created_at TIMESTAMPTZ DEFAULT NOW())`);
+  await query(`CREATE TABLE IF NOT EXISTS daily_operational_summaries (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE, unit_id UUID REFERENCES units(id) ON DELETE SET NULL, agency_id UUID REFERENCES agencies(id) ON DELETE SET NULL, summary_date DATE NOT NULL, summary_type VARCHAR(30) DEFAULT 'unit', ai_summary TEXT, metrics JSONB, highlights JSONB, risks JSONB, recommendations JSONB, generated_at TIMESTAMPTZ DEFAULT NOW(), created_at TIMESTAMPTZ DEFAULT NOW())`);
+  await query(`CREATE TABLE IF NOT EXISTS pdv_authorized_contacts (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE, unit_id UUID NOT NULL REFERENCES units(id) ON DELETE CASCADE, name VARCHAR(200) NOT NULL, phone VARCHAR(20) NOT NULL, role VARCHAR(50) DEFAULT 'other', permissions JSONB DEFAULT '["consultar_operacao"]', active BOOLEAN DEFAULT true, notes TEXT, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW())`);
+  await query(`CREATE TABLE IF NOT EXISTS assistant_audit_log (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE, unit_id UUID REFERENCES units(id) ON DELETE SET NULL, contact_id UUID REFERENCES pdv_authorized_contacts(id) ON DELETE SET NULL, phone VARCHAR(20), interaction_type VARCHAR(30) DEFAULT 'query', user_message TEXT, ai_response TEXT, incident_id UUID REFERENCES incidents(id) ON DELETE SET NULL, ai_classification JSONB, authorized BOOLEAN DEFAULT true, created_at TIMESTAMPTZ DEFAULT NOW())`);
+  await query(`CREATE TABLE IF NOT EXISTS operational_diagnostics (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE, diagnostic_type VARCHAR(30) DEFAULT 'daily', period_start DATE, period_end DATE, problems JSONB DEFAULT '[]', risks JSONB DEFAULT '[]', top_incident_agencies JSONB DEFAULT '[]', unstable_pdvs JSONB DEFAULT '[]', critical_promoters JSONB DEFAULT '[]', recommendations JSONB DEFAULT '[]', generated_at TIMESTAMPTZ DEFAULT NOW(), created_at TIMESTAMPTZ DEFAULT NOW())`);
+  // Ensure ai_classification column exists on existing tables
+  try { await query(`ALTER TABLE incidents ADD COLUMN IF NOT EXISTS ai_classification JSONB`); } catch(e) {}
+  logInfo('incidents', 'Incidents, scores & AI infrastructure created');
+}
+
+// ============ AI CONFIG HELPER ============
+async function getAIConfig(orgId) {
+  try {
+    const r = await query('SELECT ai_provider, ai_model, ai_api_key FROM organizations WHERE id = $1', [orgId]);
+    const org = r.rows[0];
+    if (!org || org.ai_provider === 'none' || !org.ai_api_key) return null;
+    return { provider: org.ai_provider, model: org.ai_model, apiKey: org.ai_api_key };
+  } catch { return null; }
+}
+
+// ============ AI INCIDENT ANALYSIS ============
+async function analyzeIncidentWithAI(orgId, incidentId) {
+  const config = await getAIConfig(orgId);
+  if (!config) return null;
+
+  const inc = await query('SELECT * FROM incidents WHERE id = $1', [incidentId]);
+  if (!inc.rows.length) return null;
+  const incident = inc.rows[0];
+
+  try {
+    const { callAI } = await import('../lib/ai-caller.js');
+    const messages = [
+      { role: 'system', content: `Você é um analista de operações de controle de acesso em supermercados. Analise a ocorrência e retorne APENAS um JSON válido sem markdown, com os seguintes campos:
+{
+  "type": "atraso|ausencia|saida_antecipada|nao_execucao|execucao_incompleta|comportamento_inadequado|desacordo_equipe|falha_operacional|outro",
+  "severity": "baixa|media|alta",
+  "impact": "operacional|relacionamento|financeiro|reputacional",
+  "risk": "baixo|medio|alto",
+  "summary": "resumo padronizado curto de até 100 caracteres",
+  "keywords": ["palavra1","palavra2","palavra3"]
+}` },
+      { role: 'user', content: `Ocorrência: Tipo informado: ${incident.incident_type}, Gravidade informada: ${incident.severity}\nDescrição: ${incident.description || 'Sem descrição'}` }
+    ];
+
+    const result = await callAI(config, messages, { temperature: 0.2, maxTokens: 500, responseFormat: { type: 'json_object' } });
+    let classification;
+    try {
+      classification = JSON.parse(result.content);
+    } catch {
+      // Try extracting JSON from content
+      const jsonMatch = result.content.match(/\{[\s\S]*\}/);
+      classification = jsonMatch ? JSON.parse(jsonMatch[0]) : null;
+    }
+
+    if (classification) {
+      classification.analyzed_at = new Date().toISOString();
+      classification.tokens_used = result.tokensUsed;
+      await query('UPDATE incidents SET ai_classification = $1, updated_at = NOW() WHERE id = $2', [JSON.stringify(classification), incidentId]);
+      logInfo('ai.incident_analyzed', { incidentId, type: classification.type });
+    }
+    return classification;
+  } catch (err) {
+    logError('ai.incident_analysis_failed', err);
+    return null;
+  }
+}
+
+// ============ AI BEHAVIOR ANALYSIS ============
+async function analyzeBehaviorWithAI(orgId, promoterId) {
+  const config = await getAIConfig(orgId);
+  if (!config) return null;
+
+  try {
+    // Gather data
+    const [entriesR, incidentsR, scoreR] = await Promise.all([
+      query(`SELECT * FROM access_entries WHERE agency_promoter_id = $1 AND entry_at > NOW() - INTERVAL '30 days' ORDER BY entry_at DESC LIMIT 50`, [promoterId]).catch(() => ({ rows: [] })),
+      query(`SELECT * FROM incidents WHERE agency_promoter_id = $1 AND created_at > NOW() - INTERVAL '30 days' ORDER BY created_at DESC LIMIT 20`, [promoterId]).catch(() => ({ rows: [] })),
+      query(`SELECT * FROM promoter_scores WHERE agency_promoter_id = $1 LIMIT 1`, [promoterId]).catch(() => ({ rows: [] })),
+    ]);
+
+    const dataSnapshot = {
+      entries_30d: entriesR.rows.length,
+      incidents_30d: incidentsR.rows.length,
+      current_score: scoreR.rows[0]?.score || null,
+      late_entries: entriesR.rows.filter(e => e.was_late).length,
+      blocked_entries: entriesR.rows.filter(e => e.status === 'blocked').length,
+    };
+
+    const { callAI } = await import('../lib/ai-caller.js');
+    const messages = [
+      { role: 'system', content: `Analise o comportamento operacional deste promotor nos últimos 30 dias. Retorne APENAS JSON:
+{
+  "risk_level": "baixo|medio|alto",
+  "risk_justification": "explicação curta",
+  "trend": "estavel|melhorando|piorando",
+  "alerts": ["alerta1","alerta2"]
+}` },
+      { role: 'user', content: `Dados do promotor:\n${JSON.stringify(dataSnapshot)}\n\nOcorrências recentes: ${incidentsR.rows.map(i => `${i.incident_type}: ${i.description?.slice(0,80)}`).join('; ') || 'nenhuma'}` }
+    ];
+
+    const result = await callAI(config, messages, { temperature: 0.3, maxTokens: 500, responseFormat: { type: 'json_object' } });
+    let analysis;
+    try { analysis = JSON.parse(result.content); } catch {
+      const m = result.content.match(/\{[\s\S]*\}/);
+      analysis = m ? JSON.parse(m[0]) : null;
+    }
+
+    if (analysis) {
+      await query(`INSERT INTO promoter_behavior_analysis (organization_id, agency_promoter_id, risk_level, risk_justification, trend, alerts, data_snapshot) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        [orgId, promoterId, analysis.risk_level || 'baixo', analysis.risk_justification, analysis.trend || 'estavel', JSON.stringify(analysis.alerts || []), JSON.stringify(dataSnapshot)]);
+    }
+    return analysis;
+  } catch (err) {
+    logError('ai.behavior_analysis_failed', err);
+    return null;
+  }
+}
+
+// ============ AI DAILY SUMMARY ============
+async function generateDailySummary(orgId, unitId = null, agencyId = null, summaryType = 'unit') {
+  const config = await getAIConfig(orgId);
+  if (!config) return null;
+
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const params = [orgId];
+    let entriesQuery = `SELECT COUNT(*) as total, COUNT(CASE WHEN status='authorized' THEN 1 END) as authorized, COUNT(CASE WHEN status='blocked' THEN 1 END) as blocked FROM access_entries WHERE organization_id = $1 AND DATE(entry_at) = CURRENT_DATE`;
+    let incidentsQuery = `SELECT COUNT(*) as total, COUNT(CASE WHEN severity='high' THEN 1 END) as high_severity FROM incidents WHERE organization_id = $1 AND DATE(created_at) = CURRENT_DATE`;
+    
+    if (unitId) {
+      entriesQuery += ` AND supermarket_unit_id = $2`;
+      incidentsQuery += ` AND reported_by_unit_id = $2`;
+      params.push(unitId);
+    }
+
+    const [entriesR, incidentsR] = await Promise.all([
+      query(entriesQuery, params).catch(() => ({ rows: [{ total: 0, authorized: 0, blocked: 0 }] })),
+      query(incidentsQuery, params).catch(() => ({ rows: [{ total: 0, high_severity: 0 }] })),
+    ]);
+
+    const metrics = {
+      total_entries: parseInt(entriesR.rows[0]?.total || 0),
+      authorized: parseInt(entriesR.rows[0]?.authorized || 0),
+      blocked: parseInt(entriesR.rows[0]?.blocked || 0),
+      incidents: parseInt(incidentsR.rows[0]?.total || 0),
+      high_severity_incidents: parseInt(incidentsR.rows[0]?.high_severity || 0),
+    };
+
+    const { callAI } = await import('../lib/ai-caller.js');
+    const messages = [
+      { role: 'system', content: `Gere um resumo operacional diário conciso para gestores de supermercado. Retorne APENAS JSON:
+{
+  "summary": "texto do resumo em 2-3 frases",
+  "highlights": ["destaque1","destaque2"],
+  "risks": ["risco1"],
+  "recommendations": ["recomendacao1"]
+}` },
+      { role: 'user', content: `Métricas do dia ${today}:\n${JSON.stringify(metrics)}` }
+    ];
+
+    const result = await callAI(config, messages, { temperature: 0.4, maxTokens: 500, responseFormat: { type: 'json_object' } });
+    let summary;
+    try { summary = JSON.parse(result.content); } catch {
+      const m = result.content.match(/\{[\s\S]*\}/);
+      summary = m ? JSON.parse(m[0]) : null;
+    }
+
+    if (summary) {
+      await query(`INSERT INTO daily_operational_summaries (organization_id, unit_id, agency_id, summary_date, summary_type, ai_summary, metrics, highlights, risks, recommendations) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT DO NOTHING`,
+        [orgId, unitId, agencyId, today, summaryType, summary.summary, JSON.stringify(metrics), JSON.stringify(summary.highlights || []), JSON.stringify(summary.risks || []), JSON.stringify(summary.recommendations || [])]);
+    }
+    return { ...summary, metrics };
+  } catch (err) {
+    logError('ai.daily_summary_failed', err);
+    return null;
+  }
 }
 
 // ============ SUPERMARKET PORTAL: Incidents ============
@@ -2601,7 +2776,10 @@ router.post('/supermarket-portal/incidents', authenticateSupermarket, async (req
     await ensureIncidentsInfra();
     const { agency_promoter_id, agency_id, incident_type, severity, description, incident_date } = req.body;
     const r = await query(`INSERT INTO incidents (organization_id, reported_by_unit_id, reported_by_user_name, agency_promoter_id, agency_id, incident_type, severity, description, incident_date) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`, [req.orgId, req.unitId, 'Supermercado', agency_promoter_id || null, agency_id || null, incident_type || 'other', severity || 'low', description, incident_date || new Date()]);
-    res.json(r.rows[0]);
+    const incident = r.rows[0];
+    // Trigger AI analysis asynchronously
+    analyzeIncidentWithAI(req.orgId, incident.id).catch(e => logError('ai.auto_analyze', e));
+    res.json(incident);
   } catch (err) { logError('sm.incidents.create', err); res.status(500).json({ error: 'Erro' }); }
 });
 
@@ -2631,6 +2809,76 @@ router.get('/supermarket-portal/schedule', authenticateSupermarket, async (req, 
     const tomorrow = await query(`SELECT vr.*, ap.name AS promoter_name, a.name AS agency_name FROM visit_requests vr LEFT JOIN agency_promoters ap ON ap.id = vr.agency_promoter_id LEFT JOIN agencies a ON a.id = vr.agency_id WHERE vr.unit_id = $1 AND vr.visit_date = CURRENT_DATE + INTERVAL '1 day' ORDER BY vr.scheduled_time`, [req.unitId]);
     res.json({ today: today.rows, tomorrow: tomorrow.rows });
   } catch (err) { logError('sm.schedule', err); res.json({ today: [], tomorrow: [] }); }
+});
+
+// ============ SUPERMARKET: AI Analysis endpoints ============
+router.post('/supermarket-portal/incidents/:id/analyze', authenticateSupermarket, async (req, res) => {
+  try {
+    await ensureIncidentsInfra();
+    const classification = await analyzeIncidentWithAI(req.orgId, req.params.id);
+    if (!classification) return res.status(400).json({ error: 'IA não configurada ou erro na análise' });
+    res.json(classification);
+  } catch (err) { logError('sm.incident.analyze', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.get('/supermarket-portal/daily-summary', authenticateSupermarket, async (req, res) => {
+  try {
+    await ensureIncidentsInfra();
+    const today = new Date().toISOString().split('T')[0];
+    // Check if already generated
+    const existing = await query(`SELECT * FROM daily_operational_summaries WHERE unit_id = $1 AND summary_date = $2 LIMIT 1`, [req.unitId, today]);
+    if (existing.rows.length) return res.json(existing.rows[0]);
+    // Generate new
+    const summary = await generateDailySummary(req.orgId, req.unitId, null, 'unit');
+    if (!summary) return res.json({ ai_summary: null, metrics: {} });
+    res.json(summary);
+  } catch (err) { logError('sm.daily_summary', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// ============ SUPERMARKET: Authorized contacts ============
+router.get('/supermarket-portal/authorized-contacts', authenticateSupermarket, async (req, res) => {
+  try {
+    await ensureIncidentsInfra();
+    const r = await query(`SELECT * FROM pdv_authorized_contacts WHERE unit_id = $1 ORDER BY name`, [req.unitId]);
+    res.json(r.rows);
+  } catch (err) { logError('sm.contacts.list', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.post('/supermarket-portal/authorized-contacts', authenticateSupermarket, async (req, res) => {
+  try {
+    await ensureIncidentsInfra();
+    const { name, phone, role, permissions, notes } = req.body;
+    if (!name || !phone) return res.status(400).json({ error: 'Nome e telefone obrigatórios' });
+    const r = await query(`INSERT INTO pdv_authorized_contacts (organization_id, unit_id, name, phone, role, permissions, notes) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [req.orgId, req.unitId, name, phone, role || 'other', JSON.stringify(permissions || ['consultar_operacao']), notes || null]);
+    res.json(r.rows[0]);
+  } catch (err) { logError('sm.contacts.create', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.put('/supermarket-portal/authorized-contacts/:id', authenticateSupermarket, async (req, res) => {
+  try {
+    const { name, phone, role, permissions, active, notes } = req.body;
+    const r = await query(`UPDATE pdv_authorized_contacts SET name=COALESCE($1,name), phone=COALESCE($2,phone), role=COALESCE($3,role), permissions=COALESCE($4,permissions), active=COALESCE($5,active), notes=COALESCE($6,notes), updated_at=NOW() WHERE id=$7 AND unit_id=$8 RETURNING *`,
+      [name, phone, role, permissions ? JSON.stringify(permissions) : null, active, notes, req.params.id, req.unitId]);
+    if (!r.rows.length) return res.status(404).json({ error: 'Contato não encontrado' });
+    res.json(r.rows[0]);
+  } catch (err) { logError('sm.contacts.update', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.delete('/supermarket-portal/authorized-contacts/:id', authenticateSupermarket, async (req, res) => {
+  try {
+    await query('DELETE FROM pdv_authorized_contacts WHERE id = $1 AND unit_id = $2', [req.params.id, req.unitId]);
+    res.json({ ok: true });
+  } catch (err) { logError('sm.contacts.delete', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// ============ SUPERMARKET: Assistant audit log ============
+router.get('/supermarket-portal/assistant-log', authenticateSupermarket, async (req, res) => {
+  try {
+    await ensureIncidentsInfra();
+    const r = await query(`SELECT al.*, pac.name as contact_name FROM assistant_audit_log al LEFT JOIN pdv_authorized_contacts pac ON pac.id = al.contact_id WHERE al.unit_id = $1 ORDER BY al.created_at DESC LIMIT 100`, [req.unitId]);
+    res.json(r.rows);
+  } catch (err) { logError('sm.audit_log', err); res.status(500).json({ error: 'Erro' }); }
 });
 
 // ============ AGENCY PORTAL: Incidents & Scores ============
@@ -2671,6 +2919,43 @@ router.get('/agency/schedule', authenticateAgency, async (req, res) => {
   } catch (err) { logError('agency.schedule', err); res.json({ today: [], tomorrow: [], week: [] }); }
 });
 
+// ============ AGENCY: AI endpoints ============
+router.get('/agency/daily-summary', authenticateAgency, async (req, res) => {
+  try {
+    await ensureIncidentsInfra();
+    const today = new Date().toISOString().split('T')[0];
+    const existing = await query(`SELECT * FROM daily_operational_summaries WHERE agency_id = $1 AND summary_date = $2 LIMIT 1`, [req.agencyId, today]);
+    if (existing.rows.length) return res.json(existing.rows[0]);
+    // Get org from agency
+    const agR = await query('SELECT organization_id FROM agencies WHERE id = $1', [req.agencyId]);
+    const orgId = agR.rows[0]?.organization_id;
+    if (!orgId) return res.json({ ai_summary: null });
+    const summary = await generateDailySummary(orgId, null, req.agencyId, 'agency');
+    if (!summary) return res.json({ ai_summary: null, metrics: {} });
+    res.json(summary);
+  } catch (err) { logError('agency.daily_summary', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.get('/agency/promoter-behavior/:promoterId', authenticateAgency, async (req, res) => {
+  try {
+    await ensureIncidentsInfra();
+    const r = await query(`SELECT * FROM promoter_behavior_analysis WHERE agency_promoter_id = $1 ORDER BY analyzed_at DESC LIMIT 5`, [req.params.promoterId]);
+    res.json(r.rows);
+  } catch (err) { logError('agency.behavior', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.post('/agency/promoter-behavior/:promoterId/analyze', authenticateAgency, async (req, res) => {
+  try {
+    await ensureIncidentsInfra();
+    const agR = await query('SELECT organization_id FROM agencies WHERE id = $1', [req.agencyId]);
+    const orgId = agR.rows[0]?.organization_id;
+    if (!orgId) return res.status(400).json({ error: 'Org não encontrada' });
+    const analysis = await analyzeBehaviorWithAI(orgId, req.params.promoterId);
+    if (!analysis) return res.status(400).json({ error: 'IA não configurada' });
+    res.json(analysis);
+  } catch (err) { logError('agency.behavior.analyze', err); res.status(500).json({ error: 'Erro' }); }
+});
+
 // ============ ADMIN: Incidents & Scores ============
 router.get('/incidents', authenticate, async (req, res) => {
   try {
@@ -2681,6 +2966,30 @@ router.get('/incidents', authenticate, async (req, res) => {
   } catch (err) { logError('admin.incidents.list', err); res.status(500).json({ error: 'Erro' }); }
 });
 
+router.post('/incidents/:id/analyze', authenticate, async (req, res) => {
+  try {
+    await ensureIncidentsInfra();
+    const orgId = await getOrgId(req.user.id);
+    const classification = await analyzeIncidentWithAI(orgId, req.params.id);
+    if (!classification) return res.status(400).json({ error: 'IA não configurada' });
+    res.json(classification);
+  } catch (err) { logError('admin.incident.analyze', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.post('/incidents/analyze-batch', authenticate, async (req, res) => {
+  try {
+    await ensureIncidentsInfra();
+    const orgId = await getOrgId(req.user.id);
+    const unanalyzed = await query(`SELECT id FROM incidents WHERE organization_id = $1 AND ai_classification IS NULL ORDER BY created_at DESC LIMIT 20`, [orgId]);
+    const results = [];
+    for (const inc of unanalyzed.rows) {
+      const c = await analyzeIncidentWithAI(orgId, inc.id);
+      results.push({ id: inc.id, classification: c });
+    }
+    res.json({ analyzed: results.length, results });
+  } catch (err) { logError('admin.incidents.batch_analyze', err); res.status(500).json({ error: 'Erro' }); }
+});
+
 router.get('/scores', authenticate, async (req, res) => {
   try {
     await ensureIncidentsInfra();
@@ -2688,6 +2997,194 @@ router.get('/scores', authenticate, async (req, res) => {
     const r = await query(`SELECT ps.*, ap.name AS promoter_name, a.name AS agency_name FROM promoter_scores ps JOIN agency_promoters ap ON ap.id = ps.agency_promoter_id LEFT JOIN agencies a ON a.id = ap.agency_id WHERE ps.organization_id = $1 ORDER BY ps.score DESC`, [orgId]);
     res.json(r.rows);
   } catch (err) { logError('admin.scores', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.get('/daily-summary', authenticate, async (req, res) => {
+  try {
+    await ensureIncidentsInfra();
+    const orgId = await getOrgId(req.user.id);
+    const today = new Date().toISOString().split('T')[0];
+    const existing = await query(`SELECT * FROM daily_operational_summaries WHERE organization_id = $1 AND summary_type = 'admin' AND summary_date = $2 LIMIT 1`, [orgId, today]);
+    if (existing.rows.length) return res.json(existing.rows[0]);
+    const summary = await generateDailySummary(orgId, null, null, 'admin');
+    if (!summary) return res.json({ ai_summary: null, metrics: {} });
+    res.json(summary);
+  } catch (err) { logError('admin.daily_summary', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.get('/diagnostics', authenticate, async (req, res) => {
+  try {
+    await ensureIncidentsInfra();
+    const orgId = await getOrgId(req.user.id);
+    const r = await query(`SELECT * FROM operational_diagnostics WHERE organization_id = $1 ORDER BY generated_at DESC LIMIT 10`, [orgId]);
+    res.json(r.rows);
+  } catch (err) { logError('admin.diagnostics', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.get('/behavior/:promoterId', authenticate, async (req, res) => {
+  try {
+    await ensureIncidentsInfra();
+    const r = await query(`SELECT * FROM promoter_behavior_analysis WHERE agency_promoter_id = $1 ORDER BY analyzed_at DESC LIMIT 5`, [req.params.promoterId]);
+    res.json(r.rows);
+  } catch (err) { logError('admin.behavior', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.post('/behavior/:promoterId/analyze', authenticate, async (req, res) => {
+  try {
+    await ensureIncidentsInfra();
+    const orgId = await getOrgId(req.user.id);
+    const analysis = await analyzeBehaviorWithAI(orgId, req.params.promoterId);
+    if (!analysis) return res.status(400).json({ error: 'IA não configurada' });
+    res.json(analysis);
+  } catch (err) { logError('admin.behavior.analyze', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// ============ ADMIN: Authorized contacts management ============
+router.get('/authorized-contacts', authenticate, async (req, res) => {
+  try {
+    await ensureIncidentsInfra();
+    const orgId = await getOrgId(req.user.id);
+    const r = await query(`SELECT pac.*, u.name as unit_name FROM pdv_authorized_contacts pac LEFT JOIN units u ON u.id = pac.unit_id WHERE pac.organization_id = $1 ORDER BY pac.name`, [orgId]);
+    res.json(r.rows);
+  } catch (err) { logError('admin.contacts', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// ============ ADMIN: Assistant audit ============
+router.get('/assistant-log', authenticate, async (req, res) => {
+  try {
+    await ensureIncidentsInfra();
+    const orgId = await getOrgId(req.user.id);
+    const r = await query(`SELECT al.*, pac.name as contact_name, u.name as unit_name FROM assistant_audit_log al LEFT JOIN pdv_authorized_contacts pac ON pac.id = al.contact_id LEFT JOIN units u ON u.id = al.unit_id WHERE al.organization_id = $1 ORDER BY al.created_at DESC LIMIT 200`, [orgId]);
+    res.json(r.rows);
+  } catch (err) { logError('admin.audit_log', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// ============ WHATSAPP ASSISTANT: Process incoming message ============
+router.post('/whatsapp-assistant/process', authenticate, async (req, res) => {
+  try {
+    await ensureIncidentsInfra();
+    const orgId = await getOrgId(req.user.id);
+    const { phone, message: userMessage, audio_transcript } = req.body;
+    if (!phone) return res.status(400).json({ error: 'Telefone obrigatório' });
+
+    const msgContent = audio_transcript || userMessage;
+    if (!msgContent) return res.status(400).json({ error: 'Mensagem ou transcrição obrigatória' });
+
+    // Find authorized contact
+    const contactR = await query(`SELECT pac.*, u.name as unit_name FROM pdv_authorized_contacts pac LEFT JOIN units u ON u.id = pac.unit_id WHERE pac.phone = $1 AND pac.organization_id = $2 AND pac.active = true LIMIT 1`, [phone, orgId]);
+    
+    if (!contactR.rows.length) {
+      // Log unauthorized attempt
+      await query(`INSERT INTO assistant_audit_log (organization_id, phone, interaction_type, user_message, ai_response, authorized) VALUES ($1,$2,'unauthorized',$3,'Número não autorizado',false)`, [orgId, phone, msgContent]);
+      return res.json({ response: 'Este número não está autorizado para interagir com o assistente. Solicite liberação ao administrador do supermercado.', authorized: false });
+    }
+
+    const contact = contactR.rows[0];
+    const permissions = contact.permissions || [];
+    const config = await getAIConfig(orgId);
+
+    if (!config) {
+      return res.json({ response: 'Assistente indisponível no momento. IA não configurada.', authorized: true });
+    }
+
+    // Determine intent and respond
+    const { callAI } = await import('../lib/ai-caller.js');
+    const tools = [
+      {
+        type: 'function',
+        function: {
+          name: 'consultar_operacao',
+          description: 'Consulta dados operacionais do PDV: promotores ativos, marcas, entradas do dia',
+          parameters: { type: 'object', properties: { query_type: { type: 'string', enum: ['promotores_ativos', 'marcas_hoje', 'entradas_hoje', 'agenda_amanha', 'bloqueios_hoje'] } }, required: ['query_type'] }
+        }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'registrar_ocorrencia',
+          description: 'Registra uma ocorrência/incidente com um promotor',
+          parameters: { type: 'object', properties: { description: { type: 'string' }, promoter_name: { type: 'string' }, incident_type: { type: 'string', enum: ['atraso', 'ausencia', 'nao_execucao', 'comportamento_inadequado', 'outro'] }, severity: { type: 'string', enum: ['baixa', 'media', 'alta'] } }, required: ['description'] }
+        }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'consultar_score',
+          description: 'Consulta o score de confiabilidade de um promotor',
+          parameters: { type: 'object', properties: { promoter_name: { type: 'string' } }, required: ['promoter_name'] }
+        }
+      }
+    ];
+
+    // Filter tools by permissions
+    const allowedTools = tools.filter(t => {
+      if (permissions.includes('acesso_total')) return true;
+      if (t.function.name === 'consultar_operacao' && permissions.includes('consultar_operacao')) return true;
+      if (t.function.name === 'registrar_ocorrencia' && permissions.includes('registrar_ocorrencia')) return true;
+      if (t.function.name === 'consultar_score' && permissions.includes('consultar_score')) return true;
+      return false;
+    });
+
+    const messages = [
+      { role: 'system', content: `Você é o assistente operacional do supermercado "${contact.unit_name || 'PDV'}". Responda de forma curta, objetiva e operacional. O contato é ${contact.name} (${contact.role}). Use as ferramentas disponíveis para consultar dados ou registrar ocorrências. Sempre confirme antes de registrar uma ocorrência.` },
+      { role: 'user', content: msgContent }
+    ];
+
+    const result = await callAI(config, messages, { temperature: 0.3, maxTokens: 500, tools: allowedTools.length > 0 ? allowedTools : undefined });
+    
+    let responseText = result.content || 'Desculpe, não consegui processar sua solicitação.';
+    let interactionType = 'query';
+    let incidentId = null;
+
+    // Handle tool calls
+    if (result.toolCalls?.length) {
+      for (const tc of result.toolCalls) {
+        if (tc.name === 'consultar_operacao') {
+          interactionType = 'query';
+          // Execute query based on type
+          const qt = tc.arguments.query_type;
+          let data;
+          if (qt === 'promotores_ativos') {
+            data = await query(`SELECT ap.name, a.name as agency_name FROM access_entries ae JOIN agency_promoters ap ON ap.id = ae.agency_promoter_id LEFT JOIN agencies a ON a.id = ap.agency_id WHERE ae.supermarket_unit_id = $1 AND ae.status = 'authorized' AND ae.exit_at IS NULL AND DATE(ae.entry_at) = CURRENT_DATE`, [contact.unit_id]).catch(() => ({ rows: [] }));
+            responseText = data.rows.length ? `Promotores ativos agora:\n${data.rows.map(r => `• ${r.name} (${r.agency_name || '—'})`).join('\n')}` : 'Nenhum promotor ativo no momento.';
+          } else if (qt === 'entradas_hoje') {
+            data = await query(`SELECT COUNT(*) as total FROM access_entries WHERE supermarket_unit_id = $1 AND DATE(entry_at) = CURRENT_DATE`, [contact.unit_id]).catch(() => ({ rows: [{ total: 0 }] }));
+            responseText = `Total de entradas hoje: ${data.rows[0]?.total || 0}`;
+          } else if (qt === 'bloqueios_hoje') {
+            data = await query(`SELECT COUNT(*) as total FROM access_entries WHERE supermarket_unit_id = $1 AND status = 'blocked' AND DATE(entry_at) = CURRENT_DATE`, [contact.unit_id]).catch(() => ({ rows: [{ total: 0 }] }));
+            responseText = `Entradas bloqueadas hoje: ${data.rows[0]?.total || 0}`;
+          } else {
+            responseText = 'Consulta processada. Dados disponíveis no painel.';
+          }
+        } else if (tc.name === 'registrar_ocorrencia') {
+          interactionType = 'incident_creation';
+          const typeMap = { atraso: 'delay', ausencia: 'non_execution', nao_execucao: 'non_execution', comportamento_inadequado: 'misconduct', outro: 'other' };
+          const sevMap = { baixa: 'low', media: 'medium', alta: 'high' };
+          const r = await query(`INSERT INTO incidents (organization_id, reported_by_unit_id, reported_by_user_name, incident_type, severity, description) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
+            [orgId, contact.unit_id, contact.name, typeMap[tc.arguments.incident_type] || 'other', sevMap[tc.arguments.severity] || 'low', tc.arguments.description]);
+          incidentId = r.rows[0]?.id;
+          if (incidentId) {
+            analyzeIncidentWithAI(orgId, incidentId).catch(e => logError('ai.auto_analyze_wa', e));
+            responseText = `✅ Ocorrência registrada com sucesso!\nDescrição: ${tc.arguments.description}\nTipo: ${tc.arguments.incident_type || 'outro'}\nGravidade: ${tc.arguments.severity || 'baixa'}`;
+          }
+        } else if (tc.name === 'consultar_score') {
+          interactionType = 'score_check';
+          const scoreR = await query(`SELECT ps.score, ap.name FROM promoter_scores ps JOIN agency_promoters ap ON ap.id = ps.agency_promoter_id WHERE ap.name ILIKE $1 LIMIT 3`, [`%${tc.arguments.promoter_name}%`]).catch(() => ({ rows: [] }));
+          if (scoreR.rows.length) {
+            responseText = scoreR.rows.map(s => `${s.name}: Score ${s.score}/100`).join('\n');
+          } else {
+            responseText = 'Promotor não encontrado ou sem score registrado.';
+          }
+        }
+      }
+    }
+
+    // Log the interaction
+    await query(`INSERT INTO assistant_audit_log (organization_id, unit_id, contact_id, phone, interaction_type, user_message, ai_response, incident_id, authorized) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true)`,
+      [orgId, contact.unit_id, contact.id, phone, interactionType, msgContent, responseText, incidentId]);
+
+    res.json({ response: responseText, authorized: true, interaction_type: interactionType, incident_id: incidentId });
+  } catch (err) { logError('wa.assistant.process', err); res.status(500).json({ error: 'Erro no assistente' }); }
 });
 
 export default router;
