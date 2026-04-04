@@ -1549,7 +1549,7 @@ router.put('/supervisor/overtime-requests/:id', authenticatePromotor, requireSup
 });
 
 // Send notification to specific promoter
-router.post('/supervisor/send-notification', requireSupervisor, async (req, res) => {
+router.post('/supervisor/send-notification', authenticatePromotor, requireSupervisor, async (req, res) => {
   try {
     const { employee_id, title, message } = req.body;
     if (!employee_id || !title) return res.status(400).json({ error: 'employee_id e title obrigatórios' });
