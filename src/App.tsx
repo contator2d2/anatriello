@@ -95,6 +95,7 @@ import PromotorPonto from "./pages/promotor/PromotorPonto";
 import PromotorEnviar from "./pages/promotor/PromotorEnviar";
 import PromotorConfig from "./pages/promotor/PromotorConfig";
 import PromotorTrocarSenha from "./pages/promotor/PromotorTrocarSenha";
+import PromotorEquipe from "./pages/promotor/PromotorEquipe";
 import NotFound from "./pages/NotFound";
 import TotemAccess from "./pages/TotemAccess";
 import AccessControlAdmin from "./pages/AccessControlAdmin";
