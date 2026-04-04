@@ -12,7 +12,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { useBrands } from "@/hooks/use-merchandising";
+import { useBrands, useBrandPdvs } from "@/hooks/use-merchandising";
+import { useEmployees } from "@/hooks/use-rh";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import {
@@ -26,9 +27,9 @@ import { useUpload } from "@/hooks/use-upload";
 import { resolveMediaUrl } from "@/lib/media";
 import {
   DollarSign, Plus, Trash2, Image as ImageIcon, Upload, FileText, List, CheckCircle2,
-  Calendar, Settings, Building2, Package, Eye, Share2, Edit, Clock, BarChart3,
+  Calendar, Settings, Building2, Package, Eye, Share2, Edit, Clock, BarChart3, CalendarPlus, MapPin, User,
 } from "lucide-react";
-import { format } from "date-fns";
+import { format, isValid, parseISO } from "date-fns";
 
 const ALL_BRANDS_VALUE = "__all_brands__";
 const ALL_STATUS_VALUE = "__all_status__";
@@ -41,6 +42,14 @@ const FREQUENCIES = [
   { value: 'monthly', label: 'Mensal' },
 ];
 const WEEKDAYS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+
+function safeFormatDate(dateStr: any, fmt: string = 'dd/MM/yyyy'): string {
+  if (!dateStr) return '-';
+  try {
+    const d = typeof dateStr === 'string' ? parseISO(dateStr) : new Date(dateStr);
+    return isValid(d) ? format(d, fmt) : '-';
+  } catch { return '-'; }
+}
 
 export default function MerchPesquisaPrecos() {
   const [tab, setTab] = useState('modelos');
@@ -94,6 +103,7 @@ function ModelosTab({ brands }: { brands: any[] }) {
   const shareRule = useShareRule();
   const [showEditor, setShowEditor] = useState(false);
   const [editingRule, setEditingRule] = useState<any>(null);
+  const [showSchedule, setShowSchedule] = useState<any>(null);
 
   // Editor state
   const [name, setName] = useState('');
@@ -152,7 +162,7 @@ function ModelosTab({ brands }: { brands: any[] }) {
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
-        <p className="text-sm text-muted-foreground">Crie modelos de pesquisa de preços e agende datas para execução.</p>
+        <p className="text-sm text-muted-foreground">Crie modelos de pesquisa de preços e agende para execução.</p>
         <Button onClick={openNew}><Plus className="h-4 w-4 mr-1" />Novo Modelo</Button>
       </div>
 
@@ -171,17 +181,20 @@ function ModelosTab({ brands }: { brands: any[] }) {
                     </div>
                     <p className="text-sm text-muted-foreground mb-2">{brandName}</p>
                     {r.description && <p className="text-xs text-muted-foreground mb-2">{r.description}</p>}
-                    <div className="flex gap-4 text-xs text-muted-foreground">
+                    <div className="flex gap-4 text-xs text-muted-foreground flex-wrap">
                       <span className="flex items-center gap-1">
                         <Calendar className="h-3 w-3" />
                         {FREQUENCIES.find(f => f.value === r.frequency)?.label || r.frequency}
-                        {r.scheduled_date && ` — ${format(new Date(r.scheduled_date + 'T12:00:00'), 'dd/MM/yyyy')}`}
+                        {r.scheduled_date && ` — ${safeFormatDate(r.scheduled_date + 'T12:00:00')}`}
                       </span>
                       <span className="flex items-center gap-1"><Package className="h-3 w-3" />{r.products_count || 0} produtos</span>
                       <span className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3" />{r.completed_count || 0}/{r.executions_count || 0} pesquisas</span>
                     </div>
                   </div>
                   <div className="flex gap-1">
+                    <Button size="sm" variant="outline" onClick={() => setShowSchedule(r)} title="Agendar pesquisa">
+                      <CalendarPlus className="h-4 w-4 mr-1" />Agendar
+                    </Button>
                     <Button size="icon" variant="ghost" onClick={() => openEdit(r)} title="Editar">
                       <Edit className="h-4 w-4" />
                     </Button>
@@ -251,7 +264,7 @@ function ModelosTab({ brands }: { brands: any[] }) {
               </div>
             )}
             <div className="space-y-3 pt-2 border-t">
-              <p className="text-sm font-medium">Opções</p>
+              <p className="text-sm font-medium">Regras de execução</p>
               <div className="flex items-center justify-between">
                 <Label className="text-sm">Foto obrigatória</Label>
                 <Switch checked={requirePhoto} onCheckedChange={setRequirePhoto} />
@@ -261,7 +274,7 @@ function ModelosTab({ brands }: { brands: any[] }) {
                 <Switch checked={requireJustification} onCheckedChange={setRequireJustification} />
               </div>
               <div className="flex items-center justify-between">
-                <Label className="text-sm">Bloquear rota sem pesquisa</Label>
+                <Label className="text-sm">Bloquear rota sem pesquisa (obrigatória)</Label>
                 <Switch checked={blockRouteCompletion} onCheckedChange={setBlockRouteCompletion} />
               </div>
             </div>
@@ -272,7 +285,126 @@ function ModelosTab({ brands }: { brands: any[] }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Schedule Research Dialog */}
+      {showSchedule && (
+        <ScheduleResearchDialog
+          rule={showSchedule}
+          brands={brands}
+          open={!!showSchedule}
+          onClose={() => setShowSchedule(null)}
+        />
+      )}
     </div>
+  );
+}
+
+// ===== Schedule Research Dialog =====
+function ScheduleResearchDialog({ rule, brands, open, onClose }: { rule: any; brands: any[]; open: boolean; onClose: () => void }) {
+  const brandName = brands.find((b: any) => b.id === rule.brand_id)?.name || 'Marca';
+  const { data: pdvs = [] } = useBrandPdvs(rule.brand_id);
+  const { data: employees = [] } = useEmployees();
+  const [pdvId, setPdvId] = useState('');
+  const [promoterId, setPromoterId] = useState('');
+  const [scheduleDate, setScheduleDate] = useState('');
+  const [scheduleTime, setScheduleTime] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSchedule = async () => {
+    if (!pdvId) return toast.error('Selecione um PDV');
+    if (!promoterId) return toast.error('Selecione um promotor');
+    if (!scheduleDate) return toast.error('Selecione uma data');
+    setIsSubmitting(true);
+    try {
+      await api('/api/price-research/schedule', {
+        method: 'POST',
+        body: {
+          rule_id: rule.id,
+          brand_id: rule.brand_id,
+          pdv_id: pdvId,
+          promoter_id: promoterId,
+          scheduled_date: scheduleDate,
+          scheduled_time: scheduleTime || null,
+          frequency: rule.frequency,
+          require_photo: rule.require_photo,
+          require_justification: rule.require_justification,
+          block_route_completion: rule.block_route_completion,
+        },
+      });
+      toast.success('Pesquisa agendada com sucesso!');
+      onClose();
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao agendar');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={() => onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <CalendarPlus className="h-5 w-5" />
+            Agendar Pesquisa
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <Card className="bg-muted/50">
+            <CardContent className="pt-3 pb-2">
+              <p className="font-medium text-sm">{rule.name || 'Pesquisa de Preços'}</p>
+              <p className="text-xs text-muted-foreground">{brandName} • {FREQUENCIES.find(f => f.value === rule.frequency)?.label}</p>
+              <div className="flex gap-3 mt-1 text-xs text-muted-foreground">
+                {rule.block_route_completion && <Badge variant="destructive" className="text-[10px] h-5">Obrigatória</Badge>}
+                {rule.require_photo && <Badge variant="outline" className="text-[10px] h-5">Foto obrigatória</Badge>}
+                {rule.require_justification && <Badge variant="outline" className="text-[10px] h-5">Justificativa obrigatória</Badge>}
+              </div>
+            </CardContent>
+          </Card>
+
+          <div>
+            <Label className="flex items-center gap-1"><MapPin className="h-3 w-3" />PDV</Label>
+            <Select value={pdvId} onValueChange={setPdvId}>
+              <SelectTrigger><SelectValue placeholder="Selecione o PDV" /></SelectTrigger>
+              <SelectContent>
+                {pdvs.map((p: any) => (
+                  <SelectItem key={p.pdv_id || p.id} value={p.pdv_id || p.id}>{p.pdv_name || p.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
+            <Label className="flex items-center gap-1"><User className="h-3 w-3" />Promotor</Label>
+            <Select value={promoterId} onValueChange={setPromoterId}>
+              <SelectTrigger><SelectValue placeholder="Selecione o promotor" /></SelectTrigger>
+              <SelectContent>
+                {employees.filter((e: any) => e.active !== false).map((e: any) => (
+                  <SelectItem key={e.id} value={e.id}>{e.full_name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="flex items-center gap-1"><Calendar className="h-3 w-3" />Data</Label>
+              <Input type="date" value={scheduleDate} onChange={e => setScheduleDate(e.target.value)} />
+            </div>
+            <div>
+              <Label className="flex items-center gap-1"><Clock className="h-3 w-3" />Horário (opcional)</Label>
+              <Input type="time" value={scheduleTime} onChange={e => setScheduleTime(e.target.value)} />
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancelar</Button>
+          <Button onClick={handleSchedule} disabled={isSubmitting}>
+            <CalendarPlus className="h-4 w-4 mr-1" />Agendar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -285,7 +417,6 @@ function PesquisasTab({ brands }: { brands: any[] }) {
     status: statusFilter || undefined,
   });
   const validate = useValidateExecution();
-  const [viewId, setViewId] = useState<string | null>(null);
 
   return (
     <div className="space-y-4">
@@ -308,6 +439,7 @@ function PesquisasTab({ brands }: { brands: any[] }) {
           <SelectContent>
             <SelectItem value={ALL_STATUS_VALUE}>Todos</SelectItem>
             <SelectItem value="pending">Pendente</SelectItem>
+            <SelectItem value="scheduled">Agendada</SelectItem>
             <SelectItem value="in_progress">Em andamento</SelectItem>
             <SelectItem value="completed">Concluída</SelectItem>
             <SelectItem value="validated">Validada</SelectItem>
@@ -321,6 +453,7 @@ function PesquisasTab({ brands }: { brands: any[] }) {
             <TableHeader>
               <TableRow>
                 <TableHead>Data</TableHead>
+                <TableHead>Modelo</TableHead>
                 <TableHead>Marca</TableHead>
                 <TableHead>PDV</TableHead>
                 <TableHead>Promotor</TableHead>
@@ -332,8 +465,11 @@ function PesquisasTab({ brands }: { brands: any[] }) {
             <TableBody>
               {executions.map((e: any) => (
                 <TableRow key={e.id}>
-                  <TableCell className="text-sm">{e.created_at ? format(new Date(e.created_at), 'dd/MM/yyyy') : '-'}</TableCell>
-                  <TableCell>{e.brand_name}</TableCell>
+                  <TableCell className="text-sm">
+                    {e.scheduled_date ? safeFormatDate(e.scheduled_date + 'T12:00:00') : safeFormatDate(e.created_at)}
+                  </TableCell>
+                  <TableCell className="text-sm">{e.rule_name || '-'}</TableCell>
+                  <TableCell>{e.brand_name || '-'}</TableCell>
                   <TableCell>{e.pdv_name || '-'}</TableCell>
                   <TableCell>{e.promoter_name || '-'}</TableCell>
                   <TableCell>
@@ -345,8 +481,16 @@ function PesquisasTab({ brands }: { brands: any[] }) {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Badge variant={e.status === 'validated' ? 'default' : e.status === 'completed' ? 'secondary' : e.status === 'in_progress' ? 'outline' : 'outline'}>
-                      {e.status === 'validated' ? '✓ Validada' : e.status === 'completed' ? 'Concluída' : e.status === 'in_progress' ? 'Em andamento' : 'Pendente'}
+                    <Badge variant={
+                      e.status === 'validated' ? 'default' :
+                      e.status === 'completed' ? 'secondary' :
+                      e.status === 'scheduled' ? 'outline' :
+                      e.status === 'in_progress' ? 'outline' : 'outline'
+                    }>
+                      {e.status === 'validated' ? '✓ Validada' :
+                       e.status === 'completed' ? 'Concluída' :
+                       e.status === 'scheduled' ? '📅 Agendada' :
+                       e.status === 'in_progress' ? 'Em andamento' : 'Pendente'}
                     </Badge>
                   </TableCell>
                   <TableCell>
@@ -361,7 +505,7 @@ function PesquisasTab({ brands }: { brands: any[] }) {
                 </TableRow>
               ))}
               {executions.length === 0 && (
-                <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Nenhuma pesquisa encontrada</TableCell></TableRow>
+                <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">Nenhuma pesquisa encontrada</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
@@ -377,7 +521,6 @@ function ResultadosTab({ brands }: { brands: any[] }) {
   const { data: rules = [] } = usePriceResearchRules(selectedBrandId || undefined);
   const shareRule = useShareRule();
 
-  // Filter only rules that have completed executions
   const rulesWithResults = rules.filter((r: any) => (r.completed_count || 0) > 0);
 
   return (

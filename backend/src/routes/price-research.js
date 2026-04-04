@@ -46,6 +46,8 @@ async function ensureTables() {
     completed_items INTEGER DEFAULT 0, started_at TIMESTAMPTZ, completed_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW())`);
   try { await query('ALTER TABLE price_research_executions ADD COLUMN IF NOT EXISTS rule_id UUID'); } catch {}
+  try { await query('ALTER TABLE price_research_executions ADD COLUMN IF NOT EXISTS scheduled_date DATE'); } catch {}
+  try { await query('ALTER TABLE price_research_executions ADD COLUMN IF NOT EXISTS scheduled_time TIME'); } catch {}
   try { await query('ALTER TABLE price_research_executions ALTER COLUMN route_id DROP NOT NULL'); } catch {}
   try { await query('ALTER TABLE price_research_executions ALTER COLUMN pdv_id DROP NOT NULL'); } catch {}
   try { await query('ALTER TABLE price_research_executions ALTER COLUMN promoter_id DROP NOT NULL'); } catch {}
@@ -245,11 +247,13 @@ router.get('/executions', authenticate, async (req, res) => {
     const orgId = await getOrgId(req.userId);
     if (!orgId) return res.status(403).json({ error: 'Sem organização' });
     const { brand_id, pdv_id, promoter_id, status, date_from, date_to } = req.query;
-    let sql = `SELECT e.*, b.name as brand_name, p.name as pdv_name, emp.full_name as promoter_name
+    let sql = `SELECT e.*, b.name as brand_name, p.name as pdv_name, emp.full_name as promoter_name,
+               r.name as rule_name, r.frequency as rule_frequency, r.block_route_completion, r.require_photo, r.require_justification
                FROM price_research_executions e
                LEFT JOIN merch_brands b ON b.id = e.brand_id
                LEFT JOIN pdvs p ON p.id = e.pdv_id
                LEFT JOIN employees emp ON emp.id = e.promoter_id
+               LEFT JOIN price_research_rules r ON r.id = e.rule_id
                WHERE e.organization_id = $1`;
     const params = [orgId];
     let idx = 2;
@@ -259,7 +263,7 @@ router.get('/executions', authenticate, async (req, res) => {
     if (status) { sql += ` AND e.status = $${idx++}`; params.push(status); }
     if (date_from) { sql += ` AND e.created_at >= $${idx++}`; params.push(date_from); }
     if (date_to) { sql += ` AND e.created_at <= $${idx++}`; params.push(date_to + 'T23:59:59'); }
-    sql += ' ORDER BY e.created_at DESC LIMIT 500';
+    sql += ' ORDER BY COALESCE(e.scheduled_date, e.created_at::date) DESC, e.created_at DESC LIMIT 500';
     res.json((await query(sql, params)).rows);
   } catch (err) { logError('price-research.executions.list', err); res.status(500).json({ error: 'Erro' }); }
 });
@@ -568,6 +572,26 @@ router.get('/brand-results/:ruleId', authenticate, async (req, res) => {
       GROUP BY i.product_id, p.name ORDER BY p.name`, [rule.id])).rows;
     res.json({ rule, executions: execs, avgPrices });
   } catch (err) { logError('price-research.brand-results.detail', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// ===== ADMIN: Schedule research from model =====
+router.post('/schedule', authenticate, async (req, res) => {
+  try {
+    await ensureTables();
+    const orgId = await getOrgId(req.userId);
+    if (!orgId) return res.status(403).json({ error: 'Sem organização' });
+    const { rule_id, brand_id, pdv_id, promoter_id, scheduled_date, scheduled_time } = req.body;
+    if (!rule_id || !brand_id || !pdv_id || !promoter_id || !scheduled_date) {
+      return res.status(400).json({ error: 'Campos obrigatórios: rule_id, brand_id, pdv_id, promoter_id, scheduled_date' });
+    }
+    const result = await query(
+      `INSERT INTO price_research_executions (organization_id, rule_id, brand_id, pdv_id, promoter_id, scheduled_date, scheduled_time, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,'scheduled') RETURNING *`,
+      [orgId, rule_id, brand_id, pdv_id, promoter_id, scheduled_date, scheduled_time || null]
+    );
+    logInfo('price-research.schedule', `Scheduled research rule=${rule_id} pdv=${pdv_id} promoter=${promoter_id} date=${scheduled_date}`);
+    res.json(result.rows[0]);
+  } catch (err) { logError('price-research.schedule', err); res.status(500).json({ error: 'Erro ao agendar pesquisa' }); }
 });
 
 export default router;
