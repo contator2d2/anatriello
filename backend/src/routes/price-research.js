@@ -449,13 +449,26 @@ router.post('/schedule', authenticate, async (req, res) => {
     await ensureTables();
     const orgId = await getOrgId(req.userId);
     if (!orgId) return res.status(403).json({ error: 'Sem organização' });
-    const { rule_id, brand_id, pdv_id, promoter_id, scheduled_date, scheduled_time, recurrence_type, recurrence_end_date } = req.body;
-    if (!rule_id || !brand_id || !pdv_id || !promoter_id || !scheduled_date) {
-      return res.status(400).json({ error: 'Campos obrigatórios: rule_id, brand_id, pdv_id, promoter_id, scheduled_date' });
+    const { rule_id, brand_id, pdv_id, pdv_ids, rede_id, promoter_id, scheduled_date, scheduled_time, recurrence_type, recurrence_end_date } = req.body;
+    if (!rule_id || !brand_id || !promoter_id || !scheduled_date) {
+      return res.status(400).json({ error: 'Campos obrigatórios: rule_id, brand_id, promoter_id, scheduled_date' });
+    }
+
+    // Resolve PDV list
+    let targetPdvIds = [];
+    if (rede_id) {
+      const redePdvs = (await query('SELECT pdv_id FROM merch_rede_pdvs WHERE rede_id=$1', [rede_id])).rows;
+      targetPdvIds = redePdvs.map(r => r.pdv_id);
+    } else if (pdv_ids && Array.isArray(pdv_ids) && pdv_ids.length > 0) {
+      targetPdvIds = pdv_ids;
+    } else if (pdv_id) {
+      targetPdvIds = [pdv_id];
+    }
+    if (targetPdvIds.length === 0) {
+      return res.status(400).json({ error: 'Selecione pelo menos um PDV ou Rede' });
     }
 
     const dates = [scheduled_date];
-    // Generate recurring dates
     if (recurrence_type && recurrence_type !== 'once' && recurrence_end_date) {
       const start = new Date(scheduled_date);
       const end = new Date(recurrence_end_date);
@@ -468,41 +481,46 @@ router.post('/schedule', authenticate, async (req, res) => {
       }
     }
 
-    // Load model config to copy products and competitors
     const ruleRow = (await query('SELECT selected_products, competitor_config FROM price_research_rules WHERE id=$1', [rule_id])).rows[0];
     const selectedProducts = ruleRow?.selected_products || [];
     const competitorConfig = ruleRow?.competitor_config || {};
 
     const results = [];
-    for (const date of dates) {
-      const result = await query(
-        `INSERT INTO price_research_executions (organization_id, rule_id, brand_id, pdv_id, promoter_id, scheduled_date, scheduled_time, recurrence_type, recurrence_end_date, status)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'scheduled') RETURNING *`,
-        [orgId, rule_id, brand_id, pdv_id, promoter_id, date, scheduled_time || null, recurrence_type || 'once', recurrence_end_date || null]
-      );
-      const exec = result.rows[0];
-
-      // Copy products from model into execution items
-      let totalItems = 0;
-      for (const pid of selectedProducts) {
-        const itemResult = await query(
-          'INSERT INTO price_research_items (execution_id, product_id) VALUES ($1,$2) RETURNING id',
-          [exec.id, pid]
+    for (const targetPdv of targetPdvIds) {
+      for (const date of dates) {
+        const result = await query(
+          `INSERT INTO price_research_executions (organization_id, rule_id, brand_id, pdv_id, promoter_id, scheduled_date, scheduled_time, recurrence_type, recurrence_end_date, status)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'scheduled') RETURNING *`,
+          [orgId, rule_id, brand_id, targetPdv, promoter_id, date, scheduled_time || null, recurrence_type || 'once', recurrence_end_date || null]
         );
-        totalItems++;
-        const itemId = itemResult.rows[0].id;
-        // Copy competitors for this product from model config
-        const comps = competitorConfig[pid] || [];
-        for (const comp of comps) {
-          await query(
-            `INSERT INTO price_research_item_competitors (item_id, competitor_product_name, competitor_brand_name, photo_url)
-             VALUES ($1,$2,$3,$4)`,
-            [itemId, comp.name, comp.brand, comp.photo_url || null]
+        const exec = result.rows[0];
+
+        let totalItems = 0;
+        for (const pid of selectedProducts) {
+          const itemResult = await query(
+            'INSERT INTO price_research_items (execution_id, product_id) VALUES ($1,$2) RETURNING id',
+            [exec.id, pid]
           );
+          totalItems++;
+          const itemId = itemResult.rows[0].id;
+          const comps = competitorConfig[pid] || [];
+          for (const comp of comps) {
+            await query(
+              `INSERT INTO price_research_item_competitors (item_id, competitor_product_name, competitor_brand_name, photo_url)
+               VALUES ($1,$2,$3,$4)`,
+              [itemId, comp.name, comp.brand, comp.photo_url || null]
+            );
+          }
         }
+        if (totalItems > 0) {
+          await query('UPDATE price_research_executions SET total_items=$1 WHERE id=$2', [totalItems, exec.id]);
+          exec.total_items = totalItems;
+        }
+        results.push(exec);
       }
-      // Update total_items count
-      if (totalItems > 0) {
+    }
+    logInfo('price-research.schedule', `Scheduled ${results.length} research(es) rule=${rule_id} pdvs=${targetPdvIds.length}`);
+    res.json(results.length === 1 ? results[0] : results);
         await query('UPDATE price_research_executions SET total_items=$1 WHERE id=$2', [totalItems, exec.id]);
         exec.total_items = totalItems;
       }
