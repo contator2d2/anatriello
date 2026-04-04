@@ -112,6 +112,16 @@ async function ensureTables() {
     week_end DATE NOT NULL, preferred_date DATE, status VARCHAR(30) DEFAULT 'pending',
     is_last_route_of_week BOOLEAN DEFAULT false, is_mandatory BOOLEAN DEFAULT false,
     completed_at TIMESTAMPTZ, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW())`);
+
+  // Redes (Networks / Chains)
+  await query(`CREATE TABLE IF NOT EXISTS merch_redes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL,
+    name VARCHAR(255) NOT NULL, description TEXT, active BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW())`);
+
+  await query(`CREATE TABLE IF NOT EXISTS merch_rede_pdvs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(), rede_id UUID NOT NULL, pdv_id UUID NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(), UNIQUE(rede_id, pdv_id))`);
 }
 
 // ===== ADMIN: Rules / Templates =====
