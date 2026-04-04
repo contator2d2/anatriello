@@ -376,7 +376,7 @@ router.get('/executions/:id', authenticate, async (req, res) => {
     const items = (await query(`SELECT i.*, ${productCols} FROM price_research_items i
       LEFT JOIN products p ON p.id = i.product_id WHERE i.execution_id = $1 ORDER BY p.name`, [exec.id])).rows;
     for (const item of items) {
-      item.competitors = (await query(`SELECT ic.*, cp.photo_url FROM price_research_item_competitors ic
+      item.competitors = (await query(`SELECT ic.*, COALESCE(ic.photo_url, cp.photo_url) as photo_url FROM price_research_item_competitors ic
         LEFT JOIN price_research_competitor_products cp ON cp.id = ic.competitor_product_id
         WHERE ic.item_id = $1 ORDER BY ic.competitor_brand_name`, [item.id])).rows;
     }
