@@ -175,6 +175,9 @@ export const FaceVerifyDialog = ({ open, onOpenChange, storedDescriptor, storedP
             <div className="flex flex-col items-center gap-3 py-8">
               <AlertTriangle className="h-8 w-8 text-destructive" />
               <p className="text-sm text-destructive">{error}</p>
+              <Button variant="outline" size="sm" onClick={handleRetry} className="gap-1">
+                <RotateCcw className="h-4 w-4" /> Tentar novamente
+              </Button>
             </div>
           )}
 
