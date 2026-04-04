@@ -50,10 +50,12 @@ interface ApiOptions {
   body?: unknown;
   auth?: boolean;
   headers?: Record<string, string>;
+  silent?: boolean;
+  fallbackToOtherBases?: boolean;
 }
 
 export const api = async <T>(endpoint: string, options: ApiOptions = {}): Promise<T> => {
-  const { method = 'GET', body, auth = true, headers: customHeaders } = options;
+  const { method = 'GET', body, auth = true, headers: customHeaders, silent = false, fallbackToOtherBases = true } = options;
   const normalizedEndpoint = normalizeEndpoint(endpoint);
 
   const headers: Record<string, string> = {
@@ -100,7 +102,7 @@ export const api = async <T>(endpoint: string, options: ApiOptions = {}): Promis
             data = { raw: rawText };
           }
         } else {
-          if ((rawText.trim().startsWith('<!') || rawText.includes('<html')) && shouldLogNow(`html:${url}:${response.status}`)) {
+          if (!silent && (rawText.trim().startsWith('<!') || rawText.includes('<html')) && shouldLogNow(`html:${url}:${response.status}`)) {
             // eslint-disable-next-line no-console
             console.error('[api] Got HTML instead of JSON', {
               url,
@@ -121,7 +123,7 @@ export const api = async <T>(endpoint: string, options: ApiOptions = {}): Promis
           const detailValue = data?.details || data?.detail || '';
           const details = detailValue ? `: ${detailValue}` : '';
           const logKey = `fail:${url}:${response.status}`;
-          if (shouldLogNow(logKey)) {
+          if (!silent && shouldLogNow(logKey)) {
             // eslint-disable-next-line no-console
             console.error('[api] request failed', {
               url,
@@ -133,7 +135,7 @@ export const api = async <T>(endpoint: string, options: ApiOptions = {}): Promis
           }
 
           // Fallback para same-origin somente em GET, evitando duplicidade em mutações
-          const shouldTryNextBase = method === 'GET' && baseIndex < baseCandidates.length - 1 && (
+          const shouldTryNextBase = fallbackToOtherBases && method === 'GET' && baseIndex < baseCandidates.length - 1 && (
             response.status >= 500 ||
             (base === '' && response.status === 404) ||
             (base === '' && typeof data?.raw === 'string' && (data.raw.trim().startsWith('<!') || data.raw.includes('<html')))
@@ -154,7 +156,7 @@ export const api = async <T>(endpoint: string, options: ApiOptions = {}): Promis
           continue;
         }
 
-        if (shouldLogNow(`network:${url}`)) {
+        if (!silent && shouldLogNow(`network:${url}`)) {
           // eslint-disable-next-line no-console
           console.error('[api] network failure', {
             url,
@@ -163,7 +165,7 @@ export const api = async <T>(endpoint: string, options: ApiOptions = {}): Promis
           });
         }
 
-        const shouldTryNextBase = method === 'GET' && baseIndex < baseCandidates.length - 1;
+        const shouldTryNextBase = fallbackToOtherBases && method === 'GET' && baseIndex < baseCandidates.length - 1;
         if (shouldTryNextBase) {
           lastError = error instanceof Error ? error : new Error('Erro de rede');
           break;

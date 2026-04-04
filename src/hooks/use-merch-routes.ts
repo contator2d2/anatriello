@@ -106,10 +106,17 @@ export function useDuplicateMerchRoute() {
 export function useLiveRoutes() {
   return useQuery({
     queryKey: ['merch-routes-live'],
-    queryFn: () => api<any[]>('/api/merch/routes/live'),
+    queryFn: async () => {
+      try {
+        return await api<any[]>('/api/merch/routes/live', { silent: true, fallbackToOtherBases: false });
+      } catch {
+        return [];
+      }
+    },
     refetchInterval: (query) => (query.state.status === 'error' ? false : 15000),
     retry: false,
     refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
 }
 
