@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { FaceVerifyDialog } from "@/components/facial-recognition/FaceVerifyDialog";
 
 interface ValidationResult {
   status: "authorized" | "blocked";
@@ -28,6 +29,8 @@ interface LookupResult {
   entry_at?: string;
   agency_promoter_id?: string;
   employee_id?: string;
+  face_descriptor?: number[];
+  face_photo_url?: string;
 }
 
 interface TotemConfig {
@@ -129,6 +132,11 @@ const TotemAccess = () => {
   // LGPD
   const [lgpdAccepted, setLgpdAccepted] = useState(false);
   const [showLgpd, setShowLgpd] = useState(false);
+
+  // Facial verification
+  const [showFacialVerify, setShowFacialVerify] = useState(false);
+  const [facialVerified, setFacialVerified] = useState(false);
+  const [facialPendingAction, setFacialPendingAction] = useState<"checkin" | "checkout" | null>(null);
 
   const API_URL = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
 
@@ -243,6 +251,10 @@ const TotemAccess = () => {
           agency_name: data.promoter.agency_name,
           brands: (data.brands || []).map((b: any) => b.name || b),
           has_open_entry: !!data.has_open_entry, open_entry_id: data.open_entry_id, entry_at: data.entry_at,
+          agency_promoter_id: data.promoter.agency_promoter_id,
+          employee_id: data.promoter.employee_id,
+          face_descriptor: data.promoter.face_descriptor || undefined,
+          face_photo_url: data.promoter.face_photo_url || undefined,
         };
         setLookupResult(lr);
         // Check if selfie is required for this step
@@ -260,6 +272,12 @@ const TotemAccess = () => {
   };
 
   const handleConfirmCheckin = async () => {
+    // If facial recognition enabled and not yet verified, open facial dialog
+    if (authConfig.facial_recognition_enabled && lookupResult?.face_descriptor?.length && !facialVerified) {
+      setFacialPendingAction("checkin");
+      setShowFacialVerify(true);
+      return;
+    }
     // If selfie required and not captured yet, open camera
     if (selfieRequired && !selfieCapture) { startCamera(); return; }
     setLoading(true);
@@ -337,6 +355,12 @@ const TotemAccess = () => {
 
   const handleConfirmCheckout = async () => {
     if (!lookupResult?.open_entry_id) return;
+    // If facial recognition enabled and not yet verified, open facial dialog
+    if (authConfig.facial_recognition_enabled && lookupResult?.face_descriptor?.length && !facialVerified) {
+      setFacialPendingAction("checkout");
+      setShowFacialVerify(true);
+      return;
+    }
     if (selfieRequired && !selfieCapture) { startCamera(); return; }
     setLoading(true);
     try {
@@ -360,6 +384,23 @@ const TotemAccess = () => {
     finally { setLoading(false); setLookupResult(null); setSelfieRequired(false); setSelfieCapture(null); }
   };
 
+  const handleFacialResult = useCallback((result: { match: boolean; score: number; imageDataUrl: string }) => {
+    setShowFacialVerify(false);
+    if (result.match) {
+      setFacialVerified(true);
+      // Continue the pending action
+      if (facialPendingAction === "checkin") {
+        setTimeout(() => handleConfirmCheckin(), 100);
+      } else if (facialPendingAction === "checkout") {
+        setTimeout(() => handleConfirmCheckout(), 100);
+      }
+    } else {
+      setResult({ status: "blocked", block_reason: `Identidade facial não confirmada (${result.score.toFixed(1)}%)` });
+      setLookupResult(null);
+    }
+    setFacialPendingAction(null);
+  }, [facialPendingAction]);
+
   const handleCheckout = async () => {
     if (!result?.entry_id) return;
     try {
@@ -373,6 +414,7 @@ const TotemAccess = () => {
   const handleReset = () => {
     setResult(null); setLookupResult(null); setLookupError(null); setCpfDigits("");
     setSelfieRequired(false); setSelfieCapture(null); setShowCamera(false); setLgpdAccepted(false); setShowLgpd(false);
+    setFacialVerified(false); setFacialPendingAction(null); setShowFacialVerify(false);
     stopCamera();
     // Reset to mode selection if multiple modes available
     if (authConfig.cpf_entry_enabled && authConfig.qr_entry_enabled) setAuthMode("select");
@@ -823,24 +865,44 @@ const TotemAccess = () => {
               </div>
             )}
 
+            {authConfig.facial_recognition_enabled && lookupResult.face_descriptor?.length && (
+              <div className="mt-3 flex items-center justify-center gap-2 text-white/60 text-sm">
+                <ScanFace className="h-4 w-4" />
+                <span>{facialVerified ? "✓ Identidade facial confirmada" : "Verificação facial obrigatória"}</span>
+              </div>
+            )}
+
             <div className="flex gap-3 mt-6">
               <Button onClick={handleReset} variant="outline" className="flex-1 h-14 text-lg border-white/30 text-white hover:bg-white/10">Não sou eu</Button>
               {lookupResult.has_open_entry ? (
                 <Button onClick={handleConfirmCheckout} disabled={loading}
                   className="flex-1 h-14 text-lg font-bold bg-amber-500 hover:bg-amber-600 text-white">
-                  {loading ? <Loader2 className="h-5 w-5 animate-spin mr-2" /> : <LogOut className="h-5 w-5 mr-2" />}
-                  {loading ? "Saindo..." : selfieRequired ? "Selfie + Check-out" : "Check-out"}
+                  {loading ? <Loader2 className="h-5 w-5 animate-spin mr-2" /> : (authConfig.facial_recognition_enabled && lookupResult.face_descriptor?.length && !facialVerified) ? <ScanFace className="h-5 w-5 mr-2" /> : <LogOut className="h-5 w-5 mr-2" />}
+                  {loading ? "Saindo..." : (authConfig.facial_recognition_enabled && lookupResult.face_descriptor?.length && !facialVerified) ? "Verificar + Check-out" : selfieRequired ? "Selfie + Check-out" : "Check-out"}
                 </Button>
               ) : (
                 <Button onClick={handleConfirmCheckin} disabled={loading} className="flex-1 h-14 text-lg font-bold" style={btnStyle}>
-                  {loading ? <Loader2 className="h-5 w-5 animate-spin mr-2" /> : <LogIn className="h-5 w-5 mr-2" />}
-                  {loading ? "Validando..." : selfieRequired ? "Selfie + Check-in" : "Check-in"}
+                  {loading ? <Loader2 className="h-5 w-5 animate-spin mr-2" /> : (authConfig.facial_recognition_enabled && lookupResult.face_descriptor?.length && !facialVerified) ? <ScanFace className="h-5 w-5 mr-2" /> : <LogIn className="h-5 w-5 mr-2" />}
+                  {loading ? "Validando..." : (authConfig.facial_recognition_enabled && lookupResult.face_descriptor?.length && !facialVerified) ? "Verificar + Check-in" : selfieRequired ? "Selfie + Check-in" : "Check-in"}
                 </Button>
               )}
             </div>
           </div>
         )}
       </div>
+
+      {/* Facial Verification Dialog */}
+      {lookupResult?.face_descriptor?.length && (
+        <FaceVerifyDialog
+          open={showFacialVerify}
+          onOpenChange={(open) => { if (!open) { setShowFacialVerify(false); setFacialPendingAction(null); } }}
+          storedDescriptor={lookupResult.face_descriptor}
+          storedPhotoUrl={lookupResult.face_photo_url || lookupResult.photo_url}
+          personName={lookupResult.name}
+          threshold={authConfig.facial_min_confidence || 70}
+          onResult={handleFacialResult}
+        />
+      )}
 
       {renderConfigDialog()}
     </div>

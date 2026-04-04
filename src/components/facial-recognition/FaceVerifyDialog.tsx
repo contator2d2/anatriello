@@ -43,7 +43,18 @@ export const FaceVerifyDialog = ({ open, onOpenChange, storedDescriptor, storedP
     let cancelled = false;
     (async () => {
       setStatus("loading");
-      await loadFaceModels();
+      try {
+        // Add timeout to prevent hanging forever on model load
+        await Promise.race([
+          loadFaceModels(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 15000)),
+        ]);
+      } catch (err) {
+        if (cancelled) return;
+        setError("Não foi possível carregar os modelos de detecção facial. Verifique sua conexão e tente novamente.");
+        setStatus("error");
+        return;
+      }
       if (cancelled) return;
 
       try {
@@ -57,7 +68,7 @@ export const FaceVerifyDialog = ({ open, onOpenChange, storedDescriptor, storedP
           setStatus("detecting");
         }
       } catch {
-        setError("Câmera não disponível.");
+        setError("Câmera não disponível. Verifique as permissões do navegador.");
         setStatus("error");
       }
     })();
@@ -164,6 +175,9 @@ export const FaceVerifyDialog = ({ open, onOpenChange, storedDescriptor, storedP
             <div className="flex flex-col items-center gap-3 py-8">
               <AlertTriangle className="h-8 w-8 text-destructive" />
               <p className="text-sm text-destructive">{error}</p>
+              <Button variant="outline" size="sm" onClick={handleRetry} className="gap-1">
+                <RotateCcw className="h-4 w-4" /> Tentar novamente
+              </Button>
             </div>
           )}
 
