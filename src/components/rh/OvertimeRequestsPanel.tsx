@@ -14,6 +14,26 @@ function safeFormatDate(value: any, fmt: string, fallback = '—'): string {
   return d && !Number.isNaN(d.getTime()) ? format(d, fmt) : fallback;
 }
 
+function formatWorkSchedule(ws: any): string {
+  if (!ws) return '—';
+  try {
+    const obj = typeof ws === 'string' ? JSON.parse(ws) : ws;
+    if (obj.entry && obj.exit) {
+      const days = obj.days;
+      const activeDays = days
+        ? Object.entries(days)
+            .filter(([, v]) => v)
+            .map(([k]) => k.charAt(0).toUpperCase() + k.slice(1))
+            .join(', ')
+        : '';
+      return `${obj.entry}–${obj.exit}${activeDays ? ` (${activeDays})` : ''}`;
+    }
+    return String(ws);
+  } catch {
+    return String(ws);
+  }
+}
+
 interface Props {
   statusFilter?: string;
   compact?: boolean;
@@ -57,7 +77,7 @@ export function OvertimeRequestsPanel({ statusFilter = 'pendente', compact = fal
           <div className="flex items-start justify-between">
             <div>
               <p className="text-sm font-medium">{ot.employee_name}</p>
-              <p className="text-xs text-muted-foreground">{ot.position} • Jornada: {ot.work_schedule || '—'}</p>
+              <p className="text-xs text-muted-foreground">{ot.position} • Jornada: {formatWorkSchedule(ot.work_schedule)}</p>
             </div>
             <div className="flex items-center gap-2">
               <Badge variant={ot.status === 'aprovado' ? 'default' : ot.status === 'recusado' ? 'destructive' : 'secondary'} className="text-[10px]">
