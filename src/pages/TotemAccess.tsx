@@ -251,6 +251,10 @@ const TotemAccess = () => {
           agency_name: data.promoter.agency_name,
           brands: (data.brands || []).map((b: any) => b.name || b),
           has_open_entry: !!data.has_open_entry, open_entry_id: data.open_entry_id, entry_at: data.entry_at,
+          agency_promoter_id: data.promoter.agency_promoter_id,
+          employee_id: data.promoter.employee_id,
+          face_descriptor: data.promoter.face_descriptor || undefined,
+          face_photo_url: data.promoter.face_photo_url || undefined,
         };
         setLookupResult(lr);
         // Check if selfie is required for this step
