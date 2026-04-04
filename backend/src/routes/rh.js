@@ -344,7 +344,9 @@ router.get('/employees', async (req, res) => {
 
     const { status, search, department_id, branch_id } = req.query;
     let sql = `SELECT e.*, d.name as department_name, b.name as branch_name,
-               CASE WHEN caa.access_status IN ('liberado','aguardando_login','ativo') THEN true ELSE false END as promotor_access
+               CASE WHEN caa.access_status IN ('liberado','aguardando_login','ativo') THEN true ELSE false END as promotor_access,
+               COALESCE(caa.access_status, 'sem_acesso') as app_access_status,
+               caa.last_login as app_last_login
                FROM employees e
                LEFT JOIN rh_departments d ON d.id = e.department_id
                LEFT JOIN branches b ON b.id = e.branch_id
