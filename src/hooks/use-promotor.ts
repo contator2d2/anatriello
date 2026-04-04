@@ -51,6 +51,50 @@ export function usePromotorOvertimeRequests() {
   });
 }
 
+// Supervisor: get pending overtime requests from subordinates
+export function useSupervisorOvertimeRequests() {
+  return useQuery({
+    queryKey: ['supervisor-overtime-requests'],
+    queryFn: () => promotorApi<any[]>('/api/promotor/supervisor/overtime-requests'),
+    refetchInterval: 30000,
+  });
+}
+
+// Supervisor: approve/reject overtime request
+export function useSupervisorApproveOvertime() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }: { id: string; status: string; supervisor_notes?: string }) =>
+      promotorApi<any>(`/api/promotor/supervisor/overtime-requests/${id}`, { method: 'PUT', body: data }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['supervisor-overtime-requests'] }); },
+  });
+}
+
+// Supervisor: get list of managed promoters
+export function useSupervisorTeam() {
+  return useQuery({
+    queryKey: ['supervisor-team'],
+    queryFn: () => promotorApi<any[]>('/api/promotor/supervisor/team'),
+    refetchInterval: 60000,
+  });
+}
+
+// Supervisor: send notification to a specific promoter
+export function useSupervisorSendNotification() {
+  return useMutation({
+    mutationFn: (data: { employee_id: string; title: string; message?: string }) =>
+      promotorApi<any>('/api/promotor/supervisor/send-notification', { method: 'POST', body: data }),
+  });
+}
+
+// Supervisor: send file/document to RH
+export function useSupervisorSendToRH() {
+  return useMutation({
+    mutationFn: (data: { title: string; message?: string; file_url?: string; category?: string }) =>
+      promotorApi<any>('/api/promotor/supervisor/send-to-rh', { method: 'POST', body: data }),
+  });
+}
+
 // RH side hooks
 export function useRhOvertimeRequests(filters?: { status?: string }) {
   const params = new URLSearchParams();

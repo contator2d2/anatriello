@@ -1,7 +1,7 @@
 import { ReactNode, useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useBranding } from "@/hooks/use-branding";
-import { Home, FileText, Clock, Upload, Settings, LogOut, Bell, X } from "lucide-react";
+import { Home, FileText, Clock, Upload, Settings, LogOut, Bell, X, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePromotorNotifications, usePromotorMarkRead, useLocationTracking } from "@/hooks/use-promotor";
 import { Badge } from "@/components/ui/badge";
@@ -75,9 +75,13 @@ export function PromotorLayout({ children }: PromotorLayoutProps) {
     markRead.mutate(id);
   };
 
+  const employee = JSON.parse(localStorage.getItem('promotor_employee') || '{}');
+  const isSupervisor = employee?.worker_profile === 'supervisor' || employee?.worker_profile === 'administrativo';
+
   const navItems = [
     { path: '/promotor/home', icon: Home, label: 'Início' },
     { path: '/promotor/agenda', icon: Clock, label: 'Agenda' },
+    ...(isSupervisor ? [{ path: '/promotor/equipe', icon: Users, label: 'Equipe' }] : []),
     { path: '/promotor/avarias', icon: FileText, label: 'Avarias' },
     { path: '/promotor/ponto', icon: Clock, label: 'Ponto' },
     { path: '/promotor/configuracoes', icon: Settings, label: 'Config' },

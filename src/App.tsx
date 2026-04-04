@@ -95,6 +95,7 @@ import PromotorPonto from "./pages/promotor/PromotorPonto";
 import PromotorEnviar from "./pages/promotor/PromotorEnviar";
 import PromotorConfig from "./pages/promotor/PromotorConfig";
 import PromotorTrocarSenha from "./pages/promotor/PromotorTrocarSenha";
+import PromotorEquipe from "./pages/promotor/PromotorEquipe";
 import NotFound from "./pages/NotFound";
 import TotemAccess from "./pages/TotemAccess";
 import AccessControlAdmin from "./pages/AccessControlAdmin";
@@ -266,6 +267,7 @@ const App = () => (
             <Route path="/promotor/enviar" element={<PromotorEnviar />} />
             <Route path="/promotor/configuracoes" element={<PromotorConfig />} />
             <Route path="/promotor/trocar-senha" element={<PromotorTrocarSenha />} />
+            <Route path="/promotor/equipe" element={<PromotorEquipe />} />
             <Route path="/api-docs" element={<ApiDocumentation />} />
             <Route path="/f/:slug" element={<PublicFormPage />} />
             <Route path="/assinar/:token" element={<AssinarDocumento />} />

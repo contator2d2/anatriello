@@ -524,7 +524,8 @@ export default function PromotorHome() {
           </Card>
         </div>
 
-        {/* Punch button - always visible */}
+        {/* Punch button - only when has routes (no-routes scenario already has its own) */}
+        {hasRoutesToday && (
         <Card className="overflow-hidden">
           <CardContent className="p-0">
             {isFacialActive && (
@@ -568,6 +569,7 @@ export default function PromotorHome() {
             )}
           </CardContent>
         </Card>
+        )}
 
         {/* Notifications */}
         {notifications.length > 0 && (
