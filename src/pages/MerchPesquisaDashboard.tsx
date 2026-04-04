@@ -17,6 +17,8 @@ import {
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { format } from "date-fns";
 
+const ALL_BRANDS_VALUE = "__all_brands__";
+
 export default function MerchPesquisaDashboard() {
   const [selectedBrandId, setSelectedBrandId] = useState('');
   const [selectedRuleId, setSelectedRuleId] = useState<string | null>(null);
@@ -35,10 +37,16 @@ export default function MerchPesquisaDashboard() {
         </div>
 
         <div className="flex gap-3 flex-wrap">
-          <Select value={selectedBrandId} onValueChange={v => { setSelectedBrandId(v); setSelectedRuleId(null); }}>
+          <Select
+            value={selectedBrandId || ALL_BRANDS_VALUE}
+            onValueChange={v => {
+              setSelectedBrandId(v === ALL_BRANDS_VALUE ? '' : v);
+              setSelectedRuleId(null);
+            }}
+          >
             <SelectTrigger className="w-48"><SelectValue placeholder="Selecione a marca" /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="">Todas as marcas</SelectItem>
+              <SelectItem value={ALL_BRANDS_VALUE}>Todas as marcas</SelectItem>
               {brands.map((b: any) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
             </SelectContent>
           </Select>

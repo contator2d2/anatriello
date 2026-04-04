@@ -29,6 +29,9 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 
+const ALL_BRANDS_VALUE = "__all_brands__";
+const ALL_STATUS_VALUE = "__all_status__";
+
 const FREQUENCIES = [
   { value: 'once', label: 'Única (sem recorrência)' },
   { value: 'daily', label: 'Diária' },
@@ -286,17 +289,23 @@ function PesquisasTab({ brands }: { brands: any[] }) {
   return (
     <div className="space-y-4">
       <div className="flex gap-3 flex-wrap">
-        <Select value={selectedBrandId} onValueChange={setSelectedBrandId}>
+        <Select
+          value={selectedBrandId || ALL_BRANDS_VALUE}
+          onValueChange={(value) => setSelectedBrandId(value === ALL_BRANDS_VALUE ? '' : value)}
+        >
           <SelectTrigger className="w-48"><SelectValue placeholder="Todas as marcas" /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="">Todas</SelectItem>
+            <SelectItem value={ALL_BRANDS_VALUE}>Todas</SelectItem>
             {brands.map((b: any) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
           </SelectContent>
         </Select>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
+        <Select
+          value={statusFilter || ALL_STATUS_VALUE}
+          onValueChange={(value) => setStatusFilter(value === ALL_STATUS_VALUE ? '' : value)}
+        >
           <SelectTrigger className="w-40"><SelectValue placeholder="Status" /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="">Todos</SelectItem>
+            <SelectItem value={ALL_STATUS_VALUE}>Todos</SelectItem>
             <SelectItem value="pending">Pendente</SelectItem>
             <SelectItem value="in_progress">Em andamento</SelectItem>
             <SelectItem value="completed">Concluída</SelectItem>
@@ -373,10 +382,13 @@ function ResultadosTab({ brands }: { brands: any[] }) {
   return (
     <div className="space-y-4">
       <div className="flex gap-3 items-center flex-wrap">
-        <Select value={selectedBrandId} onValueChange={setSelectedBrandId}>
+        <Select
+          value={selectedBrandId || ALL_BRANDS_VALUE}
+          onValueChange={(value) => setSelectedBrandId(value === ALL_BRANDS_VALUE ? '' : value)}
+        >
           <SelectTrigger className="w-48"><SelectValue placeholder="Todas as marcas" /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="">Todas</SelectItem>
+            <SelectItem value={ALL_BRANDS_VALUE}>Todas</SelectItem>
             {brands.map((b: any) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
           </SelectContent>
         </Select>
