@@ -26,6 +26,7 @@ function getGreeting(hour: number): { text: string; icon: typeof Sun } {
 export function TopBar() {
   const { user } = useAuth();
   const { branding } = useBranding();
+  const overtimePendingCount = useOvertimePendingCount();
   const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
