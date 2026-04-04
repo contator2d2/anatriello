@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CameraCapture, type PhotoQualityConfig } from "@/components/promotor/CameraCapture";
+import { FaceVerifyDialog } from "@/components/facial-recognition/FaceVerifyDialog";
 import {
   usePromotorRouteDetail, usePromotorCheckin, usePromotorCheckout,
   usePromotorUpdateExecution, usePromotorReportDamage, usePromotorReportRupture,
@@ -18,10 +19,11 @@ import {
   usePromotorRegisterExtraPoint,
 } from "@/hooks/use-promotor-routes";
 import { toast } from "sonner";
+import { useQuery } from "@tanstack/react-query";
 import {
   MapPin, Camera, Check, AlertTriangle, Archive, Clock,
   CheckCircle2, Circle, Calendar as CalendarIcon, Trash2, Store, Info,
-  Lock, Unlock, ChevronRight, Target, ImagePlus, Plus,
+  Lock, Unlock, ChevronRight, Target, ImagePlus, Plus, ScanFace,
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 
