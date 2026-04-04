@@ -3899,6 +3899,12 @@ CREATE TABLE IF NOT EXISTS timesheet_exports (id UUID PRIMARY KEY DEFAULT gen_ra
 -- Offline Sync Queue
 CREATE TABLE IF NOT EXISTS offline_sync_queue (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), employee_id UUID NOT NULL REFERENCES employees(id) ON DELETE CASCADE, action_type VARCHAR(50) NOT NULL, payload JSONB NOT NULL, local_timestamp TIMESTAMPTZ NOT NULL, server_timestamp TIMESTAMPTZ, sync_status VARCHAR(20) DEFAULT 'pending', attempts INTEGER DEFAULT 0, error_message TEXT, local_id VARCHAR(100), server_id UUID, created_at TIMESTAMPTZ DEFAULT NOW());
 
+-- Overtime Requests
+CREATE TABLE IF NOT EXISTS overtime_requests (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE, employee_id UUID NOT NULL REFERENCES employees(id) ON DELETE CASCADE, request_date DATE NOT NULL DEFAULT CURRENT_DATE, reason TEXT NOT NULL, requested_start TIME, requested_end TIME, status VARCHAR(20) DEFAULT 'pendente', approved_by UUID REFERENCES employees(id) ON DELETE SET NULL, approved_at TIMESTAMPTZ, supervisor_notes TEXT, created_at TIMESTAMPTZ DEFAULT NOW());
+CREATE INDEX IF NOT EXISTS idx_overtime_requests_emp ON overtime_requests(employee_id);
+CREATE INDEX IF NOT EXISTS idx_overtime_requests_date ON overtime_requests(request_date);
+CREATE INDEX IF NOT EXISTS idx_overtime_requests_status ON overtime_requests(status);
+
 -- Collaborator Notifications
 CREATE TABLE IF NOT EXISTS collaborator_notifications (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE, employee_id UUID NOT NULL REFERENCES employees(id) ON DELETE CASCADE, title VARCHAR(255) NOT NULL, message TEXT, type VARCHAR(30) DEFAULT 'info', reference_type VARCHAR(50), reference_id UUID, read BOOLEAN DEFAULT false, read_at TIMESTAMPTZ, created_at TIMESTAMPTZ DEFAULT NOW());
 CREATE INDEX IF NOT EXISTS idx_collab_notif_emp ON collaborator_notifications(employee_id);
