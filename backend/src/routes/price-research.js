@@ -150,7 +150,17 @@ router.get('/product-mappings', authenticate, async (req, res) => {
     await ensureTables();
     const orgId = await getOrgId(req.userId);
     const { brand_id } = req.query;
-    let sql = `SELECT pm.*, p.name as product_name, p.sku, p.photo_url, p.description FROM price_research_product_mappings pm
+
+    // Check which columns exist on products table to avoid errors
+    let productCols = 'p.name as product_name, p.sku';
+    try {
+      const colCheck = await query(`SELECT column_name FROM information_schema.columns WHERE table_name='products' AND column_name IN ('photo_url','description')`);
+      const existing = colCheck.rows.map(r => r.column_name);
+      if (existing.includes('photo_url')) productCols += ', p.photo_url';
+      if (existing.includes('description')) productCols += ', p.description';
+    } catch {}
+
+    let sql = `SELECT pm.*, ${productCols} FROM price_research_product_mappings pm
                LEFT JOIN products p ON p.id = pm.product_id WHERE pm.organization_id = $1`;
     const params = [orgId];
     if (brand_id) { sql += ' AND pm.brand_id = $2'; params.push(brand_id); }
@@ -167,7 +177,7 @@ router.get('/product-mappings', authenticate, async (req, res) => {
       for (const m of mappings) m.competitor_products = cpMap[m.id] || [];
     }
     res.json(mappings);
-  } catch (err) { logError('price-research.mappings.list', err); res.status(500).json({ error: 'Erro' }); }
+  } catch (err) { logError('price-research.mappings.list', err); res.status(500).json({ error: err.message || 'Erro' }); }
 });
 
 router.post('/product-mappings', authenticate, async (req, res) => {
