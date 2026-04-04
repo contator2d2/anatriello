@@ -267,6 +267,7 @@ const App = () => (
             <Route path="/promotor/enviar" element={<PromotorEnviar />} />
             <Route path="/promotor/configuracoes" element={<PromotorConfig />} />
             <Route path="/promotor/trocar-senha" element={<PromotorTrocarSenha />} />
+            <Route path="/promotor/equipe" element={<PromotorEquipe />} />
             <Route path="/api-docs" element={<ApiDocumentation />} />
             <Route path="/f/:slug" element={<PublicFormPage />} />
             <Route path="/assinar/:token" element={<AssinarDocumento />} />
