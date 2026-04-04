@@ -1407,11 +1407,18 @@ router.get('/facial-config', authenticatePromotor, async (req, res) => {
         [empId]
       );
       if (empRows.length && empRows[0].face_descriptor) {
-        descriptor = typeof empRows[0].face_descriptor === 'string'
+        const parsedDescriptor = typeof empRows[0].face_descriptor === 'string'
           ? JSON.parse(empRows[0].face_descriptor)
           : empRows[0].face_descriptor;
+
+        descriptor = Array.isArray(parsedDescriptor)
+          ? parsedDescriptor
+          : Array.isArray(parsedDescriptor?.descriptor)
+            ? parsedDescriptor.descriptor
+            : null;
+
         photoUrl = empRows[0].face_photo_url;
-        hasEnrollment = true;
+        hasEnrollment = Array.isArray(descriptor) && descriptor.length > 0;
       }
     } catch {
       // columns may not exist

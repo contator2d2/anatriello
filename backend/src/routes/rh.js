@@ -2043,8 +2043,18 @@ router.get('/facial-recognition/descriptor/:employeeId', async (req, res) => {
     const desc = typeof rows[0].face_descriptor === 'string'
       ? JSON.parse(rows[0].face_descriptor)
       : rows[0].face_descriptor;
+    const descriptor = Array.isArray(desc)
+      ? desc
+      : Array.isArray(desc?.descriptor)
+        ? desc.descriptor
+        : [];
+
+    if (!descriptor.length) {
+      return res.status(422).json({ error: 'Dados faciais inválidos para teste' });
+    }
+
     res.json({
-      descriptor: desc,
+      descriptor,
       photo_url: rows[0].face_photo_url,
       name: rows[0].full_name,
     });

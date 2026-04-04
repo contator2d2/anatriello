@@ -13,6 +13,12 @@ let modelsLoaded = false;
 let modelsLoadingPromise: Promise<void> | null = null;
 let activeFaceBackend: string | null = null;
 
+type FaceDescriptorPayload =
+  | number[]
+  | { descriptor?: number[] | null }
+  | null
+  | undefined;
+
 type FaceApiTensorflowBackend = {
   getBackend?: () => string;
   ready?: () => Promise<void>;
@@ -168,6 +174,18 @@ export interface FaceDetectionResult {
   confidence: number;
 }
 
+function normalizeFaceDescriptor(input: FaceDescriptorPayload): number[] {
+  const source = Array.isArray(input)
+    ? input
+    : input && typeof input === 'object' && Array.isArray(input.descriptor)
+      ? input.descriptor
+      : [];
+
+  return source
+    .map((value) => (typeof value === 'number' ? value : Number(value)))
+    .filter((value) => Number.isFinite(value));
+}
+
 /**
  * Detect face from an HTMLVideoElement or HTMLImageElement and extract descriptor
  */
@@ -191,11 +209,14 @@ export async function detectFace(
  * Returns a similarity score 0-100 (100 = identical)
  */
 export function compareFaces(descriptor1: number[], descriptor2: number[]): number {
-  if (descriptor1.length !== descriptor2.length) return 0;
+  const normalizedDescriptor1 = normalizeFaceDescriptor(descriptor1);
+  const normalizedDescriptor2 = normalizeFaceDescriptor(descriptor2);
+
+  if (!normalizedDescriptor1.length || normalizedDescriptor1.length !== normalizedDescriptor2.length) return 0;
 
   const distance = faceapi.euclideanDistance(
-    new Float32Array(descriptor1),
-    new Float32Array(descriptor2)
+    new Float32Array(normalizedDescriptor1),
+    new Float32Array(normalizedDescriptor2)
   );
 
   // face-api.js distance: 0 = identical, ~0.6+ = different person
