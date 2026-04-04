@@ -10,10 +10,11 @@ import { useToast } from "@/hooks/use-toast";
 import { usePromotorSettings, usePromotorUpdateSettings, usePromotorChangePassword } from "@/hooks/use-promotor";
 import { PromotorLayout } from "./PromotorLayout";
 import { SyncDiagnosticPanel } from "@/components/promotor/SyncDiagnosticPanel";
-import { Settings, Lock, Palette, Wifi, WifiOff, Navigation, Smartphone, Loader2, Download } from "lucide-react";
+import { Settings, Lock, Palette, Wifi, WifiOff, Navigation, Smartphone, Loader2, Download, RefreshCw } from "lucide-react";
 import { canInstallPWA, installPWA, isPWAInstalled } from "@/lib/pwa";
 
 export default function PromotorConfig() {
+  const [updating, setUpdating] = useState(false);
   const { data: settings } = usePromotorSettings();
   const updateSettings = usePromotorUpdateSettings();
   const changePassword = usePromotorChangePassword();
@@ -109,6 +110,32 @@ export default function PromotorConfig() {
     }
   };
 
+  const handleForceUpdate = async () => {
+    setUpdating(true);
+    try {
+      if ('serviceWorker' in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(registrations.map(r => r.unregister()));
+      }
+      if ('caches' in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map(k => caches.delete(k)));
+      }
+      const token = localStorage.getItem('promotor_token');
+      const emp = localStorage.getItem('promotor_employee');
+      const thm = localStorage.getItem('promotor-theme');
+      localStorage.clear();
+      if (token) localStorage.setItem('promotor_token', token);
+      if (emp) localStorage.setItem('promotor_employee', emp);
+      if (thm) localStorage.setItem('promotor-theme', thm);
+      toast({ title: '✅ Sistema atualizado!', description: 'Recarregando...' });
+      setTimeout(() => window.location.reload(), 1000);
+    } catch (err: any) {
+      toast({ title: 'Erro ao atualizar', description: err.message, variant: 'destructive' });
+      setUpdating(false);
+    }
+  };
+
   return (
     <PromotorLayout>
       <div className="p-4 max-w-lg mx-auto space-y-4">
@@ -184,6 +211,18 @@ export default function PromotorConfig() {
             <Button onClick={handleChangePassword} size="sm" className="w-full" disabled={changePassword.isPending}>
               {changePassword.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               Alterar Senha
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* Force Update */}
+        <Card className="border-orange-300 dark:border-orange-700">
+          <CardHeader className="p-3 pb-1"><CardTitle className="text-sm flex items-center gap-2"><RefreshCw className="h-4 w-4" /> Atualizar Sistema</CardTitle></CardHeader>
+          <CardContent className="p-3 pt-0 space-y-2">
+            <p className="text-xs text-muted-foreground">Limpa o cache do navegador, service workers e recarrega o app com a versão mais recente.</p>
+            <Button onClick={handleForceUpdate} disabled={updating} variant="outline" size="sm" className="w-full gap-2">
+              {updating ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              {updating ? 'Atualizando...' : 'Atualizar Agora'}
             </Button>
           </CardContent>
         </Card>
