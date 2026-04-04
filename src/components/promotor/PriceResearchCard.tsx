@@ -4,13 +4,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { useRouteResearch, useExecuteResearch } from "@/hooks/use-price-research";
 import {
-  DollarSign, ChevronRight, CheckCircle2, Clock, AlertTriangle, Camera, Save,
+  DollarSign, ChevronRight, CheckCircle2, Clock, AlertTriangle, Save, Package, Image as ImageIcon,
 } from "lucide-react";
 
 interface PriceResearchCardProps {
@@ -30,7 +29,6 @@ export function PriceResearchCard({ routeId, brandId, brandName, pdvId, promoter
   const [items, setItems] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
 
-  // Find research for this brand
   const research = researches.find((r: any) => r.brand_id === brandId);
 
   useEffect(() => {
@@ -161,7 +159,21 @@ export function PriceResearchCard({ routeId, brandId, brandName, pdvId, promoter
             <div className="space-y-4">
               {items.map((item, idx) => (
                 <Card key={item.product_id || idx} className="p-3">
-                  <p className="font-medium text-sm mb-2">{item.product_name || `Produto ${idx + 1}`}</p>
+                  {/* Product header with photo */}
+                  <div className="flex items-center gap-3 mb-3">
+                    {item.photo_url ? (
+                      <img src={item.photo_url} alt={item.product_name} className="h-12 w-12 rounded object-cover border" />
+                    ) : (
+                      <div className="h-12 w-12 rounded bg-muted flex items-center justify-center">
+                        <Package className="h-5 w-5 text-muted-foreground" />
+                      </div>
+                    )}
+                    <div>
+                      <p className="font-medium text-sm">{item.product_name || `Produto ${idx + 1}`}</p>
+                      {item.description && <p className="text-xs text-muted-foreground">{item.description}</p>}
+                    </div>
+                  </div>
+
                   <div className="space-y-2">
                     <div>
                       <Label className="text-xs">Preço encontrado (R$)</Label>
@@ -176,11 +188,20 @@ export function PriceResearchCard({ routeId, brandId, brandName, pdvId, promoter
                     </div>
 
                     {item.competitors?.length > 0 && (
-                      <div className="ml-3 border-l-2 border-muted pl-3 space-y-2">
+                      <div className="ml-3 border-l-2 border-muted pl-3 space-y-3">
                         <p className="text-xs font-medium text-muted-foreground">Concorrentes</p>
                         {item.competitors.map((comp: any, cIdx: number) => (
-                          <div key={comp.id || cIdx}>
-                            <Label className="text-xs">{comp.competitor_brand_name || comp.competitor_name} — {comp.competitor_product_name}</Label>
+                          <div key={comp.id || cIdx} className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              {comp.photo_url ? (
+                                <img src={comp.photo_url} alt={comp.competitor_product_name} className="h-8 w-8 rounded object-cover border" />
+                              ) : (
+                                <div className="h-8 w-8 rounded bg-muted flex items-center justify-center">
+                                  <ImageIcon className="h-3 w-3 text-muted-foreground" />
+                                </div>
+                              )}
+                              <Label className="text-xs">{comp.competitor_brand_name || comp.competitor_name} — {comp.competitor_product_name}</Label>
+                            </div>
                             <Input
                               type="number"
                               step="0.01"

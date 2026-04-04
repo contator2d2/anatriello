@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -21,11 +21,12 @@ import {
   useCreateCompetitorProduct, useDeleteCompetitorProduct,
 } from "@/hooks/use-price-research";
 import {
-  DollarSign, Settings, Building2, Package, Plus, Trash2, Search, ToggleLeft,
+  DollarSign, Settings, Building2, Package, Plus, Trash2, Image as ImageIcon,
 } from "lucide-react";
 
 const WEEKDAYS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
 const FREQUENCIES = [
+  { value: 'once', label: 'Única (sem recorrência)' },
   { value: 'daily', label: 'Diária' },
   { value: 'weekly', label: 'Semanal' },
   { value: 'biweekly', label: 'Quinzenal' },
@@ -103,8 +104,7 @@ function RuleConfig({ brandId }: { brandId: string }) {
   const [requireJustification, setRequireJustification] = useState(rule.require_justification ?? true);
   const [blockRouteCompletion, setBlockRouteCompletion] = useState(rule.block_route_completion ?? false);
 
-  // Sync state when rule loads
-  useState(() => {
+  useEffect(() => {
     if (rule.id) {
       setEnabled(rule.enabled);
       setFrequency(rule.frequency);
@@ -113,7 +113,7 @@ function RuleConfig({ brandId }: { brandId: string }) {
       setRequireJustification(rule.require_justification);
       setBlockRouteCompletion(rule.block_route_completion);
     }
-  });
+  }, [rule.id]);
 
   const handleSave = () => {
     upsert.mutate({
@@ -125,6 +125,8 @@ function RuleConfig({ brandId }: { brandId: string }) {
       block_route_completion: blockRouteCompletion,
     }, { onSuccess: () => toast.success('Configuração salva!') });
   };
+
+  const isRecurring = frequency !== 'once';
 
   return (
     <Card>
@@ -138,7 +140,7 @@ function RuleConfig({ brandId }: { brandId: string }) {
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <Label>Frequência</Label>
+            <Label>Recorrência</Label>
             <Select value={frequency} onValueChange={setFrequency}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -146,16 +148,23 @@ function RuleConfig({ brandId }: { brandId: string }) {
               </SelectContent>
             </Select>
           </div>
-          <div>
-            <Label>Dia preferencial</Label>
-            <Select value={preferredWeekday} onValueChange={setPreferredWeekday}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {WEEKDAYS.map((d, i) => <SelectItem key={i} value={String(i)}>{d}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
+          {isRecurring && (
+            <div>
+              <Label>Dia preferencial</Label>
+              <Select value={preferredWeekday} onValueChange={setPreferredWeekday}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {WEEKDAYS.map((d, i) => <SelectItem key={i} value={String(i)}>{d}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </div>
+        {frequency === 'once' && (
+          <p className="text-xs text-muted-foreground">
+            A pesquisa será solicitada apenas uma vez, sem repetição automática.
+          </p>
+        )}
         <div className="flex items-center justify-between">
           <Label>Foto obrigatória</Label>
           <Switch checked={requirePhoto} onCheckedChange={setRequirePhoto} />
@@ -265,9 +274,12 @@ function ProductMappingsPanel({ brandId }: { brandId: string }) {
   const [showAddComp, setShowAddComp] = useState<string | null>(null);
   const [compName, setCompName] = useState('');
   const [compCompetitorId, setCompCompetitorId] = useState('');
+  const [compPhotoUrl, setCompPhotoUrl] = useState('');
 
   const mappedProductIds = new Set(mappings.map((m: any) => m.product_id));
   const availableProducts = products.filter((p: any) => !mappedProductIds.has(p.id));
+
+  const selectedProductData = products.find((p: any) => p.id === selectedProduct);
 
   const handleAddProduct = () => {
     if (!selectedProduct) return;
@@ -278,10 +290,18 @@ function ProductMappingsPanel({ brandId }: { brandId: string }) {
 
   const handleAddCompetitorProduct = () => {
     if (!compName.trim() || !compCompetitorId || !showAddComp) return;
-    createCP.mutate({ mapping_id: showAddComp, competitor_id: compCompetitorId, competitor_product_name: compName }, {
-      onSuccess: () => { setShowAddComp(null); setCompName(''); setCompCompetitorId(''); toast.success('Produto concorrente adicionado'); },
+    createCP.mutate({
+      mapping_id: showAddComp,
+      competitor_id: compCompetitorId,
+      competitor_product_name: compName,
+      photo_url: compPhotoUrl || null,
+    }, {
+      onSuccess: () => { setShowAddComp(null); setCompName(''); setCompCompetitorId(''); setCompPhotoUrl(''); toast.success('Produto concorrente adicionado'); },
     });
   };
+
+  // Find full product info for a mapping
+  const getProductInfo = (productId: string) => products.find((p: any) => p.id === productId);
 
   return (
     <div className="space-y-4">
@@ -291,36 +311,62 @@ function ProductMappingsPanel({ brandId }: { brandId: string }) {
           <Button size="sm" onClick={() => setShowAddProduct(true)}><Plus className="h-4 w-4 mr-1" />Adicionar Produto</Button>
         </CardHeader>
         <CardContent className="space-y-3">
-          {mappings.map((m: any) => (
-            <Card key={m.id} className="p-3">
-              <div className="flex items-center justify-between mb-2">
-                <span className="font-medium">{m.product_name || m.product_id}</span>
-                <div className="flex gap-1">
-                  <Button size="sm" variant="outline" onClick={() => setShowAddComp(m.id)}>
-                    <Plus className="h-3 w-3 mr-1" />Concorrente
-                  </Button>
-                  <Button size="icon" variant="ghost" onClick={() => { if (confirm('Remover?')) deleteMapping.mutate(m.id); }}>
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                  </Button>
-                </div>
-              </div>
-              {m.competitor_products?.length > 0 && (
-                <div className="ml-4 space-y-1">
-                  {m.competitor_products.map((cp: any) => (
-                    <div key={cp.id} className="flex items-center justify-between text-sm bg-muted/50 rounded px-2 py-1">
-                      <span>{cp.competitor_name} — {cp.competitor_product_name}</span>
-                      <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => deleteCP.mutate(cp.id)}>
-                        <Trash2 className="h-3 w-3 text-destructive" />
-                      </Button>
+          {mappings.map((m: any) => {
+            const prodInfo = getProductInfo(m.product_id);
+            return (
+              <Card key={m.id} className="p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-3">
+                    {(prodInfo?.photo_url || m.photo_url) ? (
+                      <img src={prodInfo?.photo_url || m.photo_url} alt={m.product_name} className="h-12 w-12 rounded object-cover border" />
+                    ) : (
+                      <div className="h-12 w-12 rounded bg-muted flex items-center justify-center">
+                        <Package className="h-5 w-5 text-muted-foreground" />
+                      </div>
+                    )}
+                    <div>
+                      <p className="font-medium text-sm">{m.product_name || prodInfo?.name || m.product_id}</p>
+                      {(prodInfo?.description || m.sku) && (
+                        <p className="text-xs text-muted-foreground">{prodInfo?.description || `SKU: ${m.sku}`}</p>
+                      )}
                     </div>
-                  ))}
+                  </div>
+                  <div className="flex gap-1">
+                    <Button size="sm" variant="outline" onClick={() => setShowAddComp(m.id)}>
+                      <Plus className="h-3 w-3 mr-1" />Concorrente
+                    </Button>
+                    <Button size="icon" variant="ghost" onClick={() => { if (confirm('Remover?')) deleteMapping.mutate(m.id); }}>
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </div>
                 </div>
-              )}
-              {(!m.competitor_products || m.competitor_products.length === 0) && (
-                <p className="text-xs text-muted-foreground ml-4">Nenhum produto concorrente vinculado</p>
-              )}
-            </Card>
-          ))}
+                {m.competitor_products?.length > 0 && (
+                  <div className="ml-4 space-y-1">
+                    {m.competitor_products.map((cp: any) => (
+                      <div key={cp.id} className="flex items-center justify-between text-sm bg-muted/50 rounded px-2 py-1">
+                        <div className="flex items-center gap-2">
+                          {cp.photo_url ? (
+                            <img src={cp.photo_url} alt={cp.competitor_product_name} className="h-8 w-8 rounded object-cover border" />
+                          ) : (
+                            <div className="h-8 w-8 rounded bg-muted flex items-center justify-center">
+                              <ImageIcon className="h-3 w-3 text-muted-foreground" />
+                            </div>
+                          )}
+                          <span>{cp.competitor_name} — {cp.competitor_product_name}</span>
+                        </div>
+                        <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => deleteCP.mutate(cp.id)}>
+                          <Trash2 className="h-3 w-3 text-destructive" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {(!m.competitor_products || m.competitor_products.length === 0) && (
+                  <p className="text-xs text-muted-foreground ml-4">Nenhum produto concorrente vinculado</p>
+                )}
+              </Card>
+            );
+          })}
           {mappings.length === 0 && (
             <p className="text-center py-8 text-muted-foreground">Nenhum produto adicionado à pesquisa</p>
           )}
@@ -334,9 +380,34 @@ function ProductMappingsPanel({ brandId }: { brandId: string }) {
           <Select value={selectedProduct} onValueChange={setSelectedProduct}>
             <SelectTrigger><SelectValue placeholder="Selecione um produto" /></SelectTrigger>
             <SelectContent>
-              {availableProducts.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+              {availableProducts.map((p: any) => (
+                <SelectItem key={p.id} value={p.id}>
+                  <div className="flex items-center gap-2">
+                    {p.photo_url && <img src={p.photo_url} alt="" className="h-5 w-5 rounded object-cover" />}
+                    <span>{p.name}</span>
+                  </div>
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
+          {selectedProductData && (
+            <Card className="p-3">
+              <div className="flex items-center gap-3">
+                {selectedProductData.photo_url ? (
+                  <img src={selectedProductData.photo_url} alt={selectedProductData.name} className="h-16 w-16 rounded object-cover border" />
+                ) : (
+                  <div className="h-16 w-16 rounded bg-muted flex items-center justify-center">
+                    <Package className="h-6 w-6 text-muted-foreground" />
+                  </div>
+                )}
+                <div>
+                  <p className="font-medium">{selectedProductData.name}</p>
+                  {selectedProductData.sku && <p className="text-xs text-muted-foreground">SKU: {selectedProductData.sku}</p>}
+                  {selectedProductData.description && <p className="text-xs text-muted-foreground">{selectedProductData.description}</p>}
+                </div>
+              </div>
+            </Card>
+          )}
           <DialogFooter><Button onClick={handleAddProduct} disabled={createMapping.isPending}>Adicionar</Button></DialogFooter>
         </DialogContent>
       </Dialog>
@@ -360,6 +431,16 @@ function ProductMappingsPanel({ brandId }: { brandId: string }) {
             <div>
               <Label>Nome do produto concorrente</Label>
               <Input value={compName} onChange={e => setCompName(e.target.value)} placeholder="Ex: Sabonete 85g" />
+            </div>
+            <div>
+              <Label>Foto do produto (URL)</Label>
+              <Input value={compPhotoUrl} onChange={e => setCompPhotoUrl(e.target.value)} placeholder="https://..." />
+              {compPhotoUrl && (
+                <div className="mt-2">
+                  <img src={compPhotoUrl} alt="Preview" className="h-20 w-20 rounded object-cover border"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                </div>
+              )}
             </div>
           </div>
           <DialogFooter><Button onClick={handleAddCompetitorProduct} disabled={createCP.isPending}>Adicionar</Button></DialogFooter>
