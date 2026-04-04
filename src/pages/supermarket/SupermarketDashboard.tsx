@@ -71,6 +71,9 @@ export default function SupermarketDashboard() {
 
   return (
     <div className="p-4 md:p-6 space-y-6">
+      {/* AI Daily Summary */}
+      <DailySummaryWidget portal="supermarket" />
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Painel em Tempo Real</h1>
