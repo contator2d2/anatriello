@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { FaceVerifyDialog } from "@/components/facial-recognition/FaceVerifyDialog";
 
 interface ValidationResult {
   status: "authorized" | "blocked";
