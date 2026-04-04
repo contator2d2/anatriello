@@ -530,7 +530,9 @@ router.get('/overtime-requests', authenticatePromotor, async (req, res) => {
 // =============================================
 router.get('/rh/overtime-requests', authenticate, async (req, res) => {
   try {
-    const orgId = req.query.org_id || await getUserOrgId(req.userId);
+    const orgId = await resolveOrganizationId(req);
+    if (!orgId) return res.json([]);
+
     const { status, employee_id } = req.query;
     let sql = `SELECT ot.*, e.full_name as employee_name, e.position, e.work_schedule, ap.full_name as approved_by_name
       FROM overtime_requests ot
@@ -1038,9 +1040,9 @@ router.put('/rh/inbound-documents/:id', async (req, res) => {
 // =============================================
 // RH: MONITORAMENTO DE PONTO EM TEMPO REAL
 // =============================================
-router.get('/rh/punch-monitor', async (req, res) => {
+router.get('/rh/punch-monitor', authenticate, async (req, res) => {
   try {
-    const orgId = req.query.org_id || (await query(`SELECT organization_id FROM organization_members WHERE user_id = $1 LIMIT 1`, [req.userId])).rows[0]?.organization_id;
+    const orgId = await resolveOrganizationId(req);
     const today = new Date().toISOString().slice(0, 10);
 
     const [punched, notPunched, alerts, outsidePdv] = await Promise.all([
