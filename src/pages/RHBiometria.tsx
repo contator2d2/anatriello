@@ -255,6 +255,23 @@ const RHBiometria = () => {
           }
         }}
       />
+
+      {/* Face Verify Test Dialog */}
+      <FaceVerifyDialog
+        open={!!testingEmp}
+        onOpenChange={(open) => { if (!open) { setTestingEmp(null); setTestDescriptor([]); } }}
+        storedDescriptor={testDescriptor}
+        storedPhotoUrl={testingEmp?.face_photo_url || testingEmp?.photo_url}
+        personName={testingEmp?.full_name}
+        threshold={70}
+        onResult={(result) => {
+          toast({
+            title: result.match ? '✅ Teste aprovado!' : '❌ Teste reprovado',
+            description: `Similaridade: ${result.score.toFixed(1)}%`,
+            variant: result.match ? 'default' : 'destructive',
+          });
+        }}
+      />
     </MainLayout>
   );
 };
