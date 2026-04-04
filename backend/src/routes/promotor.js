@@ -530,7 +530,9 @@ router.get('/overtime-requests', authenticatePromotor, async (req, res) => {
 // =============================================
 router.get('/rh/overtime-requests', authenticate, async (req, res) => {
   try {
-    const orgId = req.query.org_id || await getUserOrgId(req.userId);
+    const orgId = await resolveOrganizationId(req);
+    if (!orgId) return res.json([]);
+
     const { status, employee_id } = req.query;
     let sql = `SELECT ot.*, e.full_name as employee_name, e.position, e.work_schedule, ap.full_name as approved_by_name
       FROM overtime_requests ot
