@@ -3187,4 +3187,85 @@ router.post('/whatsapp-assistant/process', authenticate, async (req, res) => {
   } catch (err) { logError('wa.assistant.process', err); res.status(500).json({ error: 'Erro no assistente' }); }
 });
 
+// ============ WHATSAPP AGENT CONFIG: Save/Load ============
+router.get('/whatsapp-agent-config', authenticate, async (req, res) => {
+  try {
+    await ensureIncidentsInfra();
+    const orgId = await getOrgId(req.user.id);
+    // Ensure table exists
+    await query(`CREATE TABLE IF NOT EXISTS whatsapp_agent_config (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id UUID NOT NULL,
+      name TEXT NOT NULL DEFAULT 'Assistente Operacional PDV',
+      is_active BOOLEAN DEFAULT false,
+      connection_id UUID,
+      ai_provider TEXT DEFAULT 'openai',
+      ai_model TEXT DEFAULT 'gpt-4o-mini',
+      system_prompt TEXT,
+      temperature NUMERIC DEFAULT 0.4,
+      max_tokens INTEGER DEFAULT 1000,
+      greeting_message TEXT,
+      fallback_message TEXT,
+      capabilities JSONB DEFAULT '[]',
+      personality_traits JSONB DEFAULT '[]',
+      language TEXT DEFAULT 'pt-BR',
+      context_window INTEGER DEFAULT 10,
+      working_hours JSONB,
+      notification_rules JSONB,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(organization_id)
+    )`);
+    const r = await query('SELECT * FROM whatsapp_agent_config WHERE organization_id = $1', [orgId]);
+    res.json(r.rows[0] || {});
+  } catch (err) { logError('wa.agent.config.get', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.post('/whatsapp-agent-config', authenticate, async (req, res) => {
+  try {
+    await ensureIncidentsInfra();
+    const orgId = await getOrgId(req.user.id);
+    const { name, is_active, connection_id, ai_provider, ai_model, system_prompt, temperature, max_tokens, greeting_message, fallback_message, capabilities, personality_traits, language, context_window, working_hours, notification_rules } = req.body;
+    
+    // Ensure table
+    await query(`CREATE TABLE IF NOT EXISTS whatsapp_agent_config (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id UUID NOT NULL,
+      name TEXT NOT NULL DEFAULT 'Assistente Operacional PDV',
+      is_active BOOLEAN DEFAULT false,
+      connection_id UUID,
+      ai_provider TEXT DEFAULT 'openai',
+      ai_model TEXT DEFAULT 'gpt-4o-mini',
+      system_prompt TEXT,
+      temperature NUMERIC DEFAULT 0.4,
+      max_tokens INTEGER DEFAULT 1000,
+      greeting_message TEXT,
+      fallback_message TEXT,
+      capabilities JSONB DEFAULT '[]',
+      personality_traits JSONB DEFAULT '[]',
+      language TEXT DEFAULT 'pt-BR',
+      context_window INTEGER DEFAULT 10,
+      working_hours JSONB,
+      notification_rules JSONB,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(organization_id)
+    )`);
+
+    const r = await query(`INSERT INTO whatsapp_agent_config (organization_id, name, is_active, connection_id, ai_provider, ai_model, system_prompt, temperature, max_tokens, greeting_message, fallback_message, capabilities, personality_traits, language, context_window, working_hours, notification_rules)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+      ON CONFLICT (organization_id) DO UPDATE SET
+        name=EXCLUDED.name, is_active=EXCLUDED.is_active, connection_id=EXCLUDED.connection_id,
+        ai_provider=EXCLUDED.ai_provider, ai_model=EXCLUDED.ai_model, system_prompt=EXCLUDED.system_prompt,
+        temperature=EXCLUDED.temperature, max_tokens=EXCLUDED.max_tokens, greeting_message=EXCLUDED.greeting_message,
+        fallback_message=EXCLUDED.fallback_message, capabilities=EXCLUDED.capabilities, personality_traits=EXCLUDED.personality_traits,
+        language=EXCLUDED.language, context_window=EXCLUDED.context_window, working_hours=EXCLUDED.working_hours,
+        notification_rules=EXCLUDED.notification_rules, updated_at=NOW()
+      RETURNING *`,
+      [orgId, name, is_active, connection_id || null, ai_provider, ai_model, system_prompt, temperature, max_tokens, greeting_message, fallback_message, JSON.stringify(capabilities || []), JSON.stringify(personality_traits || []), language, context_window, JSON.stringify(working_hours || null), JSON.stringify(notification_rules || null)]
+    );
+    res.json(r.rows[0]);
+  } catch (err) { logError('wa.agent.config.save', err); res.status(500).json({ error: 'Erro ao salvar' }); }
+});
+
 export default router;
