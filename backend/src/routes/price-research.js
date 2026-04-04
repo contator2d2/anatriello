@@ -472,6 +472,74 @@ router.post('/schedule', authenticate, async (req, res) => {
   } catch (err) { logError('price-research.schedule', err); res.status(500).json({ error: 'Erro ao agendar pesquisa' }); }
 });
 
+// ===== Update Execution =====
+router.put('/executions/:id', authenticate, async (req, res) => {
+  try {
+    await ensureTables();
+    const { promoter_id, pdv_id, scheduled_date, scheduled_time, products, status } = req.body;
+    const updates = [];
+    const params = [];
+    let idx = 1;
+
+    if (promoter_id !== undefined) { updates.push(`promoter_id=$${idx++}`); params.push(promoter_id); }
+    if (pdv_id !== undefined) { updates.push(`pdv_id=$${idx++}`); params.push(pdv_id); }
+    if (scheduled_date !== undefined) { updates.push(`scheduled_date=$${idx++}`); params.push(scheduled_date); }
+    if (scheduled_time !== undefined) { updates.push(`scheduled_time=$${idx++}`); params.push(scheduled_time || null); }
+    if (status !== undefined) { updates.push(`status=$${idx++}`); params.push(status); }
+    updates.push('updated_at=NOW()');
+    params.push(req.params.id);
+
+    if (updates.length > 1) {
+      await query(`UPDATE price_research_executions SET ${updates.join(',')} WHERE id=$${idx}`, params);
+    }
+
+    // Sync products: add/remove items to match provided product list
+    if (products && Array.isArray(products)) {
+      const execId = req.params.id;
+      const exec = (await query('SELECT rule_id FROM price_research_executions WHERE id=$1', [execId])).rows[0];
+      const ruleRow = exec?.rule_id ? (await query('SELECT competitor_config FROM price_research_rules WHERE id=$1', [exec.rule_id])).rows[0] : null;
+      const competitorConfig = ruleRow?.competitor_config || {};
+
+      // Get current items
+      const currentItems = (await query('SELECT id, product_id FROM price_research_items WHERE execution_id=$1', [execId])).rows;
+      const currentProductIds = currentItems.map(i => i.product_id);
+
+      // Remove items no longer in the list
+      const toRemove = currentItems.filter(i => !products.includes(i.product_id));
+      for (const item of toRemove) {
+        await query('DELETE FROM price_research_item_competitors WHERE item_id=$1', [item.id]);
+        await query('DELETE FROM price_research_items WHERE id=$1', [item.id]);
+      }
+
+      // Add new items
+      const toAdd = products.filter(pid => !currentProductIds.includes(pid));
+      for (const pid of toAdd) {
+        const itemResult = await query(
+          'INSERT INTO price_research_items (execution_id, product_id) VALUES ($1,$2) RETURNING id',
+          [execId, pid]
+        );
+        const itemId = itemResult.rows[0].id;
+        // Add competitors from model config
+        const comps = competitorConfig[pid] || [];
+        for (const comp of comps) {
+          await query(
+            `INSERT INTO price_research_item_competitors (item_id, competitor_product_name, competitor_brand_name, photo_url)
+             VALUES ($1,$2,$3,$4)`,
+            [itemId, comp.name, comp.brand, comp.photo_url || null]
+          );
+        }
+      }
+
+      // Update total_items
+      const countResult = await query('SELECT COUNT(*) as cnt FROM price_research_items WHERE execution_id=$1', [execId]);
+      await query('UPDATE price_research_executions SET total_items=$1, updated_at=NOW() WHERE id=$2', [parseInt(countResult.rows[0].cnt), execId]);
+    }
+
+    logInfo('price-research.update-execution', `Updated execution ${req.params.id}`);
+    res.json({ ok: true });
+  } catch (err) { logError('price-research.update-execution', err); res.status(500).json({ error: 'Erro ao atualizar pesquisa' }); }
+});
+
 // ===== Validate =====
 router.put('/executions/:id/validate', authenticate, async (req, res) => {
   try {
@@ -486,6 +554,26 @@ router.put('/executions/:id/publish', authenticate, async (req, res) => {
     await query("UPDATE price_research_executions SET status='published', published_at=NOW(), updated_at=NOW() WHERE id=$1", [req.params.id]);
     res.json({ ok: true });
   } catch (err) { logError('price-research.publish', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// ===== Item Competitors CRUD =====
+router.post('/item-competitors', authenticate, async (req, res) => {
+  try {
+    const { item_id, competitor_product_name, competitor_brand_name, photo_url } = req.body;
+    if (!item_id || !competitor_product_name) return res.status(400).json({ error: 'item_id e nome obrigatórios' });
+    const result = await query(
+      `INSERT INTO price_research_item_competitors (item_id, competitor_product_name, competitor_brand_name, photo_url) VALUES ($1,$2,$3,$4) RETURNING *`,
+      [item_id, competitor_product_name, competitor_brand_name || null, photo_url || null]
+    );
+    res.json(result.rows[0]);
+  } catch (err) { logError('price-research.add-item-competitor', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.delete('/item-competitors/:id', authenticate, async (req, res) => {
+  try {
+    await query('DELETE FROM price_research_item_competitors WHERE id=$1', [req.params.id]);
+    res.json({ ok: true });
+  } catch (err) { logError('price-research.delete-item-competitor', err); res.status(500).json({ error: 'Erro' }); }
 });
 
 // ===== Share rule =====

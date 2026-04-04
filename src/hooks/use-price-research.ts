@@ -189,6 +189,18 @@ export function usePriceResearchExecutionDetail(id?: string) {
   });
 }
 
+// ===== Update Execution =====
+export function useUpdateExecution() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }: any) => api<any>(`/api/price-research/executions/${id}`, { method: 'PUT', body: data }),
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ['price-research-execution', vars.id] });
+      qc.invalidateQueries({ queryKey: ['price-research-executions'] });
+    },
+  });
+}
+
 // ===== Dashboard =====
 export function usePriceResearchDashboard(filters?: { brand_id?: string; date_from?: string; date_to?: string }) {
   const params = new URLSearchParams();

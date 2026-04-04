@@ -23,7 +23,7 @@ import {
   usePriceResearchRules, useUpsertPriceResearchRule, useDeletePriceResearchRule, useShareRule,
   usePriceResearchCompetitors, useCreateCompetitor,
   usePriceResearchExecutions, useValidateExecution, usePublishExecution,
-  usePriceResearchDashboard, usePriceResearchExecutionDetail,
+  usePriceResearchDashboard, usePriceResearchExecutionDetail, useUpdateExecution,
 } from "@/hooks/use-price-research";
 import { useUpload } from "@/hooks/use-upload";
 import { resolveMediaUrl } from "@/lib/media";
@@ -897,6 +897,106 @@ function PesquisasTab({ brands }: { brands: any[] }) {
 // ===== Execution Detail Dialog =====
 function ExecutionDetailDialog({ id, open, onClose }: { id: string; open: boolean; onClose: () => void }) {
   const { data: exec, isLoading } = usePriceResearchExecutionDetail(id);
+  const updateExecution = useUpdateExecution();
+  const qc = useQueryClient();
+  const { data: employees = [] } = useEmployees();
+  const { uploadFile, isUploading } = useUpload();
+  const newCompFileRef = useRef<HTMLInputElement>(null);
+
+  const [editing, setEditing] = useState(false);
+  const [editPromoterId, setEditPromoterId] = useState('');
+  const [editDate, setEditDate] = useState('');
+  const [editTime, setEditTime] = useState('');
+  const [editPdvId, setEditPdvId] = useState('');
+  const [editProducts, setEditProducts] = useState<string[]>([]);
+  const [showAddProduct, setShowAddProduct] = useState(false);
+  const [addingCompForItem, setAddingCompForItem] = useState<string | null>(null);
+  const [newCompName, setNewCompName] = useState('');
+  const [newCompBrand, setNewCompBrand] = useState('');
+  const [newCompPhoto, setNewCompPhoto] = useState('');
+
+  // Available products for this brand
+  const brandId = exec?.brand_id;
+  const { data: allProducts = [] } = useQuery({
+    queryKey: ['merch-products-brand', brandId],
+    queryFn: () => api<any[]>(`/api/merchandising/products?brand_id=${brandId}`),
+    enabled: !!brandId && editing,
+  });
+  const { data: pdvs = [] } = useBrandPdvs(brandId || '');
+
+  const startEditing = () => {
+    if (!exec) return;
+    setEditPromoterId(exec.promoter_id || '');
+    setEditDate(exec.scheduled_date || '');
+    setEditTime(exec.scheduled_time ? String(exec.scheduled_time).slice(0, 5) : '');
+    setEditPdvId(exec.pdv_id || '');
+    setEditProducts(exec.items?.map((i: any) => i.product_id) || []);
+    setEditing(true);
+  };
+
+  const handleSave = async () => {
+    try {
+      await updateExecution.mutateAsync({
+        id,
+        promoter_id: editPromoterId || undefined,
+        pdv_id: editPdvId || undefined,
+        scheduled_date: editDate || undefined,
+        scheduled_time: editTime || undefined,
+        products: editProducts,
+      });
+      toast.success('Pesquisa atualizada!');
+      setEditing(false);
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao salvar');
+    }
+  };
+
+  const handleAddCompetitor = async (itemId: string) => {
+    if (!newCompName.trim() || !newCompBrand.trim()) return toast.error('Nome e marca são obrigatórios');
+    try {
+      await api(`/api/price-research/item-competitors`, {
+        method: 'POST',
+        body: { item_id: itemId, competitor_product_name: newCompName, competitor_brand_name: newCompBrand, photo_url: newCompPhoto || null },
+      });
+      toast.success('Concorrente adicionado');
+      setAddingCompForItem(null);
+      setNewCompName('');
+      setNewCompBrand('');
+      setNewCompPhoto('');
+      // Refetch
+      qc.invalidateQueries({ queryKey: ['price-research-execution', id] });
+    } catch (err: any) { toast.error(err.message || 'Erro'); }
+  };
+
+  const handleRemoveCompetitor = async (compId: string) => {
+    if (!confirm('Remover concorrente?')) return;
+    try {
+      await api(`/api/price-research/item-competitors/${compId}`, { method: 'DELETE' });
+      toast.success('Removido');
+      qc.invalidateQueries({ queryKey: ['price-research-execution', id] });
+    } catch (err: any) { toast.error(err.message || 'Erro'); }
+  };
+
+  const handleRemoveProduct = (productId: string) => {
+    setEditProducts(prev => prev.filter(p => p !== productId));
+  };
+
+  const handleAddProduct = (productId: string) => {
+    if (!editProducts.includes(productId)) {
+      setEditProducts(prev => [...prev, productId]);
+    }
+    setShowAddProduct(false);
+  };
+
+  const uploadCompPhoto = async (file: File) => {
+    try {
+      const url = await uploadFile(file);
+      if (url) setNewCompPhoto(url);
+    } catch { toast.error('Erro ao enviar foto'); }
+  };
+
+  const canEdit = exec && ['scheduled', 'pending', 'draft'].includes(exec.status);
+
   if (!exec && !isLoading) return null;
 
   return (
@@ -906,6 +1006,19 @@ function ExecutionDetailDialog({ id, open, onClose }: { id: string; open: boolea
           <DialogTitle className="flex items-center gap-2">
             <Eye className="h-5 w-5" />
             Detalhes da Pesquisa
+            {canEdit && !editing && (
+              <Button size="sm" variant="outline" className="ml-auto" onClick={startEditing}>
+                <Edit className="h-3 w-3 mr-1" />Editar
+              </Button>
+            )}
+            {editing && (
+              <div className="ml-auto flex gap-2">
+                <Button size="sm" variant="outline" onClick={() => setEditing(false)}>Cancelar</Button>
+                <Button size="sm" onClick={handleSave} disabled={updateExecution.isPending}>
+                  <CheckCircle2 className="h-3 w-3 mr-1" />Salvar
+                </Button>
+              </div>
+            )}
           </DialogTitle>
         </DialogHeader>
         <ScrollArea className="max-h-[70vh]">
@@ -913,22 +1026,85 @@ function ExecutionDetailDialog({ id, open, onClose }: { id: string; open: boolea
             <div className="py-12 text-center text-muted-foreground">Carregando...</div>
           ) : exec ? (
             <div className="space-y-4">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <InfoCard label="Marca" value={exec.brand_name || '-'} />
-                <InfoCard label="PDV" value={exec.pdv_name || '-'} />
-                <InfoCard label="Promotor" value={exec.promoter_name || '-'} />
-                <InfoCard label="Status" value={STATUS_LABELS[exec.status]?.label || exec.status} />
-              </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <InfoCard label="Progresso" value={`${exec.progress_pct || 0}%`} />
-                <InfoCard label="Itens" value={`${exec.completed_items || 0}/${exec.total_items || 0}`} />
-                <InfoCard label="Data" value={exec.scheduled_date ? safeFormatDate(exec.scheduled_date + 'T12:00:00') : safeFormatDate(exec.created_at)} />
-                <InfoCard label="Modelo" value={exec.rule_name || '-'} />
-              </div>
+              {/* Info Cards / Edit fields */}
+              {editing ? (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label className="flex items-center gap-1 mb-1"><MapPin className="h-3 w-3" />PDV</Label>
+                      <Select value={editPdvId} onValueChange={setEditPdvId}>
+                        <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                        <SelectContent>{pdvs.map((p: any) => <SelectItem key={p.pdv_id || p.id} value={p.pdv_id || p.id}>{p.pdv_name || p.name}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="flex items-center gap-1 mb-1"><User className="h-3 w-3" />Promotor</Label>
+                      <Select value={editPromoterId} onValueChange={setEditPromoterId}>
+                        <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                        <SelectContent>{employees.filter((e: any) => e.active !== false).map((e: any) => <SelectItem key={e.id} value={e.id}>{e.full_name}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label className="flex items-center gap-1 mb-1"><Calendar className="h-3 w-3" />Data</Label>
+                      <Input type="date" value={editDate} onChange={e => setEditDate(e.target.value)} />
+                    </div>
+                    <div>
+                      <Label className="flex items-center gap-1 mb-1"><Clock className="h-3 w-3" />Horário</Label>
+                      <Input type="time" value={editTime} onChange={e => setEditTime(e.target.value)} />
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <InfoCard label="Marca" value={exec.brand_name || '-'} />
+                    <InfoCard label="PDV" value={exec.pdv_name || '-'} />
+                    <InfoCard label="Promotor" value={exec.promoter_name || '-'} />
+                    <InfoCard label="Status" value={STATUS_LABELS[exec.status]?.label || exec.status} />
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <InfoCard label="Progresso" value={`${exec.progress_pct || 0}%`} />
+                    <InfoCard label="Itens" value={`${exec.completed_items || 0}/${exec.total_items || 0}`} />
+                    <InfoCard label="Data" value={exec.scheduled_date ? safeFormatDate(exec.scheduled_date + 'T12:00:00') : safeFormatDate(exec.created_at)} />
+                    <InfoCard label="Modelo" value={exec.rule_name || '-'} />
+                  </div>
+                </>
+              )}
 
-              {exec.items?.length > 0 && (
-                <div>
-                  <h4 className="font-semibold text-sm mb-2">Produtos e Preços</h4>
+              {/* Products Section */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="font-semibold text-sm">Produtos e Preços</h4>
+                  {editing && (
+                    <Button size="sm" variant="outline" onClick={() => setShowAddProduct(true)}>
+                      <Plus className="h-3 w-3 mr-1" />Adicionar Produto
+                    </Button>
+                  )}
+                </div>
+
+                {/* Add product dropdown */}
+                {editing && showAddProduct && (
+                  <Card className="mb-3 border-dashed">
+                    <CardContent className="pt-3 pb-3">
+                      <p className="text-xs text-muted-foreground mb-2">Selecione um produto para adicionar:</p>
+                      <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto">
+                        {allProducts.filter((p: any) => !editProducts.includes(p.id)).map((p: any) => (
+                          <Button key={p.id} size="sm" variant="outline" className="justify-start text-xs" onClick={() => handleAddProduct(p.id)}>
+                            <Plus className="h-3 w-3 mr-1 flex-shrink-0" />{p.name}
+                          </Button>
+                        ))}
+                      </div>
+                      {allProducts.filter((p: any) => !editProducts.includes(p.id)).length === 0 && (
+                        <p className="text-xs text-muted-foreground">Todos os produtos já estão adicionados.</p>
+                      )}
+                      <Button size="sm" variant="ghost" className="mt-2" onClick={() => setShowAddProduct(false)}>Fechar</Button>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {exec.items?.length > 0 ? (
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -936,11 +1112,12 @@ function ExecutionDetailDialog({ id, open, onClose }: { id: string; open: boolea
                         <TableHead>Preço</TableHead>
                         <TableHead>Observação</TableHead>
                         <TableHead>Concorrentes</TableHead>
+                        {editing && <TableHead className="w-16"></TableHead>}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {exec.items.map((item: any) => (
-                        <TableRow key={item.id}>
+                        <TableRow key={item.id} className={editing && !editProducts.includes(item.product_id) ? 'opacity-40 line-through' : ''}>
                           <TableCell>
                             <div className="flex items-center gap-2">
                               {item.photo_url ? (
@@ -958,17 +1135,60 @@ function ExecutionDetailDialog({ id, open, onClose }: { id: string; open: boolea
                                   {c.photo_url && <img src={resolveMediaUrl(c.photo_url) || ''} alt="" className="h-6 w-6 rounded object-cover border" />}
                                   <span className="text-muted-foreground">{c.competitor_brand_name}: </span>
                                   <span className="font-mono">{c.price != null ? `R$ ${Number(c.price).toFixed(2)}` : '-'}</span>
+                                  {editing && (
+                                    <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => handleRemoveCompetitor(c.id)}>
+                                      <X className="h-3 w-3 text-destructive" />
+                                    </Button>
+                                  )}
                                 </div>
                               ))}
                               {(!item.competitors || item.competitors.length === 0) && <span className="text-xs text-muted-foreground">-</span>}
+                              {editing && (
+                                addingCompForItem === item.id ? (
+                                  <div className="mt-2 space-y-2 border rounded p-2 bg-muted/30">
+                                    <Input placeholder="Nome do produto concorrente" value={newCompName} onChange={e => setNewCompName(e.target.value)} className="h-8 text-xs" />
+                                    <Input placeholder="Marca concorrente" value={newCompBrand} onChange={e => setNewCompBrand(e.target.value)} className="h-8 text-xs" />
+                                    <div className="flex items-center gap-2">
+                                      {newCompPhoto ? (
+                                        <div className="relative">
+                                          <img src={resolveMediaUrl(newCompPhoto) || ''} alt="" className="h-10 w-10 rounded object-cover border" />
+                                          <button type="button" className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground rounded-full h-4 w-4 flex items-center justify-center text-[10px]" onClick={() => setNewCompPhoto('')}>×</button>
+                                        </div>
+                                      ) : (
+                                        <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => newCompFileRef.current?.click()}>
+                                          <Camera className="h-3 w-3 mr-1" />Foto
+                                        </Button>
+                                      )}
+                                      <input ref={newCompFileRef} type="file" accept="image/*" className="hidden" onChange={e => { if (e.target.files?.[0]) uploadCompPhoto(e.target.files[0]); }} />
+                                    </div>
+                                    <div className="flex gap-2">
+                                      <Button size="sm" className="h-7 text-xs" onClick={() => handleAddCompetitor(item.id)}>Adicionar</Button>
+                                      <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setAddingCompForItem(null)}>Cancelar</Button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <Button size="sm" variant="ghost" className="h-6 text-xs mt-1" onClick={() => setAddingCompForItem(item.id)}>
+                                    <Plus className="h-3 w-3 mr-1" />Concorrente
+                                  </Button>
+                                )
+                              )}
                             </div>
                           </TableCell>
+                          {editing && (
+                            <TableCell>
+                              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleRemoveProduct(item.product_id)}>
+                                <Trash2 className="h-3 w-3 text-destructive" />
+                              </Button>
+                            </TableCell>
+                          )}
                         </TableRow>
                       ))}
                     </TableBody>
                   </Table>
-                </div>
-              )}
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-4">Nenhum produto registrado.</p>
+                )}
+              </div>
 
               {exec.photos?.length > 0 && (
                 <div>
