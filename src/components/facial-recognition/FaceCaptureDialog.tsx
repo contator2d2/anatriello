@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Camera, Loader2, CheckCircle2, AlertTriangle, RotateCcw, ScanFace } from "lucide-react";
-import { loadFaceModels, detectFace, captureVideoFrame, drawLandmarks, extractGeometricProfile, type FaceDetectionResult } from "@/lib/facial-recognition";
+import { loadFaceModels, detectFace, captureVideoFrame, drawLandmarks, extractGeometricProfile, getActiveFaceBackend, type FaceDetectionResult } from "@/lib/facial-recognition";
 
 interface Props {
   open: boolean;
@@ -21,6 +21,10 @@ export const FaceCaptureDialog = ({ open, onOpenChange, onCapture, title = "Capt
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const animFrameRef = useRef<number>(0);
+  const detectTimeoutRef = useRef<number>(0);
+  const detectSessionRef = useRef(0);
+  const latestDetectionRef = useRef<FaceDetectionResult | null>(null);
+  const capturedDetectionRef = useRef<FaceDetectionResult | null>(null);
 
   const [status, setStatus] = useState<Status>("loading_models");
   const [modelsProgress, setModelsProgress] = useState(0);
@@ -29,7 +33,9 @@ export const FaceCaptureDialog = ({ open, onOpenChange, onCapture, title = "Capt
   const [error, setError] = useState("");
 
   const stopCamera = useCallback(() => {
+    detectSessionRef.current += 1;
     if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    if (detectTimeoutRef.current) window.clearTimeout(detectTimeoutRef.current);
     streamRef.current?.getTracks().forEach(t => t.stop());
     streamRef.current = null;
   }, []);
@@ -37,6 +43,9 @@ export const FaceCaptureDialog = ({ open, onOpenChange, onCapture, title = "Capt
   const startCamera = useCallback(async () => {
     try {
       setStatus("starting_camera");
+      latestDetectionRef.current = null;
+      capturedDetectionRef.current = null;
+      setDetection(null);
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
       });
@@ -52,11 +61,13 @@ export const FaceCaptureDialog = ({ open, onOpenChange, onCapture, title = "Capt
     }
   }, []);
 
-  const detectLoop = useCallback(async () => {
-    if (!videoRef.current || status !== "detecting") return;
+  const detectLoop = useCallback(async (sessionId: number) => {
+    if (!videoRef.current || status !== "detecting" || detectSessionRef.current !== sessionId) return;
 
     try {
       const result = await detectFace(videoRef.current);
+      if (detectSessionRef.current !== sessionId) return;
+
       if (result && canvasRef.current) {
         const canvas = canvasRef.current;
         canvas.width = videoRef.current.videoWidth;
@@ -66,9 +77,11 @@ export const FaceCaptureDialog = ({ open, onOpenChange, onCapture, title = "Capt
           ctx.clearRect(0, 0, canvas.width, canvas.height);
           drawLandmarks(canvas, result.landmarks, result.box);
         }
+        latestDetectionRef.current = result;
         setDetection(result);
         setError("");
       } else {
+        latestDetectionRef.current = null;
         setDetection(null);
         if (canvasRef.current) {
           const ctx = canvasRef.current.getContext("2d");
@@ -76,20 +89,28 @@ export const FaceCaptureDialog = ({ open, onOpenChange, onCapture, title = "Capt
         }
       }
 
+      const nextDelay = getActiveFaceBackend() === "cpu" ? 350 : 200;
       animFrameRef.current = requestAnimationFrame(() => {
-        setTimeout(detectLoop, 200);
+        detectTimeoutRef.current = window.setTimeout(() => {
+          void detectLoop(sessionId);
+        }, nextDelay);
       });
     } catch {
+      if (detectSessionRef.current !== sessionId) return;
+
+      latestDetectionRef.current = null;
       setDetection(null);
       setError("Não foi possível processar o reconhecimento facial neste dispositivo. Tente novamente ou use um navegador/dispositivo com aceleração gráfica disponível.");
       setStatus("error");
       stopCamera();
     }
-  }, [status]);
+  }, [status, stopCamera]);
 
   useEffect(() => {
     if (!open) {
       stopCamera();
+      latestDetectionRef.current = null;
+      capturedDetectionRef.current = null;
       setStatus("loading_models");
       setDetection(null);
       setCapturedImage("");
@@ -117,14 +138,26 @@ export const FaceCaptureDialog = ({ open, onOpenChange, onCapture, title = "Capt
   }, [open, startCamera, stopCamera]);
 
   useEffect(() => {
-    if (status === "detecting") detectLoop();
+    if (status !== "detecting") return;
+
+    const sessionId = ++detectSessionRef.current;
+    void detectLoop(sessionId);
+
+    return () => {
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      if (detectTimeoutRef.current) window.clearTimeout(detectTimeoutRef.current);
+    };
   }, [status, detectLoop]);
 
   const handleCapture = () => {
-    if (!videoRef.current || !detection) return;
+    const capturedDetection = latestDetectionRef.current ?? detection;
+    if (!videoRef.current || !capturedDetection) return;
+
     const imageDataUrl = captureVideoFrame(videoRef.current);
-    const geometricProfile = extractGeometricProfile(detection.landmarks);
+    capturedDetectionRef.current = capturedDetection;
+    const geometricProfile = extractGeometricProfile(capturedDetection.landmarks);
     setCapturedImage(imageDataUrl);
+    setDetection(capturedDetection);
     setStatus("captured");
     stopCamera();
   };
@@ -136,11 +169,13 @@ export const FaceCaptureDialog = ({ open, onOpenChange, onCapture, title = "Capt
   };
 
   const handleConfirm = () => {
-    if (!detection || !capturedImage) return;
-    const geometricProfile = extractGeometricProfile(detection.landmarks);
+    const confirmedDetection = capturedDetectionRef.current ?? detection;
+    if (!confirmedDetection || !capturedImage) return;
+
+    const geometricProfile = extractGeometricProfile(confirmedDetection.landmarks);
     onCapture({
-      descriptor: detection.descriptor,
-      landmarks: detection.landmarks,
+      descriptor: confirmedDetection.descriptor,
+      landmarks: confirmedDetection.landmarks,
       imageDataUrl: capturedImage,
       geometricProfile,
     });

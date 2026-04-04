@@ -23,6 +23,25 @@ function getFaceTensorflowBackend(): FaceApiTensorflowBackend | undefined {
   return (faceapi as typeof faceapi & { tf?: FaceApiTensorflowBackend }).tf;
 }
 
+function hasWebGLSupport(): boolean {
+  if (typeof document === 'undefined') return false;
+
+  try {
+    const canvas = document.createElement('canvas');
+    return ['webgl2', 'webgl', 'experimental-webgl'].some((contextName) =>
+      Boolean((canvas.getContext as (contextId: string) => RenderingContext | null)(contextName))
+    );
+  } catch {
+    return false;
+  }
+}
+
+function getPreferredFaceBackends(preferredBackends: string[]): string[] {
+  const supportsWebGL = hasWebGLSupport();
+  const filtered = preferredBackends.filter((backend) => backend !== 'webgl' || supportsWebGL);
+  return filtered.includes('cpu') ? filtered : [...filtered, 'cpu'];
+}
+
 async function ensureFaceBackend(preferredBackends: string[] = ['webgl', 'cpu']): Promise<string> {
   const tf = getFaceTensorflowBackend();
   if (!tf) {
@@ -30,16 +49,29 @@ async function ensureFaceBackend(preferredBackends: string[] = ['webgl', 'cpu'])
     return activeFaceBackend;
   }
 
+  const orderedBackends = getPreferredFaceBackends(preferredBackends);
+
   const currentBackend = tf.getBackend?.();
   if (currentBackend) {
-    await tf.ready?.();
-    activeFaceBackend = currentBackend;
-    return currentBackend;
+    try {
+      if (currentBackend === 'webgl' && !hasWebGLSupport()) {
+        throw new Error('WebGL indisponível neste dispositivo.');
+      }
+
+      await tf.ready?.();
+      activeFaceBackend = currentBackend;
+      return currentBackend;
+    } catch (error) {
+      activeFaceBackend = null;
+      if (orderedBackends.length === 0) {
+        throw error;
+      }
+    }
   }
 
   let lastError: unknown;
 
-  for (const backend of preferredBackends) {
+  for (const backend of orderedBackends) {
     try {
       const changed = await tf.setBackend?.(backend);
       if (changed === false) continue;
@@ -104,7 +136,7 @@ export async function loadFaceModels(): Promise<void> {
   if (modelsLoadingPromise) return modelsLoadingPromise;
 
   modelsLoadingPromise = (async () => {
-    await ensureFaceBackend();
+    await ensureFaceBackend(getPreferredFaceBackends(['webgl', 'cpu']));
     await Promise.all([
       faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
       faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
@@ -123,6 +155,10 @@ export async function loadFaceModels(): Promise<void> {
 
 export function areModelsLoaded(): boolean {
   return modelsLoaded;
+}
+
+export function getActiveFaceBackend(): string | null {
+  return activeFaceBackend;
 }
 
 export interface FaceDetectionResult {
