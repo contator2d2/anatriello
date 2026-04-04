@@ -104,17 +104,25 @@ router.post('/rules', authenticate, async (req, res) => {
     await ensureTables();
     const orgId = await getOrgId(req.userId);
     if (!orgId) return res.status(403).json({ error: 'Sem organização' });
-    const { brand_id, enabled, frequency, preferred_weekday, preferred_time, require_photo, require_justification, block_route_completion } = req.body;
-    const result = await query(
-      `INSERT INTO price_research_rules (organization_id, brand_id, enabled, frequency, preferred_weekday, preferred_time, require_photo, require_justification, block_route_completion)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-       ON CONFLICT (organization_id, brand_id) DO UPDATE SET enabled=EXCLUDED.enabled, frequency=EXCLUDED.frequency,
-       preferred_weekday=EXCLUDED.preferred_weekday, preferred_time=EXCLUDED.preferred_time,
-       require_photo=EXCLUDED.require_photo, require_justification=EXCLUDED.require_justification,
-       block_route_completion=EXCLUDED.block_route_completion, updated_at=NOW()
-       RETURNING *`,
-      [orgId, brand_id, enabled ?? false, frequency ?? 'weekly', preferred_weekday ?? 1, preferred_time, require_photo ?? false, require_justification ?? true, block_route_completion ?? false]
-    );
+    const { id, brand_id, name, description, enabled, frequency, preferred_weekday, preferred_time, require_photo, require_justification, block_route_completion, scheduled_date, schedule_dates } = req.body;
+    let result;
+    if (id) {
+      // Update existing
+      result = await query(
+        `UPDATE price_research_rules SET name=COALESCE($1,name), description=$2, enabled=$3, frequency=$4,
+         preferred_weekday=$5, preferred_time=$6, require_photo=$7, require_justification=$8,
+         block_route_completion=$9, scheduled_date=$10, schedule_dates=$11, updated_at=NOW()
+         WHERE id=$12 RETURNING *`,
+        [name, description, enabled ?? false, frequency ?? 'weekly', preferred_weekday ?? 1, preferred_time, require_photo ?? false, require_justification ?? true, block_route_completion ?? false, scheduled_date, schedule_dates ? JSON.stringify(schedule_dates) : null, id]
+      );
+    } else {
+      result = await query(
+        `INSERT INTO price_research_rules (organization_id, brand_id, name, description, enabled, frequency, preferred_weekday, preferred_time, require_photo, require_justification, block_route_completion, scheduled_date, schedule_dates)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+         RETURNING *`,
+        [orgId, brand_id, name || 'Pesquisa de Preços', description, enabled ?? false, frequency ?? 'weekly', preferred_weekday ?? 1, preferred_time, require_photo ?? false, require_justification ?? true, block_route_completion ?? false, scheduled_date, schedule_dates ? JSON.stringify(schedule_dates) : null]
+      );
+    }
     res.json(result.rows[0]);
   } catch (err) { logError('price-research.rules.upsert', err); res.status(500).json({ error: 'Erro' }); }
 });
