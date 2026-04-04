@@ -14,8 +14,9 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Plus, Clock, Smartphone, MapPin, CheckCircle2, AlertTriangle, Wifi, WifiOff,
   Download, FileSpreadsheet, CalendarDays, CalendarRange, Calendar, Filter,
-  TrendingUp, UserX
+  TrendingUp, UserX, ShieldAlert
 } from "lucide-react";
+import { OvertimeRequestsPanel, useOvertimePendingCount } from "@/components/rh/OvertimeRequestsPanel";
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subDays, subMonths } from "date-fns";
 import * as XLSX from "xlsx";
 
