@@ -859,4 +859,65 @@ router.get('/history', authenticate, async (req, res) => {
   } catch (err) { logError('price-research.history', err); res.status(500).json({ error: 'Erro' }); }
 });
 
+// ===== Redes (Networks) CRUD =====
+router.get('/redes', authenticate, async (req, res) => {
+  try {
+    await ensureTables();
+    const orgId = await getOrgId(req.userId);
+    if (!orgId) return res.status(403).json({ error: 'Sem organização' });
+    const redes = (await query(`SELECT r.*, 
+      (SELECT COUNT(*) FROM merch_rede_pdvs rp WHERE rp.rede_id = r.id) as pdv_count
+      FROM merch_redes r WHERE r.organization_id = $1 ORDER BY r.name`, [orgId])).rows;
+    // Get PDVs for each rede
+    for (const rede of redes) {
+      rede.pdvs = (await query(`SELECT rp.pdv_id, p.name as pdv_name, p.client_name, p.city, p.state
+        FROM merch_rede_pdvs rp LEFT JOIN pdvs p ON p.id = rp.pdv_id
+        WHERE rp.rede_id = $1 ORDER BY p.name`, [rede.id])).rows;
+    }
+    res.json(redes);
+  } catch (err) { logError('price-research.redes.list', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.post('/redes', authenticate, async (req, res) => {
+  try {
+    await ensureTables();
+    const orgId = await getOrgId(req.userId);
+    if (!orgId) return res.status(403).json({ error: 'Sem organização' });
+    const { name, description, pdv_ids } = req.body;
+    if (!name) return res.status(400).json({ error: 'Nome obrigatório' });
+    const result = await query('INSERT INTO merch_redes (organization_id, name, description) VALUES ($1,$2,$3) RETURNING *', [orgId, name, description || null]);
+    const rede = result.rows[0];
+    if (pdv_ids && Array.isArray(pdv_ids)) {
+      for (const pdvId of pdv_ids) {
+        await query('INSERT INTO merch_rede_pdvs (rede_id, pdv_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [rede.id, pdvId]);
+      }
+    }
+    rede.pdv_count = pdv_ids?.length || 0;
+    res.json(rede);
+  } catch (err) { logError('price-research.redes.create', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.put('/redes/:id', authenticate, async (req, res) => {
+  try {
+    const { name, description, active, pdv_ids } = req.body;
+    await query('UPDATE merch_redes SET name=COALESCE($1,name), description=COALESCE($2,description), active=COALESCE($3,active), updated_at=NOW() WHERE id=$4',
+      [name, description, active, req.params.id]);
+    if (pdv_ids && Array.isArray(pdv_ids)) {
+      await query('DELETE FROM merch_rede_pdvs WHERE rede_id=$1', [req.params.id]);
+      for (const pdvId of pdv_ids) {
+        await query('INSERT INTO merch_rede_pdvs (rede_id, pdv_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [req.params.id, pdvId]);
+      }
+    }
+    res.json({ ok: true });
+  } catch (err) { logError('price-research.redes.update', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.delete('/redes/:id', authenticate, async (req, res) => {
+  try {
+    await query('DELETE FROM merch_rede_pdvs WHERE rede_id=$1', [req.params.id]);
+    await query('DELETE FROM merch_redes WHERE id=$1', [req.params.id]);
+    res.json({ ok: true });
+  } catch (err) { logError('price-research.redes.delete', err); res.status(500).json({ error: 'Erro' }); }
+});
+
 export default router;
