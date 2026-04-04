@@ -8,11 +8,12 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
-import { ScanFace, Search, Camera, CheckCircle2, AlertTriangle, Users, Loader2, Trash2 } from "lucide-react";
+import { ScanFace, Search, Camera, CheckCircle2, AlertTriangle, Users, Loader2, Trash2, ShieldCheck, Play } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { FaceCaptureDialog } from "@/components/facial-recognition/FaceCaptureDialog";
+import { FaceVerifyDialog } from "@/components/facial-recognition/FaceVerifyDialog";
 
 interface EmployeeFace {
   id: string;
