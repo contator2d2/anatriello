@@ -29,6 +29,8 @@ interface LookupResult {
   entry_at?: string;
   agency_promoter_id?: string;
   employee_id?: string;
+  face_descriptor?: number[];
+  face_photo_url?: string;
 }
 
 interface TotemConfig {
