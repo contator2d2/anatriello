@@ -1161,6 +1161,30 @@ export default function PromotorRota() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+        {/* Facial Verification Dialog */}
+        <FaceVerifyDialog
+          open={showFaceVerify}
+          onOpenChange={(open) => { if (!open) { setShowFaceVerify(false); setFaceVerifyAction(null); } }}
+          storedDescriptor={facialConfig?.descriptor || []}
+          storedPhotoUrl={facialConfig?.photo_url}
+          personName={route?.promotor_name}
+          threshold={facialConfig?.min_confidence || 70}
+          onResult={(result) => {
+            setShowFaceVerify(false);
+            if (result.match) {
+              toast.success(`Identidade confirmada (${result.score.toFixed(1)}%)`);
+              const action = faceVerifyAction;
+              setTimeout(() => {
+                if (action === 'checkin') handleCheckin();
+                else if (action === 'checkout') handleCompleteRoute();
+                else if (action === 'pdv_checkout') handlePdvCheckout();
+              }, 300);
+            } else {
+              toast.error(`Identidade não confirmada (${result.score.toFixed(1)}%). Ação bloqueada.`);
+              setFaceVerifyAction(null);
+            }
+          }}
+        />
       </div>
     </PromotorLayout>
   );
