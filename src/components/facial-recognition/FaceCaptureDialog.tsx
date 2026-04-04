@@ -55,28 +55,36 @@ export const FaceCaptureDialog = ({ open, onOpenChange, onCapture, title = "Capt
   const detectLoop = useCallback(async () => {
     if (!videoRef.current || status !== "detecting") return;
 
-    const result = await detectFace(videoRef.current);
-    if (result && canvasRef.current) {
-      const canvas = canvasRef.current;
-      canvas.width = videoRef.current.videoWidth;
-      canvas.height = videoRef.current.videoHeight;
-      const ctx = canvas.getContext("2d");
-      if (ctx) {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        drawLandmarks(canvas, result.landmarks, result.box);
+    try {
+      const result = await detectFace(videoRef.current);
+      if (result && canvasRef.current) {
+        const canvas = canvasRef.current;
+        canvas.width = videoRef.current.videoWidth;
+        canvas.height = videoRef.current.videoHeight;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          drawLandmarks(canvas, result.landmarks, result.box);
+        }
+        setDetection(result);
+        setError("");
+      } else {
+        setDetection(null);
+        if (canvasRef.current) {
+          const ctx = canvasRef.current.getContext("2d");
+          ctx?.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+        }
       }
-      setDetection(result);
-    } else {
-      setDetection(null);
-      if (canvasRef.current) {
-        const ctx = canvasRef.current.getContext("2d");
-        ctx?.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-      }
-    }
 
-    animFrameRef.current = requestAnimationFrame(() => {
-      setTimeout(detectLoop, 200); // ~5fps detection
-    });
+      animFrameRef.current = requestAnimationFrame(() => {
+        setTimeout(detectLoop, 200);
+      });
+    } catch {
+      setDetection(null);
+      setError("Não foi possível processar o reconhecimento facial neste dispositivo. Tente novamente ou use um navegador/dispositivo com aceleração gráfica disponível.");
+      setStatus("error");
+      stopCamera();
+    }
   }, [status]);
 
   useEffect(() => {

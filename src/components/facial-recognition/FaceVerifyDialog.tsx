@@ -68,43 +68,50 @@ export const FaceVerifyDialog = ({ open, onOpenChange, storedDescriptor, storedP
   const detectLoop = useCallback(async () => {
     if (!videoRef.current || status !== "detecting") return;
 
-    const result = await detectFace(videoRef.current);
-    if (result && canvasRef.current) {
-      const canvas = canvasRef.current;
-      canvas.width = videoRef.current.videoWidth;
-      canvas.height = videoRef.current.videoHeight;
-      const ctx = canvas.getContext("2d");
-      if (ctx) {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        drawLandmarks(canvas, result.landmarks, result.box);
+    try {
+      const result = await detectFace(videoRef.current);
+      if (result && canvasRef.current) {
+        const canvas = canvasRef.current;
+        canvas.width = videoRef.current.videoWidth;
+        canvas.height = videoRef.current.videoHeight;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          drawLandmarks(canvas, result.landmarks, result.box);
+        }
+        setFaceDetected(true);
+        setError("");
+
+        if (result.confidence > 60) {
+          setStatus("verifying");
+          const matchScore = compareFaces(storedDescriptor, result.descriptor);
+          const isMatch = matchScore >= threshold;
+          const imageDataUrl = captureVideoFrame(videoRef.current);
+
+          setScore(matchScore);
+          setMatched(isMatch);
+          setCapturedImage(imageDataUrl);
+          setStatus("result");
+          stopCamera();
+
+          onResult({ match: isMatch, score: matchScore, imageDataUrl });
+          return;
+        }
+      } else {
+        setFaceDetected(false);
+        if (canvasRef.current) {
+          const ctx = canvasRef.current.getContext("2d");
+          ctx?.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+        }
       }
-      setFaceDetected(true);
 
-      // Auto-verify when face is detected with good confidence
-      if (result.confidence > 60) {
-        setStatus("verifying");
-        const matchScore = compareFaces(storedDescriptor, result.descriptor);
-        const isMatch = matchScore >= threshold;
-        const imageDataUrl = captureVideoFrame(videoRef.current);
-
-        setScore(matchScore);
-        setMatched(isMatch);
-        setCapturedImage(imageDataUrl);
-        setStatus("result");
-        stopCamera();
-
-        onResult({ match: isMatch, score: matchScore, imageDataUrl });
-        return;
-      }
-    } else {
+      animFrameRef.current = requestAnimationFrame(() => setTimeout(detectLoop, 300));
+    } catch {
       setFaceDetected(false);
-      if (canvasRef.current) {
-        const ctx = canvasRef.current.getContext("2d");
-        ctx?.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-      }
+      setError("O reconhecimento facial não conseguiu iniciar neste dispositivo. Tente novamente ou use outro navegador/dispositivo.");
+      setStatus("error");
+      stopCamera();
     }
-
-    animFrameRef.current = requestAnimationFrame(() => setTimeout(detectLoop, 300));
   }, [status, storedDescriptor, threshold, onResult, stopCamera]);
 
   useEffect(() => {
