@@ -85,6 +85,8 @@ import MerchChecklists from "./pages/MerchChecklists";
 import MerchBookFotos from "./pages/MerchBookFotos";
 import MerchAuditoria from "./pages/MerchAuditoria";
 import MerchEquipe from "./pages/MerchEquipe";
+import MerchPesquisaPrecos from "./pages/MerchPesquisaPrecos";
+import MerchPesquisaDashboard from "./pages/MerchPesquisaDashboard";
 import PromotorLogin from "./pages/promotor/PromotorLogin";
 import PromotorHome from "./pages/promotor/PromotorHome";
 import PromotorAgenda from "./pages/promotor/PromotorAgenda";
@@ -240,6 +242,8 @@ const App = () => (
             <Route path="/merch/checklists" element={<ProtectedRoute><MerchChecklists /></ProtectedRoute>} />
             <Route path="/merch/book-fotos" element={<ProtectedRoute><MerchBookFotos /></ProtectedRoute>} />
             <Route path="/merch/auditoria" element={<ProtectedRoute><MerchAuditoria /></ProtectedRoute>} />
+            <Route path="/merch/pesquisa-precos" element={<ProtectedRoute><MerchPesquisaPrecos /></ProtectedRoute>} />
+            <Route path="/merch/pesquisa-dashboard" element={<ProtectedRoute><MerchPesquisaDashboard /></ProtectedRoute>} />
             <Route path="/controle-acesso" element={<ProtectedRoute><AccessControlAdmin /></ProtectedRoute>} />
             <Route path="/totem" element={<TotemAccess />} />
             {/* Agency Portal */}

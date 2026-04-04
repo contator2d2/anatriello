@@ -148,6 +148,8 @@ const getNavSections = (hasConnections: boolean): NavSection[] => [
       { name: "Execução Campo", href: "/merch/execucao", icon: Radio, pageKey: 'merch_execucao' },
       { name: "Book de Fotos", href: "/merch/book-fotos", icon: Camera, pageKey: 'merch_book_fotos' },
       { name: "Auditoria", href: "/merch/auditoria", icon: Shield, pageKey: 'merch_auditoria' },
+      { name: "Pesq. Preços", href: "/merch/pesquisa-precos", icon: DollarSign, pageKey: 'merch_pesquisa_precos' },
+      { name: "Dashboard Preços", href: "/merch/pesquisa-dashboard", icon: BarChart3, pageKey: 'merch_pesquisa_dashboard' },
       { name: "Relatórios", href: "/merch/relatorios", icon: BarChart3, pageKey: 'merch_relatorios' },
     ],
   },

@@ -1,0 +1,431 @@
+import express from 'express';
+import { query } from '../db.js';
+import { authenticate } from '../middleware/auth.js';
+import { logInfo, logError } from '../logger.js';
+
+const router = express.Router();
+
+// ===== Helper =====
+async function getOrgId(userId) {
+  const r = await query('SELECT organization_id FROM organization_members WHERE user_id=$1 LIMIT 1', [userId]);
+  return r.rows[0]?.organization_id;
+}
+
+async function ensureTables() {
+  await query(`CREATE TABLE IF NOT EXISTS price_research_rules (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL, brand_id UUID NOT NULL,
+    enabled BOOLEAN DEFAULT false, frequency VARCHAR(20) DEFAULT 'weekly', preferred_weekday INTEGER DEFAULT 1,
+    preferred_time TIME, require_photo BOOLEAN DEFAULT false, require_justification BOOLEAN DEFAULT true,
+    block_route_completion BOOLEAN DEFAULT false, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(organization_id, brand_id))`);
+  await query(`CREATE TABLE IF NOT EXISTS price_research_brand_competitors (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL, brand_id UUID NOT NULL,
+    competitor_name VARCHAR(255) NOT NULL, category VARCHAR(100), active BOOLEAN DEFAULT true, created_at TIMESTAMPTZ DEFAULT NOW())`);
+  await query(`CREATE TABLE IF NOT EXISTS price_research_product_mappings (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL, brand_id UUID NOT NULL,
+    product_id UUID NOT NULL, enabled BOOLEAN DEFAULT true, created_at TIMESTAMPTZ DEFAULT NOW(), UNIQUE(brand_id, product_id))`);
+  await query(`CREATE TABLE IF NOT EXISTS price_research_competitor_products (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(), mapping_id UUID NOT NULL, competitor_id UUID NOT NULL,
+    competitor_product_name VARCHAR(255) NOT NULL, category VARCHAR(100), subcategory VARCHAR(100),
+    unit_measure VARCHAR(50), active BOOLEAN DEFAULT true, created_at TIMESTAMPTZ DEFAULT NOW())`);
+  await query(`CREATE TABLE IF NOT EXISTS price_research_executions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL, schedule_id UUID,
+    route_id UUID NOT NULL, brand_id UUID NOT NULL, pdv_id UUID NOT NULL, promoter_id UUID NOT NULL,
+    status VARCHAR(30) DEFAULT 'pending', progress_pct NUMERIC(5,2) DEFAULT 0, total_items INTEGER DEFAULT 0,
+    completed_items INTEGER DEFAULT 0, started_at TIMESTAMPTZ, completed_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW())`);
+  await query(`CREATE TABLE IF NOT EXISTS price_research_items (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(), execution_id UUID NOT NULL, product_id UUID NOT NULL,
+    price NUMERIC(10,2), observation TEXT, collected_at TIMESTAMPTZ, collected_by UUID,
+    created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW())`);
+  await query(`CREATE TABLE IF NOT EXISTS price_research_item_competitors (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(), item_id UUID NOT NULL, competitor_product_id UUID,
+    competitor_id UUID, competitor_product_name VARCHAR(255), competitor_brand_name VARCHAR(255),
+    price NUMERIC(10,2), observation TEXT, collected_at TIMESTAMPTZ, created_at TIMESTAMPTZ DEFAULT NOW())`);
+  await query(`CREATE TABLE IF NOT EXISTS price_research_photos (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(), execution_id UUID NOT NULL, item_id UUID,
+    photo_url TEXT NOT NULL, photo_type VARCHAR(30) DEFAULT 'evidence', latitude NUMERIC(10,7),
+    longitude NUMERIC(10,7), watermark_applied BOOLEAN DEFAULT false,
+    captured_at TIMESTAMPTZ DEFAULT NOW(), created_at TIMESTAMPTZ DEFAULT NOW())`);
+  await query(`CREATE TABLE IF NOT EXISTS price_research_postponements (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(), schedule_id UUID NOT NULL, route_id UUID NOT NULL,
+    reason TEXT NOT NULL, observation TEXT, next_route_id UUID, postponed_by UUID NOT NULL,
+    status VARCHAR(20) DEFAULT 'pending', created_at TIMESTAMPTZ DEFAULT NOW())`);
+  await query(`CREATE TABLE IF NOT EXISTS price_research_justifications (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(), schedule_id UUID, route_id UUID,
+    reason VARCHAR(255) NOT NULL, observation TEXT, next_route_date DATE, justified_by UUID NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW())`);
+  await query(`CREATE TABLE IF NOT EXISTS price_research_schedules (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL, brand_id UUID NOT NULL,
+    pdv_id UUID NOT NULL, promoter_id UUID NOT NULL, route_id UUID, week_start DATE NOT NULL,
+    week_end DATE NOT NULL, preferred_date DATE, status VARCHAR(30) DEFAULT 'pending',
+    is_last_route_of_week BOOLEAN DEFAULT false, is_mandatory BOOLEAN DEFAULT false,
+    completed_at TIMESTAMPTZ, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW())`);
+}
+
+// ===== ADMIN: Rules =====
+router.get('/rules', authenticate, async (req, res) => {
+  try {
+    await ensureTables();
+    const orgId = await getOrgId(req.userId);
+    if (!orgId) return res.status(403).json({ error: 'Sem organização' });
+    const { brand_id } = req.query;
+    let sql = `SELECT r.*, b.name as brand_name FROM price_research_rules r
+               LEFT JOIN merch_brands b ON b.id = r.brand_id WHERE r.organization_id = $1`;
+    const params = [orgId];
+    if (brand_id) { sql += ' AND r.brand_id = $2'; params.push(brand_id); }
+    sql += ' ORDER BY b.name';
+    const result = await query(sql, params);
+    res.json(result.rows);
+  } catch (err) { logError('price-research.rules.list', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.post('/rules', authenticate, async (req, res) => {
+  try {
+    await ensureTables();
+    const orgId = await getOrgId(req.userId);
+    if (!orgId) return res.status(403).json({ error: 'Sem organização' });
+    const { brand_id, enabled, frequency, preferred_weekday, preferred_time, require_photo, require_justification, block_route_completion } = req.body;
+    const result = await query(
+      `INSERT INTO price_research_rules (organization_id, brand_id, enabled, frequency, preferred_weekday, preferred_time, require_photo, require_justification, block_route_completion)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       ON CONFLICT (organization_id, brand_id) DO UPDATE SET enabled=EXCLUDED.enabled, frequency=EXCLUDED.frequency,
+       preferred_weekday=EXCLUDED.preferred_weekday, preferred_time=EXCLUDED.preferred_time,
+       require_photo=EXCLUDED.require_photo, require_justification=EXCLUDED.require_justification,
+       block_route_completion=EXCLUDED.block_route_completion, updated_at=NOW()
+       RETURNING *`,
+      [orgId, brand_id, enabled ?? false, frequency ?? 'weekly', preferred_weekday ?? 1, preferred_time, require_photo ?? false, require_justification ?? true, block_route_completion ?? false]
+    );
+    res.json(result.rows[0]);
+  } catch (err) { logError('price-research.rules.upsert', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// ===== ADMIN: Competitors =====
+router.get('/competitors', authenticate, async (req, res) => {
+  try {
+    await ensureTables();
+    const orgId = await getOrgId(req.userId);
+    if (!orgId) return res.status(403).json({ error: 'Sem organização' });
+    const { brand_id } = req.query;
+    let sql = 'SELECT * FROM price_research_brand_competitors WHERE organization_id = $1';
+    const params = [orgId];
+    if (brand_id) { sql += ' AND brand_id = $2'; params.push(brand_id); }
+    sql += ' ORDER BY competitor_name';
+    res.json((await query(sql, params)).rows);
+  } catch (err) { logError('price-research.competitors.list', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.post('/competitors', authenticate, async (req, res) => {
+  try {
+    await ensureTables();
+    const orgId = await getOrgId(req.userId);
+    const { brand_id, competitor_name, category } = req.body;
+    const r = await query('INSERT INTO price_research_brand_competitors (organization_id, brand_id, competitor_name, category) VALUES ($1,$2,$3,$4) RETURNING *', [orgId, brand_id, competitor_name, category]);
+    res.json(r.rows[0]);
+  } catch (err) { logError('price-research.competitors.create', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.put('/competitors/:id', authenticate, async (req, res) => {
+  try {
+    const { competitor_name, category, active } = req.body;
+    const r = await query('UPDATE price_research_brand_competitors SET competitor_name=COALESCE($1,competitor_name), category=COALESCE($2,category), active=COALESCE($3,active) WHERE id=$4 RETURNING *', [competitor_name, category, active, req.params.id]);
+    res.json(r.rows[0]);
+  } catch (err) { logError('price-research.competitors.update', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.delete('/competitors/:id', authenticate, async (req, res) => {
+  try {
+    await query('DELETE FROM price_research_brand_competitors WHERE id=$1', [req.params.id]);
+    res.json({ ok: true });
+  } catch (err) { logError('price-research.competitors.delete', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// ===== ADMIN: Product Mappings =====
+router.get('/product-mappings', authenticate, async (req, res) => {
+  try {
+    await ensureTables();
+    const orgId = await getOrgId(req.userId);
+    const { brand_id } = req.query;
+    let sql = `SELECT pm.*, p.name as product_name, p.sku FROM price_research_product_mappings pm
+               LEFT JOIN products p ON p.id = pm.product_id WHERE pm.organization_id = $1`;
+    const params = [orgId];
+    if (brand_id) { sql += ' AND pm.brand_id = $2'; params.push(brand_id); }
+    sql += ' ORDER BY p.name';
+    const mappings = (await query(sql, params)).rows;
+    // Load competitor products for each mapping
+    if (mappings.length > 0) {
+      const mapIds = mappings.map(m => m.id);
+      const cpRes = await query(`SELECT cp.*, c.competitor_name FROM price_research_competitor_products cp
+        LEFT JOIN price_research_brand_competitors c ON c.id = cp.competitor_id
+        WHERE cp.mapping_id = ANY($1) ORDER BY c.competitor_name, cp.competitor_product_name`, [mapIds]);
+      const cpMap = {};
+      for (const cp of cpRes.rows) { if (!cpMap[cp.mapping_id]) cpMap[cp.mapping_id] = []; cpMap[cp.mapping_id].push(cp); }
+      for (const m of mappings) m.competitor_products = cpMap[m.id] || [];
+    }
+    res.json(mappings);
+  } catch (err) { logError('price-research.mappings.list', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.post('/product-mappings', authenticate, async (req, res) => {
+  try {
+    await ensureTables();
+    const orgId = await getOrgId(req.userId);
+    const { brand_id, product_id } = req.body;
+    const r = await query('INSERT INTO price_research_product_mappings (organization_id, brand_id, product_id) VALUES ($1,$2,$3) ON CONFLICT (brand_id, product_id) DO UPDATE SET enabled=true RETURNING *', [orgId, brand_id, product_id]);
+    res.json(r.rows[0]);
+  } catch (err) { logError('price-research.mappings.create', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.delete('/product-mappings/:id', authenticate, async (req, res) => {
+  try {
+    await query('DELETE FROM price_research_product_mappings WHERE id=$1', [req.params.id]);
+    res.json({ ok: true });
+  } catch (err) { logError('price-research.mappings.delete', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// ===== ADMIN: Competitor Products =====
+router.post('/competitor-products', authenticate, async (req, res) => {
+  try {
+    await ensureTables();
+    const { mapping_id, competitor_id, competitor_product_name, category, subcategory, unit_measure } = req.body;
+    const r = await query('INSERT INTO price_research_competitor_products (mapping_id, competitor_id, competitor_product_name, category, subcategory, unit_measure) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
+      [mapping_id, competitor_id, competitor_product_name, category, subcategory, unit_measure]);
+    res.json(r.rows[0]);
+  } catch (err) { logError('price-research.competitor-products.create', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.delete('/competitor-products/:id', authenticate, async (req, res) => {
+  try {
+    await query('DELETE FROM price_research_competitor_products WHERE id=$1', [req.params.id]);
+    res.json({ ok: true });
+  } catch (err) { logError('price-research.competitor-products.delete', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// ===== ADMIN: Executions / Dashboard =====
+router.get('/executions', authenticate, async (req, res) => {
+  try {
+    await ensureTables();
+    const orgId = await getOrgId(req.userId);
+    if (!orgId) return res.status(403).json({ error: 'Sem organização' });
+    const { brand_id, pdv_id, promoter_id, status, date_from, date_to } = req.query;
+    let sql = `SELECT e.*, b.name as brand_name, p.name as pdv_name, emp.full_name as promoter_name
+               FROM price_research_executions e
+               LEFT JOIN merch_brands b ON b.id = e.brand_id
+               LEFT JOIN pdvs p ON p.id = e.pdv_id
+               LEFT JOIN employees emp ON emp.id = e.promoter_id
+               WHERE e.organization_id = $1`;
+    const params = [orgId];
+    let idx = 2;
+    if (brand_id) { sql += ` AND e.brand_id = $${idx++}`; params.push(brand_id); }
+    if (pdv_id) { sql += ` AND e.pdv_id = $${idx++}`; params.push(pdv_id); }
+    if (promoter_id) { sql += ` AND e.promoter_id = $${idx++}`; params.push(promoter_id); }
+    if (status) { sql += ` AND e.status = $${idx++}`; params.push(status); }
+    if (date_from) { sql += ` AND e.created_at >= $${idx++}`; params.push(date_from); }
+    if (date_to) { sql += ` AND e.created_at <= $${idx++}`; params.push(date_to + 'T23:59:59'); }
+    sql += ' ORDER BY e.created_at DESC LIMIT 500';
+    res.json((await query(sql, params)).rows);
+  } catch (err) { logError('price-research.executions.list', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.get('/executions/:id', authenticate, async (req, res) => {
+  try {
+    await ensureTables();
+    const exec = (await query(`SELECT e.*, b.name as brand_name, p.name as pdv_name, emp.full_name as promoter_name
+      FROM price_research_executions e LEFT JOIN merch_brands b ON b.id = e.brand_id
+      LEFT JOIN pdvs p ON p.id = e.pdv_id LEFT JOIN employees emp ON emp.id = e.promoter_id
+      WHERE e.id = $1`, [req.params.id])).rows[0];
+    if (!exec) return res.status(404).json({ error: 'Não encontrado' });
+    // Items with competitors
+    const items = (await query(`SELECT i.*, p.name as product_name FROM price_research_items i
+      LEFT JOIN products p ON p.id = i.product_id WHERE i.execution_id = $1 ORDER BY p.name`, [exec.id])).rows;
+    for (const item of items) {
+      item.competitors = (await query('SELECT * FROM price_research_item_competitors WHERE item_id = $1 ORDER BY competitor_brand_name', [item.id])).rows;
+    }
+    exec.items = items;
+    exec.photos = (await query('SELECT * FROM price_research_photos WHERE execution_id = $1 ORDER BY created_at', [exec.id])).rows;
+    res.json(exec);
+  } catch (err) { logError('price-research.executions.detail', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// ===== Dashboard Stats =====
+router.get('/dashboard', authenticate, async (req, res) => {
+  try {
+    await ensureTables();
+    const orgId = await getOrgId(req.userId);
+    if (!orgId) return res.status(403).json({ error: 'Sem organização' });
+    const { brand_id, date_from, date_to } = req.query;
+    let dateFilter = '';
+    const params = [orgId];
+    let idx = 2;
+    if (brand_id) { dateFilter += ` AND brand_id = $${idx++}`; params.push(brand_id); }
+    if (date_from) { dateFilter += ` AND created_at >= $${idx++}`; params.push(date_from); }
+    if (date_to) { dateFilter += ` AND created_at <= $${idx++}`; params.push(date_to + 'T23:59:59'); }
+
+    const stats = (await query(`SELECT
+      COUNT(*) FILTER (WHERE status='pending') as pending,
+      COUNT(*) FILTER (WHERE status='completed') as completed,
+      COUNT(*) FILTER (WHERE status='postponed') as postponed,
+      COUNT(*) FILTER (WHERE status='expired') as expired,
+      COUNT(*) as total
+      FROM price_research_executions WHERE organization_id = $1 ${dateFilter}`, params)).rows[0];
+
+    // Average prices per product (top 20)
+    const avgPrices = (await query(`SELECT i.product_id, p.name as product_name, AVG(i.price) as avg_price,
+      MIN(i.price) as min_price, MAX(i.price) as max_price, COUNT(*) as collections
+      FROM price_research_items i
+      JOIN price_research_executions e ON e.id = i.execution_id
+      LEFT JOIN products p ON p.id = i.product_id
+      WHERE e.organization_id = $1 AND i.price IS NOT NULL ${dateFilter.replace(/brand_id/g, 'e.brand_id').replace(/created_at/g, 'e.created_at')}
+      GROUP BY i.product_id, p.name ORDER BY collections DESC LIMIT 20`, params)).rows;
+
+    res.json({ stats, avgPrices });
+  } catch (err) { logError('price-research.dashboard', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// ===== PROMOTOR: Get research for route =====
+router.get('/route/:routeId', authenticate, async (req, res) => {
+  try {
+    await ensureTables();
+    const { routeId } = req.params;
+    // Get existing execution or check if brand has research enabled
+    let exec = (await query('SELECT * FROM price_research_executions WHERE route_id = $1', [routeId])).rows;
+    if (exec.length > 0) {
+      for (const e of exec) {
+        e.items = (await query(`SELECT i.*, p.name as product_name FROM price_research_items i
+          LEFT JOIN products p ON p.id = i.product_id WHERE i.execution_id = $1 ORDER BY p.name`, [e.id])).rows;
+        for (const item of e.items) {
+          item.competitors = (await query('SELECT * FROM price_research_item_competitors WHERE item_id = $1', [item.id])).rows;
+        }
+        e.photos = (await query('SELECT * FROM price_research_photos WHERE execution_id = $1', [e.id])).rows;
+      }
+      return res.json(exec);
+    }
+    // Check route brands with active research rules
+    const route = (await query('SELECT * FROM merch_routes WHERE id = $1', [routeId])).rows[0];
+    if (!route) return res.json([]);
+    // Get brands for this route (single or multi-brand)
+    let brandIds = [];
+    if (route.brand_id) { brandIds = [route.brand_id]; }
+    else {
+      const rb = (await query('SELECT brand_id FROM route_brands WHERE route_id = $1', [routeId])).rows;
+      brandIds = rb.map(r => r.brand_id);
+    }
+    if (brandIds.length === 0) return res.json([]);
+    // Check which brands have research enabled
+    const rules = (await query('SELECT * FROM price_research_rules WHERE brand_id = ANY($1) AND enabled = true', [brandIds])).rows;
+    const result = [];
+    for (const rule of rules) {
+      result.push({ brand_id: rule.brand_id, rule, status: 'not_started', items: [], photos: [] });
+    }
+    res.json(result);
+  } catch (err) { logError('price-research.route', err); if (err.code === '42P01') return res.json([]); res.status(500).json({ error: 'Erro' }); }
+});
+
+// ===== PROMOTOR: Start/save execution =====
+router.post('/execute', authenticate, async (req, res) => {
+  try {
+    await ensureTables();
+    const { route_id, brand_id, pdv_id, promoter_id, items, photos } = req.body;
+    const orgRes = await query('SELECT organization_id FROM merch_routes WHERE id = $1', [route_id]);
+    const orgId = orgRes.rows[0]?.organization_id;
+    if (!orgId) return res.status(404).json({ error: 'Rota não encontrada' });
+
+    // Upsert execution
+    let exec = (await query('SELECT * FROM price_research_executions WHERE route_id = $1 AND brand_id = $2', [route_id, brand_id])).rows[0];
+    if (!exec) {
+      exec = (await query(`INSERT INTO price_research_executions (organization_id, route_id, brand_id, pdv_id, promoter_id, status, started_at)
+        VALUES ($1,$2,$3,$4,$5,'in_progress',NOW()) RETURNING *`, [orgId, route_id, brand_id, pdv_id, promoter_id])).rows[0];
+    }
+
+    // Save items
+    let completedCount = 0;
+    const totalCount = items?.length || 0;
+    for (const item of (items || [])) {
+      let existingItem = (await query('SELECT id FROM price_research_items WHERE execution_id = $1 AND product_id = $2', [exec.id, item.product_id])).rows[0];
+      if (existingItem) {
+        await query('UPDATE price_research_items SET price=$1, observation=$2, collected_at=NOW(), updated_at=NOW() WHERE id=$3',
+          [item.price, item.observation, existingItem.id]);
+        existingItem = { id: existingItem.id };
+      } else {
+        existingItem = (await query('INSERT INTO price_research_items (execution_id, product_id, price, observation, collected_at, collected_by) VALUES ($1,$2,$3,$4,NOW(),$5) RETURNING id',
+          [exec.id, item.product_id, item.price, item.observation, promoter_id])).rows[0];
+      }
+      if (item.price !== null && item.price !== undefined) completedCount++;
+      // Save competitor prices
+      if (item.competitors) {
+        await query('DELETE FROM price_research_item_competitors WHERE item_id = $1', [existingItem.id]);
+        for (const comp of item.competitors) {
+          await query(`INSERT INTO price_research_item_competitors (item_id, competitor_product_id, competitor_id, competitor_product_name, competitor_brand_name, price, observation, collected_at)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())`,
+            [existingItem.id, comp.competitor_product_id, comp.competitor_id, comp.competitor_product_name, comp.competitor_brand_name, comp.price, comp.observation]);
+        }
+      }
+    }
+
+    // Save photos
+    for (const photo of (photos || [])) {
+      await query('INSERT INTO price_research_photos (execution_id, item_id, photo_url, photo_type, latitude, longitude, watermark_applied) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+        [exec.id, photo.item_id, photo.photo_url, photo.photo_type || 'evidence', photo.latitude, photo.longitude, photo.watermark_applied ?? false]);
+    }
+
+    // Update progress
+    const progressPct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+    const isComplete = completedCount === totalCount && totalCount > 0;
+    await query('UPDATE price_research_executions SET progress_pct=$1, total_items=$2, completed_items=$3, status=$4, completed_at=$5, updated_at=NOW() WHERE id=$6',
+      [progressPct, totalCount, completedCount, isComplete ? 'completed' : 'in_progress', isComplete ? new Date() : null, exec.id]);
+
+    res.json({ id: exec.id, progress_pct: progressPct, status: isComplete ? 'completed' : 'in_progress' });
+  } catch (err) { logError('price-research.execute', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// ===== PROMOTOR: Postpone =====
+router.post('/postpone', authenticate, async (req, res) => {
+  try {
+    await ensureTables();
+    const { schedule_id, route_id, reason, observation, next_route_id, postponed_by } = req.body;
+    const r = await query('INSERT INTO price_research_postponements (schedule_id, route_id, reason, observation, next_route_id, postponed_by) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
+      [schedule_id, route_id, reason, observation, next_route_id, postponed_by]);
+    if (schedule_id) {
+      await query("UPDATE price_research_schedules SET status='postponed', updated_at=NOW() WHERE id=$1", [schedule_id]);
+    }
+    res.json(r.rows[0]);
+  } catch (err) { logError('price-research.postpone', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// ===== PROMOTOR: Justify =====
+router.post('/justify', authenticate, async (req, res) => {
+  try {
+    await ensureTables();
+    const { schedule_id, route_id, reason, observation, next_route_date, justified_by } = req.body;
+    const r = await query('INSERT INTO price_research_justifications (schedule_id, route_id, reason, observation, next_route_date, justified_by) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
+      [schedule_id, route_id, reason, observation, next_route_date, justified_by]);
+    res.json(r.rows[0]);
+  } catch (err) { logError('price-research.justify', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// ===== Price History =====
+router.get('/history', authenticate, async (req, res) => {
+  try {
+    await ensureTables();
+    const orgId = await getOrgId(req.userId);
+    if (!orgId) return res.status(403).json({ error: 'Sem organização' });
+    const { product_id, brand_id, pdv_id, limit: lim } = req.query;
+    let sql = `SELECT i.*, e.pdv_id, e.brand_id, e.created_at as execution_date, p.name as product_name,
+               pdv.name as pdv_name, b.name as brand_name
+               FROM price_research_items i
+               JOIN price_research_executions e ON e.id = i.execution_id
+               LEFT JOIN products p ON p.id = i.product_id
+               LEFT JOIN pdvs pdv ON pdv.id = e.pdv_id
+               LEFT JOIN merch_brands b ON b.id = e.brand_id
+               WHERE e.organization_id = $1 AND i.price IS NOT NULL`;
+    const params = [orgId];
+    let idx = 2;
+    if (product_id) { sql += ` AND i.product_id = $${idx++}`; params.push(product_id); }
+    if (brand_id) { sql += ` AND e.brand_id = $${idx++}`; params.push(brand_id); }
+    if (pdv_id) { sql += ` AND e.pdv_id = $${idx++}`; params.push(pdv_id); }
+    sql += ` ORDER BY e.created_at DESC LIMIT ${parseInt(lim) || 100}`;
+    res.json((await query(sql, params)).rows);
+  } catch (err) { logError('price-research.history', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+export default router;
