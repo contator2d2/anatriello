@@ -23,6 +23,7 @@ import {
   Plus, CheckCircle, XCircle, Stethoscope, CalendarDays, Users, Timer,
   ShieldAlert, FileCheck, Upload, Loader2, FileUp, Paperclip, Sparkles, Search, ShieldCheck, ShieldX, ShieldQuestion
 } from "lucide-react";
+import { OvertimeRequestsPanel, useOvertimePendingCount } from "@/components/rh/OvertimeRequestsPanel";
 import { format } from "date-fns";
 
 const safeDate = (v: any): Date | null => {
@@ -166,6 +167,7 @@ export default function RHDashboard() {
     analyzeWithAI(docUrl);
   }, [analyzeWithAI]);
 
+  const overtimePendingCount = useOvertimePendingCount();
   const summary = dashboard?.summary || {};
   const lateArrivals = dashboard?.late_arrivals || [];
   const absencesToday = dashboard?.absences_today || [];
@@ -283,13 +285,14 @@ export default function RHDashboard() {
         </div>
 
         {/* Summary Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
           {[
             { label: "Ativos", value: summary.total_active || 0, icon: Users, color: "text-green-600" },
             { label: "Em Férias", value: summary.on_vacation || 0, icon: Palmtree, color: "text-blue-600" },
             { label: "Afastados", value: summary.on_leave || 0, icon: ShieldAlert, color: "text-yellow-600" },
             { label: "Atrasados Hoje", value: lateArrivals.length, icon: Clock, color: "text-orange-600" },
             { label: "Ausentes Hoje", value: absencesToday.length, icon: UserX, color: "text-red-600" },
+            { label: "HE Pendentes", value: overtimePendingCount, icon: ShieldAlert, color: "text-purple-600" },
           ].map(s => (
             <Card key={s.label}>
               <CardContent className="p-4 flex items-center gap-3">
@@ -306,12 +309,28 @@ export default function RHDashboard() {
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList>
             <TabsTrigger value="dashboard">Alertas</TabsTrigger>
+            <TabsTrigger value="overtime" className="gap-1">
+              HE {overtimePendingCount > 0 && <Badge variant="destructive" className="text-[10px] px-1.5 py-0 h-4 min-w-4">{overtimePendingCount}</Badge>}
+            </TabsTrigger>
             <TabsTrigger value="vacations">Férias</TabsTrigger>
             <TabsTrigger value="certificates">Atestados</TabsTrigger>
             <TabsTrigger value="documents">Documentos</TabsTrigger>
           </TabsList>
 
-          {/* DASHBOARD TAB */}
+          {/* OVERTIME TAB */}
+          <TabsContent value="overtime" className="space-y-4 mt-4">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <ShieldAlert className="h-4 w-4 text-purple-600" /> Solicitações de Hora Extra
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <OvertimeRequestsPanel statusFilter="all" />
+              </CardContent>
+            </Card>
+          </TabsContent>
+
           <TabsContent value="dashboard" className="space-y-4 mt-4">
             <div className="grid md:grid-cols-2 gap-4">
               {/* Late Arrivals */}
