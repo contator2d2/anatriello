@@ -1474,7 +1474,7 @@ function requireSupervisor(req, res, next) {
 }
 
 // Get subordinates (team)
-router.get('/supervisor/team', requireSupervisor, async (req, res) => {
+router.get('/supervisor/team', authenticatePromotor, requireSupervisor, async (req, res) => {
   try {
     const result = await query(
       `SELECT e.id, e.full_name, e.position, e.photo_url, e.worker_profile, e.work_schedule,
