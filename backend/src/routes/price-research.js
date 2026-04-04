@@ -240,10 +240,12 @@ router.get('/executions/:id', authenticate, async (req, res) => {
       WHERE e.id = $1`, [req.params.id])).rows[0];
     if (!exec) return res.status(404).json({ error: 'Não encontrado' });
     // Items with competitors
-    const items = (await query(`SELECT i.*, p.name as product_name FROM price_research_items i
+    const items = (await query(`SELECT i.*, p.name as product_name, p.photo_url, p.description FROM price_research_items i
       LEFT JOIN products p ON p.id = i.product_id WHERE i.execution_id = $1 ORDER BY p.name`, [exec.id])).rows;
     for (const item of items) {
-      item.competitors = (await query('SELECT * FROM price_research_item_competitors WHERE item_id = $1 ORDER BY competitor_brand_name', [item.id])).rows;
+      item.competitors = (await query(`SELECT ic.*, cp.photo_url FROM price_research_item_competitors ic
+        LEFT JOIN price_research_competitor_products cp ON cp.id = ic.competitor_product_id
+        WHERE ic.item_id = $1 ORDER BY ic.competitor_brand_name`, [item.id])).rows;
     }
     exec.items = items;
     exec.photos = (await query('SELECT * FROM price_research_photos WHERE execution_id = $1 ORDER BY created_at', [exec.id])).rows;
