@@ -23,7 +23,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   MapPin, Camera, Check, AlertTriangle, Archive, Clock,
   CheckCircle2, Circle, Calendar as CalendarIcon, Trash2, Store, Info,
-  Lock, Unlock, ChevronRight, Target, ImagePlus, Plus, ScanFace,
+  Lock, Unlock, ChevronRight, Target, ImagePlus, Plus, ScanFace, Package,
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 
