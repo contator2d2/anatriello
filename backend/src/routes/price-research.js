@@ -150,7 +150,7 @@ router.get('/product-mappings', authenticate, async (req, res) => {
     await ensureTables();
     const orgId = await getOrgId(req.userId);
     const { brand_id } = req.query;
-    let sql = `SELECT pm.*, p.name as product_name, p.sku FROM price_research_product_mappings pm
+    let sql = `SELECT pm.*, p.name as product_name, p.sku, p.photo_url, p.description FROM price_research_product_mappings pm
                LEFT JOIN products p ON p.id = pm.product_id WHERE pm.organization_id = $1`;
     const params = [orgId];
     if (brand_id) { sql += ' AND pm.brand_id = $2'; params.push(brand_id); }
