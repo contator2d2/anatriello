@@ -2573,21 +2573,27 @@ router.post('/totem/facial-compare', authenticateTotem, async (req, res) => {
 
 // ============ INCIDENTS INFRASTRUCTURE ============
 async function ensureIncidentsInfra() {
-  const exists = await tableExists('incidents');
-  if (exists) return;
+  const incidentsExists = await tableExists('incidents');
+  const contactsExists = await tableExists('pdv_authorized_contacts');
+  const auditExists = await tableExists('assistant_audit_log');
+  const scoresExists = await tableExists('promoter_scores');
+  const summariesExists = await tableExists('daily_operational_summaries');
+  const behaviorExists = await tableExists('promoter_behavior_analysis');
+  const diagnosticsExists = await tableExists('operational_diagnostics');
+  if (incidentsExists && contactsExists && auditExists && scoresExists && summariesExists && behaviorExists && diagnosticsExists) return;
   try {
     await query(`DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'incident_type') THEN CREATE TYPE incident_type AS ENUM ('delay','misconduct','non_execution','product_issue','other'); END IF; END $$`);
     await query(`DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'incident_severity') THEN CREATE TYPE incident_severity AS ENUM ('low','medium','high'); END IF; END $$`);
     await query(`DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'incident_status') THEN CREATE TYPE incident_status AS ENUM ('open','under_review','responded','resolved','escalated'); END IF; END $$`);
   } catch(e) {}
-  await query(`CREATE TABLE IF NOT EXISTS incidents (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE, reported_by_unit_id UUID REFERENCES units(id) ON DELETE SET NULL, reported_by_user_name VARCHAR(200), agency_promoter_id UUID REFERENCES agency_promoters(id) ON DELETE SET NULL, agency_id UUID REFERENCES agencies(id) ON DELETE SET NULL, incident_type VARCHAR(30) NOT NULL DEFAULT 'other', severity VARCHAR(20) NOT NULL DEFAULT 'low', status VARCHAR(20) NOT NULL DEFAULT 'open', description TEXT, incident_date TIMESTAMPTZ DEFAULT NOW(), photo_urls TEXT[], ai_classification JSONB, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW())`);
+  await query(`CREATE TABLE IF NOT EXISTS incidents (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE, reported_by_unit_id UUID REFERENCES supermarket_units(id) ON DELETE SET NULL, reported_by_user_name VARCHAR(200), agency_promoter_id UUID REFERENCES agency_promoters(id) ON DELETE SET NULL, agency_id UUID REFERENCES agencies(id) ON DELETE SET NULL, incident_type VARCHAR(30) NOT NULL DEFAULT 'other', severity VARCHAR(20) NOT NULL DEFAULT 'low', status VARCHAR(20) NOT NULL DEFAULT 'open', description TEXT, incident_date TIMESTAMPTZ DEFAULT NOW(), photo_urls TEXT[], ai_classification JSONB, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW())`);
   await query(`CREATE TABLE IF NOT EXISTS incident_responses (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), incident_id UUID NOT NULL REFERENCES incidents(id) ON DELETE CASCADE, responder_type VARCHAR(30) NOT NULL, responder_name VARCHAR(200), message TEXT NOT NULL, attachment_urls TEXT[], new_status VARCHAR(20), created_at TIMESTAMPTZ DEFAULT NOW())`);
   await query(`CREATE TABLE IF NOT EXISTS promoter_scores (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE, agency_promoter_id UUID NOT NULL REFERENCES agency_promoters(id) ON DELETE CASCADE, score NUMERIC(5,2) DEFAULT 100.00, presence_score NUMERIC(5,2) DEFAULT 100.00, punctuality_score NUMERIC(5,2) DEFAULT 100.00, permanence_score NUMERIC(5,2) DEFAULT 100.00, identity_score NUMERIC(5,2) DEFAULT 100.00, incidents_score NUMERIC(5,2) DEFAULT 100.00, total_visits INTEGER DEFAULT 0, total_incidents INTEGER DEFAULT 0, total_blocks INTEGER DEFAULT 0, last_calculated_at TIMESTAMPTZ DEFAULT NOW(), created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW(), UNIQUE(organization_id, agency_promoter_id))`);
   await query(`CREATE TABLE IF NOT EXISTS score_history (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), promoter_score_id UUID NOT NULL REFERENCES promoter_scores(id) ON DELETE CASCADE, score NUMERIC(5,2) NOT NULL, calculated_at TIMESTAMPTZ DEFAULT NOW())`);
   await query(`CREATE TABLE IF NOT EXISTS promoter_behavior_analysis (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE, agency_promoter_id UUID NOT NULL REFERENCES agency_promoters(id) ON DELETE CASCADE, risk_level VARCHAR(20) DEFAULT 'low', risk_justification TEXT, trend VARCHAR(20) DEFAULT 'stable', alerts JSONB DEFAULT '[]', data_snapshot JSONB, analyzed_at TIMESTAMPTZ DEFAULT NOW(), created_at TIMESTAMPTZ DEFAULT NOW())`);
   await query(`CREATE TABLE IF NOT EXISTS daily_operational_summaries (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE, unit_id UUID REFERENCES units(id) ON DELETE SET NULL, agency_id UUID REFERENCES agencies(id) ON DELETE SET NULL, summary_date DATE NOT NULL, summary_type VARCHAR(30) DEFAULT 'unit', ai_summary TEXT, metrics JSONB, highlights JSONB, risks JSONB, recommendations JSONB, generated_at TIMESTAMPTZ DEFAULT NOW(), created_at TIMESTAMPTZ DEFAULT NOW())`);
-  await query(`CREATE TABLE IF NOT EXISTS pdv_authorized_contacts (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE, unit_id UUID NOT NULL REFERENCES units(id) ON DELETE CASCADE, name VARCHAR(200) NOT NULL, phone VARCHAR(20) NOT NULL, role VARCHAR(50) DEFAULT 'other', permissions JSONB DEFAULT '["consultar_operacao"]', active BOOLEAN DEFAULT true, notes TEXT, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW())`);
-  await query(`CREATE TABLE IF NOT EXISTS assistant_audit_log (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE, unit_id UUID REFERENCES units(id) ON DELETE SET NULL, contact_id UUID REFERENCES pdv_authorized_contacts(id) ON DELETE SET NULL, phone VARCHAR(20), interaction_type VARCHAR(30) DEFAULT 'query', user_message TEXT, ai_response TEXT, incident_id UUID REFERENCES incidents(id) ON DELETE SET NULL, ai_classification JSONB, authorized BOOLEAN DEFAULT true, created_at TIMESTAMPTZ DEFAULT NOW())`);
+  await query(`CREATE TABLE IF NOT EXISTS pdv_authorized_contacts (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE, unit_id UUID NOT NULL REFERENCES supermarket_units(id) ON DELETE CASCADE, name VARCHAR(200) NOT NULL, phone VARCHAR(20) NOT NULL, role VARCHAR(50) DEFAULT 'other', permissions JSONB DEFAULT '["consultar_operacao"]', active BOOLEAN DEFAULT true, notes TEXT, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW())`);
+  await query(`CREATE TABLE IF NOT EXISTS assistant_audit_log (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE, unit_id UUID REFERENCES supermarket_units(id) ON DELETE SET NULL, contact_id UUID REFERENCES pdv_authorized_contacts(id) ON DELETE SET NULL, phone VARCHAR(20), interaction_type VARCHAR(30) DEFAULT 'query', user_message TEXT, ai_response TEXT, incident_id UUID REFERENCES incidents(id) ON DELETE SET NULL, ai_classification JSONB, authorized BOOLEAN DEFAULT true, created_at TIMESTAMPTZ DEFAULT NOW())`);
   await query(`CREATE TABLE IF NOT EXISTS operational_diagnostics (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE, diagnostic_type VARCHAR(30) DEFAULT 'daily', period_start DATE, period_end DATE, problems JSONB DEFAULT '[]', risks JSONB DEFAULT '[]', top_incident_agencies JSONB DEFAULT '[]', unstable_pdvs JSONB DEFAULT '[]', critical_promoters JSONB DEFAULT '[]', recommendations JSONB DEFAULT '[]', generated_at TIMESTAMPTZ DEFAULT NOW(), created_at TIMESTAMPTZ DEFAULT NOW())`);
   // Ensure ai_classification column exists on existing tables
   try { await query(`ALTER TABLE incidents ADD COLUMN IF NOT EXISTS ai_classification JSONB`); } catch(e) {}
@@ -3043,8 +3049,8 @@ router.post('/behavior/:promoterId/analyze', authenticate, async (req, res) => {
 router.get('/authorized-contacts', authenticate, async (req, res) => {
   try {
     await ensureIncidentsInfra();
-    const orgId = await getOrgId(req.user.id);
-    const r = await query(`SELECT pac.*, u.name as unit_name FROM pdv_authorized_contacts pac LEFT JOIN units u ON u.id = pac.unit_id WHERE pac.organization_id = $1 ORDER BY pac.name`, [orgId]);
+    const orgId = await getOrgId(req.userId);
+    const r = await query(`SELECT pac.*, u.name as unit_name FROM pdv_authorized_contacts pac LEFT JOIN supermarket_units u ON u.id = pac.unit_id WHERE pac.organization_id = $1 ORDER BY pac.name`, [orgId]);
     res.json(r.rows);
   } catch (err) { logError('admin.contacts', err); res.status(500).json({ error: 'Erro' }); }
 });
@@ -3053,8 +3059,8 @@ router.get('/authorized-contacts', authenticate, async (req, res) => {
 router.get('/assistant-log', authenticate, async (req, res) => {
   try {
     await ensureIncidentsInfra();
-    const orgId = await getOrgId(req.user.id);
-    const r = await query(`SELECT al.*, pac.name as contact_name, u.name as unit_name FROM assistant_audit_log al LEFT JOIN pdv_authorized_contacts pac ON pac.id = al.contact_id LEFT JOIN units u ON u.id = al.unit_id WHERE al.organization_id = $1 ORDER BY al.created_at DESC LIMIT 200`, [orgId]);
+    const orgId = await getOrgId(req.userId);
+    const r = await query(`SELECT al.*, pac.name as contact_name, u.name as unit_name FROM assistant_audit_log al LEFT JOIN pdv_authorized_contacts pac ON pac.id = al.contact_id LEFT JOIN supermarket_units u ON u.id = al.unit_id WHERE al.organization_id = $1 ORDER BY al.created_at DESC LIMIT 200`, [orgId]);
     res.json(r.rows);
   } catch (err) { logError('admin.audit_log', err); res.status(500).json({ error: 'Erro' }); }
 });
@@ -3063,7 +3069,7 @@ router.get('/assistant-log', authenticate, async (req, res) => {
 router.post('/whatsapp-assistant/process', authenticate, async (req, res) => {
   try {
     await ensureIncidentsInfra();
-    const orgId = await getOrgId(req.user.id);
+    const orgId = await getOrgId(req.userId);
     const { phone, message: userMessage, audio_transcript } = req.body;
     if (!phone) return res.status(400).json({ error: 'Telefone obrigatório' });
 
@@ -3071,7 +3077,7 @@ router.post('/whatsapp-assistant/process', authenticate, async (req, res) => {
     if (!msgContent) return res.status(400).json({ error: 'Mensagem ou transcrição obrigatória' });
 
     // Find authorized contact
-    const contactR = await query(`SELECT pac.*, u.name as unit_name FROM pdv_authorized_contacts pac LEFT JOIN units u ON u.id = pac.unit_id WHERE pac.phone = $1 AND pac.organization_id = $2 AND pac.active = true LIMIT 1`, [phone, orgId]);
+    const contactR = await query(`SELECT pac.*, u.name as unit_name FROM pdv_authorized_contacts pac LEFT JOIN supermarket_units u ON u.id = pac.unit_id WHERE pac.phone = $1 AND pac.organization_id = $2 AND pac.active = true LIMIT 1`, [phone, orgId]);
     
     if (!contactR.rows.length) {
       // Log unauthorized attempt
