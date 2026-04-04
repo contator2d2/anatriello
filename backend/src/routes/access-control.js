@@ -2600,6 +2600,13 @@ async function ensureIncidentsInfra() {
   logInfo('incidents', 'Incidents, scores & AI infrastructure created');
 }
 
+async function ensureAuthorizedContactsInfra() {
+  const contactsExists = await tableExists('pdv_authorized_contacts');
+  if (contactsExists) return;
+
+  await query(`CREATE TABLE IF NOT EXISTS pdv_authorized_contacts (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE, unit_id UUID NOT NULL REFERENCES supermarket_units(id) ON DELETE CASCADE, name VARCHAR(200) NOT NULL, phone VARCHAR(20) NOT NULL, role VARCHAR(50) DEFAULT 'other', permissions JSONB DEFAULT '["consultar_operacao"]'::jsonb, active BOOLEAN DEFAULT true, notes TEXT, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW())`);
+}
+
 // ============ AI CONFIG HELPER ============
 async function getAIConfig(orgId) {
   try {
@@ -2844,7 +2851,7 @@ router.get('/supermarket-portal/daily-summary', authenticateSupermarket, async (
 // ============ SUPERMARKET: Authorized contacts ============
 router.get('/supermarket-portal/authorized-contacts', authenticateSupermarket, async (req, res) => {
   try {
-    await ensureIncidentsInfra();
+    await ensureAuthorizedContactsInfra();
     const r = await query(`SELECT * FROM pdv_authorized_contacts WHERE unit_id = $1 ORDER BY name`, [req.unitId]);
     res.json(r.rows);
   } catch (err) { logError('sm.contacts.list', err); res.status(500).json({ error: 'Erro' }); }
@@ -2852,7 +2859,7 @@ router.get('/supermarket-portal/authorized-contacts', authenticateSupermarket, a
 
 router.post('/supermarket-portal/authorized-contacts', authenticateSupermarket, async (req, res) => {
   try {
-    await ensureIncidentsInfra();
+    await ensureAuthorizedContactsInfra();
     const { name, phone, role, permissions, notes } = req.body;
     if (!name || !phone) return res.status(400).json({ error: 'Nome e telefone obrigatórios' });
     const r = await query(`INSERT INTO pdv_authorized_contacts (organization_id, unit_id, name, phone, role, permissions, notes) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
@@ -2863,6 +2870,7 @@ router.post('/supermarket-portal/authorized-contacts', authenticateSupermarket, 
 
 router.put('/supermarket-portal/authorized-contacts/:id', authenticateSupermarket, async (req, res) => {
   try {
+    await ensureAuthorizedContactsInfra();
     const { name, phone, role, permissions, active, notes } = req.body;
     const r = await query(`UPDATE pdv_authorized_contacts SET name=COALESCE($1,name), phone=COALESCE($2,phone), role=COALESCE($3,role), permissions=COALESCE($4,permissions), active=COALESCE($5,active), notes=COALESCE($6,notes), updated_at=NOW() WHERE id=$7 AND unit_id=$8 RETURNING *`,
       [name, phone, role, permissions ? JSON.stringify(permissions) : null, active, notes, req.params.id, req.unitId]);
