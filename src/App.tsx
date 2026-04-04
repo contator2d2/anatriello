@@ -113,6 +113,8 @@ import SupermarketDashboard from "./pages/supermarket/SupermarketDashboard";
 import SupermarketHistory from "./pages/supermarket/SupermarketHistory";
 import SupermarketVisitRequests from "./pages/supermarket/SupermarketVisitRequests";
 import SupermarketIncidents from "./pages/supermarket/SupermarketIncidents";
+import SupermarketContacts from "./pages/supermarket/SupermarketContacts";
+import SupermarketAssistant from "./pages/supermarket/SupermarketAssistant";
 
 const queryClient = new QueryClient();
 
