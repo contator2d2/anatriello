@@ -92,6 +92,7 @@ function getPunchTimestamp(punch: any) {
 }
 
 export default function RHPonto() {
+  const overtimePendingCount = useOvertimePendingCount();
   const [employeeFilter, setEmployeeFilter] = useState("");
   const [periodPreset, setPeriodPreset] = useState<PeriodPreset>('mes');
   const [customStart, setCustomStart] = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
