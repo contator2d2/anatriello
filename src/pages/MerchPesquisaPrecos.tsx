@@ -468,14 +468,40 @@ function ProductMappingsPanel({ brandId }: { brandId: string }) {
               <Input value={compName} onChange={e => setCompName(e.target.value)} placeholder="Ex: Sabonete 85g" />
             </div>
             <div>
-              <Label>Foto do produto (URL)</Label>
-              <Input value={compPhotoUrl} onChange={e => setCompPhotoUrl(e.target.value)} placeholder="https://..." />
-              {compPhotoUrl && (
-                <div className="mt-2">
-                  <img src={compPhotoUrl} alt="Preview" className="h-20 w-20 rounded object-cover border"
-                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                </div>
-              )}
+              <Label>Foto do produto</Label>
+              <div
+                ref={dropZoneRef}
+                onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={handleDrop}
+                onPaste={handlePaste}
+                tabIndex={0}
+                onClick={() => fileInputRef.current?.click()}
+                className={`mt-1 border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-colors
+                  ${isDragging ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'}
+                  ${isUploading ? 'opacity-50 pointer-events-none' : ''}`}
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileUpload(f); e.target.value = ''; }}
+                />
+                {compPhotoUrl ? (
+                  <div className="flex flex-col items-center gap-2">
+                    <img src={compPhotoUrl} alt="Preview" className="h-24 w-24 rounded object-cover border" />
+                    <p className="text-xs text-muted-foreground">Clique ou arraste para substituir</p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center gap-2 py-2">
+                    <Upload className="h-8 w-8 text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground">
+                      {isUploading ? 'Enviando...' : 'Arraste uma foto, cole (Ctrl+V) ou clique para selecionar'}
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
           <DialogFooter><Button onClick={handleAddCompetitorProduct} disabled={createCP.isPending}>Adicionar</Button></DialogFooter>
