@@ -24,6 +24,7 @@ import {
   usePriceResearchCompetitors, useCreateCompetitor,
   usePriceResearchExecutions, useValidateExecution, usePublishExecution,
   usePriceResearchDashboard, usePriceResearchExecutionDetail, useUpdateExecution,
+  useRedes, useCreateRede, useUpdateRede, useDeleteRede,
 } from "@/hooks/use-price-research";
 import { useUpload } from "@/hooks/use-upload";
 import { resolveMediaUrl } from "@/lib/media";
@@ -31,7 +32,7 @@ import {
   DollarSign, Plus, Trash2, Image as ImageIcon, Upload, FileText, List, CheckCircle2,
   Calendar, Building2, Package, Share2, Edit, Clock, BarChart3, CalendarPlus, MapPin, User,
   ChevronDown, ChevronUp, Eye, Send, AlertTriangle, TrendingUp, TrendingDown, Target,
-  Copy, Settings, GripVertical, Camera, X, ArrowRight, Repeat,
+  Copy, Settings, GripVertical, Camera, X, ArrowRight, Repeat, Globe,
 } from "lucide-react";
 import { format, isValid, parseISO } from "date-fns";
 
@@ -87,9 +88,10 @@ export default function MerchPesquisaPrecos() {
         </div>
 
         <Tabs value={tab} onValueChange={setTab}>
-          <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:inline-flex">
+          <TabsList className="grid w-full grid-cols-5 lg:w-auto lg:inline-flex">
             <TabsTrigger value="modelos"><FileText className="h-4 w-4 mr-1" />Modelos</TabsTrigger>
             <TabsTrigger value="agendamentos"><Calendar className="h-4 w-4 mr-1" />Pesquisas</TabsTrigger>
+            <TabsTrigger value="redes"><Globe className="h-4 w-4 mr-1" />Redes</TabsTrigger>
             <TabsTrigger value="dashboard"><BarChart3 className="h-4 w-4 mr-1" />Dashboard</TabsTrigger>
             <TabsTrigger value="marcas"><Building2 className="h-4 w-4 mr-1" />Marcas</TabsTrigger>
           </TabsList>
@@ -99,6 +101,9 @@ export default function MerchPesquisaPrecos() {
           </TabsContent>
           <TabsContent value="agendamentos">
             <PesquisasTab brands={brands} />
+          </TabsContent>
+          <TabsContent value="redes">
+            <RedesTab />
           </TabsContent>
           <TabsContent value="dashboard">
             <DashboardTab brands={brands} />
@@ -688,9 +693,12 @@ function ModelEditorDialog({ rule, brands, open, onClose }: { rule: any; brands:
 function ScheduleResearchDialog({ rule, brands, open, onClose }: { rule: any; brands: any[]; open: boolean; onClose: () => void }) {
   const brandName = brands.find((b: any) => b.id === rule.brand_id)?.name || 'Marca';
   const { data: pdvs = [] } = useBrandPdvs(rule.brand_id);
+  const { data: redes = [] } = useRedes();
   const { data: employees = [] } = useEmployees();
   const qc = useQueryClient();
+  const [targetType, setTargetType] = useState<'pdv' | 'rede'>('pdv');
   const [pdvId, setPdvId] = useState('');
+  const [redeId, setRedeId] = useState('');
   const [promoterId, setPromoterId] = useState('');
   const [scheduleDate, setScheduleDate] = useState('');
   const [scheduleTime, setScheduleTime] = useState('');
@@ -698,8 +706,11 @@ function ScheduleResearchDialog({ rule, brands, open, onClose }: { rule: any; br
   const [recurrenceEndDate, setRecurrenceEndDate] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const selectedRede = redes.find((r: any) => r.id === redeId);
+
   const handleSchedule = async () => {
-    if (!pdvId) return toast.error('Selecione um PDV');
+    if (targetType === 'pdv' && !pdvId) return toast.error('Selecione um PDV');
+    if (targetType === 'rede' && !redeId) return toast.error('Selecione uma Rede');
     if (!promoterId) return toast.error('Selecione um promotor');
     if (!scheduleDate) return toast.error('Selecione uma data');
     if (recurrenceType !== 'once' && !recurrenceEndDate) return toast.error('Defina a data final da recorrência');
@@ -709,13 +720,17 @@ function ScheduleResearchDialog({ rule, brands, open, onClose }: { rule: any; br
         method: 'POST',
         body: {
           rule_id: rule.id, brand_id: rule.brand_id,
-          pdv_id: pdvId, promoter_id: promoterId,
+          pdv_id: targetType === 'pdv' ? pdvId : undefined,
+          rede_id: targetType === 'rede' ? redeId : undefined,
+          promoter_id: promoterId,
           scheduled_date: scheduleDate, scheduled_time: scheduleTime || null,
           recurrence_type: recurrenceType, recurrence_end_date: recurrenceEndDate || null,
         },
       });
       qc.invalidateQueries({ queryKey: ['price-research-executions'] });
-      toast.success('Pesquisa agendada!');
+      toast.success(targetType === 'rede' 
+        ? `Pesquisa agendada para ${selectedRede?.pdv_count || 0} PDVs da rede!` 
+        : 'Pesquisa agendada!');
       onClose();
     } catch (err: any) {
       toast.error(err.message || 'Erro ao agendar');
@@ -733,19 +748,49 @@ function ScheduleResearchDialog({ rule, brands, open, onClose }: { rule: any; br
               <p className="text-xs text-muted-foreground">{brandName}</p>
               <div className="flex gap-2 mt-1 text-xs flex-wrap">
                 <Badge variant="outline" className="text-[10px] h-5">{rule.selected_products?.length || 0} produtos</Badge>
-                <Badge variant="outline" className="text-[10px] h-5">{rule.selected_competitors?.length || 0} concorrentes</Badge>
+                <Badge variant="outline" className="text-[10px] h-5">
+                  {rule.competitor_config ? Object.values(rule.competitor_config as Record<string, any[]>).reduce((s: number, a: any[]) => s + (a?.length || 0), 0) : 0} concorrentes
+                </Badge>
                 {rule.block_route_completion && <Badge variant="destructive" className="text-[10px] h-5">Obrigatória</Badge>}
               </div>
             </CardContent>
           </Card>
 
+          {/* Target type: PDV or Rede */}
           <div>
-            <Label className="flex items-center gap-1"><MapPin className="h-3 w-3" />PDV *</Label>
-            <Select value={pdvId} onValueChange={setPdvId}>
-              <SelectTrigger><SelectValue placeholder="Selecione o PDV" /></SelectTrigger>
-              <SelectContent>{pdvs.map((p: any) => <SelectItem key={p.pdv_id || p.id} value={p.pdv_id || p.id}>{p.pdv_name || p.name}</SelectItem>)}</SelectContent>
-            </Select>
+            <Label className="mb-1 block">Aplicar a</Label>
+            <div className="flex gap-2">
+              <Button size="sm" variant={targetType === 'pdv' ? 'default' : 'outline'} onClick={() => setTargetType('pdv')}>
+                <MapPin className="h-3 w-3 mr-1" />PDV individual
+              </Button>
+              <Button size="sm" variant={targetType === 'rede' ? 'default' : 'outline'} onClick={() => setTargetType('rede')}>
+                <Globe className="h-3 w-3 mr-1" />Rede inteira
+              </Button>
+            </div>
           </div>
+
+          {targetType === 'pdv' ? (
+            <div>
+              <Label className="flex items-center gap-1"><MapPin className="h-3 w-3" />PDV *</Label>
+              <Select value={pdvId} onValueChange={setPdvId}>
+                <SelectTrigger><SelectValue placeholder="Selecione o PDV" /></SelectTrigger>
+                <SelectContent>{pdvs.map((p: any) => <SelectItem key={p.pdv_id || p.id} value={p.pdv_id || p.id}>{p.pdv_name || p.name}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+          ) : (
+            <div>
+              <Label className="flex items-center gap-1"><Globe className="h-3 w-3" />Rede *</Label>
+              <Select value={redeId} onValueChange={setRedeId}>
+                <SelectTrigger><SelectValue placeholder="Selecione a rede" /></SelectTrigger>
+                <SelectContent>{redes.map((r: any) => <SelectItem key={r.id} value={r.id}>{r.name} ({r.pdv_count} PDVs)</SelectItem>)}</SelectContent>
+              </Select>
+              {selectedRede && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Será criada uma pesquisa para cada um dos {selectedRede.pdv_count} PDVs desta rede.
+                </p>
+              )}
+            </div>
+          )}
 
           <div>
             <Label className="flex items-center gap-1"><User className="h-3 w-3" />Promotor *</Label>
@@ -787,6 +832,157 @@ function ScheduleResearchDialog({ rule, brands, open, onClose }: { rule: any; br
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ===== Redes Tab =====
+function RedesTab() {
+  const { data: redes = [], isLoading } = useRedes();
+  const createRede = useCreateRede();
+  const updateRede = useUpdateRede();
+  const deleteRede = useDeleteRede();
+  const [showEditor, setShowEditor] = useState(false);
+  const [editingRede, setEditingRede] = useState<any>(null);
+  const [redeName, setRedeName] = useState('');
+  const [redeDesc, setRedeDesc] = useState('');
+  const [selectedPdvIds, setSelectedPdvIds] = useState<string[]>([]);
+
+  // All PDVs
+  const { data: allPdvs = [] } = useQuery({
+    queryKey: ['all-pdvs-for-rede'],
+    queryFn: () => api<any[]>('/api/rh/pdvs'),
+  });
+
+  const openEditor = (rede?: any) => {
+    setEditingRede(rede || null);
+    setRedeName(rede?.name || '');
+    setRedeDesc(rede?.description || '');
+    setSelectedPdvIds(rede?.pdvs?.map((p: any) => p.pdv_id) || []);
+    setShowEditor(true);
+  };
+
+  const handleSave = () => {
+    if (!redeName.trim()) return toast.error('Nome obrigatório');
+    if (selectedPdvIds.length === 0) return toast.error('Selecione pelo menos um PDV');
+    const data = { name: redeName, description: redeDesc, pdv_ids: selectedPdvIds };
+    if (editingRede) {
+      updateRede.mutate({ id: editingRede.id, ...data }, {
+        onSuccess: () => { toast.success('Rede atualizada!'); setShowEditor(false); },
+      });
+    } else {
+      createRede.mutate(data, {
+        onSuccess: () => { toast.success('Rede criada!'); setShowEditor(false); },
+      });
+    }
+  };
+
+  const togglePdv = (pdvId: string) => {
+    setSelectedPdvIds(prev => prev.includes(pdvId) ? prev.filter(id => id !== pdvId) : [...prev, pdvId]);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-between items-center flex-wrap gap-2">
+        <div>
+          <p className="text-sm text-muted-foreground">Agrupe PDVs em redes para agendar pesquisas em lote.</p>
+        </div>
+        <Button onClick={() => openEditor()}>
+          <Plus className="h-4 w-4 mr-1" />Nova Rede
+        </Button>
+      </div>
+
+      <div className="grid gap-3">
+        {redes.map((rede: any) => (
+          <Card key={rede.id} className="hover:shadow-md transition-shadow">
+            <CardContent className="pt-4 pb-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Globe className="h-4 w-4 text-primary" />
+                    <h3 className="font-semibold">{rede.name}</h3>
+                    <Badge variant={rede.active ? 'default' : 'secondary'}>{rede.active ? 'Ativa' : 'Inativa'}</Badge>
+                  </div>
+                  {rede.description && <p className="text-xs text-muted-foreground mb-2">{rede.description}</p>}
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <MapPin className="h-3 w-3" />
+                    <span>{rede.pdv_count} PDV{rede.pdv_count !== 1 ? 's' : ''}</span>
+                  </div>
+                  {rede.pdvs?.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {rede.pdvs.slice(0, 5).map((p: any) => (
+                        <Badge key={p.pdv_id} variant="outline" className="text-[10px] h-5">{p.pdv_name}</Badge>
+                      ))}
+                      {rede.pdvs.length > 5 && <Badge variant="outline" className="text-[10px] h-5">+{rede.pdvs.length - 5}</Badge>}
+                    </div>
+                  )}
+                </div>
+                <div className="flex gap-1 flex-shrink-0">
+                  <Button size="icon" variant="ghost" onClick={() => openEditor(rede)}>
+                    <Edit className="h-4 w-4" />
+                  </Button>
+                  <Button size="icon" variant="ghost" onClick={() => { if (confirm('Excluir rede?')) deleteRede.mutate(rede.id); }}>
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+        {redes.length === 0 && !isLoading && (
+          <Card><CardContent className="py-12 text-center text-muted-foreground">
+            <Globe className="h-12 w-12 mx-auto mb-3 text-muted-foreground/50" />
+            Nenhuma rede criada. Clique em "Nova Rede" para agrupar PDVs.
+          </CardContent></Card>
+        )}
+      </div>
+
+      {showEditor && (
+        <Dialog open={showEditor} onOpenChange={() => setShowEditor(false)}>
+          <DialogContent className="max-w-lg max-h-[90vh]">
+            <DialogHeader><DialogTitle>{editingRede ? 'Editar Rede' : 'Nova Rede'}</DialogTitle></DialogHeader>
+            <ScrollArea className="max-h-[70vh] pr-4">
+              <div className="space-y-4">
+                <div>
+                  <Label>Nome da rede *</Label>
+                  <Input value={redeName} onChange={e => setRedeName(e.target.value)} placeholder="Ex: Rede Carrefour" />
+                </div>
+                <div>
+                  <Label>Descrição</Label>
+                  <Textarea value={redeDesc} onChange={e => setRedeDesc(e.target.value)} rows={2} placeholder="Opcional" />
+                </div>
+                <div>
+                  <Label>PDVs ({selectedPdvIds.length} selecionados)</Label>
+                  <div className="space-y-2 max-h-60 overflow-y-auto mt-2 border rounded p-2">
+                    {allPdvs.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">Nenhum PDV disponível</p>}
+                    {allPdvs.map((pdv: any) => (
+                      <label key={pdv.id} className="flex items-center gap-3 p-2 rounded hover:bg-muted/50 cursor-pointer">
+                        <Checkbox checked={selectedPdvIds.includes(pdv.id)} onCheckedChange={() => togglePdv(pdv.id)} />
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium truncate">{pdv.name}</p>
+                          <p className="text-xs text-muted-foreground">{[pdv.client_name, pdv.city, pdv.state].filter(Boolean).join(' • ')}</p>
+                        </div>
+                      </label>
+                    ))}
+                    {allPdvs.length > 0 && (
+                      <div className="flex gap-2 pt-2 border-t">
+                        <Button size="sm" variant="outline" onClick={() => setSelectedPdvIds(allPdvs.map((p: any) => p.id))}>Todos</Button>
+                        <Button size="sm" variant="outline" onClick={() => setSelectedPdvIds([])}>Limpar</Button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </ScrollArea>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowEditor(false)}>Cancelar</Button>
+              <Button onClick={handleSave} disabled={createRede.isPending || updateRede.isPending}>
+                {editingRede ? 'Salvar' : 'Criar Rede'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+    </div>
   );
 }
 
@@ -920,7 +1116,7 @@ function ExecutionDetailDialog({ id, open, onClose }: { id: string; open: boolea
   const { data: allProducts = [] } = useQuery({
     queryKey: ['merch-products-brand', brandId],
     queryFn: () => api<any[]>(`/api/merchandising/products?brand_id=${brandId}`),
-    enabled: !!brandId && editing,
+    enabled: !!brandId,
   });
   const { data: pdvs = [] } = useBrandPdvs(brandId || '');
 
@@ -1105,90 +1301,120 @@ function ExecutionDetailDialog({ id, open, onClose }: { id: string; open: boolea
                   </Card>
                 )}
 
-                {exec.items?.length > 0 ? (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Produto</TableHead>
-                        <TableHead>Preço</TableHead>
-                        <TableHead>Observação</TableHead>
-                        <TableHead>Concorrentes</TableHead>
-                        {editing && <TableHead className="w-16"></TableHead>}
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {exec.items.map((item: any) => (
-                        <TableRow key={item.id} className={editing && !editProducts.includes(item.product_id) ? 'opacity-40 line-through' : ''}>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              {item.photo_url ? (
-                                <img src={resolveMediaUrl(item.photo_url) || ''} alt="" className="h-8 w-8 rounded object-cover border" />
-                              ) : null}
-                              <span className="text-sm">{item.product_name}</span>
-                            </div>
-                          </TableCell>
-                          <TableCell className="font-mono">{item.price != null ? `R$ ${Number(item.price).toFixed(2)}` : '-'}</TableCell>
-                          <TableCell className="text-xs text-muted-foreground max-w-[150px] truncate">{item.observation || '-'}</TableCell>
-                          <TableCell>
-                            <div className="space-y-1">
-                              {item.competitors?.map((c: any, idx: number) => (
-                                <div key={idx} className="flex items-center gap-2 text-xs">
-                                  {c.photo_url && <img src={resolveMediaUrl(c.photo_url) || ''} alt="" className="h-6 w-6 rounded object-cover border" />}
-                                  <span className="text-muted-foreground">{c.competitor_brand_name}: </span>
-                                  <span className="font-mono">{c.price != null ? `R$ ${Number(c.price).toFixed(2)}` : '-'}</span>
-                                  {editing && (
-                                    <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => handleRemoveCompetitor(c.id)}>
-                                      <X className="h-3 w-3 text-destructive" />
-                                    </Button>
-                                  )}
-                                </div>
-                              ))}
-                              {(!item.competitors || item.competitors.length === 0) && <span className="text-xs text-muted-foreground">-</span>}
-                              {editing && (
-                                addingCompForItem === item.id ? (
-                                  <div className="mt-2 space-y-2 border rounded p-2 bg-muted/30">
-                                    <Input placeholder="Nome do produto concorrente" value={newCompName} onChange={e => setNewCompName(e.target.value)} className="h-8 text-xs" />
-                                    <Input placeholder="Marca concorrente" value={newCompBrand} onChange={e => setNewCompBrand(e.target.value)} className="h-8 text-xs" />
-                                    <div className="flex items-center gap-2">
-                                      {newCompPhoto ? (
-                                        <div className="relative">
-                                          <img src={resolveMediaUrl(newCompPhoto) || ''} alt="" className="h-10 w-10 rounded object-cover border" />
-                                          <button type="button" className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground rounded-full h-4 w-4 flex items-center justify-center text-[10px]" onClick={() => setNewCompPhoto('')}>×</button>
-                                        </div>
-                                      ) : (
-                                        <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => newCompFileRef.current?.click()}>
-                                          <Camera className="h-3 w-3 mr-1" />Foto
-                                        </Button>
-                                      )}
-                                      <input ref={newCompFileRef} type="file" accept="image/*" className="hidden" onChange={e => { if (e.target.files?.[0]) uploadCompPhoto(e.target.files[0]); }} />
-                                    </div>
-                                    <div className="flex gap-2">
-                                      <Button size="sm" className="h-7 text-xs" onClick={() => handleAddCompetitor(item.id)}>Adicionar</Button>
-                                      <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setAddingCompForItem(null)}>Cancelar</Button>
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <Button size="sm" variant="ghost" className="h-6 text-xs mt-1" onClick={() => setAddingCompForItem(item.id)}>
-                                    <Plus className="h-3 w-3 mr-1" />Concorrente
-                                  </Button>
-                                )
-                              )}
-                            </div>
-                          </TableCell>
-                          {editing && (
+                {/* Build display items: existing items + newly added products */}
+                {(() => {
+                  const existingItems = exec.items || [];
+                  const existingProductIds = existingItems.map((i: any) => i.product_id);
+                  const newProductIds = editing ? editProducts.filter(pid => !existingProductIds.includes(pid)) : [];
+                  const newItems = newProductIds.map(pid => {
+                    const prod = allProducts.find((p: any) => p.id === pid);
+                    return { id: `new-${pid}`, product_id: pid, product_name: prod?.name || 'Produto', photo_url: prod?.photo_url, price: null, observation: null, competitors: [], isNew: true };
+                  });
+                  const displayItems = [
+                    ...existingItems.filter((item: any) => !editing || editProducts.includes(item.product_id)),
+                    ...newItems,
+                  ];
+                  const removedItems = editing ? existingItems.filter((item: any) => !editProducts.includes(item.product_id)) : [];
+
+                  return displayItems.length > 0 || removedItems.length > 0 ? (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Produto</TableHead>
+                          <TableHead>Preço</TableHead>
+                          <TableHead>Observação</TableHead>
+                          <TableHead>Concorrentes</TableHead>
+                          {editing && <TableHead className="w-16"></TableHead>}
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {displayItems.map((item: any) => (
+                          <TableRow key={item.id} className={item.isNew ? 'bg-primary/5' : ''}>
                             <TableCell>
-                              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleRemoveProduct(item.product_id)}>
-                                <Trash2 className="h-3 w-3 text-destructive" />
+                              <div className="flex items-center gap-2">
+                                {item.photo_url ? (
+                                  <img src={resolveMediaUrl(item.photo_url) || ''} alt="" className="h-8 w-8 rounded object-cover border" />
+                                ) : null}
+                                <span className="text-sm">{item.product_name}</span>
+                                {item.isNew && <Badge variant="outline" className="text-[10px] h-4">Novo</Badge>}
+                              </div>
+                            </TableCell>
+                            <TableCell className="font-mono">{item.price != null ? `R$ ${Number(item.price).toFixed(2)}` : '-'}</TableCell>
+                            <TableCell className="text-xs text-muted-foreground max-w-[150px] truncate">{item.observation || '-'}</TableCell>
+                            <TableCell>
+                              <div className="space-y-1">
+                                {item.competitors?.map((c: any, idx: number) => (
+                                  <div key={idx} className="flex items-center gap-2 text-xs">
+                                    {c.photo_url && <img src={resolveMediaUrl(c.photo_url) || ''} alt="" className="h-6 w-6 rounded object-cover border" />}
+                                    <span className="text-muted-foreground">{c.competitor_product_name || c.competitor_brand_name}: </span>
+                                    <span className="font-mono">{c.price != null ? `R$ ${Number(c.price).toFixed(2)}` : '-'}</span>
+                                    {editing && !item.isNew && (
+                                      <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => handleRemoveCompetitor(c.id)}>
+                                        <X className="h-3 w-3 text-destructive" />
+                                      </Button>
+                                    )}
+                                  </div>
+                                ))}
+                                {(!item.competitors || item.competitors.length === 0) && <span className="text-xs text-muted-foreground">-</span>}
+                                {editing && !item.isNew && (
+                                  addingCompForItem === item.id ? (
+                                    <div className="mt-2 space-y-2 border rounded p-2 bg-muted/30">
+                                      <Input placeholder="Nome do produto concorrente" value={newCompName} onChange={e => setNewCompName(e.target.value)} className="h-8 text-xs" />
+                                      <Input placeholder="Marca concorrente" value={newCompBrand} onChange={e => setNewCompBrand(e.target.value)} className="h-8 text-xs" />
+                                      <div className="flex items-center gap-2">
+                                        {newCompPhoto ? (
+                                          <div className="relative">
+                                            <img src={resolveMediaUrl(newCompPhoto) || ''} alt="" className="h-10 w-10 rounded object-cover border" />
+                                            <button type="button" className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground rounded-full h-4 w-4 flex items-center justify-center text-[10px]" onClick={() => setNewCompPhoto('')}>×</button>
+                                          </div>
+                                        ) : (
+                                          <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => newCompFileRef.current?.click()}>
+                                            <Camera className="h-3 w-3 mr-1" />Foto
+                                          </Button>
+                                        )}
+                                        <input ref={newCompFileRef} type="file" accept="image/*" className="hidden" onChange={e => { if (e.target.files?.[0]) uploadCompPhoto(e.target.files[0]); }} />
+                                      </div>
+                                      <div className="flex gap-2">
+                                        <Button size="sm" className="h-7 text-xs" onClick={() => handleAddCompetitor(item.id)}>Adicionar</Button>
+                                        <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setAddingCompForItem(null)}>Cancelar</Button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <Button size="sm" variant="ghost" className="h-6 text-xs mt-1" onClick={() => setAddingCompForItem(item.id)}>
+                                      <Plus className="h-3 w-3 mr-1" />Concorrente
+                                    </Button>
+                                  )
+                                )}
+                              </div>
+                            </TableCell>
+                            {editing && (
+                              <TableCell>
+                                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleRemoveProduct(item.product_id)}>
+                                  <Trash2 className="h-3 w-3 text-destructive" />
+                                </Button>
+                              </TableCell>
+                            )}
+                          </TableRow>
+                        ))}
+                        {removedItems.map((item: any) => (
+                          <TableRow key={item.id} className="opacity-40 line-through">
+                            <TableCell><span className="text-sm">{item.product_name}</span></TableCell>
+                            <TableCell className="font-mono">{item.price != null ? `R$ ${Number(item.price).toFixed(2)}` : '-'}</TableCell>
+                            <TableCell>-</TableCell>
+                            <TableCell>-</TableCell>
+                            <TableCell>
+                              <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={() => setEditProducts(prev => [...prev, item.product_id])}>
+                                Restaurar
                               </Button>
                             </TableCell>
-                          )}
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                ) : (
-                  <p className="text-sm text-muted-foreground text-center py-4">Nenhum produto registrado.</p>
-                )}
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  ) : (
+                    <p className="text-sm text-muted-foreground text-center py-4">Nenhum produto registrado.</p>
+                  );
+                })()}
               </div>
 
               {exec.photos?.length > 0 && (

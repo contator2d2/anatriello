@@ -112,6 +112,16 @@ async function ensureTables() {
     week_end DATE NOT NULL, preferred_date DATE, status VARCHAR(30) DEFAULT 'pending',
     is_last_route_of_week BOOLEAN DEFAULT false, is_mandatory BOOLEAN DEFAULT false,
     completed_at TIMESTAMPTZ, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW())`);
+
+  // Redes (Networks / Chains)
+  await query(`CREATE TABLE IF NOT EXISTS merch_redes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL,
+    name VARCHAR(255) NOT NULL, description TEXT, active BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW())`);
+
+  await query(`CREATE TABLE IF NOT EXISTS merch_rede_pdvs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(), rede_id UUID NOT NULL, pdv_id UUID NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(), UNIQUE(rede_id, pdv_id))`);
 }
 
 // ===== ADMIN: Rules / Templates =====
@@ -366,7 +376,7 @@ router.get('/executions/:id', authenticate, async (req, res) => {
     const items = (await query(`SELECT i.*, ${productCols} FROM price_research_items i
       LEFT JOIN products p ON p.id = i.product_id WHERE i.execution_id = $1 ORDER BY p.name`, [exec.id])).rows;
     for (const item of items) {
-      item.competitors = (await query(`SELECT ic.*, cp.photo_url FROM price_research_item_competitors ic
+      item.competitors = (await query(`SELECT ic.*, COALESCE(ic.photo_url, cp.photo_url) as photo_url FROM price_research_item_competitors ic
         LEFT JOIN price_research_competitor_products cp ON cp.id = ic.competitor_product_id
         WHERE ic.item_id = $1 ORDER BY ic.competitor_brand_name`, [item.id])).rows;
     }
@@ -439,13 +449,26 @@ router.post('/schedule', authenticate, async (req, res) => {
     await ensureTables();
     const orgId = await getOrgId(req.userId);
     if (!orgId) return res.status(403).json({ error: 'Sem organização' });
-    const { rule_id, brand_id, pdv_id, promoter_id, scheduled_date, scheduled_time, recurrence_type, recurrence_end_date } = req.body;
-    if (!rule_id || !brand_id || !pdv_id || !promoter_id || !scheduled_date) {
-      return res.status(400).json({ error: 'Campos obrigatórios: rule_id, brand_id, pdv_id, promoter_id, scheduled_date' });
+    const { rule_id, brand_id, pdv_id, pdv_ids, rede_id, promoter_id, scheduled_date, scheduled_time, recurrence_type, recurrence_end_date } = req.body;
+    if (!rule_id || !brand_id || !promoter_id || !scheduled_date) {
+      return res.status(400).json({ error: 'Campos obrigatórios: rule_id, brand_id, promoter_id, scheduled_date' });
+    }
+
+    // Resolve PDV list
+    let targetPdvIds = [];
+    if (rede_id) {
+      const redePdvs = (await query('SELECT pdv_id FROM merch_rede_pdvs WHERE rede_id=$1', [rede_id])).rows;
+      targetPdvIds = redePdvs.map(r => r.pdv_id);
+    } else if (pdv_ids && Array.isArray(pdv_ids) && pdv_ids.length > 0) {
+      targetPdvIds = pdv_ids;
+    } else if (pdv_id) {
+      targetPdvIds = [pdv_id];
+    }
+    if (targetPdvIds.length === 0) {
+      return res.status(400).json({ error: 'Selecione pelo menos um PDV ou Rede' });
     }
 
     const dates = [scheduled_date];
-    // Generate recurring dates
     if (recurrence_type && recurrence_type !== 'once' && recurrence_end_date) {
       const start = new Date(scheduled_date);
       const end = new Date(recurrence_end_date);
@@ -458,48 +481,45 @@ router.post('/schedule', authenticate, async (req, res) => {
       }
     }
 
-    // Load model config to copy products and competitors
     const ruleRow = (await query('SELECT selected_products, competitor_config FROM price_research_rules WHERE id=$1', [rule_id])).rows[0];
     const selectedProducts = ruleRow?.selected_products || [];
     const competitorConfig = ruleRow?.competitor_config || {};
 
     const results = [];
-    for (const date of dates) {
-      const result = await query(
-        `INSERT INTO price_research_executions (organization_id, rule_id, brand_id, pdv_id, promoter_id, scheduled_date, scheduled_time, recurrence_type, recurrence_end_date, status)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'scheduled') RETURNING *`,
-        [orgId, rule_id, brand_id, pdv_id, promoter_id, date, scheduled_time || null, recurrence_type || 'once', recurrence_end_date || null]
-      );
-      const exec = result.rows[0];
-
-      // Copy products from model into execution items
-      let totalItems = 0;
-      for (const pid of selectedProducts) {
-        const itemResult = await query(
-          'INSERT INTO price_research_items (execution_id, product_id) VALUES ($1,$2) RETURNING id',
-          [exec.id, pid]
+    for (const targetPdv of targetPdvIds) {
+      for (const date of dates) {
+        const result = await query(
+          `INSERT INTO price_research_executions (organization_id, rule_id, brand_id, pdv_id, promoter_id, scheduled_date, scheduled_time, recurrence_type, recurrence_end_date, status)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'scheduled') RETURNING *`,
+          [orgId, rule_id, brand_id, targetPdv, promoter_id, date, scheduled_time || null, recurrence_type || 'once', recurrence_end_date || null]
         );
-        totalItems++;
-        const itemId = itemResult.rows[0].id;
-        // Copy competitors for this product from model config
-        const comps = competitorConfig[pid] || [];
-        for (const comp of comps) {
-          await query(
-            `INSERT INTO price_research_item_competitors (item_id, competitor_product_name, competitor_brand_name, photo_url)
-             VALUES ($1,$2,$3,$4)`,
-            [itemId, comp.name, comp.brand, comp.photo_url || null]
-          );
-        }
-      }
-      // Update total_items count
-      if (totalItems > 0) {
-        await query('UPDATE price_research_executions SET total_items=$1 WHERE id=$2', [totalItems, exec.id]);
-        exec.total_items = totalItems;
-      }
+        const exec = result.rows[0];
 
-      results.push(exec);
+        let totalItems = 0;
+        for (const pid of selectedProducts) {
+          const itemResult = await query(
+            'INSERT INTO price_research_items (execution_id, product_id) VALUES ($1,$2) RETURNING id',
+            [exec.id, pid]
+          );
+          totalItems++;
+          const itemId = itemResult.rows[0].id;
+          const comps = competitorConfig[pid] || [];
+          for (const comp of comps) {
+            await query(
+              `INSERT INTO price_research_item_competitors (item_id, competitor_product_name, competitor_brand_name, photo_url)
+               VALUES ($1,$2,$3,$4)`,
+              [itemId, comp.name, comp.brand, comp.photo_url || null]
+            );
+          }
+        }
+        if (totalItems > 0) {
+          await query('UPDATE price_research_executions SET total_items=$1 WHERE id=$2', [totalItems, exec.id]);
+          exec.total_items = totalItems;
+        }
+        results.push(exec);
+      }
     }
-    logInfo('price-research.schedule', `Scheduled ${results.length} research(es) rule=${rule_id} pdv=${pdv_id}`);
+    logInfo('price-research.schedule', `Scheduled ${results.length} research(es) rule=${rule_id} pdvs=${targetPdvIds.length}`);
     res.json(results.length === 1 ? results[0] : results);
   } catch (err) { logError('price-research.schedule', err); res.status(500).json({ error: 'Erro ao agendar pesquisa' }); }
 });
@@ -837,6 +857,67 @@ router.get('/history', authenticate, async (req, res) => {
     sql += ` ORDER BY e.created_at DESC LIMIT ${parseInt(lim) || 100}`;
     res.json((await query(sql, params)).rows);
   } catch (err) { logError('price-research.history', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// ===== Redes (Networks) CRUD =====
+router.get('/redes', authenticate, async (req, res) => {
+  try {
+    await ensureTables();
+    const orgId = await getOrgId(req.userId);
+    if (!orgId) return res.status(403).json({ error: 'Sem organização' });
+    const redes = (await query(`SELECT r.*, 
+      (SELECT COUNT(*) FROM merch_rede_pdvs rp WHERE rp.rede_id = r.id) as pdv_count
+      FROM merch_redes r WHERE r.organization_id = $1 ORDER BY r.name`, [orgId])).rows;
+    // Get PDVs for each rede
+    for (const rede of redes) {
+      rede.pdvs = (await query(`SELECT rp.pdv_id, p.name as pdv_name, p.client_name, p.city, p.state
+        FROM merch_rede_pdvs rp LEFT JOIN pdvs p ON p.id = rp.pdv_id
+        WHERE rp.rede_id = $1 ORDER BY p.name`, [rede.id])).rows;
+    }
+    res.json(redes);
+  } catch (err) { logError('price-research.redes.list', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.post('/redes', authenticate, async (req, res) => {
+  try {
+    await ensureTables();
+    const orgId = await getOrgId(req.userId);
+    if (!orgId) return res.status(403).json({ error: 'Sem organização' });
+    const { name, description, pdv_ids } = req.body;
+    if (!name) return res.status(400).json({ error: 'Nome obrigatório' });
+    const result = await query('INSERT INTO merch_redes (organization_id, name, description) VALUES ($1,$2,$3) RETURNING *', [orgId, name, description || null]);
+    const rede = result.rows[0];
+    if (pdv_ids && Array.isArray(pdv_ids)) {
+      for (const pdvId of pdv_ids) {
+        await query('INSERT INTO merch_rede_pdvs (rede_id, pdv_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [rede.id, pdvId]);
+      }
+    }
+    rede.pdv_count = pdv_ids?.length || 0;
+    res.json(rede);
+  } catch (err) { logError('price-research.redes.create', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.put('/redes/:id', authenticate, async (req, res) => {
+  try {
+    const { name, description, active, pdv_ids } = req.body;
+    await query('UPDATE merch_redes SET name=COALESCE($1,name), description=COALESCE($2,description), active=COALESCE($3,active), updated_at=NOW() WHERE id=$4',
+      [name, description, active, req.params.id]);
+    if (pdv_ids && Array.isArray(pdv_ids)) {
+      await query('DELETE FROM merch_rede_pdvs WHERE rede_id=$1', [req.params.id]);
+      for (const pdvId of pdv_ids) {
+        await query('INSERT INTO merch_rede_pdvs (rede_id, pdv_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [req.params.id, pdvId]);
+      }
+    }
+    res.json({ ok: true });
+  } catch (err) { logError('price-research.redes.update', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.delete('/redes/:id', authenticate, async (req, res) => {
+  try {
+    await query('DELETE FROM merch_rede_pdvs WHERE rede_id=$1', [req.params.id]);
+    await query('DELETE FROM merch_redes WHERE id=$1', [req.params.id]);
+    res.json({ ok: true });
+  } catch (err) { logError('price-research.redes.delete', err); res.status(500).json({ error: 'Erro' }); }
 });
 
 export default router;
