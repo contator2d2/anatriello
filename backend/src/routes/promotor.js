@@ -1367,4 +1367,69 @@ router.get('/rh/trackable-employees', async (req, res) => {
   }
 });
 
+// Get facial recognition config for current promotor (used by app to decide if facial verification is required)
+router.get('/facial-config', authenticatePromotor, async (req, res) => {
+  try {
+    const empId = req.promotor.employee_id;
+    const orgId = req.promotor.organization_id;
+
+    // Check if facial recognition is enabled for this org
+    let enabled = false;
+    let useForAttendance = false;
+    let useForCheckin = false;
+    let minConfidence = 70;
+    try {
+      const { rows: cfgRows } = await query(
+        `SELECT enabled, use_for_attendance, use_for_checkin, min_confidence FROM facial_recognition_config WHERE organization_id = $1`,
+        [orgId]
+      );
+      if (cfgRows.length) {
+        enabled = cfgRows[0].enabled;
+        useForAttendance = cfgRows[0].use_for_attendance;
+        useForCheckin = cfgRows[0].use_for_checkin;
+        minConfidence = parseFloat(cfgRows[0].min_confidence) || 70;
+      }
+    } catch {
+      // table may not exist
+    }
+
+    if (!enabled) {
+      return res.json({ enabled: false });
+    }
+
+    // Get employee's face descriptor
+    let descriptor = null;
+    let photoUrl = null;
+    let hasEnrollment = false;
+    try {
+      const { rows: empRows } = await query(
+        `SELECT face_descriptor, face_photo_url FROM employees WHERE id = $1`,
+        [empId]
+      );
+      if (empRows.length && empRows[0].face_descriptor) {
+        descriptor = typeof empRows[0].face_descriptor === 'string'
+          ? JSON.parse(empRows[0].face_descriptor)
+          : empRows[0].face_descriptor;
+        photoUrl = empRows[0].face_photo_url;
+        hasEnrollment = true;
+      }
+    } catch {
+      // columns may not exist
+    }
+
+    res.json({
+      enabled,
+      use_for_attendance: useForAttendance,
+      use_for_checkin: useForCheckin,
+      min_confidence: minConfidence,
+      has_enrollment: hasEnrollment,
+      descriptor,
+      photo_url: photoUrl,
+    });
+  } catch (err) {
+    logError('promotor.facial-config', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;
