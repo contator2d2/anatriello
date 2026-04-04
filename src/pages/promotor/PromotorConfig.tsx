@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { usePromotorSettings, usePromotorUpdateSettings, usePromotorChangePassword } from "@/hooks/use-promotor";
 import { PromotorLayout } from "./PromotorLayout";
 import { SyncDiagnosticPanel } from "@/components/promotor/SyncDiagnosticPanel";
-import { Settings, Lock, Palette, Wifi, WifiOff, Navigation, Smartphone, Loader2, Download } from "lucide-react";
+import { Settings, Lock, Palette, Wifi, WifiOff, Navigation, Smartphone, Loader2, Download, RefreshCw } from "lucide-react";
 import { canInstallPWA, installPWA, isPWAInstalled } from "@/lib/pwa";
 
 export default function PromotorConfig() {
