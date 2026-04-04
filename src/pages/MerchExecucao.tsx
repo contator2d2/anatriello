@@ -273,15 +273,51 @@ export default function MerchExecucao() {
                   </div>
                   <div>
                     <div className="text-[10px] text-muted-foreground">Marca</div>
-                    <div className="font-medium">{viewRoute.brand_name}</div>
+                    <div className="font-medium">
+                      {viewRoute.is_multi_brand
+                        ? `🏷️ ${viewRoute.route_brands?.length || 0} marcas`
+                        : viewRoute.brand_name}
+                    </div>
                   </div>
-                  {viewRoute.checklist_name && (
+                  {!viewRoute.is_multi_brand && viewRoute.checklist_name && (
                     <div className="col-span-2">
                       <div className="text-[10px] text-muted-foreground">Checklist</div>
                       <div className="font-medium">{viewRoute.checklist_name}</div>
                     </div>
                   )}
                 </div>
+
+                {/* Multi-brand detailed view */}
+                {viewRoute.is_multi_brand && viewRoute.route_brands?.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="text-xs font-semibold text-muted-foreground">Progresso por Marca</div>
+                    {viewRoute.route_brands.map((rb: any) => (
+                      <Card key={rb.brand_id} className={`${rb.status === 'completed' ? 'border-green-500/30 bg-green-500/5' : rb.status === 'in_progress' ? 'border-orange-500/30 bg-orange-500/5' : 'border-border'}`}>
+                        <CardContent className="p-3 space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium">{rb.brand_name}</span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-mono font-bold">{Math.round(rb.progress_pct || 0)}%</span>
+                              <Badge variant="outline" className="text-[9px]">
+                                {rb.status === 'completed' ? '✅ Concluída' : rb.status === 'in_progress' ? '🔄 Em Andamento' : '⏳ Pendente'}
+                              </Badge>
+                            </div>
+                          </div>
+                          <Progress value={rb.progress_pct || 0} className="h-1.5" />
+                          {rb.checklist_name && (
+                            <div className="text-[10px] text-muted-foreground">Checklist: {rb.checklist_name}</div>
+                          )}
+                          {rb.started_at && (
+                            <div className="text-[10px] text-muted-foreground">
+                              Início: {new Date(rb.started_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                              {rb.completed_at && ` • Fim: ${new Date(rb.completed_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`}
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
 
                 {/* Execution progress */}
                 {(viewRoute.status === 'in_progress' || viewRoute.status === 'completed') && (
