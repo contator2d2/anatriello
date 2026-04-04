@@ -432,6 +432,25 @@ export default function PromotorRota() {
   const [selectedExtraProducts, setSelectedExtraProducts] = useState<string[]>([]);
   const [showExtraPointCategoryPicker, setShowExtraPointCategoryPicker] = useState(false);
   const [extraGroupPhotos, setExtraGroupPhotos] = useState<Record<string, boolean>>({});
+  const [showFaceVerify, setShowFaceVerify] = useState(false);
+  const [faceVerifyAction, setFaceVerifyAction] = useState<'checkin' | 'checkout' | 'pdv_checkout' | null>(null);
+
+  // Facial config
+  const promotorToken = localStorage.getItem('promotor_token');
+  const { data: facialConfig } = useQuery({
+    queryKey: ['promotor-facial-config'],
+    queryFn: async () => {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (promotorToken) headers['Authorization'] = `Bearer ${promotorToken}`;
+      const url = `${(import.meta.env.VITE_API_URL || '').replace(/\/$/, '')}/api/promotor/facial-config`;
+      const res = await fetch(url, { headers });
+      if (!res.ok) return null;
+      return res.json();
+    },
+    retry: false,
+    staleTime: 300000,
+  });
+  const isFacialActiveCheckin = facialConfig?.enabled && facialConfig?.use_for_checkin && facialConfig?.has_enrollment;
 
   // Build category status map
   const categoryStatusMap = useMemo(() => {
