@@ -77,7 +77,7 @@ export function OvertimeRequestsPanel({ statusFilter = 'pendente', compact = fal
           <div className="flex items-start justify-between">
             <div>
               <p className="text-sm font-medium">{ot.employee_name}</p>
-              <p className="text-xs text-muted-foreground">{ot.position} • Jornada: {ot.work_schedule || '—'}</p>
+              <p className="text-xs text-muted-foreground">{ot.position} • Jornada: {formatWorkSchedule(ot.work_schedule)}</p>
             </div>
             <div className="flex items-center gap-2">
               <Badge variant={ot.status === 'aprovado' ? 'default' : ot.status === 'recusado' ? 'destructive' : 'secondary'} className="text-[10px]">
