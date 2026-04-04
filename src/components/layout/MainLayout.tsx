@@ -26,8 +26,9 @@ export function MainLayout({ children }: MainLayoutProps) {
       </div>
       
       {/* Desktop: margin-left for collapsed sidebar + top bar, Mobile/Tablet: no margin */}
-      <main className="xl:ml-16 pt-14 xl:pt-12 overflow-x-hidden w-full xl:w-[calc(100vw-4rem)] box-border">
-        <div className="p-2 xl:p-3 2xl:p-4 w-full min-w-0 overflow-x-hidden">{children}</div>
+      <main className="xl:ml-16 pt-14 xl:pt-12 overflow-x-hidden w-full xl:w-[calc(100vw-4rem)] box-border"
+        style={{ paddingTop: 'max(3.5rem, calc(env(safe-area-inset-top, 0px) + 3.5rem))' }}>
+        <div className="p-2 xl:p-3 2xl:p-4 w-full min-w-0 overflow-x-hidden" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>{children}</div>
       </main>
       <GroupSecretaryPopup />
     </div>
