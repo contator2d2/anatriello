@@ -409,6 +409,7 @@ export default function PromotorRota() {
   const pdvCheckout = usePromotorPdvCheckout();
   const registerExtraPoint = usePromotorRegisterExtraPoint();
   const [photoQualityConfig, setPhotoQualityConfig] = useState<PhotoQualityConfig | undefined>();
+  const [activeBrandId, setActiveBrandId] = useState<string | null>(null);
 
   // Load photo quality config
   useEffect(() => {
@@ -452,21 +453,51 @@ export default function PromotorRota() {
   });
   const isFacialActiveCheckin = facialConfig?.enabled && facialConfig?.use_for_checkin && facialConfig?.has_enrollment;
 
-  // Build category status map
+  // Multi-brand support
+  const isMultiBrand = route?.is_multi_brand && route?.route_brands?.length > 1;
+  const routeBrands = route?.route_brands || [];
+  const currentBrand = isMultiBrand
+    ? routeBrands.find((rb: any) => rb.brand_id === activeBrandId)
+    : null;
+
+  // Auto-select first brand for non-multi-brand routes
+  useEffect(() => {
+    if (route && !isMultiBrand && !activeBrandId) {
+      setActiveBrandId(route.brand_id);
+    }
+  }, [route, isMultiBrand, activeBrandId]);
+
+  // Build category status map - filter by active brand if multi-brand
   const categoryStatusMap = useMemo(() => {
     const map: Record<string, any> = {};
     (route?.category_statuses || []).forEach((cs: any) => {
+      // If multi-brand, only show categories for active brand
+      if (isMultiBrand && activeBrandId && cs.route_brand_id) {
+        const rb = routeBrands.find((b: any) => b.id === cs.route_brand_id);
+        if (rb?.brand_id !== activeBrandId) return;
+      }
       map[cs.category_id] = cs;
     });
     return map;
-  }, [route?.category_statuses]);
+  }, [route?.category_statuses, isMultiBrand, activeBrandId, routeBrands]);
+
+  // Filter executions by active brand
+  const filteredExecs = useMemo(() => {
+    if (!route?.executions) return [];
+    if (!isMultiBrand || !activeBrandId) return route.executions;
+    return route.executions.filter((e: any) => {
+      if (e.route_brand_id) {
+        const rb = routeBrands.find((b: any) => b.id === e.route_brand_id);
+        return rb?.brand_id === activeBrandId;
+      }
+      return e.brand_id === activeBrandId;
+    });
+  }, [route?.executions, isMultiBrand, activeBrandId, routeBrands]);
 
   const groupedExecs = useMemo(() => {
-    if (!route?.executions) return {};
     const groups: Record<string, { catId: string; execs: any[]; isExtraGroup?: boolean }> = {};
-    route.executions.forEach((e: any) => {
+    filteredExecs.forEach((e: any) => {
       const baseCat = e.category_name || 'Sem Categoria';
-      // Separate extra-point products into their own group
       if (e.exposure_point === 'extra') {
         const extraKey = `${baseCat} (Ponto Extra)`;
         if (!groups[extraKey]) groups[extraKey] = { catId: e.category_id, execs: [], isExtraGroup: true };
@@ -477,7 +508,7 @@ export default function PromotorRota() {
       }
     });
     return groups;
-  }, [route?.executions]);
+  }, [filteredExecs]);
 
   const handleCheckin = useCallback(async () => {
     if (!id) return;
@@ -485,7 +516,6 @@ export default function PromotorRota() {
       toast.error('Esta rota exige foto obrigatória no check-in');
       return;
     }
-    // Require facial verification if active
     if (isFacialActiveCheckin && faceVerifyAction !== 'checkin') {
       setFaceVerifyAction('checkin');
       setShowFaceVerify(true);
@@ -514,7 +544,6 @@ export default function PromotorRota() {
 
   const handleCompleteRoute = useCallback(() => {
     if (!id) return;
-    // Require facial verification if active
     if (isFacialActiveCheckin && faceVerifyAction !== 'checkout') {
       setFaceVerifyAction('checkout');
       setShowFaceVerify(true);
@@ -539,7 +568,6 @@ export default function PromotorRota() {
 
   const handlePdvCheckout = useCallback(async () => {
     if (!route?.pdv_id) return;
-    // Require facial verification if active
     if (isFacialActiveCheckin && faceVerifyAction !== 'pdv_checkout') {
       setFaceVerifyAction('pdv_checkout');
       setShowFaceVerify(true);
@@ -567,7 +595,6 @@ export default function PromotorRota() {
 
   const handleOpenProduct = useCallback((exec: any) => {
     const catStatus = categoryStatusMap[exec.category_id];
-    // Block if category is not unlocked (including when catStatus is undefined)
     if (!catStatus?.products_unlocked) {
       toast.error('Finalize a etapa de preparação da categoria antes de executar produtos.');
       return;
@@ -577,14 +604,15 @@ export default function PromotorRota() {
     setActiveAction(null);
   }, [categoryStatusMap]);
 
-  // handleSubmitAction removed - logic inlined in dialogs
-
   if (isLoading) return <PromotorLayout><div className="flex items-center justify-center h-64"><div className="animate-spin h-8 w-8 border-2 border-primary border-t-transparent rounded-full" /></div></PromotorLayout>;
   if (!route) return <PromotorLayout><div className="text-center py-12 text-muted-foreground">Rota não encontrada</div></PromotorLayout>;
 
   const needsCheckin = route.status === 'scheduled' || route.status === 'confirmed';
   const isActive = route.status === 'in_progress';
   const isCompleted = route.status === 'completed';
+
+  // Multi-brand: show brand selection screen after check-in
+  const showBrandSelector = isMultiBrand && isActive && !activeBrandId;
 
   return (
     <PromotorLayout>
@@ -595,8 +623,15 @@ export default function PromotorRota() {
             <div className="flex items-start justify-between mb-2">
               <div>
                 <h2 className="font-bold text-lg">{route.pdv_name}</h2>
-                <p className="text-sm text-muted-foreground">{route.brand_name}</p>
-                {route.checklist_name && <p className="text-xs text-muted-foreground mt-1">Checklist: {route.checklist_name}</p>}
+                {isMultiBrand ? (
+                  <div className="flex items-center gap-2 mt-1">
+                    <Badge className="bg-primary/20 text-primary text-[10px]">🏷️ Multi-marca</Badge>
+                    <span className="text-xs text-muted-foreground">{routeBrands.length} marcas</span>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">{route.brand_name}</p>
+                )}
+                {!isMultiBrand && route.checklist_name && <p className="text-xs text-muted-foreground mt-1">Checklist: {route.checklist_name}</p>}
               </div>
               <Badge className={route.status === 'in_progress' ? 'bg-orange-500/20 text-orange-700' : route.status === 'completed' ? 'bg-green-500/20 text-green-700' : 'bg-blue-500/20 text-blue-700'}>
                 {route.status === 'in_progress' ? 'Em Andamento' : route.status === 'completed' ? 'Concluída' : 'Agendada'}
@@ -609,7 +644,7 @@ export default function PromotorRota() {
             {isActive && (
               <div className="mt-3">
                 <div className="flex justify-between text-xs mb-1">
-                  <span>Progresso</span>
+                  <span>Progresso Geral</span>
                   <span className="font-mono font-bold">{Math.round(route.progress_pct || 0)}%</span>
                 </div>
                 <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
@@ -619,6 +654,120 @@ export default function PromotorRota() {
             )}
           </CardContent>
         </Card>
+
+        {/* Multi-brand progress overview (always visible when multi-brand & active) */}
+        {isMultiBrand && isActive && (
+          <div className="space-y-1.5">
+            {routeBrands.map((rb: any) => {
+              const isSelected = activeBrandId === rb.brand_id;
+              return (
+                <Card key={rb.brand_id}
+                  className={`cursor-pointer transition-all ${isSelected ? 'border-primary ring-1 ring-primary/30' : 'hover:border-primary/40'} ${rb.status === 'completed' ? 'bg-green-500/5' : ''}`}
+                  onClick={() => setActiveBrandId(rb.brand_id)}>
+                  <CardContent className="p-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        {rb.status === 'completed' ? (
+                          <CheckCircle2 className="h-5 w-5 text-green-500" />
+                        ) : rb.status === 'in_progress' ? (
+                          <Clock className="h-5 w-5 text-orange-500" />
+                        ) : (
+                          <Circle className="h-5 w-5 text-muted-foreground" />
+                        )}
+                        <div>
+                          <div className="text-sm font-semibold">{rb.brand_name}</div>
+                          {rb.checklist_name && <div className="text-[10px] text-muted-foreground">{rb.checklist_name}</div>}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-mono font-bold">{Math.round(rb.progress_pct || 0)}%</span>
+                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                    </div>
+                    <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden mt-2">
+                      <div className={`h-full rounded-full transition-all ${rb.status === 'completed' ? 'bg-green-500' : 'bg-primary'}`}
+                        style={{ width: `${rb.progress_pct || 0}%` }} />
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Brand selector prompt */}
+        {showBrandSelector && (
+          <Card className="border-primary/30 bg-primary/5">
+            <CardContent className="p-4 text-center">
+              <Store className="h-8 w-8 mx-auto text-primary mb-2" />
+              <p className="text-sm font-medium mb-1">Selecione uma marca para iniciar</p>
+              <p className="text-[10px] text-muted-foreground mb-3">
+                Escolha por qual marca deseja começar. Você poderá alternar entre elas a qualquer momento.
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Active brand indicator */}
+        {isMultiBrand && activeBrandId && isActive && (
+          <div className="flex items-center justify-between p-2 rounded-lg bg-primary/10 border border-primary/20">
+            <div className="flex items-center gap-2 text-sm">
+              <Package className="h-4 w-4 text-primary" />
+              <span className="font-medium">{currentBrand?.brand_name || 'Marca'}</span>
+            </div>
+            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setActiveBrandId(null)}>
+              Trocar marca
+            </Button>
+          </div>
+        )}
+
+        {/* Check-in photo requirement */}
+        {needsCheckin && route.require_checkin_photo && (
+          <Card className="border-primary/30">
+            <CardContent className="p-4 space-y-3">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Camera className="h-4 w-4 text-primary" />
+                Foto obrigatória para check-in
+              </div>
+              {checkinPhotoUrl ? (
+                <div className="space-y-2">
+                  <img src={checkinPhotoUrl} alt="Check-in" className="w-full rounded-lg border max-h-48 object-cover" />
+                  <Button variant="outline" size="sm" onClick={() => setCheckinPhotoUrl('')}>Tirar outra foto</Button>
+                </div>
+              ) : (
+                <CameraCapture
+                  onCapture={setCheckinPhotoUrl}
+                  watermark={{ pdvName: route.pdv_name, brandName: route.brand_name, photoType: 'Check-in' }}
+                  customTokenGetter={() => localStorage.getItem('promotor_token')}
+                  buttonLabel="Tirar foto de check-in"
+                  qualityConfig={photoQualityConfig}
+                />
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {needsCheckin && isFacialActiveCheckin && (
+          <div className="flex items-center gap-2 px-3 py-2 bg-primary/10 rounded-lg text-xs text-primary">
+            <ScanFace className="h-4 w-4" />
+            <span className="font-medium">Verificação facial obrigatória para check-in</span>
+          </div>
+        )}
+
+        {needsCheckin && (
+          <Button className="w-full h-14 text-lg" onClick={handleCheckin} disabled={checkin.isPending || (route.require_checkin_photo && !checkinPhotoUrl)}>
+            {isFacialActiveCheckin ? <ScanFace className="h-5 w-5 mr-2" /> : <MapPin className="h-5 w-5 mr-2" />}
+            {checkin.isPending ? 'Realizando check-in...' : route.require_checkin_photo ? 'Enviar foto e fazer check-in' : 'Fazer Check-in'}
+          </Button>
+        )}
+
+        {isActive && filteredExecs.length === 0 && activeBrandId && (
+          <Card>
+            <CardContent className="p-6 text-center text-sm text-muted-foreground">
+              Nenhum produto foi carregado para esta {isMultiBrand ? 'marca' : 'rota'}.
+            </CardContent>
+          </Card>
+        )}
 
         {/* Check-in photo requirement */}
         {needsCheckin && route.require_checkin_photo && (
