@@ -1570,7 +1570,7 @@ router.post('/supervisor/send-notification', authenticatePromotor, requireSuperv
 });
 
 // Send document/file to RH
-router.post('/supervisor/send-to-rh', requireSupervisor, async (req, res) => {
+router.post('/supervisor/send-to-rh', authenticatePromotor, requireSupervisor, async (req, res) => {
   try {
     const { title, message, file_url, category } = req.body;
     if (!title) return res.status(400).json({ error: 'Título obrigatório' });
