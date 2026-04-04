@@ -468,15 +468,33 @@ router.post('/overtime-request', authenticatePromotor, async (req, res) => {
       [req.organizationId, req.employeeId, date, reason, requested_start || null, requested_end || null]
     );
 
-    // Notify supervisor
+    // Notify supervisor + all RH admins/owners
     const emp = await query(`SELECT full_name, direct_manager_id FROM employees WHERE id = $1`, [req.employeeId]);
-    if (emp.rows[0]?.direct_manager_id) {
+    const empName = emp.rows[0]?.full_name || 'Colaborador';
+    const notifTitle = 'Solicitação de Hora Extra';
+    const notifMsg = `${empName} solicitou hora extra para ${date}: ${reason}`;
+
+    // Collect unique employee IDs to notify
+    const notifyIds = new Set();
+    if (emp.rows[0]?.direct_manager_id) notifyIds.add(emp.rows[0].direct_manager_id);
+
+    // Find all admin/owner users in the org and their employee records
+    try {
+      const admins = await query(
+        `SELECT e.id FROM employees e
+         JOIN users u ON u.id = e.user_id
+         WHERE e.organization_id = $1 AND u.role IN ('owner','admin')`,
+        [req.organizationId]
+      );
+      admins.rows.forEach(r => notifyIds.add(r.id));
+    } catch (e) { /* ignore */ }
+
+    // Send notifications to all
+    for (const targetId of notifyIds) {
       await query(
         `INSERT INTO collaborator_notifications (organization_id, employee_id, title, message, type)
          VALUES ($1,$2,$3,$4,'overtime_request')`,
-        [req.organizationId, emp.rows[0].direct_manager_id,
-         'Solicitação de Hora Extra',
-         `${emp.rows[0].full_name} solicitou hora extra para ${date}: ${reason}`]
+        [req.organizationId, targetId, notifTitle, notifMsg]
       ).catch(() => {});
     }
 
