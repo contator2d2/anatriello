@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CameraCapture, type PhotoQualityConfig } from "@/components/promotor/CameraCapture";
+import { FaceVerifyDialog } from "@/components/facial-recognition/FaceVerifyDialog";
 import {
   usePromotorRouteDetail, usePromotorCheckin, usePromotorCheckout,
   usePromotorUpdateExecution, usePromotorReportDamage, usePromotorReportRupture,
@@ -18,10 +19,11 @@ import {
   usePromotorRegisterExtraPoint,
 } from "@/hooks/use-promotor-routes";
 import { toast } from "sonner";
+import { useQuery } from "@tanstack/react-query";
 import {
   MapPin, Camera, Check, AlertTriangle, Archive, Clock,
   CheckCircle2, Circle, Calendar as CalendarIcon, Trash2, Store, Info,
-  Lock, Unlock, ChevronRight, Target, ImagePlus, Plus,
+  Lock, Unlock, ChevronRight, Target, ImagePlus, Plus, ScanFace,
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 
@@ -430,6 +432,25 @@ export default function PromotorRota() {
   const [selectedExtraProducts, setSelectedExtraProducts] = useState<string[]>([]);
   const [showExtraPointCategoryPicker, setShowExtraPointCategoryPicker] = useState(false);
   const [extraGroupPhotos, setExtraGroupPhotos] = useState<Record<string, boolean>>({});
+  const [showFaceVerify, setShowFaceVerify] = useState(false);
+  const [faceVerifyAction, setFaceVerifyAction] = useState<'checkin' | 'checkout' | 'pdv_checkout' | null>(null);
+
+  // Facial config
+  const promotorToken = localStorage.getItem('promotor_token');
+  const { data: facialConfig } = useQuery({
+    queryKey: ['promotor-facial-config'],
+    queryFn: async () => {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (promotorToken) headers['Authorization'] = `Bearer ${promotorToken}`;
+      const url = `${(import.meta.env.VITE_API_URL || '').replace(/\/$/, '')}/api/promotor/facial-config`;
+      const res = await fetch(url, { headers });
+      if (!res.ok) return null;
+      return res.json();
+    },
+    retry: false,
+    staleTime: 300000,
+  });
+  const isFacialActiveCheckin = facialConfig?.enabled && facialConfig?.use_for_checkin && facialConfig?.has_enrollment;
 
   // Build category status map
   const categoryStatusMap = useMemo(() => {
@@ -464,6 +485,13 @@ export default function PromotorRota() {
       toast.error('Esta rota exige foto obrigatória no check-in');
       return;
     }
+    // Require facial verification if active
+    if (isFacialActiveCheckin && faceVerifyAction !== 'checkin') {
+      setFaceVerifyAction('checkin');
+      setShowFaceVerify(true);
+      return;
+    }
+    setFaceVerifyAction(null);
     try {
       const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
         navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000 })
@@ -474,6 +502,7 @@ export default function PromotorRota() {
         longitude: pos.coords.longitude,
         device: navigator.userAgent,
         photo_url: checkinPhotoUrl || undefined,
+        facial_verified: isFacialActiveCheckin || undefined,
       }, {
         onSuccess: () => toast.success('Check-in realizado!'),
         onError: (err: any) => toast.error(err.message),
@@ -481,10 +510,17 @@ export default function PromotorRota() {
     } catch {
       toast.error('Não foi possível obter localização');
     }
-  }, [id, checkin, route?.require_checkin_photo, checkinPhotoUrl]);
+  }, [id, checkin, route?.require_checkin_photo, checkinPhotoUrl, isFacialActiveCheckin, faceVerifyAction]);
 
   const handleCompleteRoute = useCallback(() => {
     if (!id) return;
+    // Require facial verification if active
+    if (isFacialActiveCheckin && faceVerifyAction !== 'checkout') {
+      setFaceVerifyAction('checkout');
+      setShowFaceVerify(true);
+      return;
+    }
+    setFaceVerifyAction(null);
     checkout.mutate({ id, notes: actionForm.notes }, {
       onSuccess: (data: any) => {
         toast.success('Rota finalizada!');
@@ -499,10 +535,17 @@ export default function PromotorRota() {
       },
       onError: (err: any) => toast.error(err.message),
     });
-  }, [id, checkout, actionForm, navigate]);
+  }, [id, checkout, actionForm, navigate, isFacialActiveCheckin, faceVerifyAction]);
 
   const handlePdvCheckout = useCallback(async () => {
     if (!route?.pdv_id) return;
+    // Require facial verification if active
+    if (isFacialActiveCheckin && faceVerifyAction !== 'pdv_checkout') {
+      setFaceVerifyAction('pdv_checkout');
+      setShowFaceVerify(true);
+      return;
+    }
+    setFaceVerifyAction(null);
     try {
       const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
         navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000 })
@@ -603,9 +646,16 @@ export default function PromotorRota() {
           </Card>
         )}
 
+        {needsCheckin && isFacialActiveCheckin && (
+          <div className="flex items-center gap-2 px-3 py-2 bg-primary/10 rounded-lg text-xs text-primary">
+            <ScanFace className="h-4 w-4" />
+            <span className="font-medium">Verificação facial obrigatória para check-in</span>
+          </div>
+        )}
+
         {needsCheckin && (
           <Button className="w-full h-14 text-lg" onClick={handleCheckin} disabled={checkin.isPending || (route.require_checkin_photo && !checkinPhotoUrl)}>
-            <MapPin className="h-5 w-5 mr-2" />
+            {isFacialActiveCheckin ? <ScanFace className="h-5 w-5 mr-2" /> : <MapPin className="h-5 w-5 mr-2" />}
             {checkin.isPending ? 'Realizando check-in...' : route.require_checkin_photo ? 'Enviar foto e fazer check-in' : 'Fazer Check-in'}
           </Button>
         )}
@@ -1111,6 +1161,30 @@ export default function PromotorRota() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+        {/* Facial Verification Dialog */}
+        <FaceVerifyDialog
+          open={showFaceVerify}
+          onOpenChange={(open) => { if (!open) { setShowFaceVerify(false); setFaceVerifyAction(null); } }}
+          storedDescriptor={facialConfig?.descriptor || []}
+          storedPhotoUrl={facialConfig?.photo_url}
+          personName={route?.promotor_name}
+          threshold={facialConfig?.min_confidence || 70}
+          onResult={(result) => {
+            setShowFaceVerify(false);
+            if (result.match) {
+              toast.success(`Identidade confirmada (${result.score.toFixed(1)}%)`);
+              const action = faceVerifyAction;
+              setTimeout(() => {
+                if (action === 'checkin') handleCheckin();
+                else if (action === 'checkout') handleCompleteRoute();
+                else if (action === 'pdv_checkout') handlePdvCheckout();
+              }, 300);
+            } else {
+              toast.error(`Identidade não confirmada (${result.score.toFixed(1)}%). Ação bloqueada.`);
+              setFaceVerifyAction(null);
+            }
+          }}
+        />
       </div>
     </PromotorLayout>
   );
