@@ -483,4 +483,79 @@ router.get('/history', authenticate, async (req, res) => {
   } catch (err) { logError('price-research.history', err); res.status(500).json({ error: 'Erro' }); }
 });
 
+// ===== ADMIN: Delete rule/model =====
+router.delete('/rules/:id', authenticate, async (req, res) => {
+  try {
+    await ensureTables();
+    await query('DELETE FROM price_research_rules WHERE id=$1', [req.params.id]);
+    res.json({ ok: true });
+  } catch (err) { logError('price-research.rules.delete', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// ===== ADMIN: Validate research =====
+router.put('/executions/:id/validate', authenticate, async (req, res) => {
+  try {
+    await query("UPDATE price_research_executions SET status='validated', updated_at=NOW() WHERE id=$1", [req.params.id]);
+    res.json({ ok: true });
+  } catch (err) { logError('price-research.validate', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// ===== ADMIN: Share rule results with brand =====
+router.put('/rules/:id/share', authenticate, async (req, res) => {
+  try {
+    const { shared } = req.body;
+    await query('UPDATE price_research_rules SET shared_with_brand=$1, updated_at=NOW() WHERE id=$2', [shared !== false, req.params.id]);
+    res.json({ ok: true });
+  } catch (err) { logError('price-research.share', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// ===== BRAND: Get shared results =====
+router.get('/brand-results', authenticate, async (req, res) => {
+  try {
+    await ensureTables();
+    const orgId = await getOrgId(req.userId);
+    if (!orgId) return res.status(403).json({ error: 'Sem organização' });
+    const { brand_id } = req.query;
+    let sql = `SELECT r.*, b.name as brand_name,
+      (SELECT COUNT(*) FROM price_research_executions ex WHERE ex.rule_id = r.id AND ex.status IN ('completed','validated')) as completed_count,
+      (SELECT COUNT(*) FROM price_research_executions ex WHERE ex.rule_id = r.id AND ex.status = 'in_progress') as in_progress_count,
+      (SELECT COUNT(*) FROM price_research_executions ex WHERE ex.rule_id = r.id) as total_count
+      FROM price_research_rules r
+      LEFT JOIN merch_brands b ON b.id = r.brand_id
+      WHERE r.organization_id = $1 AND r.shared_with_brand = true`;
+    const params = [orgId];
+    if (brand_id) { sql += ' AND r.brand_id = $2'; params.push(brand_id); }
+    sql += ' ORDER BY r.updated_at DESC';
+    res.json((await query(sql, params)).rows);
+  } catch (err) { logError('price-research.brand-results', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// ===== BRAND: Get detailed results for a specific rule =====
+router.get('/brand-results/:ruleId', authenticate, async (req, res) => {
+  try {
+    await ensureTables();
+    const orgId = await getOrgId(req.userId);
+    if (!orgId) return res.status(403).json({ error: 'Sem organização' });
+    // Check rule is shared
+    const rule = (await query('SELECT * FROM price_research_rules WHERE id=$1 AND organization_id=$2 AND shared_with_brand=true', [req.params.ruleId, orgId])).rows[0];
+    if (!rule) return res.status(404).json({ error: 'Não encontrado' });
+    // Get executions
+    const execs = (await query(`SELECT e.*, p.name as pdv_name, emp.full_name as promoter_name
+      FROM price_research_executions e
+      LEFT JOIN pdvs p ON p.id = e.pdv_id
+      LEFT JOIN employees emp ON emp.id = e.promoter_id
+      WHERE e.rule_id = $1 AND e.status IN ('completed','validated')
+      ORDER BY e.completed_at DESC`, [rule.id])).rows;
+    // Get avg prices
+    const avgPrices = (await query(`SELECT i.product_id, p.name as product_name, AVG(i.price) as avg_price,
+      MIN(i.price) as min_price, MAX(i.price) as max_price, COUNT(*) as collections
+      FROM price_research_items i
+      JOIN price_research_executions e ON e.id = i.execution_id
+      LEFT JOIN products p ON p.id = i.product_id
+      WHERE e.rule_id = $1 AND i.price IS NOT NULL AND e.status IN ('completed','validated')
+      GROUP BY i.product_id, p.name ORDER BY p.name`, [rule.id])).rows;
+    res.json({ rule, executions: execs, avgPrices });
+  } catch (err) { logError('price-research.brand-results.detail', err); res.status(500).json({ error: 'Erro' }); }
+});
+
 export default router;
