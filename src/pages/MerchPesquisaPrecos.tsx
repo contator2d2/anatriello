@@ -1301,90 +1301,120 @@ function ExecutionDetailDialog({ id, open, onClose }: { id: string; open: boolea
                   </Card>
                 )}
 
-                {exec.items?.length > 0 ? (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Produto</TableHead>
-                        <TableHead>Preço</TableHead>
-                        <TableHead>Observação</TableHead>
-                        <TableHead>Concorrentes</TableHead>
-                        {editing && <TableHead className="w-16"></TableHead>}
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {exec.items.map((item: any) => (
-                        <TableRow key={item.id} className={editing && !editProducts.includes(item.product_id) ? 'opacity-40 line-through' : ''}>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              {item.photo_url ? (
-                                <img src={resolveMediaUrl(item.photo_url) || ''} alt="" className="h-8 w-8 rounded object-cover border" />
-                              ) : null}
-                              <span className="text-sm">{item.product_name}</span>
-                            </div>
-                          </TableCell>
-                          <TableCell className="font-mono">{item.price != null ? `R$ ${Number(item.price).toFixed(2)}` : '-'}</TableCell>
-                          <TableCell className="text-xs text-muted-foreground max-w-[150px] truncate">{item.observation || '-'}</TableCell>
-                          <TableCell>
-                            <div className="space-y-1">
-                              {item.competitors?.map((c: any, idx: number) => (
-                                <div key={idx} className="flex items-center gap-2 text-xs">
-                                  {c.photo_url && <img src={resolveMediaUrl(c.photo_url) || ''} alt="" className="h-6 w-6 rounded object-cover border" />}
-                                  <span className="text-muted-foreground">{c.competitor_brand_name}: </span>
-                                  <span className="font-mono">{c.price != null ? `R$ ${Number(c.price).toFixed(2)}` : '-'}</span>
-                                  {editing && (
-                                    <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => handleRemoveCompetitor(c.id)}>
-                                      <X className="h-3 w-3 text-destructive" />
-                                    </Button>
-                                  )}
-                                </div>
-                              ))}
-                              {(!item.competitors || item.competitors.length === 0) && <span className="text-xs text-muted-foreground">-</span>}
-                              {editing && (
-                                addingCompForItem === item.id ? (
-                                  <div className="mt-2 space-y-2 border rounded p-2 bg-muted/30">
-                                    <Input placeholder="Nome do produto concorrente" value={newCompName} onChange={e => setNewCompName(e.target.value)} className="h-8 text-xs" />
-                                    <Input placeholder="Marca concorrente" value={newCompBrand} onChange={e => setNewCompBrand(e.target.value)} className="h-8 text-xs" />
-                                    <div className="flex items-center gap-2">
-                                      {newCompPhoto ? (
-                                        <div className="relative">
-                                          <img src={resolveMediaUrl(newCompPhoto) || ''} alt="" className="h-10 w-10 rounded object-cover border" />
-                                          <button type="button" className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground rounded-full h-4 w-4 flex items-center justify-center text-[10px]" onClick={() => setNewCompPhoto('')}>×</button>
-                                        </div>
-                                      ) : (
-                                        <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => newCompFileRef.current?.click()}>
-                                          <Camera className="h-3 w-3 mr-1" />Foto
-                                        </Button>
-                                      )}
-                                      <input ref={newCompFileRef} type="file" accept="image/*" className="hidden" onChange={e => { if (e.target.files?.[0]) uploadCompPhoto(e.target.files[0]); }} />
-                                    </div>
-                                    <div className="flex gap-2">
-                                      <Button size="sm" className="h-7 text-xs" onClick={() => handleAddCompetitor(item.id)}>Adicionar</Button>
-                                      <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setAddingCompForItem(null)}>Cancelar</Button>
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <Button size="sm" variant="ghost" className="h-6 text-xs mt-1" onClick={() => setAddingCompForItem(item.id)}>
-                                    <Plus className="h-3 w-3 mr-1" />Concorrente
-                                  </Button>
-                                )
-                              )}
-                            </div>
-                          </TableCell>
-                          {editing && (
+                {/* Build display items: existing items + newly added products */}
+                {(() => {
+                  const existingItems = exec.items || [];
+                  const existingProductIds = existingItems.map((i: any) => i.product_id);
+                  const newProductIds = editing ? editProducts.filter(pid => !existingProductIds.includes(pid)) : [];
+                  const newItems = newProductIds.map(pid => {
+                    const prod = allProducts.find((p: any) => p.id === pid);
+                    return { id: `new-${pid}`, product_id: pid, product_name: prod?.name || 'Produto', photo_url: prod?.photo_url, price: null, observation: null, competitors: [], isNew: true };
+                  });
+                  const displayItems = [
+                    ...existingItems.filter((item: any) => !editing || editProducts.includes(item.product_id)),
+                    ...newItems,
+                  ];
+                  const removedItems = editing ? existingItems.filter((item: any) => !editProducts.includes(item.product_id)) : [];
+
+                  return displayItems.length > 0 || removedItems.length > 0 ? (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Produto</TableHead>
+                          <TableHead>Preço</TableHead>
+                          <TableHead>Observação</TableHead>
+                          <TableHead>Concorrentes</TableHead>
+                          {editing && <TableHead className="w-16"></TableHead>}
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {displayItems.map((item: any) => (
+                          <TableRow key={item.id} className={item.isNew ? 'bg-primary/5' : ''}>
                             <TableCell>
-                              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleRemoveProduct(item.product_id)}>
-                                <Trash2 className="h-3 w-3 text-destructive" />
+                              <div className="flex items-center gap-2">
+                                {item.photo_url ? (
+                                  <img src={resolveMediaUrl(item.photo_url) || ''} alt="" className="h-8 w-8 rounded object-cover border" />
+                                ) : null}
+                                <span className="text-sm">{item.product_name}</span>
+                                {item.isNew && <Badge variant="outline" className="text-[10px] h-4">Novo</Badge>}
+                              </div>
+                            </TableCell>
+                            <TableCell className="font-mono">{item.price != null ? `R$ ${Number(item.price).toFixed(2)}` : '-'}</TableCell>
+                            <TableCell className="text-xs text-muted-foreground max-w-[150px] truncate">{item.observation || '-'}</TableCell>
+                            <TableCell>
+                              <div className="space-y-1">
+                                {item.competitors?.map((c: any, idx: number) => (
+                                  <div key={idx} className="flex items-center gap-2 text-xs">
+                                    {c.photo_url && <img src={resolveMediaUrl(c.photo_url) || ''} alt="" className="h-6 w-6 rounded object-cover border" />}
+                                    <span className="text-muted-foreground">{c.competitor_product_name || c.competitor_brand_name}: </span>
+                                    <span className="font-mono">{c.price != null ? `R$ ${Number(c.price).toFixed(2)}` : '-'}</span>
+                                    {editing && !item.isNew && (
+                                      <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => handleRemoveCompetitor(c.id)}>
+                                        <X className="h-3 w-3 text-destructive" />
+                                      </Button>
+                                    )}
+                                  </div>
+                                ))}
+                                {(!item.competitors || item.competitors.length === 0) && <span className="text-xs text-muted-foreground">-</span>}
+                                {editing && !item.isNew && (
+                                  addingCompForItem === item.id ? (
+                                    <div className="mt-2 space-y-2 border rounded p-2 bg-muted/30">
+                                      <Input placeholder="Nome do produto concorrente" value={newCompName} onChange={e => setNewCompName(e.target.value)} className="h-8 text-xs" />
+                                      <Input placeholder="Marca concorrente" value={newCompBrand} onChange={e => setNewCompBrand(e.target.value)} className="h-8 text-xs" />
+                                      <div className="flex items-center gap-2">
+                                        {newCompPhoto ? (
+                                          <div className="relative">
+                                            <img src={resolveMediaUrl(newCompPhoto) || ''} alt="" className="h-10 w-10 rounded object-cover border" />
+                                            <button type="button" className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground rounded-full h-4 w-4 flex items-center justify-center text-[10px]" onClick={() => setNewCompPhoto('')}>×</button>
+                                          </div>
+                                        ) : (
+                                          <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => newCompFileRef.current?.click()}>
+                                            <Camera className="h-3 w-3 mr-1" />Foto
+                                          </Button>
+                                        )}
+                                        <input ref={newCompFileRef} type="file" accept="image/*" className="hidden" onChange={e => { if (e.target.files?.[0]) uploadCompPhoto(e.target.files[0]); }} />
+                                      </div>
+                                      <div className="flex gap-2">
+                                        <Button size="sm" className="h-7 text-xs" onClick={() => handleAddCompetitor(item.id)}>Adicionar</Button>
+                                        <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setAddingCompForItem(null)}>Cancelar</Button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <Button size="sm" variant="ghost" className="h-6 text-xs mt-1" onClick={() => setAddingCompForItem(item.id)}>
+                                      <Plus className="h-3 w-3 mr-1" />Concorrente
+                                    </Button>
+                                  )
+                                )}
+                              </div>
+                            </TableCell>
+                            {editing && (
+                              <TableCell>
+                                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleRemoveProduct(item.product_id)}>
+                                  <Trash2 className="h-3 w-3 text-destructive" />
+                                </Button>
+                              </TableCell>
+                            )}
+                          </TableRow>
+                        ))}
+                        {removedItems.map((item: any) => (
+                          <TableRow key={item.id} className="opacity-40 line-through">
+                            <TableCell><span className="text-sm">{item.product_name}</span></TableCell>
+                            <TableCell className="font-mono">{item.price != null ? `R$ ${Number(item.price).toFixed(2)}` : '-'}</TableCell>
+                            <TableCell>-</TableCell>
+                            <TableCell>-</TableCell>
+                            <TableCell>
+                              <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={() => setEditProducts(prev => [...prev, item.product_id])}>
+                                Restaurar
                               </Button>
                             </TableCell>
-                          )}
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                ) : (
-                  <p className="text-sm text-muted-foreground text-center py-4">Nenhum produto registrado.</p>
-                )}
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  ) : (
+                    <p className="text-sm text-muted-foreground text-center py-4">Nenhum produto registrado.</p>
+                  );
+                })()}
               </div>
 
               {exec.photos?.length > 0 && (
