@@ -136,6 +136,7 @@ export default function PromotorConfig() {
     }
   };
 
+  return (
     <PromotorLayout>
       <div className="p-4 max-w-lg mx-auto space-y-4">
         <h1 className="text-lg font-bold flex items-center gap-2"><Settings className="h-5 w-5" /> Configurações</h1>
