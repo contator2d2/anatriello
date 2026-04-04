@@ -47,7 +47,15 @@ export function useMerchReportProduct(filters?: DashboardFilters & { product_id?
   const qs = buildQS(filters);
   return useQuery({
     queryKey: ['merch-analytics-report-product', qs],
-    queryFn: () => api<any[]>(`/api/merch-analytics/report/product${qs}`),
+    queryFn: async () => {
+      try {
+        return await api<any[]>(`/api/merch-analytics/report/product${qs}`, { silent: true });
+      } catch {
+        return [];
+      }
+    },
+    retry: false,
+    refetchOnWindowFocus: false,
   });
 }
 
@@ -78,6 +86,14 @@ export function useMerchRankingIssues(filters?: DashboardFilters) {
   const qs = buildQS(filters);
   return useQuery({
     queryKey: ['merch-analytics-ranking-issues', qs],
-    queryFn: () => api<any[]>(`/api/merch-analytics/ranking/issues${qs}`),
+    queryFn: async () => {
+      try {
+        return await api<any[]>(`/api/merch-analytics/ranking/issues${qs}`, { silent: true });
+      } catch {
+        return [];
+      }
+    },
+    retry: false,
+    refetchOnWindowFocus: false,
   });
 }
