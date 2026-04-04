@@ -295,10 +295,12 @@ router.get('/route/:routeId', authenticate, async (req, res) => {
     let exec = (await query('SELECT * FROM price_research_executions WHERE route_id = $1', [routeId])).rows;
     if (exec.length > 0) {
       for (const e of exec) {
-        e.items = (await query(`SELECT i.*, p.name as product_name FROM price_research_items i
+        e.items = (await query(`SELECT i.*, p.name as product_name, p.photo_url, p.description FROM price_research_items i
           LEFT JOIN products p ON p.id = i.product_id WHERE i.execution_id = $1 ORDER BY p.name`, [e.id])).rows;
         for (const item of e.items) {
-          item.competitors = (await query('SELECT * FROM price_research_item_competitors WHERE item_id = $1', [item.id])).rows;
+          item.competitors = (await query(`SELECT ic.*, cp.photo_url FROM price_research_item_competitors ic
+            LEFT JOIN price_research_competitor_products cp ON cp.id = ic.competitor_product_id
+            WHERE ic.item_id = $1`, [item.id])).rows;
         }
         e.photos = (await query('SELECT * FROM price_research_photos WHERE execution_id = $1', [e.id])).rows;
       }
