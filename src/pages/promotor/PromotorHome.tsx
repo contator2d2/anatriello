@@ -446,7 +446,7 @@ export default function PromotorHome() {
             <Card className="overflow-hidden">
               <CardContent className="p-0">
                 <Button
-                  onClick={handlePunch}
+                  onClick={() => void handlePunch()}
                   disabled={punchLoading || gpsStatus !== 'active' || (!canPunch && isOutsideSchedule)}
                   className={`w-full h-24 rounded-none text-lg font-bold ${
                     !canPunch && isOutsideSchedule
@@ -532,7 +532,7 @@ export default function PromotorHome() {
               </div>
             )}
             <Button
-              onClick={handlePunch}
+              onClick={() => void handlePunch()}
               disabled={punchLoading || gpsStatus !== 'active' || (!canPunch && isOutsideSchedule)}
               className={`w-full h-20 rounded-none text-lg font-bold ${
                 !canPunch && isOutsideSchedule
