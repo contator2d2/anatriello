@@ -17,7 +17,8 @@ export function MainLayout({ children }: MainLayoutProps) {
       <TopBar />
       
       {/* Mobile/Tablet TopBar with notifications */}
-      <div className="xl:hidden fixed top-0 right-0 left-12 h-14 flex items-center justify-end gap-2 px-3 bg-background/95 backdrop-blur-sm border-b border-border/50 z-50">
+      <div className="xl:hidden fixed top-0 right-0 left-12 h-14 flex items-center justify-end gap-2 px-3 bg-background/95 backdrop-blur-sm border-b border-border/50 z-50"
+        style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
         <ConnectionStatusIndicator />
         <div className="h-5 w-px bg-border" />
         <MessageNotifications />
