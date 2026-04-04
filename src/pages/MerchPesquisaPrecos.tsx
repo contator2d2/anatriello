@@ -23,7 +23,7 @@ import {
   usePriceResearchRules, useUpsertPriceResearchRule, useDeletePriceResearchRule, useShareRule,
   usePriceResearchCompetitors, useCreateCompetitor,
   usePriceResearchExecutions, useValidateExecution, usePublishExecution,
-  usePriceResearchDashboard, usePriceResearchExecutionDetail,
+  usePriceResearchDashboard, usePriceResearchExecutionDetail, useUpdateExecution,
 } from "@/hooks/use-price-research";
 import { useUpload } from "@/hooks/use-upload";
 import { resolveMediaUrl } from "@/lib/media";
