@@ -192,10 +192,24 @@ function ModelosTab({ brands, onSwitchTab }: { brands: any[]; onSwitchTab: (t: s
   );
 }
 
+// ===== Types for competitor config per product =====
+interface ProductCompetitor {
+  id: string;
+  name: string;
+  brand: string;
+  description?: string;
+  photo_url?: string;
+  unit_measure?: string;
+}
+
+type CompetitorConfig = Record<string, ProductCompetitor[]>;
+
 // ===== Model Editor Dialog =====
 function ModelEditorDialog({ rule, brands, open, onClose }: { rule: any; brands: any[]; open: boolean; onClose: () => void }) {
   const upsert = useUpsertPriceResearchRule();
   const qc = useQueryClient();
+  const { upload, isUploading } = useUpload();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [name, setName] = useState(rule?.name || '');
   const [description, setDescription] = useState(rule?.description || '');
@@ -218,27 +232,103 @@ function ModelEditorDialog({ rule, brands, open, onClose }: { rule: any; brands:
   const [postponeLimitDays, setPostponeLimitDays] = useState(String(rule?.postpone_limit_days ?? 7));
 
   const [selectedProducts, setSelectedProducts] = useState<string[]>(rule?.selected_products || []);
-  const [selectedCompetitors, setSelectedCompetitors] = useState<string[]>(rule?.selected_competitors || []);
+  // competitor_config: { [product_id]: ProductCompetitor[] }
+  const [competitorConfig, setCompetitorConfig] = useState<CompetitorConfig>(rule?.competitor_config || {});
 
   const [showProducts, setShowProducts] = useState(false);
-  const [showCompetitors, setShowCompetitors] = useState(false);
   const [showRules, setShowRules] = useState(false);
   const [showPostpone, setShowPostpone] = useState(false);
-  const [showAddCompetitor, setShowAddCompetitor] = useState(false);
-  const [newCompName, setNewCompName] = useState('');
-  const [newCompCategory, setNewCompCategory] = useState('');
-  const createCompetitor = useCreateCompetitor();
+
+  // Per-product competitor management
+  const [expandedProduct, setExpandedProduct] = useState<string | null>(null);
+  const [addingCompetitorFor, setAddingCompetitorFor] = useState<string | null>(null);
+  const [newComp, setNewComp] = useState<Partial<ProductCompetitor>>({});
+  const [uploadTargetProductId, setUploadTargetProductId] = useState<string | null>(null);
+  const [uploadTargetCompIdx, setUploadTargetCompIdx] = useState<number | null>(null);
 
   const { data: products = [] } = useQuery({
     queryKey: ['merch-products-brand', brandId],
     queryFn: () => api<any[]>(`/api/merchandising/products?brand_id=${brandId}`),
     enabled: !!brandId,
   });
-  const { data: competitors = [] } = usePriceResearchCompetitors(brandId || undefined);
   const isRecurring = frequency !== 'once';
 
-  const toggleProduct = (id: string) => setSelectedProducts(prev => prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]);
-  const toggleCompetitor = (id: string) => setSelectedCompetitors(prev => prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]);
+  const toggleProduct = (id: string) => {
+    setSelectedProducts(prev => {
+      if (prev.includes(id)) {
+        // Remove product and its competitors
+        const next = prev.filter(p => p !== id);
+        setCompetitorConfig(cfg => { const c = { ...cfg }; delete c[id]; return c; });
+        return next;
+      }
+      return [...prev, id];
+    });
+  };
+
+  const addCompetitorToProduct = (productId: string) => {
+    if (!newComp.name?.trim()) return toast.error('Nome do concorrente obrigatório');
+    if (!newComp.brand?.trim()) return toast.error('Marca concorrente obrigatória');
+    const comp: ProductCompetitor = {
+      id: crypto.randomUUID(),
+      name: newComp.name.trim(),
+      brand: newComp.brand.trim(),
+      description: newComp.description || '',
+      photo_url: newComp.photo_url || '',
+      unit_measure: newComp.unit_measure || '',
+    };
+    setCompetitorConfig(prev => ({
+      ...prev,
+      [productId]: [...(prev[productId] || []), comp],
+    }));
+    setNewComp({});
+    setAddingCompetitorFor(null);
+    toast.success('Concorrente adicionado ao produto');
+  };
+
+  const removeCompetitorFromProduct = (productId: string, compIdx: number) => {
+    setCompetitorConfig(prev => ({
+      ...prev,
+      [productId]: (prev[productId] || []).filter((_, i) => i !== compIdx),
+    }));
+  };
+
+  const handlePhotoUpload = async (file: File) => {
+    if (!uploadTargetProductId || uploadTargetCompIdx === null) return;
+    try {
+      const result = await upload(file);
+      if (result?.url) {
+        setCompetitorConfig(prev => {
+          const comps = [...(prev[uploadTargetProductId] || [])];
+          if (comps[uploadTargetCompIdx]) {
+            comps[uploadTargetCompIdx] = { ...comps[uploadTargetCompIdx], photo_url: result.url };
+          }
+          return { ...prev, [uploadTargetProductId]: comps };
+        });
+        toast.success('Foto enviada');
+      }
+    } catch { toast.error('Erro ao enviar foto'); }
+    setUploadTargetProductId(null);
+    setUploadTargetCompIdx(null);
+  };
+
+  const handlePaste = useCallback((e: React.ClipboardEvent, productId: string, compIdx: number) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of Array.from(items)) {
+      if (item.type.startsWith('image/')) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (file) {
+          setUploadTargetProductId(productId);
+          setUploadTargetCompIdx(compIdx);
+          setTimeout(() => handlePhotoUpload(file), 0);
+        }
+        break;
+      }
+    }
+  }, [upload]);
+
+  const totalCompetitors = Object.values(competitorConfig).reduce((sum, arr) => sum + arr.length, 0);
 
   const handleSave = () => {
     if (!brandId) return toast.error('Selecione uma marca');
@@ -253,21 +343,16 @@ function ModelEditorDialog({ rule, brands, open, onClose }: { rule: any; brands:
       allow_partial: allowPartial, require_observation: requireObservation,
       allow_promoter_edit: allowPromoterEdit, allow_postpone: allowPostpone,
       postpone_limit_type: postponeLimitType, postpone_limit_days: parseInt(postponeLimitDays),
-      selected_products: selectedProducts, selected_competitors: selectedCompetitors,
+      selected_products: selectedProducts,
+      competitor_config: competitorConfig,
     }, {
       onSuccess: () => { qc.invalidateQueries({ queryKey: ['price-research-rules'] }); onClose(); toast.success(rule ? 'Modelo atualizado!' : 'Modelo criado!'); },
     });
   };
 
-  const handleAddCompetitor = () => {
-    if (!brandId) return toast.error('Selecione a marca primeiro');
-    if (!newCompName.trim()) return toast.error('Nome obrigatório');
-    createCompetitor.mutate({ brand_id: brandId, competitor_name: newCompName, category: newCompCategory }, {
-      onSuccess: (data: any) => { setShowAddCompetitor(false); setNewCompName(''); setNewCompCategory(''); if (data?.id) setSelectedCompetitors(prev => [...prev, data.id]); toast.success('Concorrente criado'); },
-    });
-  };
-
   const WEEKDAYS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+
+  const selectedProductObjects = products.filter((p: any) => selectedProducts.includes(p.id));
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -287,7 +372,7 @@ function ModelEditorDialog({ rule, brands, open, onClose }: { rule: any; brands:
               </div>
               <div>
                 <Label>Marca *</Label>
-                <Select value={brandId} onValueChange={(v) => { setBrandId(v); setSelectedProducts([]); setSelectedCompetitors([]); }}>
+                <Select value={brandId} onValueChange={(v) => { setBrandId(v); setSelectedProducts([]); setCompetitorConfig({}); }}>
                   <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                   <SelectContent>{brands.map((b: any) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
                 </Select>
@@ -314,7 +399,7 @@ function ModelEditorDialog({ rule, brands, open, onClose }: { rule: any; brands:
               )}
             </div>
 
-            {/* Products */}
+            {/* Products Selection */}
             {brandId && (
               <CollapsibleSection
                 title={`Produtos (${selectedProducts.length} selecionados)`}
@@ -341,33 +426,124 @@ function ModelEditorDialog({ rule, brands, open, onClose }: { rule: any; brands:
                   {products.length > 0 && (
                     <div className="flex gap-2 pt-2 border-t">
                       <Button size="sm" variant="outline" onClick={() => setSelectedProducts(products.map((p: any) => p.id))}>Todos</Button>
-                      <Button size="sm" variant="outline" onClick={() => setSelectedProducts([])}>Limpar</Button>
+                      <Button size="sm" variant="outline" onClick={() => { setSelectedProducts([]); setCompetitorConfig({}); }}>Limpar</Button>
                     </div>
                   )}
                 </div>
               </CollapsibleSection>
             )}
 
-            {/* Competitors */}
-            {brandId && (
-              <CollapsibleSection
-                title={`Concorrentes (${selectedCompetitors.length} selecionados)`}
-                icon={<Building2 className="h-4 w-4" />}
-                open={showCompetitors} onToggle={() => setShowCompetitors(!showCompetitors)}
-              >
-                <div className="space-y-2 max-h-60 overflow-y-auto">
-                  {competitors.length === 0 && <p className="text-sm text-muted-foreground text-center py-2">Nenhum concorrente</p>}
-                  {competitors.filter((c: any) => c.active).map((c: any) => (
-                    <label key={c.id} className="flex items-center gap-3 p-2 rounded hover:bg-muted/50 cursor-pointer">
-                      <Checkbox checked={selectedCompetitors.includes(c.id)} onCheckedChange={() => toggleCompetitor(c.id)} />
-                      <div><p className="text-sm font-medium">{c.competitor_name}</p>{c.category && <p className="text-xs text-muted-foreground">{c.category}</p>}</div>
-                    </label>
-                  ))}
-                  <Button size="sm" variant="outline" onClick={() => setShowAddCompetitor(true)} className="w-full mt-2">
-                    <Plus className="h-3 w-3 mr-1" />Novo Concorrente (Biblioteca Global)
-                  </Button>
+            {/* Competitors PER PRODUCT */}
+            {selectedProducts.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <Building2 className="h-4 w-4" />
+                  Concorrentes por Produto ({totalCompetitors} total)
                 </div>
-              </CollapsibleSection>
+                <p className="text-xs text-muted-foreground">Para cada produto, cadastre os concorrentes semelhantes com foto de referência.</p>
+
+                {selectedProductObjects.map((product: any) => {
+                  const productComps = competitorConfig[product.id] || [];
+                  const isExpanded = expandedProduct === product.id;
+
+                  return (
+                    <Card key={product.id} className="border">
+                      <button
+                        type="button"
+                        className="w-full flex items-center gap-3 p-3 text-left hover:bg-muted/30 transition-colors"
+                        onClick={() => setExpandedProduct(isExpanded ? null : product.id)}
+                      >
+                        {product.photo_url ? (
+                          <img src={resolveMediaUrl(product.photo_url) || ''} alt={product.name} className="h-10 w-10 rounded object-cover border flex-shrink-0" />
+                        ) : (
+                          <div className="h-10 w-10 rounded bg-muted flex items-center justify-center flex-shrink-0"><Package className="h-4 w-4 text-muted-foreground" /></div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{product.name}</p>
+                          <p className="text-xs text-muted-foreground">{productComps.length} concorrente{productComps.length !== 1 ? 's' : ''}</p>
+                        </div>
+                        {isExpanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                      </button>
+
+                      {isExpanded && (
+                        <CardContent className="pt-0 pb-3 space-y-2">
+                          <Separator />
+                          {/* List existing competitors for this product */}
+                          {productComps.map((comp, idx) => (
+                            <div key={comp.id} className="flex items-start gap-2 p-2 bg-muted/30 rounded"
+                              onPaste={(e) => handlePaste(e, product.id, idx)}>
+                              {comp.photo_url ? (
+                                <img src={resolveMediaUrl(comp.photo_url) || ''} alt={comp.name} className="h-12 w-12 rounded object-cover border flex-shrink-0" />
+                              ) : (
+                                <div
+                                  className="h-12 w-12 rounded border-2 border-dashed border-muted-foreground/30 flex items-center justify-center flex-shrink-0 cursor-pointer hover:border-primary/50 transition-colors"
+                                  onClick={() => { setUploadTargetProductId(product.id); setUploadTargetCompIdx(idx); fileInputRef.current?.click(); }}
+                                  title="Clique para enviar foto ou Ctrl+V para colar"
+                                >
+                                  <Camera className="h-4 w-4 text-muted-foreground/50" />
+                                </div>
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium truncate">{comp.name}</p>
+                                <p className="text-xs text-muted-foreground">{comp.brand}</p>
+                                {comp.description && <p className="text-xs text-muted-foreground truncate">{comp.description}</p>}
+                              </div>
+                              <div className="flex gap-1 flex-shrink-0">
+                                {comp.photo_url && (
+                                  <Button size="icon" variant="ghost" className="h-7 w-7"
+                                    onClick={() => { setUploadTargetProductId(product.id); setUploadTargetCompIdx(idx); fileInputRef.current?.click(); }}
+                                    title="Trocar foto">
+                                    <Camera className="h-3 w-3" />
+                                  </Button>
+                                )}
+                                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => removeCompetitorFromProduct(product.id, idx)}>
+                                  <X className="h-3 w-3 text-destructive" />
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+
+                          {/* Add competitor form */}
+                          {addingCompetitorFor === product.id ? (
+                            <div className="space-y-2 p-2 border rounded bg-background">
+                              <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                  <Label className="text-xs">Nome do produto concorrente *</Label>
+                                  <Input className="h-8 text-sm" value={newComp.name || ''} onChange={e => setNewComp(p => ({ ...p, name: e.target.value }))} placeholder="Ex: Detergente X" />
+                                </div>
+                                <div>
+                                  <Label className="text-xs">Marca concorrente *</Label>
+                                  <Input className="h-8 text-sm" value={newComp.brand || ''} onChange={e => setNewComp(p => ({ ...p, brand: e.target.value }))} placeholder="Ex: Marca Y" />
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                  <Label className="text-xs">Descrição</Label>
+                                  <Input className="h-8 text-sm" value={newComp.description || ''} onChange={e => setNewComp(p => ({ ...p, description: e.target.value }))} placeholder="Opcional" />
+                                </div>
+                                <div>
+                                  <Label className="text-xs">Unidade</Label>
+                                  <Input className="h-8 text-sm" value={newComp.unit_measure || ''} onChange={e => setNewComp(p => ({ ...p, unit_measure: e.target.value }))} placeholder="Ex: 500ml" />
+                                </div>
+                              </div>
+                              <div className="flex gap-2">
+                                <Button size="sm" onClick={() => addCompetitorToProduct(product.id)}>
+                                  <Plus className="h-3 w-3 mr-1" />Adicionar
+                                </Button>
+                                <Button size="sm" variant="ghost" onClick={() => { setAddingCompetitorFor(null); setNewComp({}); }}>Cancelar</Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <Button size="sm" variant="outline" className="w-full" onClick={() => { setAddingCompetitorFor(product.id); setNewComp({}); }}>
+                              <Plus className="h-3 w-3 mr-1" />Adicionar concorrente a {product.name}
+                            </Button>
+                          )}
+                        </CardContent>
+                      )}
+                    </Card>
+                  );
+                })}
+              </div>
             )}
 
             {/* Validation Rules */}
@@ -422,16 +598,14 @@ function ModelEditorDialog({ rule, brands, open, onClose }: { rule: any; brands:
           <Button onClick={handleSave} disabled={upsert.isPending}>{rule ? 'Salvar' : 'Criar Modelo'}</Button>
         </DialogFooter>
 
-        <Dialog open={showAddCompetitor} onOpenChange={setShowAddCompetitor}>
-          <DialogContent className="max-w-sm">
-            <DialogHeader><DialogTitle>Novo Concorrente</DialogTitle></DialogHeader>
-            <div className="space-y-3">
-              <div><Label>Nome *</Label><Input value={newCompName} onChange={e => setNewCompName(e.target.value)} placeholder="Ex: Marca X" /></div>
-              <div><Label>Categoria</Label><Input value={newCompCategory} onChange={e => setNewCompCategory(e.target.value)} /></div>
-            </div>
-            <DialogFooter><Button onClick={handleAddCompetitor} disabled={createCompetitor.isPending}>Criar</Button></DialogFooter>
-          </DialogContent>
-        </Dialog>
+        {/* Hidden file input for photo upload */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) handlePhotoUpload(f); e.target.value = ''; }}
+        />
       </DialogContent>
     </Dialog>
   );
