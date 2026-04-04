@@ -17,7 +17,8 @@ export function MainLayout({ children }: MainLayoutProps) {
       <TopBar />
       
       {/* Mobile/Tablet TopBar with notifications */}
-      <div className="xl:hidden fixed top-0 right-0 left-12 h-14 flex items-center justify-end gap-2 px-3 bg-background/95 backdrop-blur-sm border-b border-border/50 z-50">
+      <div className="xl:hidden fixed top-0 right-0 left-12 h-14 flex items-center justify-end gap-2 px-3 bg-background/95 backdrop-blur-sm border-b border-border/50 z-50"
+        style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
         <ConnectionStatusIndicator />
         <div className="h-5 w-px bg-border" />
         <MessageNotifications />
@@ -25,8 +26,9 @@ export function MainLayout({ children }: MainLayoutProps) {
       </div>
       
       {/* Desktop: margin-left for collapsed sidebar + top bar, Mobile/Tablet: no margin */}
-      <main className="xl:ml-16 pt-14 xl:pt-12 overflow-x-hidden w-full xl:w-[calc(100vw-4rem)] box-border">
-        <div className="p-2 xl:p-3 2xl:p-4 w-full min-w-0 overflow-x-hidden">{children}</div>
+      <main className="xl:ml-16 pt-14 xl:pt-12 overflow-x-hidden w-full xl:w-[calc(100vw-4rem)] box-border"
+        style={{ paddingTop: 'max(3.5rem, calc(env(safe-area-inset-top, 0px) + 3.5rem))' }}>
+        <div className="p-2 xl:p-3 2xl:p-4 w-full min-w-0 overflow-x-hidden" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>{children}</div>
       </main>
       <GroupSecretaryPopup />
     </div>
