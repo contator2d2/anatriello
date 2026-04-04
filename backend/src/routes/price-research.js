@@ -628,6 +628,34 @@ router.delete('/item-competitors/:id', authenticate, async (req, res) => {
   } catch (err) { logError('price-research.delete-item-competitor', err); res.status(500).json({ error: 'Erro' }); }
 });
 
+// ===== Delete execution =====
+router.delete('/executions/:id', authenticate, async (req, res) => {
+  try {
+    const execId = req.params.id;
+    // Delete in correct order due to FK constraints
+    await query('DELETE FROM price_research_photos WHERE execution_id=$1', [execId]);
+    await query(`DELETE FROM price_research_item_competitors WHERE item_id IN (SELECT id FROM price_research_items WHERE execution_id=$1)`, [execId]);
+    await query('DELETE FROM price_research_items WHERE execution_id=$1', [execId]);
+    await query('DELETE FROM price_research_executions WHERE id=$1', [execId]);
+    res.json({ ok: true });
+  } catch (err) { logError('price-research.executions.delete', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// ===== Bulk delete executions =====
+router.post('/executions/bulk-delete', authenticate, async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!ids || !Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'IDs obrigatórios' });
+    for (const execId of ids) {
+      await query('DELETE FROM price_research_photos WHERE execution_id=$1', [execId]);
+      await query(`DELETE FROM price_research_item_competitors WHERE item_id IN (SELECT id FROM price_research_items WHERE execution_id=$1)`, [execId]);
+      await query('DELETE FROM price_research_items WHERE execution_id=$1', [execId]);
+      await query('DELETE FROM price_research_executions WHERE id=$1', [execId]);
+    }
+    res.json({ ok: true, deleted: ids.length });
+  } catch (err) { logError('price-research.executions.bulk-delete', err); res.status(500).json({ error: 'Erro' }); }
+});
+
 // ===== Share rule =====
 router.put('/rules/:id/share', authenticate, async (req, res) => {
   try {
