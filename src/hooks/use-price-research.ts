@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 
-// ===== Rules =====
+// ===== Rules / Models =====
 export function usePriceResearchRules(brandId?: string) {
   const params = brandId ? `?brand_id=${brandId}` : '';
   return useQuery({
@@ -15,6 +15,53 @@ export function useUpsertPriceResearchRule() {
   return useMutation({
     mutationFn: (data: any) => api<any>('/api/price-research/rules', { method: 'POST', body: data }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['price-research-rules'] }),
+  });
+}
+
+export function useDeletePriceResearchRule() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api<any>(`/api/price-research/rules/${id}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['price-research-rules'] }),
+  });
+}
+
+// ===== Sharing =====
+export function useShareRule() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, shared }: { id: string; shared: boolean }) =>
+      api<any>(`/api/price-research/rules/${id}/share`, { method: 'PUT', body: { shared } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['price-research-rules'] }),
+  });
+}
+
+// ===== Validate execution =====
+export function useValidateExecution() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api<any>(`/api/price-research/executions/${id}/validate`, { method: 'PUT' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['price-research-executions'] });
+      qc.invalidateQueries({ queryKey: ['price-research-rules'] });
+    },
+  });
+}
+
+// ===== Brand Results =====
+export function useBrandResults(brandId?: string) {
+  const params = brandId ? `?brand_id=${brandId}` : '';
+  return useQuery({
+    queryKey: ['price-research-brand-results', brandId],
+    queryFn: () => api<any[]>(`/api/price-research/brand-results${params}`),
+  });
+}
+
+export function useBrandResultDetail(ruleId?: string) {
+  return useQuery({
+    queryKey: ['price-research-brand-result', ruleId],
+    queryFn: () => api<any>(`/api/price-research/brand-results/${ruleId}`),
+    enabled: !!ruleId,
   });
 }
 
@@ -96,7 +143,7 @@ export function useDeleteCompetitorProduct() {
 }
 
 // ===== Executions =====
-export function usePriceResearchExecutions(filters?: { brand_id?: string; pdv_id?: string; promoter_id?: string; status?: string; date_from?: string; date_to?: string }) {
+export function usePriceResearchExecutions(filters?: { brand_id?: string; pdv_id?: string; promoter_id?: string; status?: string; date_from?: string; date_to?: string; rule_id?: string }) {
   const params = new URLSearchParams();
   if (filters?.brand_id) params.set('brand_id', filters.brand_id);
   if (filters?.pdv_id) params.set('pdv_id', filters.pdv_id);
@@ -104,6 +151,7 @@ export function usePriceResearchExecutions(filters?: { brand_id?: string; pdv_id
   if (filters?.status) params.set('status', filters.status);
   if (filters?.date_from) params.set('date_from', filters.date_from);
   if (filters?.date_to) params.set('date_to', filters.date_to);
+  if (filters?.rule_id) params.set('rule_id', filters.rule_id);
   const qs = params.toString();
   return useQuery({
     queryKey: ['price-research-executions', qs],
