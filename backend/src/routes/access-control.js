@@ -3191,7 +3191,7 @@ router.post('/whatsapp-assistant/process', authenticate, async (req, res) => {
 router.get('/whatsapp-agent-config', authenticate, async (req, res) => {
   try {
     await ensureIncidentsInfra();
-    const orgId = await getOrgId(req.user.id);
+    const orgId = await getOrgId(req.userId);
     // Ensure table exists
     await query(`CREATE TABLE IF NOT EXISTS whatsapp_agent_config (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -3224,7 +3224,7 @@ router.get('/whatsapp-agent-config', authenticate, async (req, res) => {
 router.post('/whatsapp-agent-config', authenticate, async (req, res) => {
   try {
     await ensureIncidentsInfra();
-    const orgId = await getOrgId(req.user.id);
+    const orgId = await getOrgId(req.userId);
     const { name, is_active, connection_id, ai_provider, ai_model, system_prompt, temperature, max_tokens, greeting_message, fallback_message, capabilities, personality_traits, language, context_window, working_hours, notification_rules } = req.body;
     
     // Ensure table
