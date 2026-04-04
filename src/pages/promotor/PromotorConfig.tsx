@@ -153,7 +153,14 @@ export default function PromotorConfig() {
               {canInstall ? (
                 <Button size="sm" onClick={handleInstallPWA}>Instalar</Button>
               ) : (
-                <p className="text-[10px] text-muted-foreground text-right max-w-[120px]">Use o menu do navegador → "Adicionar à tela inicial"</p>
+                <Button size="sm" variant="outline" onClick={() => {
+                  const isIOSDevice = /iPad|iPhone|iPod/.test(navigator.userAgent);
+                  if (isIOSDevice) {
+                    toast({ title: '📱 Como instalar no iPhone', description: 'No Safari, toque em 📤 (Compartilhar) e depois em "Adicionar à Tela de Início"' });
+                  } else {
+                    toast({ title: '📱 Como instalar', description: 'No menu do navegador (⋮), toque em "Instalar app" ou "Adicionar à tela inicial"' });
+                  }
+                }}>Como instalar</Button>
               )}
             </CardContent>
           </Card>
