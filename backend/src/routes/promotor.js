@@ -336,7 +336,9 @@ router.post('/punch', authenticatePromotor, async (req, res) => {
     // ===== WORK SCHEDULE VALIDATION =====
     const empRes = await query(`SELECT work_schedule FROM employees WHERE id = $1`, [req.employeeId]);
     const wsRaw = empRes.rows[0]?.work_schedule || '08:00-17:00';
-    const now = is_offline && offline_local_time ? new Date(offline_local_time) : new Date();
+    const now = is_offline && offline_local_time
+      ? new Date(offline_local_time)
+      : new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
     // Parse schedule — supports JSON {"entry":"HH:MM","exit":"HH:MM"} or plain "HH:MM-HH:MM"
