@@ -97,10 +97,10 @@ export function PromotorLayout({ children }: PromotorLayoutProps) {
           <div className="flex items-center justify-between h-14 px-4 max-w-lg mx-auto">
             <div className="flex items-center gap-2 min-w-0">
               {(branding.logo_topbar || (branding as any).logo) && (
-                <img src={branding.logo_topbar || (branding as any).logo} alt="Logo" className="h-7 w-7 object-contain rounded flex-shrink-0" />
+                <img src={branding.logo_topbar || (branding as any).logo} alt="Logo" className="h-8 w-auto max-w-[100px] object-contain flex-shrink-0" />
               )}
-              <h2 className="text-sm font-bold text-foreground truncate">
-                {navItems.find(i => location.pathname === i.path)?.label || 'Promotor'}
+              <h2 className="text-sm font-bold text-foreground truncate leading-tight">
+                {branding.company_name || 'Ayratech'}
               </h2>
             </div>
             <button
