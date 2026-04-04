@@ -208,7 +208,7 @@ type CompetitorConfig = Record<string, ProductCompetitor[]>;
 function ModelEditorDialog({ rule, brands, open, onClose }: { rule: any; brands: any[]; open: boolean; onClose: () => void }) {
   const upsert = useUpsertPriceResearchRule();
   const qc = useQueryClient();
-  const { upload, isUploading } = useUpload();
+  const { uploadFile, isUploading } = useUpload();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [name, setName] = useState(rule?.name || '');
