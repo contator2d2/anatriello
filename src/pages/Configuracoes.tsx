@@ -480,6 +480,9 @@ const Configuracoes = () => {
                     <Smartphone className="h-4 w-4 mr-2" />
                     Instalar Glee-go Whats
                   </Button>
+                  {isPWAInstalled() && (
+                    <p className="text-sm text-green-600 font-medium text-center">✅ App já está instalado!</p>
+                  )}
                 </CardContent>
               </Card>
 
