@@ -4,8 +4,19 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 
-// Build hash injected at build time — changes on each deploy
-const BUILD_ID = import.meta.env.VITE_BUILD_ID || Date.now().toString();
+const isInIframe = (() => {
+  try {
+    return window.self !== window.top;
+  } catch {
+    return true;
+  }
+})();
+
+const isPreviewHost =
+  window.location.hostname.includes("id-preview--") ||
+  window.location.hostname.includes("lovableproject.com");
+
+const shouldWatchForUpdates = import.meta.env.PROD && !isInIframe && !isPreviewHost;
 
 export function PWAUpdateBanner() {
   const [showPopup, setShowPopup] = useState(false);
@@ -14,7 +25,7 @@ export function PWAUpdateBanner() {
   const [done, setDone] = useState(false);
 
   useEffect(() => {
-    if (!("serviceWorker" in navigator)) return;
+    if (!shouldWatchForUpdates || !("serviceWorker" in navigator)) return;
 
     let interval: ReturnType<typeof setInterval>;
 
@@ -51,29 +62,6 @@ export function PWAUpdateBanner() {
 
     setup();
     return () => { if (interval) clearInterval(interval); };
-  }, []);
-
-  // Poll for app-level changes via version check
-  useEffect(() => {
-    const checkVersion = async () => {
-      try {
-        const res = await fetch(`/?_v=${Date.now()}`, {
-          cache: "no-store",
-          headers: { Accept: "text/html" },
-        });
-        if (!res.ok) return;
-        const html = await res.text();
-        if (html.includes("/assets/") && !html.includes(BUILD_ID)) {
-          const reg = await navigator.serviceWorker.getRegistration();
-          if (reg) reg.update();
-        }
-      } catch {
-        // Network error — ignore
-      }
-    };
-
-    const versionInterval = setInterval(checkVersion, 60 * 1000);
-    return () => clearInterval(versionInterval);
   }, []);
 
   const handleUpdate = useCallback(() => {
