@@ -2029,4 +2029,29 @@ router.delete('/facial-recognition/enroll/:employeeId', async (req, res) => {
   }
 });
 
+// Get face descriptor for testing verification
+router.get('/facial-recognition/descriptor/:employeeId', async (req, res) => {
+  try {
+    await ensureFaceEnrollColumn();
+    const { rows } = await query(
+      `SELECT face_descriptor, face_photo_url, full_name FROM employees WHERE id = $1`,
+      [req.params.employeeId]
+    );
+    if (!rows.length || !rows[0].face_descriptor) {
+      return res.status(404).json({ error: 'Sem dados faciais cadastrados' });
+    }
+    const desc = typeof rows[0].face_descriptor === 'string'
+      ? JSON.parse(rows[0].face_descriptor)
+      : rows[0].face_descriptor;
+    res.json({
+      descriptor: desc,
+      photo_url: rows[0].face_photo_url,
+      name: rows[0].full_name,
+    });
+  } catch (err) {
+    logError('rh.facial.descriptor', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;

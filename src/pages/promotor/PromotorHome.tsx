@@ -10,13 +10,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { useToast } from "@/hooks/use-toast";
 import { usePromotorHome, usePromotorPunch, usePromotorOvertimeRequest } from "@/hooks/use-promotor";
 import { CameraCapture } from "@/components/promotor/CameraCapture";
+import { FaceVerifyDialog } from "@/components/facial-recognition/FaceVerifyDialog";
 import { PromotorLayout } from "./PromotorLayout";
 import {
   Clock, FileText, Bell, MapPin, Wifi, WifiOff, Navigation, AlertTriangle, CheckCircle2,
-  Loader2, ShieldAlert, Timer, ChevronRight, PlayCircle, Package, Store
+  Loader2, ShieldAlert, Timer, ChevronRight, PlayCircle, Package, Store, ScanFace
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { useQuery } from "@tanstack/react-query";
 
 const STATUS_COLORS: Record<string, string> = {
   scheduled: 'bg-blue-500/20 text-blue-700',
@@ -49,6 +51,26 @@ export default function PromotorHome() {
   const [pdvCheckoutNotes, setPdvCheckoutNotes] = useState('');
   const [pdvCheckoutLoading, setPdvCheckoutLoading] = useState(false);
   const [actionPdv, setActionPdv] = useState<{ pdv_id: string; pdv_name: string } | null>(null);
+  const [showFaceVerify, setShowFaceVerify] = useState(false);
+  const [faceVerifyPending, setFaceVerifyPending] = useState(false);
+
+  // Fetch facial config for this promotor
+  const promotorToken = localStorage.getItem('promotor_token');
+  const { data: facialConfig } = useQuery({
+    queryKey: ['promotor-facial-config'],
+    queryFn: async () => {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (promotorToken) headers['Authorization'] = `Bearer ${promotorToken}`;
+      const url = `${(import.meta.env.VITE_API_URL || '').replace(/\/$/, '')}/api/promotor/facial-config`;
+      const res = await fetch(url, { headers });
+      if (!res.ok) return null;
+      return res.json();
+    },
+    retry: false,
+    staleTime: 300000,
+  });
+
+  const isFacialActive = facialConfig?.enabled && facialConfig?.use_for_attendance && facialConfig?.has_enrollment;
 
   const employee = data?.employee;
   const todayPunches = data?.today_punches || [];
@@ -147,6 +169,12 @@ export default function PromotorHome() {
       toast({ title: 'GPS necessário', description: 'Ative a localização para bater o ponto', variant: 'destructive' });
       return;
     }
+    // If facial is active, require verification first
+    if (isFacialActive && !faceVerifyPending) {
+      setShowFaceVerify(true);
+      return;
+    }
+    setFaceVerifyPending(false);
     setPunchLoading(true);
     try {
       const pdvId = dailyAssignment?.pdv_id || availablePdvs[0]?.id;
@@ -156,6 +184,7 @@ export default function PromotorHome() {
         longitude: currentPos.lng,
         accuracy_meters: currentPos.accuracy,
         pdv_id: pdvId,
+        facial_verified: isFacialActive || undefined,
       });
       toast({ title: 'Ponto registrado!', description: PUNCH_LABELS[getNextPunchType()] });
     } catch (err: any) {
@@ -165,6 +194,20 @@ export default function PromotorHome() {
       toast({ title: 'Erro ao registrar ponto', description: err.message, variant: 'destructive' });
     } finally {
       setPunchLoading(false);
+    }
+  };
+
+  const handleFaceVerifyResult = (result: { match: boolean; score: number; imageDataUrl: string }) => {
+    setShowFaceVerify(false);
+    if (result.match) {
+      toast({ title: '✅ Identidade confirmada', description: `Similaridade: ${result.score.toFixed(1)}%` });
+      setFaceVerifyPending(true);
+      // Trigger punch after successful facial
+      setTimeout(() => {
+        handlePunch();
+      }, 300);
+    } else {
+      toast({ title: '❌ Identidade não confirmada', description: `Similaridade: ${result.score.toFixed(1)}%. Ponto bloqueado.`, variant: 'destructive' });
     }
   };
 
@@ -484,6 +527,12 @@ export default function PromotorHome() {
         {/* Punch button - always visible */}
         <Card className="overflow-hidden">
           <CardContent className="p-0">
+            {isFacialActive && (
+              <div className="flex items-center gap-2 px-3 py-2 bg-primary/10 border-b text-xs text-primary">
+                <ScanFace className="h-4 w-4" />
+                <span className="font-medium">Verificação facial ativa para ponto</span>
+              </div>
+            )}
             <Button
               onClick={handlePunch}
               disabled={punchLoading || gpsStatus !== 'active' || (!canPunch && isOutsideSchedule)}
@@ -493,7 +542,7 @@ export default function PromotorHome() {
                   : 'bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70'
               }`}
             >
-              {punchLoading ? <Loader2 className="h-6 w-6 animate-spin mr-2" /> : <Clock className="h-6 w-6 mr-2" />}
+              {punchLoading ? <Loader2 className="h-6 w-6 animate-spin mr-2" /> : isFacialActive ? <ScanFace className="h-6 w-6 mr-2" /> : <Clock className="h-6 w-6 mr-2" />}
               {!canPunch && isOutsideSchedule
                 ? '🔒 Fora do Horário'
                 : PUNCH_LABELS[getNextPunchType()] || 'Bater Ponto'}
@@ -632,6 +681,17 @@ export default function PromotorHome() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Facial Verification Dialog for Punch */}
+      <FaceVerifyDialog
+        open={showFaceVerify}
+        onOpenChange={setShowFaceVerify}
+        storedDescriptor={facialConfig?.descriptor || []}
+        storedPhotoUrl={facialConfig?.photo_url}
+        personName={employee?.full_name}
+        threshold={facialConfig?.min_confidence || 70}
+        onResult={handleFaceVerifyResult}
+      />
     </PromotorLayout>
   );
 }

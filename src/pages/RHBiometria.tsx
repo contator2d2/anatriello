@@ -8,11 +8,12 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
-import { ScanFace, Search, Camera, CheckCircle2, AlertTriangle, Users, Loader2, Trash2 } from "lucide-react";
+import { ScanFace, Search, Camera, CheckCircle2, AlertTriangle, Users, Loader2, Trash2, ShieldCheck, Play } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { FaceCaptureDialog } from "@/components/facial-recognition/FaceCaptureDialog";
+import { FaceVerifyDialog } from "@/components/facial-recognition/FaceVerifyDialog";
 
 interface EmployeeFace {
   id: string;
@@ -33,6 +34,8 @@ const RHBiometria = () => {
   const [filter, setFilter] = useState("all");
   const [enrollingId, setEnrollingId] = useState<string | null>(null);
   const [enrollingName, setEnrollingName] = useState("");
+  const [testingEmp, setTestingEmp] = useState<EmployeeFace | null>(null);
+  const [testDescriptor, setTestDescriptor] = useState<number[]>([]);
 
   const { data: employees = [], isLoading } = useQuery({
     queryKey: ["rh-facial-employees", filter],
@@ -178,6 +181,27 @@ const RHBiometria = () => {
                           </Button>
                           <Button
                             size="sm"
+                            variant="secondary"
+                            className="gap-1"
+                            onClick={async () => {
+                              try {
+                                const data = await api<any>(`/api/rh/facial-recognition/descriptor/${emp.id}`);
+                                if (data?.descriptor) {
+                                  setTestDescriptor(data.descriptor);
+                                  setTestingEmp(emp);
+                                } else {
+                                  toast({ title: 'Sem dados faciais para testar', variant: 'destructive' });
+                                }
+                              } catch {
+                                toast({ title: 'Erro ao carregar dados faciais', variant: 'destructive' });
+                              }
+                            }}
+                          >
+                            <Play className="h-3.5 w-3.5" />
+                            Testar
+                          </Button>
+                          <Button
+                            size="sm"
                             variant="outline"
                             className="gap-1"
                             onClick={() => {
@@ -229,6 +253,23 @@ const RHBiometria = () => {
           if (enrollingId) {
             enrollMutation.mutate({ id: enrollingId, data });
           }
+        }}
+      />
+
+      {/* Face Verify Test Dialog */}
+      <FaceVerifyDialog
+        open={!!testingEmp}
+        onOpenChange={(open) => { if (!open) { setTestingEmp(null); setTestDescriptor([]); } }}
+        storedDescriptor={testDescriptor}
+        storedPhotoUrl={testingEmp?.face_photo_url || testingEmp?.photo_url}
+        personName={testingEmp?.full_name}
+        threshold={70}
+        onResult={(result) => {
+          toast({
+            title: result.match ? '✅ Teste aprovado!' : '❌ Teste reprovado',
+            description: `Similaridade: ${result.score.toFixed(1)}%`,
+            variant: result.match ? 'default' : 'destructive',
+          });
         }}
       />
     </MainLayout>
