@@ -2779,7 +2779,7 @@ async function generateDailySummary(orgId, unitId = null, agencyId = null, summa
 router.get('/supermarket-portal/incidents', authenticateSupermarket, async (req, res) => {
   try {
     await ensureIncidentsInfra();
-    const r = await query(`SELECT i.*, ap.name AS promoter_name, a.name AS agency_name, u.name AS unit_name, (SELECT json_agg(ir ORDER BY ir.created_at) FROM incident_responses ir WHERE ir.incident_id = i.id) AS responses FROM incidents i LEFT JOIN agency_promoters ap ON ap.id = i.agency_promoter_id LEFT JOIN agencies a ON a.id = i.agency_id LEFT JOIN units u ON u.id = i.reported_by_unit_id WHERE i.reported_by_unit_id = $1 ORDER BY i.created_at DESC LIMIT 100`, [req.unitId]);
+    const r = await query(`SELECT i.*, ap.name AS promoter_name, a.name AS agency_name, u.name AS unit_name, (SELECT json_agg(ir ORDER BY ir.created_at) FROM incident_responses ir WHERE ir.incident_id = i.id) AS responses FROM incidents i LEFT JOIN agency_promoters ap ON ap.id = i.agency_promoter_id LEFT JOIN agencies a ON a.id = i.agency_id LEFT JOIN supermarket_units u ON u.id = i.reported_by_unit_id WHERE i.reported_by_unit_id = $1 ORDER BY i.created_at DESC LIMIT 100`, [req.unitId]);
     res.json(r.rows);
   } catch (err) { logError('sm.incidents.list', err); res.status(500).json({ error: 'Erro' }); }
 });
@@ -2918,7 +2918,7 @@ router.get('/supermarket-portal/assistant-log', authenticateSupermarket, async (
 router.get('/agency/incidents', authenticateAgency, async (req, res) => {
   try {
     await ensureIncidentsInfra();
-    const r = await query(`SELECT i.*, ap.name AS promoter_name, a.name AS agency_name, u.name AS unit_name, (SELECT json_agg(ir ORDER BY ir.created_at) FROM incident_responses ir WHERE ir.incident_id = i.id) AS responses FROM incidents i LEFT JOIN agency_promoters ap ON ap.id = i.agency_promoter_id LEFT JOIN agencies a ON a.id = i.agency_id LEFT JOIN units u ON u.id = i.reported_by_unit_id WHERE i.agency_id = $1 ORDER BY i.created_at DESC LIMIT 100`, [req.agencyId]);
+    const r = await query(`SELECT i.*, ap.name AS promoter_name, a.name AS agency_name, u.name AS unit_name, (SELECT json_agg(ir ORDER BY ir.created_at) FROM incident_responses ir WHERE ir.incident_id = i.id) AS responses FROM incidents i LEFT JOIN agency_promoters ap ON ap.id = i.agency_promoter_id LEFT JOIN agencies a ON a.id = i.agency_id LEFT JOIN supermarket_units u ON u.id = i.reported_by_unit_id WHERE i.agency_id = $1 ORDER BY i.created_at DESC LIMIT 100`, [req.agencyId]);
     res.json(r.rows);
   } catch (err) { logError('agency.incidents.list', err); res.status(500).json({ error: 'Erro' }); }
 });
@@ -2994,7 +2994,7 @@ router.get('/incidents', authenticate, async (req, res) => {
   try {
     await ensureIncidentsInfra();
     const orgId = await getOrgId(req.user.id);
-    const r = await query(`SELECT i.*, ap.name AS promoter_name, a.name AS agency_name, u.name AS unit_name, (SELECT json_agg(ir ORDER BY ir.created_at) FROM incident_responses ir WHERE ir.incident_id = i.id) AS responses FROM incidents i LEFT JOIN agency_promoters ap ON ap.id = i.agency_promoter_id LEFT JOIN agencies a ON a.id = i.agency_id LEFT JOIN units u ON u.id = i.reported_by_unit_id WHERE i.organization_id = $1 ORDER BY i.created_at DESC LIMIT 200`, [orgId]);
+    const r = await query(`SELECT i.*, ap.name AS promoter_name, a.name AS agency_name, u.name AS unit_name, (SELECT json_agg(ir ORDER BY ir.created_at) FROM incident_responses ir WHERE ir.incident_id = i.id) AS responses FROM incidents i LEFT JOIN agency_promoters ap ON ap.id = i.agency_promoter_id LEFT JOIN agencies a ON a.id = i.agency_id LEFT JOIN supermarket_units u ON u.id = i.reported_by_unit_id WHERE i.organization_id = $1 ORDER BY i.created_at DESC LIMIT 200`, [orgId]);
     res.json(r.rows);
   } catch (err) { logError('admin.incidents.list', err); res.status(500).json({ error: 'Erro' }); }
 });
