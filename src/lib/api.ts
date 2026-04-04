@@ -28,8 +28,26 @@ const RETRYABLE_STATUS = new Set([429, 502, 503, 504]);
 const MAX_GET_RETRIES = 2;
 const ERROR_LOG_COOLDOWN_MS = 15000;
 const lastErrorLogByKey = new Map<string, number>();
+const LIVE_ROUTES_ENDPOINT = '/api/merch/routes/live';
+const LIVE_ROUTES_COOLDOWN_MS = 10 * 60 * 1000;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const getEndpointCooldownKey = (endpoint: string) => `api-cooldown:${endpoint}`;
+
+const getEndpointCooldownUntil = (endpoint: string) => {
+  if (!isBrowser) return 0;
+  const raw = window.sessionStorage.getItem(getEndpointCooldownKey(endpoint));
+  const parsed = raw ? Number(raw) : 0;
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const setEndpointCooldown = (endpoint: string, ms: number) => {
+  if (!isBrowser) return;
+  window.sessionStorage.setItem(getEndpointCooldownKey(endpoint), String(Date.now() + ms));
+};
+
+const isEndpointOnCooldown = (endpoint: string) => getEndpointCooldownUntil(endpoint) > Date.now();
 
 const shouldRetry = (method: string, status?: number) => {
   if (method !== 'GET') return false;
@@ -57,6 +75,13 @@ interface ApiOptions {
 export const api = async <T>(endpoint: string, options: ApiOptions = {}): Promise<T> => {
   const { method = 'GET', body, auth = true, headers: customHeaders, silent = false, fallbackToOtherBases = true } = options;
   const normalizedEndpoint = normalizeEndpoint(endpoint);
+  const isLiveRoutesEndpoint = normalizedEndpoint === LIVE_ROUTES_ENDPOINT;
+  const effectiveSilent = silent || isLiveRoutesEndpoint;
+  const effectiveFallbackToOtherBases = isLiveRoutesEndpoint ? false : fallbackToOtherBases;
+
+  if (isLiveRoutesEndpoint && isEndpointOnCooldown(normalizedEndpoint)) {
+    return [] as T;
+  }
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -102,7 +127,7 @@ export const api = async <T>(endpoint: string, options: ApiOptions = {}): Promis
             data = { raw: rawText };
           }
         } else {
-          if (!silent && (rawText.trim().startsWith('<!') || rawText.includes('<html')) && shouldLogNow(`html:${url}:${response.status}`)) {
+          if (!effectiveSilent && (rawText.trim().startsWith('<!') || rawText.includes('<html')) && shouldLogNow(`html:${url}:${response.status}`)) {
             // eslint-disable-next-line no-console
             console.error('[api] Got HTML instead of JSON', {
               url,
@@ -114,6 +139,11 @@ export const api = async <T>(endpoint: string, options: ApiOptions = {}): Promis
         }
 
         if (!response.ok) {
+          if (isLiveRoutesEndpoint && response.status >= 500) {
+            setEndpointCooldown(normalizedEndpoint, LIVE_ROUTES_COOLDOWN_MS);
+            return [] as T;
+          }
+
           if (attempt < retries && shouldRetry(method, response.status)) {
             await sleep(250 * Math.pow(2, attempt));
             continue;
@@ -123,7 +153,7 @@ export const api = async <T>(endpoint: string, options: ApiOptions = {}): Promis
           const detailValue = data?.details || data?.detail || '';
           const details = detailValue ? `: ${detailValue}` : '';
           const logKey = `fail:${url}:${response.status}`;
-          if (!silent && shouldLogNow(logKey)) {
+          if (!effectiveSilent && shouldLogNow(logKey)) {
             // eslint-disable-next-line no-console
             console.error('[api] request failed', {
               url,
@@ -135,7 +165,7 @@ export const api = async <T>(endpoint: string, options: ApiOptions = {}): Promis
           }
 
           // Fallback para same-origin somente em GET, evitando duplicidade em mutações
-          const shouldTryNextBase = fallbackToOtherBases && method === 'GET' && baseIndex < baseCandidates.length - 1 && (
+          const shouldTryNextBase = effectiveFallbackToOtherBases && method === 'GET' && baseIndex < baseCandidates.length - 1 && (
             response.status >= 500 ||
             (base === '' && response.status === 404) ||
             (base === '' && typeof data?.raw === 'string' && (data.raw.trim().startsWith('<!') || data.raw.includes('<html')))
@@ -150,13 +180,18 @@ export const api = async <T>(endpoint: string, options: ApiOptions = {}): Promis
 
         return data as T;
       } catch (error: any) {
+        if (isLiveRoutesEndpoint) {
+          setEndpointCooldown(normalizedEndpoint, LIVE_ROUTES_COOLDOWN_MS);
+          return [] as T;
+        }
+
         const canRetry = attempt < retries && shouldRetry(method);
         if (canRetry) {
           await sleep(250 * Math.pow(2, attempt));
           continue;
         }
 
-        if (!silent && shouldLogNow(`network:${url}`)) {
+        if (!effectiveSilent && shouldLogNow(`network:${url}`)) {
           // eslint-disable-next-line no-console
           console.error('[api] network failure', {
             url,
@@ -165,7 +200,7 @@ export const api = async <T>(endpoint: string, options: ApiOptions = {}): Promis
           });
         }
 
-        const shouldTryNextBase = fallbackToOtherBases && method === 'GET' && baseIndex < baseCandidates.length - 1;
+        const shouldTryNextBase = effectiveFallbackToOtherBases && method === 'GET' && baseIndex < baseCandidates.length - 1;
         if (shouldTryNextBase) {
           lastError = error instanceof Error ? error : new Error('Erro de rede');
           break;
