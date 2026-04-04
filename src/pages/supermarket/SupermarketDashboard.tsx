@@ -10,6 +10,7 @@ import { PromoterScoreBadge } from '@/components/scores/PromoterScoreBadge';
 import { IncidentCreateDialog } from '@/components/incidents/IncidentCreateDialog';
 import { IncidentDetailDialog } from '@/components/incidents/IncidentDetailDialog';
 import { useIncidents, usePromoterScores } from '@/hooks/use-incidents';
+import DailySummaryWidget from '@/components/access-control/DailySummaryWidget';
 import { Users, CheckCircle, XCircle, Clock, Tag, ShieldAlert, CalendarDays, CalendarPlus, Star, AlertTriangle, Plus, ScanFace, QrCode, Fingerprint, CreditCard } from 'lucide-react';
 import { format } from 'date-fns';
 
