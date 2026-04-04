@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PromoterScoreBadge } from '@/components/scores/PromoterScoreBadge';
 import { IncidentDetailDialog } from '@/components/incidents/IncidentDetailDialog';
 import { useIncidents, usePromoterScores } from '@/hooks/use-incidents';
+import DailySummaryWidget from '@/components/access-control/DailySummaryWidget';
 import { Users, CheckCircle, XCircle, Building2, Clock, CalendarDays, AlertTriangle, Star, CreditCard, TrendingUp } from 'lucide-react';
 import { format } from 'date-fns';
 
