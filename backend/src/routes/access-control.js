@@ -32,6 +32,8 @@ const DEFAULT_TOTEM_BRANDING = {
   totem_button_color: '#3b82f6',
   totem_button_text_color: '#ffffff',
   totem_header_text: 'Controle de Acesso',
+  totem_slogan: '',
+  totem_pdv_name: '',
 };
 
 let supermarketPortalSchemaReadyPromise = null;
@@ -47,7 +49,9 @@ async function ensureSupermarketPortalSchema() {
         ADD COLUMN IF NOT EXISTS totem_bg_color TEXT,
         ADD COLUMN IF NOT EXISTS totem_button_color TEXT,
         ADD COLUMN IF NOT EXISTS totem_button_text_color TEXT,
-        ADD COLUMN IF NOT EXISTS totem_header_text TEXT
+        ADD COLUMN IF NOT EXISTS totem_header_text TEXT,
+        ADD COLUMN IF NOT EXISTS totem_slogan TEXT,
+        ADD COLUMN IF NOT EXISTS totem_pdv_name TEXT
     `);
   })();
 
@@ -784,6 +788,7 @@ router.post('/totem/login', async (req, res) => {
               su.totem_token, su.totem_enabled, su.logo_url as unit_logo,
               su.totem_primary_color, su.totem_secondary_color, su.totem_bg_color,
               su.totem_button_color, su.totem_button_text_color, su.totem_header_text,
+              su.totem_slogan, su.totem_pdv_name,
               su.city, su.state, su.id as unit_id
        FROM supermarket_users su_user
        JOIN supermarket_units su ON su.id = su_user.supermarket_unit_id
@@ -818,6 +823,8 @@ router.post('/totem/login', async (req, res) => {
         totem_button_color: user.totem_button_color || DEFAULT_TOTEM_BRANDING.totem_button_color,
         totem_button_text_color: user.totem_button_text_color || DEFAULT_TOTEM_BRANDING.totem_button_text_color,
         totem_header_text: user.totem_header_text || DEFAULT_TOTEM_BRANDING.totem_header_text,
+        totem_slogan: user.totem_slogan || DEFAULT_TOTEM_BRANDING.totem_slogan,
+        totem_pdv_name: user.totem_pdv_name || user.unit_name || DEFAULT_TOTEM_BRANDING.totem_pdv_name,
       },
       user: { id: user.id, name: user.name, email: user.email },
     });
@@ -2281,7 +2288,7 @@ router.get('/totem/auth-config', authenticateTotem, async (req, res) => {
 
     const unitR = await query(
       `SELECT network_id, logo_url, totem_primary_color, totem_secondary_color, totem_bg_color,
-              totem_button_color, totem_button_text_color, totem_header_text, name
+              totem_button_color, totem_button_text_color, totem_header_text, totem_slogan, totem_pdv_name, name
        FROM supermarket_units WHERE id=$1`,
       [req.unitId]
     );
@@ -2317,6 +2324,8 @@ router.get('/totem/auth-config', authenticateTotem, async (req, res) => {
       totem_button_color: unit.totem_button_color || DEFAULT_TOTEM_BRANDING.totem_button_color,
       totem_button_text_color: unit.totem_button_text_color || DEFAULT_TOTEM_BRANDING.totem_button_text_color,
       totem_header_text: unit.totem_header_text || DEFAULT_TOTEM_BRANDING.totem_header_text,
+      totem_slogan: unit.totem_slogan || DEFAULT_TOTEM_BRANDING.totem_slogan,
+      totem_pdv_name: unit.totem_pdv_name || unit.name || DEFAULT_TOTEM_BRANDING.totem_pdv_name,
     };
 
     res.json(effective);
@@ -3269,6 +3278,7 @@ router.get('/supermarket-portal/settings', authenticateSupermarket, async (req, 
       `SELECT su.id, su.name, su.totem_token, su.totem_enabled, su.logo_url,
               su.totem_primary_color, su.totem_secondary_color, su.totem_bg_color,
               su.totem_button_color, su.totem_button_text_color, su.totem_header_text,
+              su.totem_slogan, su.totem_pdv_name,
               su.city, su.state, su.address,
               smu.email as login_email,
               smu.name as login_name,
@@ -3293,6 +3303,8 @@ router.get('/supermarket-portal/settings', authenticateSupermarket, async (req, 
       totem_button_color: settings.totem_button_color || DEFAULT_TOTEM_BRANDING.totem_button_color,
       totem_button_text_color: settings.totem_button_text_color || DEFAULT_TOTEM_BRANDING.totem_button_text_color,
       totem_header_text: settings.totem_header_text || DEFAULT_TOTEM_BRANDING.totem_header_text,
+      totem_slogan: settings.totem_slogan || DEFAULT_TOTEM_BRANDING.totem_slogan,
+      totem_pdv_name: settings.totem_pdv_name || settings.name || DEFAULT_TOTEM_BRANDING.totem_pdv_name,
     });
   } catch (err) { logError('sm.settings.get', err); res.status(500).json({ error: 'Erro ao carregar configurações do supermercado' }); }
 });
@@ -3301,7 +3313,7 @@ router.put('/supermarket-portal/settings', authenticateSupermarket, async (req, 
   try {
     await ensureSupermarketPortalSchema();
     const { logo_url, totem_primary_color, totem_secondary_color, totem_bg_color,
-            totem_button_color, totem_button_text_color, totem_header_text } = req.body;
+            totem_button_color, totem_button_text_color, totem_header_text, totem_slogan, totem_pdv_name } = req.body;
 
     const r = await query(
       `UPDATE supermarket_units SET
@@ -3312,8 +3324,10 @@ router.put('/supermarket-portal/settings', authenticateSupermarket, async (req, 
         totem_button_color = $5,
         totem_button_text_color = $6,
         totem_header_text = $7,
+        totem_slogan = $8,
+        totem_pdv_name = $9,
         updated_at = NOW()
-       WHERE id = $8 RETURNING *`,
+       WHERE id = $10 RETURNING *`,
       [
         typeof logo_url === 'string' ? logo_url.trim() : null,
         typeof totem_primary_color === 'string' ? totem_primary_color.trim() : DEFAULT_TOTEM_BRANDING.totem_primary_color,
@@ -3322,6 +3336,8 @@ router.put('/supermarket-portal/settings', authenticateSupermarket, async (req, 
         typeof totem_button_color === 'string' ? totem_button_color.trim() : DEFAULT_TOTEM_BRANDING.totem_button_color,
         typeof totem_button_text_color === 'string' ? totem_button_text_color.trim() : DEFAULT_TOTEM_BRANDING.totem_button_text_color,
         typeof totem_header_text === 'string' ? totem_header_text.trim() : DEFAULT_TOTEM_BRANDING.totem_header_text,
+        typeof totem_slogan === 'string' ? totem_slogan.trim() : '',
+        typeof totem_pdv_name === 'string' ? totem_pdv_name.trim() : '',
         req.unitId,
       ]
     );
