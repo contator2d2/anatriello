@@ -51,6 +51,7 @@ export default function MerchRotas() {
   const [filterBrand, setFilterBrand] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [showFilters, setShowFilters] = useState(false);
+  const [promoterOpen, setPromoterOpen] = useState(false);
   const [showAIPlanner, setShowAIPlanner] = useState(false);
   const [scopeDialog, setScopeDialog] = useState<{ action: 'edit' | 'delete'; data?: any } | null>(null);
 
