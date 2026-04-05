@@ -173,17 +173,51 @@ export default function MerchRotas() {
           </div>
         </div>
 
-        {/* Filters */}
+        {/* Promoter Search - always visible */}
+        <div className="flex flex-wrap items-center gap-3">
+          <Popover open={promoterOpen} onOpenChange={setPromoterOpen}>
+            <PopoverTrigger asChild>
+              <Button variant="outline" role="combobox" aria-expanded={promoterOpen} className="w-[280px] justify-between">
+                <span className="truncate">
+                  {filterPromoter
+                    ? employees.find((e: any) => e.id === filterPromoter)?.full_name || 'Promotor'
+                    : 'Buscar promotor...'}
+                </span>
+                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[280px] p-0" align="start">
+              <Command>
+                <CommandInput placeholder="Digite o nome do promotor..." />
+                <CommandList>
+                  <CommandEmpty>Nenhum promotor encontrado.</CommandEmpty>
+                  <CommandGroup>
+                    <CommandItem value="__all__" onSelect={() => { setFilterPromoter(''); setPromoterOpen(false); }}>
+                      <Check className={cn("mr-2 h-4 w-4", !filterPromoter ? "opacity-100" : "opacity-0")} />
+                      Todos os promotores
+                    </CommandItem>
+                    {employees.filter((e: any) => e?.id).map((e: any) => (
+                      <CommandItem key={e.id} value={e.full_name} onSelect={() => { setFilterPromoter(e.id); setPromoterOpen(false); }}>
+                        <Check className={cn("mr-2 h-4 w-4", filterPromoter === e.id ? "opacity-100" : "opacity-0")} />
+                        {e.full_name}
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
+          {filterPromoter && (
+            <Button variant="ghost" size="sm" onClick={() => setFilterPromoter('')} className="h-8 px-2 text-muted-foreground">
+              <X className="h-3 w-3 mr-1" /> Limpar
+            </Button>
+          )}
+        </div>
+
+        {/* Additional Filters */}
         {showFilters && (
           <Card>
             <CardContent className="p-3 flex flex-wrap gap-3">
-              <Select value={filterPromoter || "__all__"} onValueChange={(v) => setFilterPromoter(v === "__all__" ? "" : v)}>
-                <SelectTrigger className="w-48"><SelectValue placeholder="Promotor" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__all__">Todos</SelectItem>
-                  {employees.filter((e: any) => e?.id).map((e: any) => <SelectItem key={e.id} value={e.id}>{e.full_name}</SelectItem>)}
-                </SelectContent>
-              </Select>
               <Select value={filterStatus || "__all__"} onValueChange={(v) => setFilterStatus(v === "__all__" ? "" : v)}>
                 <SelectTrigger className="w-44"><SelectValue placeholder="Status" /></SelectTrigger>
                 <SelectContent>
