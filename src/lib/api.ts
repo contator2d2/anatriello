@@ -106,6 +106,24 @@ interface ApiOptions {
   fallbackToOtherBases?: boolean;
 }
 
+const getScopedAuthToken = (endpoint: string) => {
+  if (!isBrowser) return null;
+
+  if (endpoint.startsWith('/api/access-control/agency')) {
+    return localStorage.getItem('agency_auth_token') || localStorage.getItem('auth_token');
+  }
+
+  if (endpoint.startsWith('/api/access-control/supermarket')) {
+    return localStorage.getItem('supermarket_auth_token') || localStorage.getItem('auth_token');
+  }
+
+  if (endpoint.startsWith('/api/promotor')) {
+    return localStorage.getItem('promotor_token') || localStorage.getItem('auth_token');
+  }
+
+  return localStorage.getItem('auth_token');
+};
+
 export const api = async <T>(endpoint: string, options: ApiOptions = {}): Promise<T> => {
   const { method = 'GET', body, auth = true, headers: customHeaders, silent = false, fallbackToOtherBases = true } = options;
   const normalizedEndpoint = normalizeEndpoint(endpoint);
@@ -122,7 +140,7 @@ export const api = async <T>(endpoint: string, options: ApiOptions = {}): Promis
   };
 
   if (auth && !customHeaders?.Authorization) {
-    const token = localStorage.getItem('auth_token');
+    const token = getScopedAuthToken(normalizedEndpoint);
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
     }
@@ -209,7 +227,15 @@ export const api = async <T>(endpoint: string, options: ApiOptions = {}): Promis
             break;
           }
 
-          throw new Error(`${baseMsg}${details}`);
+          const requestError = new Error(`${baseMsg}${details}`) as Error & {
+            status?: number;
+            response?: unknown;
+            url?: string;
+          };
+          requestError.status = response.status;
+          requestError.response = data;
+          requestError.url = url;
+          throw requestError;
         }
 
         return data as T;
