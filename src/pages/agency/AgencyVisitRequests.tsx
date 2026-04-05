@@ -14,6 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Plus, CalendarDays, Loader2, Clock, MapPin } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
+import { useAgencyAuth } from '@/contexts/AgencyAuthContext';
 
 const WEEKDAY_LABELS = ['', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
 
@@ -31,6 +32,7 @@ const statusMap: Record<string, { label: string; variant: 'default' | 'secondary
 export default function AgencyVisitRequests() {
   const { toast } = useToast();
   const qc = useQueryClient();
+  const { user, isLoading: isAuthLoading } = useAgencyAuth();
   const headers = getHeaders();
 
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -50,16 +52,19 @@ export default function AgencyVisitRequests() {
   const { data: requests = [], isLoading } = useQuery({
     queryKey: ['agency-visit-requests'],
     queryFn: () => api<any[]>('/api/access-control/agency/visit-requests', { headers }),
+    enabled: !!user && !!headers && !isAuthLoading,
   });
 
   const { data: allowedUnits = [] } = useQuery({
     queryKey: ['agency-allowed-units'],
     queryFn: () => api<any[]>('/api/access-control/agency/allowed-units', { headers }),
+    enabled: !!user && !!headers && !isAuthLoading,
   });
 
   const { data: promoters = [] } = useQuery({
     queryKey: ['agency-promoters-list'],
     queryFn: () => api<any[]>('/api/access-control/agency/promoters', { headers }),
+    enabled: !!user && !!headers && !isAuthLoading,
   });
 
   const createMutation = useMutation({

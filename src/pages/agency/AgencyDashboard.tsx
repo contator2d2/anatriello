@@ -14,7 +14,7 @@ import { Users, CheckCircle, XCircle, Building2, Clock, CalendarDays, AlertTrian
 import { format } from 'date-fns';
 
 export default function AgencyDashboard() {
-  const { user } = useAgencyAuth();
+  const { user, isLoading: isAuthLoading } = useAgencyAuth();
   const token = localStorage.getItem('agency_auth_token');
   const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
   const [selectedIncident, setSelectedIncident] = useState<any>(null);
@@ -26,19 +26,19 @@ export default function AgencyDashboard() {
   const { data: stats } = useQuery({
     queryKey: ['agency-dashboard-stats'],
     queryFn: () => api<any>('/api/access-control/agency/stats', { headers }),
-    enabled: !!user,
+    enabled: !!user && !!headers && !isAuthLoading,
   });
 
   const { data: recentEntries } = useQuery({
     queryKey: ['agency-recent-entries'],
     queryFn: () => api<any[]>('/api/access-control/agency/recent-entries', { headers }),
-    enabled: !!user,
+    enabled: !!user && !!headers && !isAuthLoading,
   });
 
   const { data: schedule } = useQuery({
     queryKey: ['agency-schedule'],
     queryFn: () => api<any>('/api/access-control/agency/schedule', { headers }),
-    enabled: !!user,
+    enabled: !!user && !!headers && !isAuthLoading,
   });
 
   const s = stats || { total_promoters: 0, active_promoters: 0, blocked_promoters: 0, entries_today: 0, blocked_today: 0, units_authorized: 0, plan_limit: 0, plan_usage: 0 };
