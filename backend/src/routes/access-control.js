@@ -2277,9 +2277,16 @@ router.delete('/qr-tokens/:id', authenticate, async (req, res) => {
 // --- Totem: Get auth config for this unit ---
 router.get('/totem/auth-config', authenticateTotem, async (req, res) => {
   try {
-    // Get unit's network
-    const unitR = await query('SELECT network_id FROM supermarket_units WHERE id=$1', [req.unitId]);
-    const networkId = unitR.rows[0]?.network_id;
+    await ensureSupermarketPortalSchema();
+
+    const unitR = await query(
+      `SELECT network_id, logo_url, totem_primary_color, totem_secondary_color, totem_bg_color,
+              totem_button_color, totem_button_text_color, totem_header_text, name
+       FROM supermarket_units WHERE id=$1`,
+      [req.unitId]
+    );
+    const unit = unitR.rows[0] || {};
+    const networkId = unit.network_id;
 
     let settings = null;
     if (networkId) {
@@ -2287,11 +2294,9 @@ router.get('/totem/auth-config', authenticateTotem, async (req, res) => {
       settings = r.rows[0] || null;
     }
 
-    // Check for PDV override
     const overrideR = await query('SELECT * FROM pdv_auth_overrides WHERE supermarket_unit_id=$1', [req.unitId]);
     const override = overrideR.rows[0];
 
-    // Merge: override takes precedence over network settings
     const effective = {
       cpf_entry_enabled: override?.cpf_entry_enabled ?? settings?.cpf_entry_enabled ?? true,
       qr_entry_enabled: override?.qr_entry_enabled ?? settings?.qr_entry_enabled ?? false,
@@ -2304,6 +2309,14 @@ router.get('/totem/auth-config', authenticateTotem, async (req, res) => {
       allow_low_confidence_entry: override?.allow_low_confidence_entry ?? settings?.allow_low_confidence_entry ?? false,
       require_lgpd_consent: settings?.require_lgpd_consent ?? true,
       consent_text: settings?.consent_text || null,
+      logo_url: unit.logo_url || '',
+      unit_name: unit.name || 'PDV',
+      totem_primary_color: unit.totem_primary_color || DEFAULT_TOTEM_BRANDING.totem_primary_color,
+      totem_secondary_color: unit.totem_secondary_color || DEFAULT_TOTEM_BRANDING.totem_secondary_color,
+      totem_bg_color: unit.totem_bg_color || DEFAULT_TOTEM_BRANDING.totem_bg_color,
+      totem_button_color: unit.totem_button_color || DEFAULT_TOTEM_BRANDING.totem_button_color,
+      totem_button_text_color: unit.totem_button_text_color || DEFAULT_TOTEM_BRANDING.totem_button_text_color,
+      totem_header_text: unit.totem_header_text || DEFAULT_TOTEM_BRANDING.totem_header_text,
     };
 
     res.json(effective);
