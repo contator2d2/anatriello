@@ -127,9 +127,10 @@ async function ensureTables() {
 async function getProductColumns(alias = 'p') {
   let productCols = `${alias}.name as product_name`;
   try {
-    const colCheck = await query(`SELECT column_name FROM information_schema.columns WHERE table_name='products' AND column_name IN ('photo_url','description')`);
+    const colCheck = await query(`SELECT column_name FROM information_schema.columns WHERE table_name='products' AND column_name IN ('photo_url','image_url','description')`);
     const existing = colCheck.rows.map((r) => r.column_name);
-    if (existing.includes('photo_url')) productCols += `, ${alias}.photo_url`;
+    if (existing.includes('image_url')) productCols += `, ${alias}.image_url as photo_url`;
+    else if (existing.includes('photo_url')) productCols += `, ${alias}.photo_url`;
     if (existing.includes('description')) productCols += `, ${alias}.description`;
   } catch {}
   return productCols;
