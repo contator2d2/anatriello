@@ -2490,6 +2490,7 @@ async function checkPromoterConformity(orgId, { agency_promoter_id, employee_id,
 
     if (!settings) {
       // No auth settings = basic (CPF only), always conforme
+      await upsertConformity(orgId, agency_promoter_id, employee_id, network.id, 'conforme', null);
       results.push({ network_id: network.id, network_name: network.name, status: 'conforme', reason: null });
       continue;
     }
