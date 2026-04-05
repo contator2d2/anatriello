@@ -56,6 +56,8 @@ export default function SupermarketSettings() {
       totem_button_color: settings.totem_button_color || DEFAULTS.totem_button_color,
       totem_button_text_color: settings.totem_button_text_color || DEFAULTS.totem_button_text_color,
       totem_header_text: settings.totem_header_text || DEFAULTS.totem_header_text,
+      totem_slogan: settings.totem_slogan || DEFAULTS.totem_slogan,
+      totem_pdv_name: settings.totem_pdv_name || settings.name || DEFAULTS.totem_pdv_name,
     });
   }, [settings]);
 
