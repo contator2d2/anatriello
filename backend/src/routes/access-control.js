@@ -2466,6 +2466,42 @@ router.get('/promoters/conformity', authenticate, async (req, res) => {
   } catch (err) { logError('access.conformity.list', err); res.status(500).json({ error: 'Erro' }); }
 });
 
+// --- Bulk conformity check (all promoters) --- MUST be before :id route
+router.post('/promoters/check-all-conformity', authenticate, async (req, res) => {
+  try {
+    const hasTable = await tableExists('public.promoter_conformity');
+    if (!hasTable) return res.json({ checked: 0, message: 'Tabela não disponível' });
+
+    const orgId = await getOrgId(req.userId);
+
+    const apR = await query(
+      `SELECT ap.id as agency_promoter_id, ap.photo_url, NULL as employee_id
+       FROM agency_promoters ap
+       JOIN agencies a ON a.id = ap.agency_id
+       WHERE a.organization_id = $1 AND ap.status = 'active'`,
+      [orgId]
+    );
+
+    const empR = await query(
+      `SELECT NULL as agency_promoter_id, e.photo_url, e.id as employee_id
+       FROM employees e
+       JOIN organizations o ON o.id = $1
+       WHERE e.organization_id = $1`,
+      [orgId]
+    );
+
+    const all = [...apR.rows, ...empR.rows];
+    let checked = 0;
+
+    for (const p of all) {
+      await checkPromoterConformity(orgId, p);
+      checked++;
+    }
+
+    res.json({ checked, total: all.length });
+  } catch (err) { logError('access.conformity.check_all', err); res.status(500).json({ error: 'Erro' }); }
+});
+
 // --- Check conformity for a single promoter ---
 router.post('/promoters/:id/check-conformity', authenticate, async (req, res) => {
   try {
@@ -2491,27 +2527,22 @@ router.post('/promoters/:id/check-conformity', authenticate, async (req, res) =>
 
     const results = await checkPromoterConformity(orgId, promoter);
 
-    // Create notifications for non-conform results
     const nonConform = results.filter(r => r.status === 'nao_conforme' || r.status === 'pendente');
     if (nonConform.length > 0 && promoter.agency_promoter_id) {
-      // Get agency info
-      const agencyR = await query('SELECT id FROM agency_promoters WHERE id=$1', [promoter.agency_promoter_id]);
-      if (agencyR.rows[0]) {
-        const agR = await query('SELECT agency_id FROM agency_promoters WHERE id=$1', [promoter.agency_promoter_id]);
-        const agencyId = agR.rows[0]?.agency_id;
-        if (agencyId) {
-          for (const nc of nonConform) {
-            const hasNotifTable = await tableExists('public.conformity_notifications');
-            if (hasNotifTable) {
-              await query(
-                `INSERT INTO conformity_notifications (organization_id, agency_id, agency_promoter_id, network_id,
-                 notification_type, message, channel, sent_at)
-                 VALUES ($1,$2,$3,$4,'photo_non_conform',$5,'system',NOW())
-                 ON CONFLICT DO NOTHING`,
-                [orgId, agencyId, promoter.agency_promoter_id, nc.network_id,
-                 `Promotor não está em conformidade com as regras de autenticação da rede ${nc.network_name}. Motivo: ${nc.reason}`]
-              );
-            }
+      const agR = await query('SELECT agency_id FROM agency_promoters WHERE id=$1', [promoter.agency_promoter_id]);
+      const agencyId = agR.rows[0]?.agency_id;
+      if (agencyId) {
+        for (const nc of nonConform) {
+          const hasNotifTable = await tableExists('public.conformity_notifications');
+          if (hasNotifTable) {
+            await query(
+              `INSERT INTO conformity_notifications (organization_id, agency_id, agency_promoter_id, network_id,
+               notification_type, message, channel, sent_at)
+               VALUES ($1,$2,$3,$4,'photo_non_conform',$5,'system',NOW())
+               ON CONFLICT DO NOTHING`,
+              [orgId, agencyId, promoter.agency_promoter_id, nc.network_id,
+               `Promotor não está em conformidade com as regras de autenticação da rede ${nc.network_name}. Motivo: ${nc.reason}`]
+            );
           }
         }
       }
@@ -2519,44 +2550,6 @@ router.post('/promoters/:id/check-conformity', authenticate, async (req, res) =>
 
     res.json({ results });
   } catch (err) { logError('access.conformity.check', err); res.status(500).json({ error: 'Erro ao verificar conformidade' }); }
-});
-
-// --- Bulk conformity check (all promoters) ---
-router.post('/promoters/check-all-conformity', authenticate, async (req, res) => {
-  try {
-    const hasTable = await tableExists('public.promoter_conformity');
-    if (!hasTable) return res.json({ checked: 0, message: 'Tabela não disponível' });
-
-    const orgId = await getOrgId(req.userId);
-
-    // Get all agency promoters
-    const apR = await query(
-      `SELECT ap.id as agency_promoter_id, ap.photo_url, NULL as employee_id
-       FROM agency_promoters ap
-       JOIN agencies a ON a.id = ap.agency_id
-       WHERE a.organization_id = $1 AND ap.status = 'active'`,
-      [orgId]
-    );
-
-    // Get all employees
-    const empR = await query(
-      `SELECT NULL as agency_promoter_id, e.photo_url, e.id as employee_id
-       FROM employees e
-       JOIN organizations o ON o.id = $1
-       WHERE e.organization_id = $1`,
-      [orgId]
-    );
-
-    const all = [...apR.rows, ...empR.rows];
-    let checked = 0;
-
-    for (const p of all) {
-      await checkPromoterConformity(orgId, p);
-      checked++;
-    }
-
-    res.json({ checked, total: all.length });
-  } catch (err) { logError('access.conformity.check_all', err); res.status(500).json({ error: 'Erro' }); }
 });
 
 // --- Get conformity notifications for an agency ---
