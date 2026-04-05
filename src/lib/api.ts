@@ -30,6 +30,40 @@ const ERROR_LOG_COOLDOWN_MS = 15000;
 const lastErrorLogByKey = new Map<string, number>();
 const LIVE_ROUTES_ENDPOINT = '/api/merch/routes/live';
 const LIVE_ROUTES_COOLDOWN_MS = 10 * 60 * 1000;
+const CHAT_UNREAD_ENDPOINT = '/api/chat/conversations/unread';
+const CHAT_ALERTS_ENDPOINT = '/api/chat/alerts';
+const CHAT_POLLING_COOLDOWN_MS = 60 * 1000;
+
+interface EndpointResilienceConfig {
+  cooldownMs: number;
+  fallbackToOtherBases: boolean;
+  fallbackValue: () => unknown;
+  maxRetries?: number;
+  silent?: boolean;
+}
+
+const ENDPOINT_RESILIENCE: Partial<Record<string, EndpointResilienceConfig>> = {
+  [LIVE_ROUTES_ENDPOINT]: {
+    cooldownMs: LIVE_ROUTES_COOLDOWN_MS,
+    fallbackToOtherBases: false,
+    fallbackValue: () => [],
+    silent: true,
+  },
+  [CHAT_UNREAD_ENDPOINT]: {
+    cooldownMs: CHAT_POLLING_COOLDOWN_MS,
+    fallbackToOtherBases: false,
+    fallbackValue: () => [],
+    maxRetries: 0,
+    silent: true,
+  },
+  [CHAT_ALERTS_ENDPOINT]: {
+    cooldownMs: CHAT_POLLING_COOLDOWN_MS,
+    fallbackToOtherBases: false,
+    fallbackValue: () => [],
+    maxRetries: 0,
+    silent: true,
+  },
+};
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -75,12 +109,12 @@ interface ApiOptions {
 export const api = async <T>(endpoint: string, options: ApiOptions = {}): Promise<T> => {
   const { method = 'GET', body, auth = true, headers: customHeaders, silent = false, fallbackToOtherBases = true } = options;
   const normalizedEndpoint = normalizeEndpoint(endpoint);
-  const isLiveRoutesEndpoint = normalizedEndpoint === LIVE_ROUTES_ENDPOINT;
-  const effectiveSilent = silent || isLiveRoutesEndpoint;
-  const effectiveFallbackToOtherBases = isLiveRoutesEndpoint ? false : fallbackToOtherBases;
+  const endpointResilience = ENDPOINT_RESILIENCE[normalizedEndpoint];
+  const effectiveSilent = silent || endpointResilience?.silent === true;
+  const effectiveFallbackToOtherBases = endpointResilience?.fallbackToOtherBases ?? fallbackToOtherBases;
 
-  if (isLiveRoutesEndpoint && isEndpointOnCooldown(normalizedEndpoint)) {
-    return [] as T;
+  if (endpointResilience && isEndpointOnCooldown(normalizedEndpoint)) {
+    return endpointResilience.fallbackValue() as T;
   }
 
   const headers: Record<string, string> = {
@@ -99,7 +133,7 @@ export const api = async <T>(endpoint: string, options: ApiOptions = {}): Promis
   }
 
   const baseCandidates = getBaseCandidates(normalizedEndpoint);
-  const retries = method === 'GET' ? MAX_GET_RETRIES : 0;
+  const retries = method === 'GET' ? endpointResilience?.maxRetries ?? MAX_GET_RETRIES : 0;
   let lastError: Error | null = null;
 
   for (let baseIndex = 0; baseIndex < baseCandidates.length; baseIndex++) {
@@ -139,9 +173,9 @@ export const api = async <T>(endpoint: string, options: ApiOptions = {}): Promis
         }
 
         if (!response.ok) {
-          if (isLiveRoutesEndpoint && response.status >= 500) {
-            setEndpointCooldown(normalizedEndpoint, LIVE_ROUTES_COOLDOWN_MS);
-            return [] as T;
+          if (endpointResilience && response.status >= 500) {
+            setEndpointCooldown(normalizedEndpoint, endpointResilience.cooldownMs);
+            return endpointResilience.fallbackValue() as T;
           }
 
           if (attempt < retries && shouldRetry(method, response.status)) {
@@ -180,9 +214,9 @@ export const api = async <T>(endpoint: string, options: ApiOptions = {}): Promis
 
         return data as T;
       } catch (error: any) {
-        if (isLiveRoutesEndpoint) {
-          setEndpointCooldown(normalizedEndpoint, LIVE_ROUTES_COOLDOWN_MS);
-          return [] as T;
+        if (endpointResilience) {
+          setEndpointCooldown(normalizedEndpoint, endpointResilience.cooldownMs);
+          return endpointResilience.fallbackValue() as T;
         }
 
         const canRetry = attempt < retries && shouldRetry(method);
