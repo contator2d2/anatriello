@@ -41,6 +41,11 @@ const PromotersTab = () => {
 
   const { data: rules = [] } = useAccessRules(selectedPromoter?.id);
 
+  const getPromoterCheckPayload = (promoter: any): { id: string | null; type: "agency_promoter" | "employee" } => {
+    if (promoter?.employee_id) return { id: promoter.employee_id, type: "employee" };
+    return { id: promoter?.agency_promoter_id || promoter?.id || null, type: "agency_promoter" };
+  };
+
   const openNew = () => {
     setEditing(null);
     setForm({ full_name: "", cpf: "", phone: "", agency_id: "", is_active: true });
@@ -126,22 +131,22 @@ const PromotersTab = () => {
       const result = await checkAllConformityMutation.mutateAsync();
       if ((result?.checked ?? 0) > 0) return;
 
-      const validPromoters = promoters.filter((p: any) => (p.employee_id || p.agency_promoter_id || p.id));
+      const validPromoters = promoters
+        .map((p: any) => ({ ...getPromoterCheckPayload(p), promoter: p }))
+        .filter((p: any) => !!p.id);
       for (const p of validPromoters) {
-        const type = p.employee_id ? "employee" : "agency_promoter";
-        const id = p.employee_id || p.agency_promoter_id || p.id;
-        await checkConformityMutation.mutateAsync({ id, type });
+        await checkConformityMutation.mutateAsync({ id: p.id, type: p.type });
       }
 
       if (validPromoters.length > 0) {
         toast({ title: `Conformidade verificada para ${validPromoters.length} promotores` });
       }
     } catch {
-      const validPromoters = promoters.filter((p: any) => (p.employee_id || p.agency_promoter_id || p.id));
+      const validPromoters = promoters
+        .map((p: any) => ({ ...getPromoterCheckPayload(p), promoter: p }))
+        .filter((p: any) => !!p.id);
       for (const p of validPromoters) {
-        const type = p.employee_id ? "employee" : "agency_promoter";
-        const id = p.employee_id || p.agency_promoter_id || p.id;
-        await checkConformityMutation.mutateAsync({ id, type });
+        await checkConformityMutation.mutateAsync({ id: p.id, type: p.type });
       }
       toast({ title: `Conformidade verificada para ${validPromoters.length} promotores` });
     }
@@ -153,7 +158,7 @@ const PromotersTab = () => {
         <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-2">
           <CardTitle className="flex items-center gap-2"><ShieldCheck className="h-5 w-5" /> Promotores</CardTitle>
           <div className="flex gap-2">
-            <Button onClick={handleCheckAllConformity} size="sm" variant="outline" disabled={checkAllConformityMutation.isPending || checkConformityMutation.isPending}>
+            <Button onClick={handleCheckAllConformity} size="sm" variant="outline" disabled={isLoading || checkAllConformityMutation.isPending || checkConformityMutation.isPending}>
               {checkAllConformityMutation.isPending || checkConformityMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <ScanFace className="h-4 w-4 mr-1" />}
               Verificar Conformidade
             </Button>
@@ -221,7 +226,8 @@ const PromotersTab = () => {
                       </TableCell>
                       <TableCell>
                         {(() => {
-                          const promoterId = p.agency_promoter_id || p.id;
+                          const checkPayload = getPromoterCheckPayload(p);
+                          const promoterId = checkPayload.type === "agency_promoter" ? checkPayload.id : null;
                           const conformities = (conformityData as any[]).filter((c: any) =>
                             (c.agency_promoter_id === promoterId) || (c.employee_id === p.employee_id)
                           );
@@ -238,10 +244,13 @@ const PromotersTab = () => {
                       </TableCell>
                       <TableCell>
                         <div className="flex gap-1">
-                          <Button size="icon" variant="ghost" onClick={() => {
-                            const type = p.employee_id ? "employee" : "agency_promoter";
-                            const id = p.employee_id || p.agency_promoter_id || p.id;
-                            checkConformityMutation.mutate({ id, type });
+                          <Button size="icon" variant="ghost" disabled={checkConformityMutation.isPending || checkAllConformityMutation.isPending} onClick={async () => {
+                            const payload = getPromoterCheckPayload(p);
+                            if (!payload.id) {
+                              toast({ title: "Promotor inválido", description: "Não foi possível identificar o cadastro para validar a conformidade.", variant: "destructive" });
+                              return;
+                            }
+                            await checkConformityMutation.mutateAsync(payload);
                           }} title="Verificar conformidade">
                             <ScanFace className="h-4 w-4 text-primary" />
                           </Button>

@@ -4,6 +4,8 @@ import { useToast } from "@/hooks/use-toast";
 
 const BASE = "/api/access-control";
 
+const getErrorMessage = (error: any, fallback: string) => error?.message || fallback;
+
 // ─── Networks ───
 export function useNetworks() {
   return useQuery({ queryKey: ["ac-networks"], queryFn: () => api<any[]>(`${BASE}/networks`) });
@@ -354,7 +356,13 @@ export function useCheckPromoterConformity() {
       qc.invalidateQueries({ queryKey: ["ac-conformity"] });
       toast({
         title: data?.message || "Conformidade verificada",
-        variant: data?.message ? "destructive" : "default",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Erro ao verificar conformidade",
+        description: getErrorMessage(error, "Tente novamente."),
+        variant: "destructive",
       });
     },
   });
@@ -369,7 +377,13 @@ export function useCheckAllConformity() {
       qc.invalidateQueries({ queryKey: ["ac-conformity"] });
       toast({
         title: data?.message || `Conformidade verificada para ${data.checked} promotores`,
-        variant: data?.message ? "destructive" : "default",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Erro ao verificar conformidade em lote",
+        description: getErrorMessage(error, "Tente novamente."),
+        variant: "destructive",
       });
     },
   });
