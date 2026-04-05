@@ -99,6 +99,7 @@ import PromotorConfig from "./pages/promotor/PromotorConfig";
 import PromotorTrocarSenha from "./pages/promotor/PromotorTrocarSenha";
 import PromotorEquipe from "./pages/promotor/PromotorEquipe";
 import NotFound from "./pages/NotFound";
+import SupermarketLandingPage from "./pages/SupermarketLandingPage";
 import TotemAccess from "./pages/TotemAccess";
 import AccessControlAdmin from "./pages/AccessControlAdmin";
 import { AgencyAuthProvider } from "./contexts/AgencyAuthContext";
