@@ -124,6 +124,110 @@ async function ensureTables() {
     created_at TIMESTAMPTZ DEFAULT NOW(), UNIQUE(rede_id, pdv_id))`);
 }
 
+async function getProductColumns(alias = 'p') {
+  let productCols = `${alias}.name as product_name`;
+  try {
+    const colCheck = await query(`SELECT column_name FROM information_schema.columns WHERE table_name='products' AND column_name IN ('photo_url','description')`);
+    const existing = colCheck.rows.map((r) => r.column_name);
+    if (existing.includes('photo_url')) productCols += `, ${alias}.photo_url`;
+    if (existing.includes('description')) productCols += `, ${alias}.description`;
+  } catch {}
+  return productCols;
+}
+
+function mapRuleCompetitors(productId, competitors = []) {
+  return competitors.map((comp, index) => ({
+    id: comp.id || `rule-${productId}-${index}`,
+    competitor_product_id: comp.competitor_product_id || null,
+    competitor_id: comp.competitor_id || null,
+    competitor_product_name: comp.competitor_product_name || comp.name || '',
+    competitor_brand_name: comp.competitor_brand_name || comp.brand || '',
+    photo_url: comp.photo_url || null,
+    price: comp.price ?? null,
+    observation: comp.observation ?? null,
+    source: 'rule',
+  }));
+}
+
+async function buildTemplateItems(rule) {
+  const selectedProducts = Array.isArray(rule?.selected_products) ? rule.selected_products : [];
+  const competitorConfig = rule?.competitor_config || {};
+  if (selectedProducts.length === 0) return [];
+
+  const productCols = await getProductColumns('p');
+  const products = (await query(
+    `SELECT p.id, ${productCols} FROM products p WHERE p.id = ANY($1::uuid[]) ORDER BY p.name`,
+    [selectedProducts],
+  )).rows;
+  const productMap = new Map(products.map((product) => [product.id, product]));
+
+  return selectedProducts.map((productId, index) => {
+    const product = productMap.get(productId) || {};
+    return {
+      id: `template-${productId}-${index}`,
+      product_id: productId,
+      product_name: product.product_name || 'Produto',
+      photo_url: product.photo_url || null,
+      description: product.description || null,
+      price: null,
+      observation: null,
+      competitors: mapRuleCompetitors(productId, competitorConfig[productId] || []),
+      source: 'template',
+      is_template_only: true,
+    };
+  });
+}
+
+async function hydrateExecution(exec, ruleOverride = null) {
+  const rule = ruleOverride || (exec.rule_id
+    ? (await query('SELECT selected_products, competitor_config FROM price_research_rules WHERE id = $1', [exec.rule_id])).rows[0]
+    : null);
+  const productCols = await getProductColumns('p');
+
+  const items = (await query(
+    `SELECT i.*, ${productCols} FROM price_research_items i
+     LEFT JOIN products p ON p.id = i.product_id WHERE i.execution_id = $1 ORDER BY p.name`,
+    [exec.id],
+  )).rows;
+
+  for (const item of items) {
+    item.competitors = (await query(
+      `SELECT ic.*, COALESCE(ic.photo_url, cp.photo_url) as photo_url FROM price_research_item_competitors ic
+       LEFT JOIN price_research_competitor_products cp ON cp.id = ic.competitor_product_id
+       WHERE ic.item_id = $1 ORDER BY ic.competitor_brand_name, ic.competitor_product_name`,
+      [item.id],
+    )).rows;
+  }
+
+  const mergedItems = [];
+  const existingByProductId = new Map(items.map((item) => [item.product_id, item]));
+  const selectedProducts = Array.isArray(rule?.selected_products) ? rule.selected_products : [];
+
+  if (selectedProducts.length > 0) {
+    const templateItems = await buildTemplateItems(rule);
+    for (const templateItem of templateItems) {
+      const existingItem = existingByProductId.get(templateItem.product_id);
+      if (existingItem) {
+        if ((!existingItem.competitors || existingItem.competitors.length === 0) && templateItem.competitors.length > 0) {
+          existingItem.competitors = templateItem.competitors;
+        }
+        mergedItems.push(existingItem);
+      } else {
+        mergedItems.push(templateItem);
+      }
+      existingByProductId.delete(templateItem.product_id);
+    }
+  }
+
+  for (const item of existingByProductId.values()) mergedItems.push(item);
+
+  exec.rule_selected_products = selectedProducts;
+  exec.rule_competitor_config = rule?.competitor_config || {};
+  exec.items = selectedProducts.length > 0 ? mergedItems : items;
+  exec.photos = (await query('SELECT * FROM price_research_photos WHERE execution_id = $1 ORDER BY created_at', [exec.id])).rows;
+  return exec;
+}
+
 // ===== ADMIN: Rules / Templates =====
 router.get('/rules', authenticate, async (req, res) => {
   try {
@@ -364,25 +468,7 @@ router.get('/executions/:id', authenticate, async (req, res) => {
       LEFT JOIN price_research_rules r ON r.id = e.rule_id
       WHERE e.id = $1`, [req.params.id])).rows[0];
     if (!exec) return res.status(404).json({ error: 'Não encontrado' });
-
-    let productCols = 'p.name as product_name';
-    try {
-      const colCheck = await query(`SELECT column_name FROM information_schema.columns WHERE table_name='products' AND column_name IN ('photo_url','description')`);
-      const existing = colCheck.rows.map((r) => r.column_name);
-      if (existing.includes('photo_url')) productCols += ', p.photo_url';
-      if (existing.includes('description')) productCols += ', p.description';
-    } catch {}
-
-    const items = (await query(`SELECT i.*, ${productCols} FROM price_research_items i
-      LEFT JOIN products p ON p.id = i.product_id WHERE i.execution_id = $1 ORDER BY p.name`, [exec.id])).rows;
-    for (const item of items) {
-      item.competitors = (await query(`SELECT ic.*, COALESCE(ic.photo_url, cp.photo_url) as photo_url FROM price_research_item_competitors ic
-        LEFT JOIN price_research_competitor_products cp ON cp.id = ic.competitor_product_id
-        WHERE ic.item_id = $1 ORDER BY ic.competitor_brand_name`, [item.id])).rows;
-    }
-    exec.items = items;
-    exec.photos = (await query('SELECT * FROM price_research_photos WHERE execution_id = $1 ORDER BY created_at', [exec.id])).rows;
-    res.json(exec);
+    res.json(await hydrateExecution(exec));
   } catch (err) { logError('price-research.executions.detail', err); res.status(500).json({ error: 'Erro' }); }
 });
 
@@ -450,8 +536,8 @@ router.post('/schedule', authenticate, async (req, res) => {
     const orgId = await getOrgId(req.userId);
     if (!orgId) return res.status(403).json({ error: 'Sem organização' });
     const { rule_id, brand_id, pdv_id, pdv_ids, rede_id, promoter_id, scheduled_date, scheduled_time, recurrence_type, recurrence_end_date } = req.body;
-    if (!rule_id || !brand_id || !promoter_id || !scheduled_date) {
-      return res.status(400).json({ error: 'Campos obrigatórios: rule_id, brand_id, promoter_id, scheduled_date' });
+    if (!rule_id || !brand_id || !scheduled_date || (!rede_id && !promoter_id)) {
+      return res.status(400).json({ error: 'Campos obrigatórios: rule_id, brand_id, scheduled_date e promotor para agendamento por PDV' });
     }
 
     // Resolve PDV list
@@ -491,7 +577,7 @@ router.post('/schedule', authenticate, async (req, res) => {
         const result = await query(
           `INSERT INTO price_research_executions (organization_id, rule_id, brand_id, pdv_id, promoter_id, scheduled_date, scheduled_time, recurrence_type, recurrence_end_date, status)
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'scheduled') RETURNING *`,
-          [orgId, rule_id, brand_id, targetPdv, promoter_id, date, scheduled_time || null, recurrence_type || 'once', recurrence_end_date || null]
+          [orgId, rule_id, brand_id, targetPdv, rede_id ? null : promoter_id, date, scheduled_time || null, recurrence_type || 'once', recurrence_end_date || null]
         );
         const exec = result.rows[0];
 
@@ -528,7 +614,7 @@ router.post('/schedule', authenticate, async (req, res) => {
 router.put('/executions/:id', authenticate, async (req, res) => {
   try {
     await ensureTables();
-    const { promoter_id, pdv_id, scheduled_date, scheduled_time, products, status } = req.body;
+    const { promoter_id, pdv_id, scheduled_date, scheduled_time, products, items, status } = req.body;
     const updates = [];
     const params = [];
     let idx = 1;
@@ -545,46 +631,87 @@ router.put('/executions/:id', authenticate, async (req, res) => {
       await query(`UPDATE price_research_executions SET ${updates.join(',')} WHERE id=$${idx}`, params);
     }
 
-    // Sync products: add/remove items to match provided product list
-    if (products && Array.isArray(products)) {
+    // Sync products/items to match provided list
+    if ((items && Array.isArray(items)) || (products && Array.isArray(products))) {
       const execId = req.params.id;
       const exec = (await query('SELECT rule_id FROM price_research_executions WHERE id=$1', [execId])).rows[0];
       const ruleRow = exec?.rule_id ? (await query('SELECT competitor_config FROM price_research_rules WHERE id=$1', [exec.rule_id])).rows[0] : null;
       const competitorConfig = ruleRow?.competitor_config || {};
+      const itemPayload = Array.isArray(items) ? items.filter((item) => item?.product_id) : null;
+      const nextProducts = itemPayload ? itemPayload.map((item) => item.product_id) : products;
 
       // Get current items
       const currentItems = (await query('SELECT id, product_id FROM price_research_items WHERE execution_id=$1', [execId])).rows;
       const currentProductIds = currentItems.map(i => i.product_id);
 
       // Remove items no longer in the list
-      const toRemove = currentItems.filter(i => !products.includes(i.product_id));
+      const toRemove = currentItems.filter(i => !nextProducts.includes(i.product_id));
       for (const item of toRemove) {
         await query('DELETE FROM price_research_item_competitors WHERE item_id=$1', [item.id]);
         await query('DELETE FROM price_research_items WHERE id=$1', [item.id]);
       }
 
-      // Add new items
-      const toAdd = products.filter(pid => !currentProductIds.includes(pid));
-      for (const pid of toAdd) {
-        const itemResult = await query(
-          'INSERT INTO price_research_items (execution_id, product_id) VALUES ($1,$2) RETURNING id',
-          [execId, pid]
-        );
-        const itemId = itemResult.rows[0].id;
-        // Add competitors from model config
-        const comps = competitorConfig[pid] || [];
-        for (const comp of comps) {
-          await query(
-            `INSERT INTO price_research_item_competitors (item_id, competitor_product_name, competitor_brand_name, photo_url)
-             VALUES ($1,$2,$3,$4)`,
-            [itemId, comp.name, comp.brand, comp.photo_url || null]
+      if (itemPayload) {
+        for (const item of itemPayload) {
+          let currentItem = currentItems.find((row) => row.product_id === item.product_id);
+          if (!currentItem) {
+            currentItem = (await query(
+              'INSERT INTO price_research_items (execution_id, product_id, price, observation, updated_at) VALUES ($1,$2,$3,$4,NOW()) RETURNING id, product_id',
+              [execId, item.product_id, item.price ?? null, item.observation ?? null],
+            )).rows[0];
+          } else {
+            await query(
+              'UPDATE price_research_items SET price=$1, observation=$2, updated_at=NOW() WHERE id=$3',
+              [item.price ?? null, item.observation ?? null, currentItem.id],
+            );
+          }
+
+          await query('DELETE FROM price_research_item_competitors WHERE item_id=$1', [currentItem.id]);
+          for (const comp of (item.competitors || [])) {
+            await query(
+              `INSERT INTO price_research_item_competitors (
+                 item_id, competitor_product_id, competitor_id, competitor_product_name,
+                 competitor_brand_name, price, observation, photo_url, collected_at
+               ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+              [
+                currentItem.id,
+                comp.competitor_product_id || null,
+                comp.competitor_id || null,
+                comp.competitor_product_name || null,
+                comp.competitor_brand_name || null,
+                comp.price ?? null,
+                comp.observation ?? null,
+                comp.photo_url || null,
+                comp.price != null ? new Date() : null,
+              ],
+            );
+          }
+        }
+      } else {
+        const toAdd = products.filter(pid => !currentProductIds.includes(pid));
+        for (const pid of toAdd) {
+          const itemResult = await query(
+            'INSERT INTO price_research_items (execution_id, product_id) VALUES ($1,$2) RETURNING id',
+            [execId, pid]
           );
+          const itemId = itemResult.rows[0].id;
+          const comps = competitorConfig[pid] || [];
+          for (const comp of comps) {
+            await query(
+              `INSERT INTO price_research_item_competitors (item_id, competitor_product_name, competitor_brand_name, photo_url)
+               VALUES ($1,$2,$3,$4)`,
+              [itemId, comp.name, comp.brand, comp.photo_url || null]
+            );
+          }
         }
       }
 
-      // Update total_items
       const countResult = await query('SELECT COUNT(*) as cnt FROM price_research_items WHERE execution_id=$1', [execId]);
-      await query('UPDATE price_research_executions SET total_items=$1, updated_at=NOW() WHERE id=$2', [parseInt(countResult.rows[0].cnt), execId]);
+      const completedResult = await query('SELECT COUNT(*) as cnt FROM price_research_items WHERE execution_id=$1 AND price IS NOT NULL', [execId]);
+      const totalItems = parseInt(countResult.rows[0].cnt, 10) || 0;
+      const completedItems = parseInt(completedResult.rows[0].cnt, 10) || 0;
+      const progressPct = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
+      await query('UPDATE price_research_executions SET total_items=$1, completed_items=$2, progress_pct=$3, updated_at=NOW() WHERE id=$4', [totalItems, completedItems, progressPct, execId]);
     }
 
     logInfo('price-research.update-execution', `Updated execution ${req.params.id}`);
@@ -611,11 +738,11 @@ router.put('/executions/:id/publish', authenticate, async (req, res) => {
 // ===== Item Competitors CRUD =====
 router.post('/item-competitors', authenticate, async (req, res) => {
   try {
-    const { item_id, competitor_product_name, competitor_brand_name, photo_url } = req.body;
+    const { item_id, competitor_product_name, competitor_brand_name, photo_url, observation } = req.body;
     if (!item_id || !competitor_product_name) return res.status(400).json({ error: 'item_id e nome obrigatórios' });
     const result = await query(
-      `INSERT INTO price_research_item_competitors (item_id, competitor_product_name, competitor_brand_name, photo_url) VALUES ($1,$2,$3,$4) RETURNING *`,
-      [item_id, competitor_product_name, competitor_brand_name || null, photo_url || null]
+      `INSERT INTO price_research_item_competitors (item_id, competitor_product_name, competitor_brand_name, photo_url, observation) VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+      [item_id, competitor_product_name, competitor_brand_name || null, photo_url || null, observation || null]
     );
     res.json(result.rows[0]);
   } catch (err) { logError('price-research.add-item-competitor', err); res.status(500).json({ error: 'Erro' }); }
@@ -723,20 +850,6 @@ router.get('/route/:routeId', authenticate, async (req, res) => {
   try {
     await ensureTables();
     const { routeId } = req.params;
-    let exec = (await query('SELECT * FROM price_research_executions WHERE route_id = $1', [routeId])).rows;
-    if (exec.length > 0) {
-      for (const e of exec) {
-        e.items = (await query(`SELECT i.*, p.name as product_name, p.photo_url, p.description FROM price_research_items i
-          LEFT JOIN products p ON p.id = i.product_id WHERE i.execution_id = $1 ORDER BY p.name`, [e.id])).rows;
-        for (const item of e.items) {
-          item.competitors = (await query(`SELECT ic.*, cp.photo_url FROM price_research_item_competitors ic
-            LEFT JOIN price_research_competitor_products cp ON cp.id = ic.competitor_product_id
-            WHERE ic.item_id = $1`, [item.id])).rows;
-        }
-        e.photos = (await query('SELECT * FROM price_research_photos WHERE execution_id = $1', [e.id])).rows;
-      }
-      return res.json(exec);
-    }
     const route = (await query('SELECT * FROM merch_routes WHERE id = $1', [routeId])).rows[0];
     if (!route) return res.json([]);
     let brandIds = [];
@@ -746,28 +859,62 @@ router.get('/route/:routeId', authenticate, async (req, res) => {
       brandIds = rb.map(r => r.brand_id);
     }
     if (brandIds.length === 0) return res.json([]);
-    const rules = (await query('SELECT * FROM price_research_rules WHERE brand_id = ANY($1) AND enabled = true', [brandIds])).rows;
+
+    const directExecutions = (await query('SELECT * FROM price_research_executions WHERE route_id = $1 ORDER BY created_at', [routeId])).rows;
+    const sharedExecutions = (await query(
+      `SELECT * FROM price_research_executions
+       WHERE route_id IS NULL
+         AND pdv_id = $1
+         AND brand_id = ANY($2::uuid[])
+         AND status = ANY($3::text[])
+         AND (scheduled_date IS NULL OR scheduled_date <= $4)
+       ORDER BY COALESCE(scheduled_date, created_at::date), created_at`,
+      [route.pdv_id, brandIds, ['scheduled', 'pending', 'in_progress', 'draft', 'postponed', 'partially_completed'], route.visit_date],
+    )).rows;
+
+    const executionMap = new Map();
+    [...directExecutions, ...sharedExecutions].forEach((execution) => executionMap.set(execution.id, execution));
+
     const result = [];
+    const executionBrandIds = new Set();
+    for (const execution of executionMap.values()) {
+      executionBrandIds.add(execution.brand_id);
+      result.push(await hydrateExecution(execution));
+    }
+
+    const rules = (await query('SELECT * FROM price_research_rules WHERE brand_id = ANY($1) AND enabled = true', [brandIds])).rows;
     for (const rule of rules) {
-      const mappings = (await query(`SELECT pm.*, p.name as product_name, p.photo_url, p.description
-        FROM price_research_product_mappings pm LEFT JOIN products p ON p.id = pm.product_id
-        WHERE pm.brand_id = $1 AND pm.enabled = true ORDER BY p.name`, [rule.brand_id])).rows;
-      const items = [];
-      for (const m of mappings) {
-        const compProducts = (await query(`SELECT cp.*, c.competitor_name as competitor_brand_name
-          FROM price_research_competitor_products cp
-          LEFT JOIN price_research_brand_competitors c ON c.id = cp.competitor_id
-          WHERE cp.mapping_id = $1 AND cp.active = true ORDER BY COALESCE(cp.sort_order,0), c.competitor_name`, [m.id])).rows;
-        items.push({
-          product_id: m.product_id, product_name: m.product_name, photo_url: m.photo_url, description: m.description, price: null,
-          competitors: compProducts.map(cp => ({
-            competitor_product_id: cp.id, competitor_id: cp.competitor_id,
-            competitor_product_name: cp.competitor_product_name, competitor_brand_name: cp.competitor_brand_name,
-            photo_url: cp.photo_url, price: null,
-          })),
-        });
+      if (executionBrandIds.has(rule.brand_id)) continue;
+      let items = await buildTemplateItems(rule);
+      if (items.length === 0) {
+        const mappings = (await query(`SELECT pm.*, p.name as product_name, p.photo_url, p.description
+          FROM price_research_product_mappings pm LEFT JOIN products p ON p.id = pm.product_id
+          WHERE pm.brand_id = $1 AND pm.enabled = true ORDER BY p.name`, [rule.brand_id])).rows;
+        items = [];
+        for (const m of mappings) {
+          const compProducts = (await query(`SELECT cp.*, c.competitor_name as competitor_brand_name
+            FROM price_research_competitor_products cp
+            LEFT JOIN price_research_brand_competitors c ON c.id = cp.competitor_id
+            WHERE cp.mapping_id = $1 AND cp.active = true ORDER BY COALESCE(cp.sort_order,0), c.competitor_name`, [m.id])).rows;
+          items.push({
+            product_id: m.product_id, product_name: m.product_name, photo_url: m.photo_url, description: m.description, price: null,
+            competitors: compProducts.map(cp => ({
+              competitor_product_id: cp.id, competitor_id: cp.competitor_id,
+              competitor_product_name: cp.competitor_product_name, competitor_brand_name: cp.competitor_brand_name,
+              photo_url: cp.photo_url, price: null,
+            })),
+          });
+        }
       }
-      result.push({ brand_id: rule.brand_id, rule, status: 'not_started', items, photos: [] });
+      result.push({
+        brand_id: rule.brand_id,
+        rule,
+        rule_selected_products: rule.selected_products || [],
+        rule_competitor_config: rule.competitor_config || {},
+        status: 'not_started',
+        items,
+        photos: [],
+      });
     }
     res.json(result);
   } catch (err) { logError('price-research.route', err); if (err.code === '42P01') return res.json([]); res.status(500).json({ error: 'Erro' }); }
@@ -795,10 +942,28 @@ router.post('/execute', authenticate, async (req, res) => {
     }
     if (!exec && route_id) {
       exec = (await query('SELECT * FROM price_research_executions WHERE route_id = $1 AND brand_id = $2', [route_id, brand_id])).rows[0];
+      if (!exec) {
+        const route = (await query('SELECT pdv_id, visit_date FROM merch_routes WHERE id = $1', [route_id])).rows[0];
+        if (route?.pdv_id) {
+          exec = (await query(
+            `SELECT * FROM price_research_executions
+             WHERE route_id IS NULL
+               AND pdv_id = $1
+               AND brand_id = $2
+               AND status = ANY($3::text[])
+               AND (scheduled_date IS NULL OR scheduled_date <= $4)
+             ORDER BY COALESCE(scheduled_date, created_at::date), created_at
+             LIMIT 1`,
+            [route.pdv_id, brand_id, ['scheduled', 'pending', 'in_progress', 'draft', 'postponed', 'partially_completed'], route.visit_date],
+          )).rows[0];
+        }
+      }
     }
     if (!exec) {
       exec = (await query(`INSERT INTO price_research_executions (organization_id, route_id, brand_id, pdv_id, promoter_id, status, started_at)
         VALUES ($1,$2,$3,$4,$5,'in_progress',NOW()) RETURNING *`, [orgId, route_id, brand_id, pdv_id, promoter_id])).rows[0];
+    } else {
+      await query('UPDATE price_research_executions SET promoter_id = COALESCE($1, promoter_id), updated_at = NOW() WHERE id = $2', [promoter_id || null, exec.id]);
     }
 
     let completedCount = 0;
