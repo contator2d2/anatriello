@@ -3205,6 +3205,88 @@ router.get('/supermarket-portal/assistant-log', authenticateSupermarket, async (
 });
 
 // ============ AGENCY PORTAL: Incidents & Scores ============
+
+// ============ SUPERMARKET-PORTAL: Settings ============
+router.get('/supermarket-portal/settings', authenticateSupermarket, async (req, res) => {
+  try {
+    const r = await query(
+      `SELECT su.id, su.name, su.totem_token, su.totem_enabled, su.logo_url,
+              su.totem_primary_color, su.totem_secondary_color, su.totem_bg_color,
+              su.totem_button_color, su.totem_button_text_color, su.totem_header_text,
+              su.city, su.state, su.address,
+              sn.name as network_name
+       FROM supermarket_units su
+       LEFT JOIN supermarket_networks sn ON sn.id = su.network_id
+       WHERE su.id = $1`,
+      [req.unitId]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'Unidade não encontrada' });
+    res.json(r.rows[0]);
+  } catch (err) { logError('sm.settings.get', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.put('/supermarket-portal/settings', authenticateSupermarket, async (req, res) => {
+  try {
+    const { logo_url, totem_primary_color, totem_secondary_color, totem_bg_color,
+            totem_button_color, totem_button_text_color, totem_header_text } = req.body;
+
+    // Ensure columns exist
+    const cols = ['totem_primary_color', 'totem_secondary_color', 'totem_bg_color',
+                  'totem_button_color', 'totem_button_text_color', 'totem_header_text'];
+    for (const col of cols) {
+      await query(`ALTER TABLE supermarket_units ADD COLUMN IF NOT EXISTS ${col} TEXT`).catch(() => {});
+    }
+
+    const r = await query(
+      `UPDATE supermarket_units SET
+        logo_url = COALESCE($1, logo_url),
+        totem_primary_color = COALESCE($2, totem_primary_color),
+        totem_secondary_color = COALESCE($3, totem_secondary_color),
+        totem_bg_color = COALESCE($4, totem_bg_color),
+        totem_button_color = COALESCE($5, totem_button_color),
+        totem_button_text_color = COALESCE($6, totem_button_text_color),
+        totem_header_text = COALESCE($7, totem_header_text),
+        updated_at = NOW()
+       WHERE id = $8 RETURNING *`,
+      [logo_url || null, totem_primary_color || null, totem_secondary_color || null,
+       totem_bg_color || null, totem_button_color || null, totem_button_text_color || null,
+       totem_header_text || null, req.unitId]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'Unidade não encontrada' });
+    res.json(r.rows[0]);
+  } catch (err) { logError('sm.settings.update', err); res.status(500).json({ error: 'Erro ao salvar configurações' }); }
+});
+
+router.put('/supermarket-portal/change-password', authenticateSupermarket, async (req, res) => {
+  try {
+    const { current_password, new_password } = req.body;
+    if (!current_password || !new_password) return res.status(400).json({ error: 'Senhas são obrigatórias' });
+    if (String(new_password).length < 6) return res.status(400).json({ error: 'Nova senha deve ter no mínimo 6 caracteres' });
+
+    const user = await query('SELECT password_hash FROM supermarket_users WHERE id = $1', [req.supermarketUserId]);
+    if (!user.rows.length) return res.status(404).json({ error: 'Usuário não encontrado' });
+
+    const valid = await bcrypt.compare(current_password, user.rows[0].password_hash);
+    if (!valid) return res.status(401).json({ error: 'Senha atual incorreta' });
+
+    const hash = await bcrypt.hash(new_password, 10);
+    await query('UPDATE supermarket_users SET password_hash = $1, updated_at = NOW() WHERE id = $2', [hash, req.supermarketUserId]);
+    res.json({ success: true, message: 'Senha alterada com sucesso' });
+  } catch (err) { logError('sm.change_password', err); res.status(500).json({ error: 'Erro ao alterar senha' }); }
+});
+
+router.post('/supermarket-portal/regenerate-token', authenticateSupermarket, async (req, res) => {
+  try {
+    const newToken = crypto.randomBytes(32).toString('hex');
+    const r = await query(
+      'UPDATE supermarket_units SET totem_token = $1, totem_enabled = true, updated_at = NOW() WHERE id = $2 RETURNING totem_token',
+      [newToken, req.unitId]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'Unidade não encontrada' });
+    res.json({ totem_token: r.rows[0].totem_token });
+  } catch (err) { logError('sm.regen_token', err); res.status(500).json({ error: 'Erro ao regenerar token' }); }
+});
+
 router.get('/agency/incidents', authenticateAgency, async (req, res) => {
   try {
     await ensureIncidentsInfra();

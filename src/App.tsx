@@ -117,6 +117,7 @@ import SupermarketVisitRequests from "./pages/supermarket/SupermarketVisitReques
 import SupermarketIncidents from "./pages/supermarket/SupermarketIncidents";
 import SupermarketContacts from "./pages/supermarket/SupermarketContacts";
 import SupermarketAssistant from "./pages/supermarket/SupermarketAssistant";
+import SupermarketSettings from "./pages/supermarket/SupermarketSettings";
 
 const queryClient = new QueryClient();
 
@@ -263,6 +264,7 @@ const App = () => (
               <Route path="contatos" element={<SupermarketContacts />} />
               <Route path="assistente" element={<SupermarketAssistant />} />
               <Route path="historico" element={<SupermarketHistory />} />
+              <Route path="configuracoes" element={<SupermarketSettings />} />
             </Route>
             {/* Promotor App */}
             <Route path="/promotor/login" element={<PromotorLogin />} />
