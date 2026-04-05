@@ -156,7 +156,21 @@ const TotemAccess = () => {
       headers: { "x-totem-token": session.token },
     }).then(r => r.json()).then(data => {
       setAuthConfig(data);
-      // Auto-select mode if only one is enabled
+      const syncedConfig = {
+        ...config,
+        token: session.token,
+        unitName: data.unit_name || session.unitName || config.unitName,
+        logoUrl: data.logo_url || session.unitLogo || config.logoUrl,
+        primaryColor: data.totem_primary_color || config.primaryColor,
+        secondaryColor: data.totem_secondary_color || config.secondaryColor,
+        bgColor: data.totem_bg_color || config.bgColor,
+        buttonColor: data.totem_button_color || config.buttonColor,
+        buttonTextColor: data.totem_button_text_color || config.buttonTextColor,
+        headerText: data.totem_header_text || config.headerText,
+      };
+      setConfig(syncedConfig);
+      setConfigForm(syncedConfig);
+      saveConfig(syncedConfig);
       if (data.cpf_entry_enabled && !data.qr_entry_enabled) setAuthMode("cpf");
       else if (!data.cpf_entry_enabled && data.qr_entry_enabled) setAuthMode("qr");
       else setAuthMode("select");
@@ -215,8 +229,19 @@ const TotemAccess = () => {
         unitState: data.unit?.state || "", userName: data.user?.name || "", userEmail: data.user?.email || "",
       };
       saveSession(newSession); setSession(newSession);
-      const newConfig = { ...config, token: newSession.token, unitName: newSession.unitName, logoUrl: newSession.unitLogo || config.logoUrl };
-      setConfig(newConfig); saveConfig(newConfig);
+      const newConfig = {
+        ...config,
+        token: newSession.token,
+        unitName: newSession.unitName,
+        logoUrl: data.unit?.logo_url || newSession.unitLogo || config.logoUrl,
+        primaryColor: data.unit?.totem_primary_color || config.primaryColor,
+        secondaryColor: data.unit?.totem_secondary_color || config.secondaryColor,
+        bgColor: data.unit?.totem_bg_color || config.bgColor,
+        buttonColor: data.unit?.totem_button_color || config.buttonColor,
+        buttonTextColor: data.unit?.totem_button_text_color || config.buttonTextColor,
+        headerText: data.unit?.totem_header_text || config.headerText,
+      };
+      setConfig(newConfig); setConfigForm(newConfig); saveConfig(newConfig);
     } catch { setLoginError("Erro de conexão com o servidor"); }
     finally { setLoginLoading(false); }
   };
