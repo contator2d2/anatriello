@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Pencil, ShieldCheck, Loader2, Key, Trash2, FileText, ScanFace, RefreshCw } from "lucide-react";
+import { Plus, Pencil, ShieldCheck, Loader2, Key, Trash2, FileText, ScanFace } from "lucide-react";
 import { AuthorizationLetterDialog } from "./AuthorizationLetterDialog";
 import { useToast } from "@/hooks/use-toast";
 import { formatCpf, formatPhone, isValidCpf, isValidPhone, onlyDigits } from "@/lib/br-utils";
@@ -111,14 +111,28 @@ const PromotersTab = () => {
     }));
   };
 
+  const handleCheckAllConformity = async () => {
+    try {
+      await checkAllConformityMutation.mutateAsync();
+    } catch {
+      const validPromoters = promoters.filter((p: any) => (p.employee_id || p.agency_promoter_id || p.id));
+      for (const p of validPromoters) {
+        const type = p.employee_id ? "employee" : "agency_promoter";
+        const id = p.employee_id || p.agency_promoter_id || p.id;
+        await checkConformityMutation.mutateAsync({ id, type });
+      }
+      toast({ title: `Conformidade verificada para ${validPromoters.length} promotores` });
+    }
+  };
+
   return (
     <>
       <Card>
         <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-2">
           <CardTitle className="flex items-center gap-2"><ShieldCheck className="h-5 w-5" /> Promotores</CardTitle>
           <div className="flex gap-2">
-            <Button onClick={() => checkAllConformityMutation.mutate()} size="sm" variant="outline" disabled={checkAllConformityMutation.isPending}>
-              {checkAllConformityMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <ScanFace className="h-4 w-4 mr-1" />}
+            <Button onClick={handleCheckAllConformity} size="sm" variant="outline" disabled={checkAllConformityMutation.isPending || checkConformityMutation.isPending}>
+              {checkAllConformityMutation.isPending || checkConformityMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <ScanFace className="h-4 w-4 mr-1" />}
               Verificar Conformidade
             </Button>
             <Button onClick={openNew} size="sm"><Plus className="h-4 w-4 mr-1" /> Novo Promotor</Button>
@@ -193,8 +207,8 @@ const PromotersTab = () => {
                           const hasNonConform = conformities.some((c: any) => c.status === 'nao_conforme');
                           const hasPending = conformities.some((c: any) => c.status === 'pendente');
                           if (hasNonConform) return <Badge variant="destructive">Não conforme</Badge>;
-                          if (hasPending) return <Badge className="bg-amber-500 hover:bg-amber-600">Pendente</Badge>;
-                          return <Badge className="bg-emerald-600 hover:bg-emerald-700">Conforme</Badge>;
+                          if (hasPending) return <Badge className="border border-accent/30 bg-accent/15 text-accent-foreground">Pendente</Badge>;
+                          return <Badge className="border border-primary/30 bg-primary/15 text-primary">Conforme</Badge>;
                         })()}
                       </TableCell>
                       <TableCell>
