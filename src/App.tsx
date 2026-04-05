@@ -248,6 +248,7 @@ const App = () => (
             <Route path="/merch/pesquisa-dashboard" element={<ProtectedRoute><MerchPesquisaDashboard /></ProtectedRoute>} />
             <Route path="/controle-acesso" element={<ProtectedRoute><AccessControlAdmin /></ProtectedRoute>} />
             <Route path="/totem" element={<TotemAccess />} />
+            <Route path="/acesso-supermercado" element={<SupermarketLandingPage />} />
             {/* Agency Portal */}
             <Route path="/agencia/login" element={<AgencyAuthProvider><AgencyLogin /></AgencyAuthProvider>} />
             <Route path="/agencia" element={<AgencyAuthProvider><AgencyLayout /></AgencyAuthProvider>}>
