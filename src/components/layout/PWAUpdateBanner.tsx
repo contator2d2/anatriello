@@ -29,6 +29,27 @@ export function PWAUpdateBanner() {
 
     let interval: ReturnType<typeof setInterval>;
 
+    // Listen for precache errors and auto-recover
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      const msg = String(event.reason);
+      if (msg.includes("bad-precaching-response")) {
+        console.warn("[PWA] Precache error detected, clearing caches...");
+        event.preventDefault();
+        if ("caches" in window) {
+          caches.keys().then(names => {
+            Promise.all(names.map(name => caches.delete(name))).then(() => {
+              navigator.serviceWorker.getRegistration().then(reg => {
+                reg?.unregister().then(() => {
+                  setShowPopup(true);
+                });
+              });
+            });
+          });
+        }
+      }
+    };
+    window.addEventListener("unhandledrejection", handleUnhandledRejection);
+
     const setup = async () => {
       try {
         const reg = await navigator.serviceWorker.getRegistration();
@@ -61,7 +82,10 @@ export function PWAUpdateBanner() {
     };
 
     setup();
-    return () => { if (interval) clearInterval(interval); };
+    return () => {
+      if (interval) clearInterval(interval);
+      window.removeEventListener("unhandledrejection", handleUnhandledRejection);
+    };
   }, []);
 
   const handleUpdate = useCallback(() => {
