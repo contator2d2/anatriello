@@ -738,11 +738,11 @@ router.put('/executions/:id/publish', authenticate, async (req, res) => {
 // ===== Item Competitors CRUD =====
 router.post('/item-competitors', authenticate, async (req, res) => {
   try {
-    const { item_id, competitor_product_name, competitor_brand_name, photo_url } = req.body;
+    const { item_id, competitor_product_name, competitor_brand_name, photo_url, observation } = req.body;
     if (!item_id || !competitor_product_name) return res.status(400).json({ error: 'item_id e nome obrigatórios' });
     const result = await query(
-      `INSERT INTO price_research_item_competitors (item_id, competitor_product_name, competitor_brand_name, photo_url) VALUES ($1,$2,$3,$4) RETURNING *`,
-      [item_id, competitor_product_name, competitor_brand_name || null, photo_url || null]
+      `INSERT INTO price_research_item_competitors (item_id, competitor_product_name, competitor_brand_name, photo_url, observation) VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+      [item_id, competitor_product_name, competitor_brand_name || null, photo_url || null, observation || null]
     );
     res.json(result.rows[0]);
   } catch (err) { logError('price-research.add-item-competitor', err); res.status(500).json({ error: 'Erro' }); }
