@@ -15,6 +15,8 @@ import {
   Camera, ClipboardList, Bot, Send, Building2,
   Lock, AlertTriangle, TrendingUp, Calendar,
   Layers, Clock, Eye, ChevronDown, ChevronUp,
+  MapPin, Route, Fingerprint, Navigation, Wallet,
+  Monitor, UserCheck, Globe, Radio, Gauge,
 } from "lucide-react";
 
 /* ─────────────── HERO ─────────────── */
@@ -62,7 +64,7 @@ function Hero({ onCta }: { onCta: () => void }) {
 
         {/* Trust strip */}
         <div className="mt-14 flex flex-wrap items-center justify-center gap-6 text-sm text-gray-500">
-          {["IA integrada", "WhatsApp nativo", "CRM completo", "App do promotor", "Controle de acesso"].map(t => (
+          {["IA integrada", "WhatsApp nativo", "CRM completo", "App do promotor", "Controle de acesso", "Rotas por IA", "Rastreamento GPS", "Ponto facial"].map(t => (
             <span key={t} className="flex items-center gap-1.5"><CheckCircle2 className="h-4 w-4 text-violet-500" />{t}</span>
           ))}
         </div>
@@ -168,17 +170,96 @@ const features: FeatureBlock[] = [
     title: "O promotor executa tudo pelo app, com",
     titleHighlight: "validação real",
     items: [
-      "Check-in validado no PDV",
-      "Escolha de ponto natural ou ponto extra",
+      "Check-in validado no PDV com geolocalização",
       "Foto obrigatória da categoria antes de iniciar",
-      "Checklist por produto",
-      "Contagem, validade e execução",
+      "Checklist por produto com contagem e validade",
       "Múltiplas marcas na mesma rota",
-      "Fotos com validação de qualidade",
-      "Marca d'água automática",
+      "Fotos com validação de qualidade por IA",
+      "Marca d'água automática com data/hora/local",
+      "Ponto natural e ponto extra separados",
+      "PWA instalável — funciona como app nativo",
     ],
     quote: "Se não foi validado, não foi executado.",
     icon: Smartphone,
+  },
+  {
+    id: "rotas-ia",
+    badge: "Rotas Inteligentes por IA",
+    badgeColor: "bg-emerald-50 text-emerald-600 border-emerald-200",
+    title: "Criação e otimização de rotas com",
+    titleHighlight: "inteligência artificial",
+    items: [
+      "Sequenciamento automático por geolocalização",
+      "Considera endereço do promotor como origem",
+      "Cálculo de distância e tempo entre PDVs",
+      "Balanceamento de carga operacional diária",
+      "Respeita marcas autorizadas por promotor",
+      "Comparação plano manual vs. otimizado",
+      "Calendário visual de rotas por semana/mês",
+      "Duplicação e recorrência de rotas",
+    ],
+    extraItems: {
+      label: "Resultado",
+      items: ["Menos km rodados", "Mais PDVs atendidos", "Operação equilibrada"],
+    },
+    quote: "A IA planeja. Você aprova. O promotor executa.",
+    icon: Route,
+  },
+  {
+    id: "mapas",
+    badge: "Mapas & Rastreamento GPS",
+    badgeColor: "bg-sky-50 text-sky-600 border-sky-200",
+    title: "Saiba onde está cada promotor e",
+    titleHighlight: "o que ele está fazendo",
+    items: [
+      "Mapa em tempo real com todos os promotores",
+      "Status ao vivo: em rota, no PDV, em deslocamento",
+      "Histórico de trajetos com playback",
+      "Marcadores de início e fim do expediente",
+      "Nível de bateria e status de movimento",
+      "Controle de velocidade de reprodução (0.5x a 10x)",
+      "Filtro por promotor, marca e região",
+    ],
+    quote: "Você não pergunta mais. Você já sabe onde ele está.",
+    icon: MapPin,
+  },
+  {
+    id: "rh",
+    badge: "RH Completo",
+    badgeColor: "bg-teal-50 text-teal-600 border-teal-200",
+    title: "Gestão de equipe completa",
+    titleHighlight: "em um só lugar",
+    items: [
+      "Cadastro de colaboradores (CLT, PJ, Freelancer)",
+      "Hierarquia: departamentos, cargos e filiais",
+      "Controle de documentos e holerites",
+      "Assinatura digital com validade jurídica",
+      "Contratos e termos automatizados",
+      "Vínculo obrigatório de supervisor",
+      "Perfil funcional e controle de acesso ao app",
+      "Auditoria e conformidade LGPD",
+    ],
+    quote: "Menos papel. Mais controle. Tudo em um lugar.",
+    icon: FileText,
+  },
+  {
+    id: "ponto-facial",
+    badge: "Ponto por Reconhecimento Facial",
+    badgeColor: "bg-rose-50 text-rose-600 border-rose-200",
+    title: "Registro de ponto validado por",
+    titleHighlight: "biometria facial e geolocalização",
+    items: [
+      "Reconhecimento facial com IA para bater ponto",
+      "Geolocalização obrigatória no registro",
+      "Fotos de entrada e saída armazenadas",
+      "Dashboard de monitoramento em tempo real",
+      "Controle de horas extras e banco de horas",
+      "Relatório de frequência por período",
+      "Fallback manual com justificativa",
+      "Integração com módulo de RH",
+    ],
+    quote: "Ponto batido com rosto e localização. Sem fraude.",
+    icon: Fingerprint,
   },
   {
     id: "ia",
@@ -187,11 +268,13 @@ const features: FeatureBlock[] = [
     title: "A operação não depende mais só do promotor —",
     titleHighlight: "a IA valida e analisa tudo",
     items: [
-      "Análise de fotos",
-      "Identificação de padrões",
+      "Análise automática de fotos de execução",
+      "Identificação de padrões e anomalias",
       "Detecção de comportamento fora do normal",
       "Interpretação de ocorrências (texto e áudio)",
       "Geração de resumos automáticos",
+      "Secretária virtual com agendamento",
+      "Múltiplos provedores: OpenAI, Gemini, OpenRouter",
     ],
     quote: "A IA garante que o controle aconteça.",
     icon: Brain,
@@ -203,16 +286,16 @@ const features: FeatureBlock[] = [
     title: "Toda a comunicação centralizada no WhatsApp, com",
     titleHighlight: "CRM e IA",
     items: [
-      "Chat interno",
-      "Múltiplos atendentes",
-      "Departamentos",
-      "Histórico completo",
-      "Distribuição automática",
-      "Integração com CRM",
+      "Chat com múltiplos atendentes simultâneos",
+      "Departamentos e distribuição automática",
+      "Histórico completo de conversas",
+      "Agentes de IA com respostas automáticas",
+      "Triagem inteligente por contexto",
+      "Integração nativa com CRM e pipeline",
     ],
     extraItems: {
-      label: "IA integrada",
-      items: ["Respostas automáticas", "Triagem inteligente", "Suporte à operação"],
+      label: "IA no WhatsApp",
+      items: ["Transcrição de áudio", "Análise de imagens", "Base de conhecimento RAG"],
     },
     quote: "Não é mais conversa solta. É operação organizada.",
     icon: MessageSquare,
@@ -224,29 +307,36 @@ const features: FeatureBlock[] = [
     title: "Controle total da operação com",
     titleHighlight: "CRM e gestão visual",
     items: [
-      "Tarefas",
-      "Acompanhamento",
-      "Pipeline",
-      "Organização por cliente e PDV",
-      "Histórico completo",
+      "Kanban e Pipeline visuais",
+      "Campos personalizados por negociação",
+      "Gestão de empresas com busca por CNPJ",
+      "Análise preditiva de saúde do deal",
+      "Tarefas e acompanhamento integrados",
+      "Relatórios de performance e conversão",
     ],
     quote: "Você vê a operação acontecendo.",
     icon: BarChart3,
   },
   {
     id: "acesso",
-    badge: "Controle de Acesso",
+    badge: "Integração AyraAccess",
     badgeColor: "bg-red-50 text-red-600 border-red-200",
     title: "Controle de entrada em supermercados",
-    titleHighlight: "integrado",
+    titleHighlight: "totalmente integrado",
     items: [
-      "Autorização automática",
-      "Controle por PDV",
-      "Horários definidos",
-      "Bloqueio por comportamento",
-      "Histórico de acesso",
+      "Totem de acesso com CPF, QR Code e selfie",
+      "Validação facial com IA na entrada e saída",
+      "Autorização automática por agenda",
+      "Controle por PDV, horário e marca",
+      "Bloqueio automático por comportamento",
+      "Histórico completo de acessos por promotor",
+      "Portal gratuito para o supermercado",
     ],
-    quote: "Se não estiver autorizado, não entra.",
+    extraItems: {
+      label: "Para a agência",
+      items: ["Visibilidade em tempo real", "Alertas de ocorrência", "Substituição rápida"],
+    },
+    quote: "Se não estiver autorizado, não entra. Se entrar, fica registrado.",
     icon: Lock,
   },
   {
@@ -256,63 +346,50 @@ const features: FeatureBlock[] = [
     title: "Cada promotor tem um score baseado no",
     titleHighlight: "comportamento real",
     items: [
-      "Ocorrências",
-      "Execução",
-      "Permanência",
-      "Padrão de comportamento",
+      "Ocorrências registradas por supervisores",
+      "Qualidade e completude da execução",
+      "Tempo de permanência no PDV",
+      "Padrão de comportamento ao longo do tempo",
+      "Inconsistências de acesso detectadas",
     ],
     extraItems: {
-      label: "Resultado",
-      items: ["Identificação de risco", "Bloqueio automático", "Substituição obrigatória"],
+      label: "Consequência automática",
+      items: ["Identificação de risco", "Bloqueio automático", "Agência notificada", "Substituição obrigatória"],
     },
     quote: "Você evita o problema antes dele acontecer.",
     icon: Target,
   },
   {
-    id: "rh",
-    badge: "Assinatura Digital & RH",
-    badgeColor: "bg-teal-50 text-teal-600 border-teal-200",
-    title: "Contratos e controle de equipe",
-    titleHighlight: "em um só lugar",
-    items: [
-      "Assinatura digital com validade jurídica",
-      "Contratos",
-      "Documentos",
-      "Holerite",
-      "Relógio de ponto",
-    ],
-    quote: "Menos papel. Mais controle.",
-    icon: FileText,
-  },
-  {
     id: "automacao",
-    badge: "Automação & IA",
+    badge: "Automação & Fluxos",
     badgeColor: "bg-indigo-50 text-indigo-600 border-indigo-200",
-    title: "Automatize tarefas com",
-    titleHighlight: "inteligência artificial",
+    title: "Automatize processos com",
+    titleHighlight: "fluxos inteligentes",
     items: [
-      "Secretária virtual",
-      "Automação de processos",
-      "Lembretes inteligentes",
-      "Organização automática",
+      "Chatbots e fluxos de atendimento",
+      "Campanhas programadas via WhatsApp",
+      "Lembretes e notificações automáticas",
+      "Nurturing de leads com sequências",
+      "Webhooks e integrações externas",
     ],
     quote: "Menos trabalho manual. Mais eficiência.",
     icon: Zap,
   },
   {
     id: "relatorios",
-    badge: "Relatórios",
+    badge: "Relatórios & Analytics",
     badgeColor: "bg-cyan-50 text-cyan-600 border-cyan-200",
     title: "Relatórios completos com",
     titleHighlight: "análise real da operação",
     items: [
-      "Execução por promotor",
-      "Desempenho por PDV",
-      "Produtividade por marca",
-      "Falhas e inconsistências",
-      "Análise com IA",
+      "Execução por promotor e por PDV",
+      "Produtividade por marca e região",
+      "Análise de falhas e inconsistências",
+      "Dashboards visuais com gráficos",
+      "Exportação em Excel e PDF",
+      "Análise assistida por IA",
     ],
-    quote: "Você entende a operação.",
+    quote: "Você entende a operação com dados reais.",
     icon: TrendingUp,
   },
 ];
@@ -377,6 +454,56 @@ function FeatureSection({ f, index }: { f: FeatureBlock; index: number }) {
   );
 }
 
+/* ─────────────── COMMERCIAL MODEL ─────────────── */
+function CommercialModelSection() {
+  return (
+    <section className="py-20 bg-gray-50">
+      <div className="mx-auto max-w-6xl px-6">
+        <div className="text-center mb-12">
+          <Badge className="mb-4 bg-violet-50 text-violet-600 border-violet-200 hover:bg-violet-50">Modelo comercial</Badge>
+          <h2 className="text-3xl md:text-4xl font-bold text-gray-900">
+            Pagamento simples:{" "}
+            <span className="text-violet-600">por promotor ativo</span>
+          </h2>
+          <p className="mt-4 text-gray-600 max-w-2xl mx-auto">
+            Sem taxa de implantação, sem surpresas. Você paga apenas pelos promotores cadastrados e ativos na plataforma.
+          </p>
+        </div>
+
+        <div className="grid md:grid-cols-3 gap-6 max-w-4xl mx-auto">
+          <div className="bg-white rounded-2xl p-8 border border-gray-200 shadow-sm text-center">
+            <div className="h-14 w-14 rounded-xl bg-violet-100 flex items-center justify-center mx-auto mb-4">
+              <Wallet className="h-7 w-7 text-violet-600" />
+            </div>
+            <h3 className="font-bold text-gray-900 text-lg mb-2">Agência paga</h3>
+            <p className="text-gray-600 text-sm">Cobrança por promotor ativo cadastrado. Mensalidade fixa e previsível.</p>
+          </div>
+
+          <div className="bg-white rounded-2xl p-8 border border-violet-200 shadow-sm text-center ring-2 ring-violet-100">
+            <div className="h-14 w-14 rounded-xl bg-green-100 flex items-center justify-center mx-auto mb-4">
+              <Building2 className="h-7 w-7 text-green-600" />
+            </div>
+            <h3 className="font-bold text-gray-900 text-lg mb-2">Supermercado grátis</h3>
+            <p className="text-gray-600 text-sm">O PDV usa o sistema AyraAccess sem nenhum custo. Controle total gratuito.</p>
+          </div>
+
+          <div className="bg-white rounded-2xl p-8 border border-gray-200 shadow-sm text-center">
+            <div className="h-14 w-14 rounded-xl bg-violet-100 flex items-center justify-center mx-auto mb-4">
+              <Gauge className="h-7 w-7 text-violet-600" />
+            </div>
+            <h3 className="font-bold text-gray-900 text-lg mb-2">Tudo incluso</h3>
+            <p className="text-gray-600 text-sm">IA, WhatsApp, CRM, rotas, mapas, RH, ponto facial — tudo na mesma plataforma.</p>
+          </div>
+        </div>
+
+        <p className="text-center mt-10 text-lg font-semibold text-gray-800 italic">
+          "Quem precisa acessar a loja é quem paga pelo controle."
+        </p>
+      </div>
+    </section>
+  );
+}
+
 /* ─────────────── POSITIONING ─────────────── */
 function PositioningSection({ onCta }: { onCta: () => void }) {
   return (
@@ -410,11 +537,14 @@ function PositioningSection({ onCta }: { onCta: () => void }) {
 function FAQSection() {
   const [open, setOpen] = useState<number | null>(null);
   const faqs = [
-    { q: "O sistema funciona para qualquer tamanho de agência?", a: "Sim, o Ayratech atende desde agências com 5 promotores até operações com centenas de profissionais em campo." },
-    { q: "Precisa instalar algo no supermercado?", a: "O totem de acesso pode rodar em um tablet comum. Não exige infraestrutura especial no PDV." },
-    { q: "A IA substitui o supervisor?", a: "Não. A IA complementa a supervisão, identificando padrões e problemas que passariam despercebidos." },
-    { q: "O promotor precisa de um celular especial?", a: "Não. O app funciona em qualquer smartphone Android ou iOS com câmera." },
-    { q: "Como funciona a cobrança?", a: "A agência paga por promotor ativo. O supermercado usa o sistema gratuitamente." },
+    { q: "O sistema funciona para qualquer tamanho de agência?", a: "Sim, o Ayratech atende desde agências com 5 promotores até operações com centenas de profissionais em campo, com escalabilidade total." },
+    { q: "Como funciona a cobrança?", a: "A agência paga por promotor ativo cadastrado no sistema. O supermercado usa o módulo AyraAccess gratuitamente. Sem taxa de implantação." },
+    { q: "Precisa instalar algo no supermercado?", a: "O totem de acesso roda em qualquer tablet comum com navegador. Não exige hardware especial." },
+    { q: "O promotor precisa de um celular especial?", a: "Não. O app funciona como PWA em qualquer smartphone Android ou iOS com câmera e GPS." },
+    { q: "A IA substitui o supervisor?", a: "Não. A IA complementa a supervisão humana, identificando padrões, validando fotos e detectando anomalias que passariam despercebidas." },
+    { q: "Como funciona o reconhecimento facial?", a: "O sistema utiliza IA para comparar a selfie do promotor com a foto cadastrada, validando identidade no registro de ponto e no acesso ao PDV." },
+    { q: "As rotas por IA funcionam com qualquer quantidade de PDVs?", a: "Sim. A otimização considera distância, tempo de deslocamento, mix de produtos e carga operacional, independente do volume." },
+    { q: "Posso integrar com o sistema do supermercado?", a: "O AyraAccess oferece portal próprio gratuito para o PDV. A integração é automática pela plataforma." },
   ];
 
   return (
@@ -517,6 +647,7 @@ function Navbar({ onCta }: { onCta: () => void }) {
         <div className="hidden md:flex items-center gap-6 text-sm text-gray-600">
           {[
             { label: "Recursos", href: "#features" },
+            { label: "Modelo", href: "#modelo" },
             { label: "FAQ", href: "#faq" },
             { label: "Contato", href: "#contato" },
           ].map(l => (
@@ -593,6 +724,7 @@ export default function LandingPage() {
         ))}
       </div>
 
+      <div id="modelo"><CommercialModelSection /></div>
       <PositioningSection onCta={scrollToContact} />
       <div id="faq"><FAQSection /></div>
       <ContactSection />
