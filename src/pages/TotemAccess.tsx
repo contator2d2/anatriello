@@ -578,7 +578,8 @@ const TotemAccess = () => {
   if (result) {
     const isAuthorized = result.status === "authorized";
     const isCheckout = result.block_reason === "SAÍDA REGISTRADA";
-    const bgColor = isCheckout ? "#2563eb" : isAuthorized ? "#16a34a" : "#dc2626";
+    const isRegistration = result.block_reason === "CADASTRO REALIZADO";
+    const bgColor = isRegistration ? "#7c3aed" : isCheckout ? "#2563eb" : isAuthorized ? "#16a34a" : "#dc2626";
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-8 transition-colors duration-500" style={{ background: bgColor }}>
         <div className="text-center text-white max-w-lg w-full">
