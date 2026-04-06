@@ -1323,8 +1323,89 @@ router.delete('/agency/access-rules/:id', authenticateAgency, async (req, res) =
   } catch (err) { logError('agency.rules.delete', err); res.status(500).json({ error: 'Erro' }); }
 });
 
+// ============ AGENCY BRANDS ============
 
-// Agency: list visit requests
+// Ensure agency_brands table exists
+let agencyBrandsSchemaReady = null;
+async function ensureAgencyBrandsSchema() {
+  if (agencyBrandsSchemaReady) return agencyBrandsSchemaReady;
+  agencyBrandsSchemaReady = (async () => {
+    await query(`
+      CREATE TABLE IF NOT EXISTS agency_brands (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        agency_id UUID NOT NULL REFERENCES agencies(id) ON DELETE CASCADE,
+        organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        name VARCHAR(255) NOT NULL,
+        cnpj VARCHAR(20),
+        segment VARCHAR(100),
+        contact_name VARCHAR(255),
+        contact_phone VARCHAR(30),
+        contact_email VARCHAR(255),
+        notes TEXT,
+        active BOOLEAN DEFAULT true,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(agency_id, name)
+      )
+    `);
+    await query('CREATE INDEX IF NOT EXISTS idx_agency_brands_agency ON agency_brands(agency_id)');
+  })();
+  try { await agencyBrandsSchemaReady; } catch(e) { agencyBrandsSchemaReady = null; throw e; }
+}
+
+// Agency: list brands
+router.get('/agency/brands', authenticateAgency, async (req, res) => {
+  try {
+    await ensureAgencyBrandsSchema();
+    const r = await query('SELECT * FROM agency_brands WHERE agency_id=$1 ORDER BY name', [req.agencyId]);
+    res.json(r.rows);
+  } catch (err) { logError('agency.brands.list', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// Agency: create brand
+router.post('/agency/brands', authenticateAgency, async (req, res) => {
+  try {
+    await ensureAgencyBrandsSchema();
+    const { name, cnpj, segment, contact_name, contact_phone, contact_email, notes } = req.body;
+    if (!name?.trim()) return res.status(400).json({ error: 'Nome é obrigatório' });
+    const r = await query(
+      `INSERT INTO agency_brands (agency_id, organization_id, name, cnpj, segment, contact_name, contact_phone, contact_email, notes)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+      [req.agencyId, req.orgId, name.trim(), cnpj||null, segment||null, contact_name||null, contact_phone||null, contact_email||null, notes||null]
+    );
+    res.json(r.rows[0]);
+  } catch (err) {
+    if (err.code === '23505') return res.status(400).json({ error: 'Marca já cadastrada com esse nome' });
+    logError('agency.brands.create', err); res.status(500).json({ error: 'Erro' });
+  }
+});
+
+// Agency: update brand
+router.put('/agency/brands/:id', authenticateAgency, async (req, res) => {
+  try {
+    await ensureAgencyBrandsSchema();
+    const { name, cnpj, segment, contact_name, contact_phone, contact_email, notes } = req.body;
+    const r = await query(
+      `UPDATE agency_brands SET name=COALESCE($1,name), cnpj=$2, segment=$3, contact_name=$4, contact_phone=$5, contact_email=$6, notes=$7, updated_at=NOW()
+       WHERE id=$8 AND agency_id=$9 RETURNING *`,
+      [name?.trim(), cnpj||null, segment||null, contact_name||null, contact_phone||null, contact_email||null, notes||null, req.params.id, req.agencyId]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'Marca não encontrada' });
+    res.json(r.rows[0]);
+  } catch (err) { logError('agency.brands.update', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// Agency: delete brand
+router.delete('/agency/brands/:id', authenticateAgency, async (req, res) => {
+  try {
+    await ensureAgencyBrandsSchema();
+    const r = await query('DELETE FROM agency_brands WHERE id=$1 AND agency_id=$2 RETURNING id', [req.params.id, req.agencyId]);
+    if (!r.rows.length) return res.status(404).json({ error: 'Marca não encontrada' });
+    res.json({ success: true });
+  } catch (err) { logError('agency.brands.delete', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+
 router.get('/agency/visit-requests', authenticateAgency, async (req, res) => {
   try {
     const r = await query(
@@ -1610,12 +1691,19 @@ router.get('/supermarket-portal/live', authenticateSupermarket, async (req, res)
     }
     const placeholders = unitIds.map((_, i) => `$${i + 1}`).join(',');
 
-    // Currently in store
+    // Currently in store — include agency brands via visit_requests
     const inStore = await query(
       `SELECT el.*, ap.name as promoter_name, ap.photo_url, a.name as agency_name, su.name as unit_name,
               EXTRACT(EPOCH FROM (NOW() - el.entry_at)) / 60 as duration_so_far,
               TO_CHAR(el.entry_at, 'HH24:MI') as entry_time,
-              'cpf' as validation_method
+              'cpf' as validation_method,
+              COALESCE(
+                (SELECT ARRAY_AGG(DISTINCT vr.brand_name) FROM visit_requests vr
+                 WHERE vr.agency_id = a.id AND vr.supermarket_unit_id = el.supermarket_unit_id
+                 AND vr.status = 'approved' AND vr.brand_name IS NOT NULL
+                 AND CURRENT_DATE BETWEEN vr.period_start AND vr.period_end),
+                ARRAY[]::text[]
+              ) as brands_attending
        FROM pdv_entry_logs el
        LEFT JOIN agency_promoters ap ON ap.id = el.agency_promoter_id
        LEFT JOIN agencies a ON a.id = ap.agency_id
@@ -1623,12 +1711,15 @@ router.get('/supermarket-portal/live', authenticateSupermarket, async (req, res)
        WHERE el.supermarket_unit_id IN (${placeholders}) AND el.exit_at IS NULL AND el.status = 'authorized'
        ORDER BY el.entry_at DESC`, unitIds);
 
-    // Brands today
+    // Brands today — merge daily_brand_presence with agency brands from visit requests
     const brands = await query(
-      `SELECT dbp.*, b.name as brand_name FROM daily_brand_presence dbp
-       JOIN brands b ON b.id = dbp.brand_id
-       WHERE dbp.supermarket_unit_id IN (${placeholders}) AND dbp.presence_date = CURRENT_DATE
-       ORDER BY b.name`, unitIds).catch(() => ({ rows: [] }));
+      `SELECT DISTINCT vr.brand_name, a.name as agency_name, COUNT(DISTINCT vr.promoter_id) as promoter_count, 'in_progress' as status
+       FROM visit_requests vr
+       JOIN agencies a ON a.id = vr.agency_id
+       WHERE vr.supermarket_unit_id IN (${placeholders}) AND vr.status = 'approved'
+       AND CURRENT_DATE BETWEEN vr.period_start AND vr.period_end AND vr.brand_name IS NOT NULL
+       GROUP BY vr.brand_name, a.name
+       ORDER BY vr.brand_name`, unitIds).catch(() => ({ rows: [] }));
 
     // Blocked today
     const blocked = await query(
@@ -1640,7 +1731,7 @@ router.get('/supermarket-portal/live', authenticateSupermarket, async (req, res)
 
     res.json({
       promoters_now: inStore.rows.map(p => ({ ...p, name: p.promoter_name, duration_so_far: Math.round(p.duration_so_far || 0) })),
-      brands_now: brands.rows.map(b => ({ ...b, promoter_count: 1, status: 'in_progress' })),
+      brands_now: brands.rows.map(b => ({ ...b, promoter_count: parseInt(b.promoter_count) || 1 })),
       alerts: [],
       blocked_today: blocked.rows,
     });
@@ -1690,7 +1781,14 @@ router.get('/supermarket-portal/today-stats', authenticateSupermarket, async (re
 router.get('/supermarket/history', authenticateSupermarket, async (req, res) => {
   try {
     const { date, status } = req.query;
-    let sql = `SELECT el.*, ap.name as promoter_name, ap.photo_url, a.name as agency_name
+    let sql = `SELECT el.*, ap.name as promoter_name, ap.photo_url, a.name as agency_name,
+               COALESCE(
+                 (SELECT ARRAY_AGG(DISTINCT vr.brand_name) FROM visit_requests vr
+                  WHERE vr.agency_id = a.id AND vr.supermarket_unit_id = el.supermarket_unit_id
+                  AND vr.status = 'approved' AND vr.brand_name IS NOT NULL
+                  AND el.entry_at::date BETWEEN vr.period_start AND vr.period_end),
+                 ARRAY[]::text[]
+               ) as brands_attending
                FROM pdv_entry_logs el
                LEFT JOIN agency_promoters ap ON ap.id = el.agency_promoter_id
                LEFT JOIN agencies a ON a.id = ap.agency_id

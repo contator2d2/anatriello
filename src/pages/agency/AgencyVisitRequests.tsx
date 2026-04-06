@@ -40,6 +40,7 @@ export default function AgencyVisitRequests() {
     supermarket_unit_id: '',
     promoter_id: '',
     promoter_name: '',
+    brand_id: '',
     brand_name: '',
     period_start: '',
     period_end: '',
@@ -67,6 +68,12 @@ export default function AgencyVisitRequests() {
     enabled: !!user && !!headers && !isAuthLoading,
   });
 
+  const { data: agencyBrands = [] } = useQuery({
+    queryKey: ['agency-brands'],
+    queryFn: () => api<any[]>('/api/access-control/agency/brands', { headers }),
+    enabled: !!user && !!headers && !isAuthLoading,
+  });
+
   const createMutation = useMutation({
     mutationFn: (data: any) => api('/api/access-control/agency/visit-requests', { method: 'POST', body: data, headers }),
     onSuccess: () => {
@@ -86,7 +93,7 @@ export default function AgencyVisitRequests() {
 
   const openNew = () => {
     setForm({
-      supermarket_unit_id: '', promoter_id: '', promoter_name: '', brand_name: '',
+      supermarket_unit_id: '', promoter_id: '', promoter_name: '', brand_id: '', brand_name: '',
       period_start: '', period_end: '', weekdays: [1, 2, 3, 4, 5], start_time: '08:00', end_time: '18:00', notes: '',
     });
     setDialogOpen(true);
@@ -98,9 +105,11 @@ export default function AgencyVisitRequests() {
       return;
     }
     const selectedPromoter = promoters.find((p: any) => p.id === form.promoter_id);
+    const selectedBrand = agencyBrands.find((b: any) => b.id === form.brand_id);
     createMutation.mutate({
       ...form,
       promoter_name: selectedPromoter?.name || form.promoter_name || null,
+      brand_name: selectedBrand?.name || form.brand_name || null,
     });
   };
 
@@ -130,8 +139,11 @@ export default function AgencyVisitRequests() {
                   <TableRow>
                     <TableHead>PDV</TableHead>
                     <TableHead>Promotor</TableHead>
+                    <TableHead>Marca</TableHead>
                     <TableHead>Período</TableHead>
                     <TableHead>Dias</TableHead>
+                    <TableHead>Horário</TableHead>
+                    <TableHead>Status</TableHead>
                     <TableHead>Horário</TableHead>
                     <TableHead>Status</TableHead>
                   </TableRow>
@@ -143,6 +155,7 @@ export default function AgencyVisitRequests() {
                       <TableRow key={r.id}>
                         <TableCell className="font-medium">{r.unit_name}</TableCell>
                         <TableCell>{r.promoter_name || '—'}</TableCell>
+                        <TableCell><Badge variant="outline">{r.brand_name || '—'}</Badge></TableCell>
                         <TableCell className="text-sm">
                           {r.period_start && format(new Date(r.period_start), 'dd/MM/yyyy')} — {r.period_end && format(new Date(r.period_end), 'dd/MM/yyyy')}
                         </TableCell>
@@ -197,7 +210,18 @@ export default function AgencyVisitRequests() {
                 </SelectContent>
               </Select>
             </div>
-            <div><Label>Marca</Label><Input value={form.brand_name} onChange={e => setForm(f => ({ ...f, brand_name: e.target.value }))} placeholder="Ex: Nestlé" /></div>
+            <div>
+              <Label>Marca</Label>
+              <Select value={form.brand_id} onValueChange={v => {
+                const brand = agencyBrands.find((b: any) => b.id === v);
+                setForm(f => ({ ...f, brand_id: v, brand_name: brand?.name || '' }));
+              }}>
+                <SelectTrigger><SelectValue placeholder="Selecione a marca" /></SelectTrigger>
+                <SelectContent>
+                  {agencyBrands.map((b: any) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <div><Label>Início do Período *</Label><Input type="date" value={form.period_start} onChange={e => setForm(f => ({ ...f, period_start: e.target.value }))} /></div>
               <div><Label>Fim do Período *</Label><Input type="date" value={form.period_end} onChange={e => setForm(f => ({ ...f, period_end: e.target.value }))} /></div>

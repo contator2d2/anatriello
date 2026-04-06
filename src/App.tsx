@@ -107,6 +107,7 @@ import AgencyLogin from "./pages/agency/AgencyLogin";
 import AgencyLayout from "./pages/agency/AgencyLayout";
 import AgencyDashboard from "./pages/agency/AgencyDashboard";
 import AgencyPromoters from "./pages/agency/AgencyPromoters";
+import AgencyBrands from "./pages/agency/AgencyBrands";
 import AgencyAccessRules from "./pages/agency/AgencyAccessRules";
 import AgencyVisitRequests from "./pages/agency/AgencyVisitRequests";
 import { SupermarketAuthProvider } from "./contexts/SupermarketAuthContext";
@@ -254,6 +255,7 @@ const App = () => (
             <Route path="/agencia" element={<AgencyAuthProvider><AgencyLayout /></AgencyAuthProvider>}>
               <Route path="dashboard" element={<AgencyDashboard />} />
               <Route path="promotores" element={<AgencyPromoters />} />
+              <Route path="marcas" element={<AgencyBrands />} />
               <Route path="visitas" element={<AgencyVisitRequests />} />
               <Route path="regras" element={<AgencyAccessRules />} />
             </Route>
