@@ -51,7 +51,7 @@ interface AuthorizationLetterDialogProps {
 }
 
 export function AuthorizationLetterDialog({
-  open, onOpenChange, promoter, agency, unit, rule, organizationName,
+  open, onOpenChange, promoter, agency, unit, rule, organizationName, availableBrands, availableUnits,
 }: AuthorizationLetterDialogProps) {
   const { toast } = useToast();
   const [form, setForm] = useState<AuthorizationLetterData>({
