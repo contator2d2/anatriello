@@ -318,28 +318,6 @@ const features: FeatureBlock[] = [
     icon: BarChart3,
   },
   {
-    id: "acesso",
-    badge: "Integração AyraAccess",
-    badgeColor: "bg-red-50 text-red-600 border-red-200",
-    title: "Controle de entrada em supermercados",
-    titleHighlight: "totalmente integrado",
-    items: [
-      "Totem de acesso com CPF, QR Code e selfie",
-      "Validação facial com IA na entrada e saída",
-      "Autorização automática por agenda",
-      "Controle por PDV, horário e marca",
-      "Bloqueio automático por comportamento",
-      "Histórico completo de acessos por promotor",
-      "Portal gratuito para o supermercado",
-    ],
-    extraItems: {
-      label: "Para a agência",
-      items: ["Visibilidade em tempo real", "Alertas de ocorrência", "Substituição rápida"],
-    },
-    quote: "Se não estiver autorizado, não entra. Se entrar, fica registrado.",
-    icon: Lock,
-  },
-  {
     id: "score",
     badge: "Score de Promotor",
     badgeColor: "bg-amber-50 text-amber-600 border-amber-200",
@@ -462,11 +440,11 @@ function CommercialModelSection() {
         <div className="text-center mb-12">
           <Badge className="mb-4 bg-violet-50 text-violet-600 border-violet-200 hover:bg-violet-50">Modelo comercial</Badge>
           <h2 className="text-3xl md:text-4xl font-bold text-gray-900">
-            Pagamento simples:{" "}
-            <span className="text-violet-600">por promotor ativo</span>
+            Valores e implantação{" "}
+            <span className="text-violet-600">sob consulta</span>
           </h2>
           <p className="mt-4 text-gray-600 max-w-2xl mx-auto">
-            Sem taxa de implantação, sem surpresas. Você paga apenas pelos promotores cadastrados e ativos na plataforma.
+            Cada operação é única. O setup, treinamento e valor variam de acordo com o tamanho da equipe e as necessidades da sua agência.
           </p>
         </div>
 
@@ -475,16 +453,16 @@ function CommercialModelSection() {
             <div className="h-14 w-14 rounded-xl bg-violet-100 flex items-center justify-center mx-auto mb-4">
               <Wallet className="h-7 w-7 text-violet-600" />
             </div>
-            <h3 className="font-bold text-gray-900 text-lg mb-2">Agência paga</h3>
-            <p className="text-gray-600 text-sm">Cobrança por promotor ativo cadastrado. Mensalidade fixa e previsível.</p>
+            <h3 className="font-bold text-gray-900 text-lg mb-2">Setup personalizado</h3>
+            <p className="text-gray-600 text-sm">Implantação e treinamento adaptados à realidade e ao tamanho da sua operação.</p>
           </div>
 
           <div className="bg-white rounded-2xl p-8 border border-violet-200 shadow-sm text-center ring-2 ring-violet-100">
-            <div className="h-14 w-14 rounded-xl bg-green-100 flex items-center justify-center mx-auto mb-4">
-              <Building2 className="h-7 w-7 text-green-600" />
+            <div className="h-14 w-14 rounded-xl bg-violet-100 flex items-center justify-center mx-auto mb-4">
+              <Users className="h-7 w-7 text-violet-600" />
             </div>
-            <h3 className="font-bold text-gray-900 text-lg mb-2">Supermercado grátis</h3>
-            <p className="text-gray-600 text-sm">O PDV usa o sistema AyraAccess sem nenhum custo. Controle total gratuito.</p>
+            <h3 className="font-bold text-gray-900 text-lg mb-2">Por equipe ativa</h3>
+            <p className="text-gray-600 text-sm">Valor baseado na quantidade de promotores e na complexidade da operação.</p>
           </div>
 
           <div className="bg-white rounded-2xl p-8 border border-gray-200 shadow-sm text-center">
@@ -497,7 +475,7 @@ function CommercialModelSection() {
         </div>
 
         <p className="text-center mt-10 text-lg font-semibold text-gray-800 italic">
-          "Quem precisa acessar a loja é quem paga pelo controle."
+          "Fale com nosso time e receba uma proposta personalizada para a sua agência."
         </p>
       </div>
     </section>
@@ -538,13 +516,13 @@ function FAQSection() {
   const [open, setOpen] = useState<number | null>(null);
   const faqs = [
     { q: "O sistema funciona para qualquer tamanho de agência?", a: "Sim, o Ayratech atende desde agências com 5 promotores até operações com centenas de profissionais em campo, com escalabilidade total." },
-    { q: "Como funciona a cobrança?", a: "A agência paga por promotor ativo cadastrado no sistema. O supermercado usa o módulo AyraAccess gratuitamente. Sem taxa de implantação." },
+    { q: "Como funciona a contratação?", a: "Os valores e a implantação são sob consulta, variando de acordo com o tamanho da equipe e as necessidades de treinamento. Entre em contato para uma proposta personalizada." },
     { q: "Precisa instalar algo no supermercado?", a: "O totem de acesso roda em qualquer tablet comum com navegador. Não exige hardware especial." },
     { q: "O promotor precisa de um celular especial?", a: "Não. O app funciona como PWA em qualquer smartphone Android ou iOS com câmera e GPS." },
     { q: "A IA substitui o supervisor?", a: "Não. A IA complementa a supervisão humana, identificando padrões, validando fotos e detectando anomalias que passariam despercebidas." },
     { q: "Como funciona o reconhecimento facial?", a: "O sistema utiliza IA para comparar a selfie do promotor com a foto cadastrada, validando identidade no registro de ponto e no acesso ao PDV." },
     { q: "As rotas por IA funcionam com qualquer quantidade de PDVs?", a: "Sim. A otimização considera distância, tempo de deslocamento, mix de produtos e carga operacional, independente do volume." },
-    { q: "Posso integrar com o sistema do supermercado?", a: "O AyraAccess oferece portal próprio gratuito para o PDV. A integração é automática pela plataforma." },
+    { q: "Posso integrar com o sistema do supermercado?", a: "Sim, a plataforma oferece integração nativa com PDVs e redes de supermercados para controle completo da operação." },
   ];
 
   return (
