@@ -584,12 +584,20 @@ const TotemAccess = () => {
       <div className="min-h-screen flex flex-col items-center justify-center p-8 transition-colors duration-500" style={{ background: bgColor }}>
         <div className="text-center text-white max-w-lg w-full">
           {config.logoUrl && <img src={config.logoUrl} alt="Logo" className="h-16 mx-auto mb-6 object-contain" />}
-          {isCheckout ? <LogOut className="h-32 w-32 mx-auto mb-6 animate-in zoom-in duration-500" /> :
+          {isRegistration ? <UserPlus className="h-32 w-32 mx-auto mb-6 animate-in zoom-in duration-500" /> :
+           isCheckout ? <LogOut className="h-32 w-32 mx-auto mb-6 animate-in zoom-in duration-500" /> :
            isAuthorized ? <CheckCircle2 className="h-32 w-32 mx-auto mb-6 animate-in zoom-in duration-500" /> :
            <XCircle className="h-32 w-32 mx-auto mb-6 animate-in zoom-in duration-500" />}
           <h1 className="text-5xl font-bold mb-4">
-            {isCheckout ? "SAÍDA REGISTRADA" : isAuthorized ? "ACESSO LIBERADO" : "ACESSO BLOQUEADO"}
+            {isRegistration ? "CADASTRO REALIZADO" : isCheckout ? "SAÍDA REGISTRADA" : isAuthorized ? "ACESSO LIBERADO" : "ACESSO BLOQUEADO"}
           </h1>
+          {isRegistration && (
+            <Card className="bg-white/20 backdrop-blur border-white/30 p-6 mt-6 text-white">
+              <p className="text-2xl font-semibold mb-2">{result.promoter_name}</p>
+              <p className="text-lg opacity-80">Cadastro efetuado com sucesso!</p>
+              <p className="text-sm opacity-60 mt-2">Sua agência foi notificada. Agora você pode fazer o check-in normalmente.</p>
+            </Card>
+          )}
           {isAuthorized && !isCheckout && (
             <Card className="bg-white/20 backdrop-blur border-white/30 p-6 mt-6 text-white">
               {result.promoter_photo && <img src={result.promoter_photo} alt="Foto" className="w-24 h-24 rounded-full mx-auto mb-4 border-4 border-white object-cover" />}
