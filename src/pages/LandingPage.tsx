@@ -1,1201 +1,602 @@
 import { useState } from "react";
-import { ScrollReveal } from "@/hooks/use-scroll-animation";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useBranding } from "@/hooks/use-branding";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
 import { API_URL } from "@/lib/api";
 import { toast } from "sonner";
 import {
-  MessageSquare,
-  Users,
-  Zap,
-  Send,
-  BarChart3,
-  Clock,
-  Shield,
-  Headphones,
-  Bot,
-  CheckCircle2,
-  ArrowRight,
-  Menu,
-  X,
-  Loader2,
-  Building2,
-  Brain,
-  Target,
-  Calendar,
-  TrendingUp,
-  Star,
-  Sparkles,
-  FileText,
-  Globe,
-  Bell,
-  RefreshCw,
-  Scale,
-  Gavel,
-  Briefcase,
-  FolderOpen,
-  ClipboardList,
-  UserCheck,
-  AlertTriangle,
-  Lock,
-  Search,
-  Layers,
-  ArrowLeftRight,
-  Database,
-  MessageCircle,
-  Cpu,
-  Ghost,
-  Eye,
-  ShieldCheck,
-  Activity,
-  PenTool,
-  QrCode,
-  Mail,
-  MapPin,
+  Menu, X, Loader2, ArrowRight, CheckCircle2,
+  Smartphone, Brain, MessageSquare, BarChart3,
+  Shield, Users, FileText, Zap, Target, Star,
+  Camera, ClipboardList, Bot, Send, Building2,
+  Lock, AlertTriangle, TrendingUp, Calendar,
+  Layers, Clock, Eye, ChevronDown, ChevronUp,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
-import heroImage from "@/assets/system-preview-crm-kanban.png";
-import ayratechLogo from "@/assets/ayratech_logo.jpg";
 
-const featureCategories = [
+/* ─────────────── HERO ─────────────── */
+function Hero({ onCta }: { onCta: () => void }) {
+  return (
+    <section className="relative overflow-hidden pt-32 pb-20 lg:pt-40 lg:pb-28">
+      {/* Subtle decorative blobs */}
+      <div className="pointer-events-none absolute -top-40 -right-40 h-[500px] w-[500px] rounded-full bg-violet-200/40 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-40 -left-40 h-[400px] w-[400px] rounded-full bg-violet-300/30 blur-3xl" />
+
+      <div className="mx-auto max-w-6xl px-6 text-center relative z-10">
+        <Badge className="mb-6 bg-violet-100 text-violet-700 border-violet-200 hover:bg-violet-100 text-sm px-4 py-1.5">
+          Sistema completo para agências de merchandising
+        </Badge>
+
+        <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold leading-tight tracking-tight text-gray-900 max-w-4xl mx-auto">
+          Pare de operar promotores no improviso —{" "}
+          <span className="bg-gradient-to-r from-violet-600 to-purple-600 bg-clip-text text-transparent">
+            tenha controle total da operação
+          </span>
+        </h1>
+
+        <p className="mt-6 text-lg md:text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
+          O Ayratech organiza, automatiza e monitora toda a operação com promotores,
+          supervisores e agências, usando IA, WhatsApp, CRM e controle completo de execução.
+        </p>
+
+        <div className="mt-10 flex flex-col sm:flex-row gap-4 justify-center">
+          <Button
+            size="lg"
+            onClick={onCta}
+            className="bg-violet-600 hover:bg-violet-700 text-white text-lg px-8 h-14 rounded-xl shadow-lg shadow-violet-200"
+          >
+            Quero organizar minha operação <ArrowRight className="ml-2 h-5 w-5" />
+          </Button>
+          <Button
+            size="lg"
+            variant="outline"
+            onClick={() => document.getElementById("features")?.scrollIntoView({ behavior: "smooth" })}
+            className="border-violet-300 text-violet-700 hover:bg-violet-50 text-lg px-8 h-14 rounded-xl"
+          >
+            Conheça os recursos
+          </Button>
+        </div>
+
+        {/* Trust strip */}
+        <div className="mt-14 flex flex-wrap items-center justify-center gap-6 text-sm text-gray-500">
+          {["IA integrada", "WhatsApp nativo", "CRM completo", "App do promotor", "Controle de acesso"].map(t => (
+            <span key={t} className="flex items-center gap-1.5"><CheckCircle2 className="h-4 w-4 text-violet-500" />{t}</span>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ─────────────── PROBLEM ─────────────── */
+function ProblemSection() {
+  const problems = [
+    "Promotor não executa corretamente",
+    "Ninguém sabe o que foi feito de verdade",
+    "Fotos não são confiáveis",
+    "Checklist mal preenchido",
+    "Supervisão falha",
+    "Comunicação desorganizada",
+  ];
+
+  return (
+    <section className="py-20 bg-gray-50">
+      <div className="mx-auto max-w-6xl px-6">
+        <div className="text-center mb-12">
+          <Badge className="mb-4 bg-red-50 text-red-600 border-red-200 hover:bg-red-50">O problema</Badge>
+          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 max-w-3xl mx-auto">
+            Se você depende de planilha, WhatsApp solto e "confiança", você{" "}
+            <span className="text-red-500">não tem controle</span> da operação
+          </h2>
+        </div>
+
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-4xl mx-auto">
+          {problems.map(p => (
+            <div key={p} className="flex items-start gap-3 bg-white rounded-xl p-5 border border-red-100 shadow-sm">
+              <AlertTriangle className="h-5 w-5 text-red-400 mt-0.5 shrink-0" />
+              <span className="text-gray-700">{p}</span>
+            </div>
+          ))}
+        </div>
+
+        <p className="text-center mt-10 text-xl font-semibold text-gray-800 italic">
+          "Você não tem visibilidade. Você tem suposição."
+        </p>
+      </div>
+    </section>
+  );
+}
+
+/* ─────────────── SOLUTION ─────────────── */
+function SolutionSection() {
+  const items = [
+    { icon: Shield, text: "Entrada no PDV validada" },
+    { icon: ClipboardList, text: "Execução por categoria" },
+    { icon: CheckCircle2, text: "Checklist validado" },
+    { icon: Camera, text: "Fotos com controle" },
+    { icon: Users, text: "Histórico do promotor" },
+    { icon: MessageSquare, text: "Comunicação integrada" },
+  ];
+
+  return (
+    <section className="py-20">
+      <div className="mx-auto max-w-6xl px-6">
+        <div className="text-center mb-12">
+          <Badge className="mb-4 bg-violet-50 text-violet-600 border-violet-200 hover:bg-violet-50">A solução</Badge>
+          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 max-w-3xl mx-auto">
+            O Ayratech centraliza, valida e acompanha toda a operação{" "}
+            <span className="text-violet-600">em tempo real</span>
+          </h2>
+        </div>
+
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {items.map(({ icon: Icon, text }) => (
+            <div key={text} className="flex items-center gap-4 bg-violet-50/60 rounded-xl p-5 border border-violet-100">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-violet-600 text-white">
+                <Icon className="h-5 w-5" />
+              </div>
+              <span className="text-gray-800 font-medium">{text}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ─────────────── FEATURE CARD SECTION ─────────────── */
+interface FeatureBlock {
+  id: string;
+  badge: string;
+  badgeColor: string;
+  title: string;
+  titleHighlight?: string;
+  items: string[];
+  quote: string;
+  icon: any;
+  extraItems?: { label: string; items: string[] };
+}
+
+const features: FeatureBlock[] = [
   {
-    category: "WhatsApp Organizado",
-    icon: MessageSquare,
-    color: "text-blue-500",
-    bgColor: "bg-blue-500/10",
-    features: [
-      {
-        icon: MessageSquare,
-        title: "Chat Centralizado",
-        description: "Todas as conversas de clientes em um único painel, sem perder nenhuma mensagem.",
-      },
-      {
-        icon: Users,
-        title: "Multi-Atendentes",
-        description: "Cada vendedor ou atendente cuida dos seus clientes com filas organizadas e transferências.",
-      },
-      {
-        icon: Bell,
-        title: "Notificações Inteligentes",
-        description: "Receba alertas quando clientes enviam mensagens, pedidos ou novas solicitações.",
-      },
-      {
-        icon: Building2,
-        title: "Setores e Departamentos",
-        description: "Separe atendimento por área: comercial, suporte, financeiro, pós-venda.",
-      },
+    id: "app-promotor",
+    badge: "App do Promotor",
+    badgeColor: "bg-blue-50 text-blue-600 border-blue-200",
+    title: "O promotor executa tudo pelo app, com",
+    titleHighlight: "validação real",
+    items: [
+      "Check-in validado no PDV",
+      "Escolha de ponto natural ou ponto extra",
+      "Foto obrigatória da categoria antes de iniciar",
+      "Checklist por produto",
+      "Contagem, validade e execução",
+      "Múltiplas marcas na mesma rota",
+      "Fotos com validação de qualidade",
+      "Marca d'água automática",
     ],
+    quote: "Se não foi validado, não foi executado.",
+    icon: Smartphone,
   },
   {
-    category: "Organização Interna",
-    icon: FolderOpen,
-    color: "text-amber-500",
-    bgColor: "bg-amber-500/10",
-    features: [
-      {
-        icon: FolderOpen,
-        title: "Kanban de Negociações",
-        description: "Organize negociações e oportunidades em quadros visuais por etapa do funil.",
-      },
-      {
-        icon: ClipboardList,
-        title: "Tarefas da Equipe",
-        description: "Atribua e acompanhe tarefas entre vendedores, gestores e equipe de suporte.",
-      },
-      {
-        icon: Bot,
-        title: "Secretária IA nos Grupos",
-        description: "IA inteligente monitora grupos do WhatsApp, identifica solicitações, cria tarefas automaticamente e envia alertas para os responsáveis.",
-      },
-      {
-        icon: Users,
-        title: "Gestão de Grupos",
-        description: "Grupos internos por projeto ou área para comunicação rápida da equipe.",
-      },
-      {
-        icon: Lock,
-        title: "Permissões por Cargo",
-        description: "Controle quem vê o quê: diretores, gerentes, vendedores e atendentes.",
-      },
+    id: "ia",
+    badge: "IA na Operação",
+    badgeColor: "bg-purple-50 text-purple-600 border-purple-200",
+    title: "A operação não depende mais só do promotor —",
+    titleHighlight: "a IA valida e analisa tudo",
+    items: [
+      "Análise de fotos",
+      "Identificação de padrões",
+      "Detecção de comportamento fora do normal",
+      "Interpretação de ocorrências (texto e áudio)",
+      "Geração de resumos automáticos",
     ],
-  },
-  {
-    category: "Lembretes & Agenda",
-    icon: Clock,
-    color: "text-emerald-500",
-    bgColor: "bg-emerald-500/10",
-    features: [
-      {
-        icon: Bell,
-        title: "Lembretes Automáticos",
-        description: "Crie lembretes para reuniões, follow-ups e retornos a clientes.",
-      },
-      {
-        icon: Clock,
-        title: "Mensagens Agendadas",
-        description: "Programe mensagens para clientes em datas e horários específicos.",
-      },
-      {
-        icon: Calendar,
-        title: "Agenda da Empresa",
-        description: "Visualize compromissos de toda a equipe em um calendário integrado.",
-      },
-      {
-        icon: RefreshCw,
-        title: "Follow-up Automático",
-        description: "Sequências de acompanhamento para leads que não responderam.",
-      },
-    ],
-  },
-  {
-    category: "IA Comercial",
+    quote: "A IA garante que o controle aconteça.",
     icon: Brain,
-    color: "text-violet-500",
-    bgColor: "bg-violet-500/10",
-    features: [
-      {
-        icon: Brain,
-        title: "Assistente de Vendas",
-        description: "IA que ajuda a criar propostas, scripts de vendas e respostas comerciais.",
-      },
-      {
-        icon: ArrowLeftRight,
-        title: "Transferir para IA",
-        description: "Transfira o atendimento de um cliente diretamente para um agente de IA especializado.",
-      },
-      {
-        icon: MessageCircle,
-        title: "Consulta IA no Chat",
-        description: "Peça ajuda à IA durante o atendimento: análise da conversa, sugestões de resposta e fechamento.",
-      },
-      {
-        icon: Database,
-        title: "Base de Conhecimento",
-        description: "Alimente a IA com catálogos, manuais e documentos da empresa para respostas precisas (RAG).",
-      },
-      {
-        icon: Bot,
-        title: "Chatbot para Clientes",
-        description: "Atenda clientes 24h com triagem automática e coleta de informações.",
-      },
-      {
-        icon: FileText,
-        title: "Resumos de Conversas",
-        description: "IA resume conversas longas com clientes destacando os pontos importantes.",
-      },
-      {
-        icon: Cpu,
-        title: "Múltiplos Agentes IA",
-        description: "Crie agentes especializados: qualificação, fechamento, suporte técnico, cada um com seu conhecimento.",
-      },
-      {
-        icon: Sparkles,
-        title: "Insights Comerciais",
-        description: "Análise inteligente de conversas para identificar oportunidades e melhorar o atendimento.",
-      },
-    ],
   },
   {
-    category: "Automação",
-    icon: Zap,
-    color: "text-rose-500",
-    bgColor: "bg-rose-500/10",
-    features: [
-      {
-        icon: Bot,
-        title: "Fluxos de Atendimento",
-        description: "Crie menus automáticos para triagem: tipo de produto, urgência e departamento.",
-      },
-      {
-        icon: Send,
-        title: "Disparos em Massa",
-        description: "Envie promoções, novidades e comunicados para toda sua base de clientes.",
-      },
-      {
-        icon: UserCheck,
-        title: "Distribuição Automática",
-        description: "Novos leads são distribuídos automaticamente entre os vendedores.",
-      },
-      {
-        icon: Target,
-        title: "Tags e Segmentação",
-        description: "Classifique clientes por interesse, etapa do funil e prioridade.",
-      },
+    id: "whatsapp",
+    badge: "WhatsApp Integrado",
+    badgeColor: "bg-green-50 text-green-600 border-green-200",
+    title: "Toda a comunicação centralizada no WhatsApp, com",
+    titleHighlight: "CRM e IA",
+    items: [
+      "Chat interno",
+      "Múltiplos atendentes",
+      "Departamentos",
+      "Histórico completo",
+      "Distribuição automática",
+      "Integração com CRM",
     ],
+    extraItems: {
+      label: "IA integrada",
+      items: ["Respostas automáticas", "Triagem inteligente", "Suporte à operação"],
+    },
+    quote: "Não é mais conversa solta. É operação organizada.",
+    icon: MessageSquare,
   },
   {
-    category: "Relatórios",
+    id: "crm",
+    badge: "CRM & Kanban",
+    badgeColor: "bg-orange-50 text-orange-600 border-orange-200",
+    title: "Controle total da operação com",
+    titleHighlight: "CRM e gestão visual",
+    items: [
+      "Tarefas",
+      "Acompanhamento",
+      "Pipeline",
+      "Organização por cliente e PDV",
+      "Histórico completo",
+    ],
+    quote: "Você vê a operação acontecendo.",
     icon: BarChart3,
-    color: "text-cyan-500",
-    bgColor: "bg-cyan-500/10",
-    features: [
-      {
-        icon: BarChart3,
-        title: "Dashboard Gerencial",
-        description: "Visão geral de vendas, atendimentos e performance da equipe comercial.",
-      },
-      {
-        icon: TrendingUp,
-        title: "Métricas de Atendimento",
-        description: "Tempo de resposta, volume de conversas e taxa de conversão.",
-      },
-      {
-        icon: Search,
-        title: "Busca de Conversas",
-        description: "Encontre qualquer conversa, cliente ou mensagem em segundos.",
-      },
-      {
-        icon: Globe,
-        title: "Formulários de Captação",
-        description: "Capte novos leads com formulários online integrados ao WhatsApp.",
-      },
-    ],
   },
   {
-    category: "Modo Fantasma",
-    icon: Ghost,
-    color: "text-slate-400",
-    bgColor: "bg-slate-500/10",
-    features: [
-      {
-        icon: Ghost,
-        title: "IA de Monitoramento",
-        description: "Inteligência artificial que analisa a qualidade das conversas automaticamente, sem interferir no fluxo de atendimento.",
-      },
-      {
-        icon: Eye,
-        title: "Auditoria de Qualidade",
-        description: "Avalie a qualidade do atendimento com IA: tom, agilidade, assertividade e postura.",
-      },
-      {
-        icon: ShieldCheck,
-        title: "Análise de Risco e Conduta",
-        description: "Detecte comportamentos inadequados, promessas indevidas ou riscos de compliance.",
-      },
-      {
-        icon: Activity,
-        title: "Métricas Operacionais",
-        description: "Tempo médio de resposta, taxa de resolução, horários de pico e ranking de desempenho.",
-      },
+    id: "acesso",
+    badge: "Controle de Acesso",
+    badgeColor: "bg-red-50 text-red-600 border-red-200",
+    title: "Controle de entrada em supermercados",
+    titleHighlight: "integrado",
+    items: [
+      "Autorização automática",
+      "Controle por PDV",
+      "Horários definidos",
+      "Bloqueio por comportamento",
+      "Histórico de acesso",
     ],
+    quote: "Se não estiver autorizado, não entra.",
+    icon: Lock,
   },
   {
-    category: "Assinatura Digital",
-    icon: PenTool,
-    color: "text-teal-500",
-    bgColor: "bg-teal-500/10",
-    features: [
-      {
-        icon: PenTool,
-        title: "Assinatura Eletrônica",
-        description: "Envie documentos PDF para assinatura com validade jurídica (MP 2.200-2/2001 e Lei 14.063/2020).",
-      },
-      {
-        icon: QrCode,
-        title: "Verificação por QR Code",
-        description: "Cada documento assinado possui um QR Code de verificação de autenticidade acessível publicamente.",
-      },
-      {
-        icon: Mail,
-        title: "Verificação por E-mail (OTP)",
-        description: "Identidade do signatário validada por código de verificação enviado ao e-mail cadastrado.",
-      },
-      {
-        icon: MapPin,
-        title: "Geolocalização Obrigatória",
-        description: "Registro de localização do signatário para garantir rastreabilidade e segurança jurídica.",
-      },
-      {
-        icon: ShieldCheck,
-        title: "Trilha de Auditoria Completa",
-        description: "IP, geolocalização, User-Agent e timestamps registrados para cada ação no documento.",
-      },
-      {
-        icon: MessageSquare,
-        title: "Envio via WhatsApp",
-        description: "Envie o link de assinatura diretamente pelo WhatsApp do contato, integrado ao Chat e CRM.",
-      },
+    id: "score",
+    badge: "Score de Promotor",
+    badgeColor: "bg-amber-50 text-amber-600 border-amber-200",
+    title: "Cada promotor tem um score baseado no",
+    titleHighlight: "comportamento real",
+    items: [
+      "Ocorrências",
+      "Execução",
+      "Permanência",
+      "Padrão de comportamento",
     ],
+    extraItems: {
+      label: "Resultado",
+      items: ["Identificação de risco", "Bloqueio automático", "Substituição obrigatória"],
+    },
+    quote: "Você evita o problema antes dele acontecer.",
+    icon: Target,
+  },
+  {
+    id: "rh",
+    badge: "Assinatura Digital & RH",
+    badgeColor: "bg-teal-50 text-teal-600 border-teal-200",
+    title: "Contratos e controle de equipe",
+    titleHighlight: "em um só lugar",
+    items: [
+      "Assinatura digital com validade jurídica",
+      "Contratos",
+      "Documentos",
+      "Holerite",
+      "Relógio de ponto",
+    ],
+    quote: "Menos papel. Mais controle.",
+    icon: FileText,
+  },
+  {
+    id: "automacao",
+    badge: "Automação & IA",
+    badgeColor: "bg-indigo-50 text-indigo-600 border-indigo-200",
+    title: "Automatize tarefas com",
+    titleHighlight: "inteligência artificial",
+    items: [
+      "Secretária virtual",
+      "Automação de processos",
+      "Lembretes inteligentes",
+      "Organização automática",
+    ],
+    quote: "Menos trabalho manual. Mais eficiência.",
+    icon: Zap,
+  },
+  {
+    id: "relatorios",
+    badge: "Relatórios",
+    badgeColor: "bg-cyan-50 text-cyan-600 border-cyan-200",
+    title: "Relatórios completos com",
+    titleHighlight: "análise real da operação",
+    items: [
+      "Execução por promotor",
+      "Desempenho por PDV",
+      "Produtividade por marca",
+      "Falhas e inconsistências",
+      "Análise com IA",
+    ],
+    quote: "Você entende a operação.",
+    icon: TrendingUp,
   },
 ];
 
-const pricingPlans = [
-  {
-    name: "Starter",
-    description: "Para pequenas empresas e empreendedores",
-    price: "R$ 380",
-    period: "/mês",
-    popular: false,
-    cta: "Começar Agora",
-    features: [
-      { text: "1 conexão WhatsApp", included: true },
-      { text: "4 usuários", included: true },
-      { text: "Chat centralizado", included: true },
-      { text: "CRM com Kanban", included: true },
-      { text: "Lembretes e agendamentos", included: true },
-      { text: "Chatbot de triagem", included: true },
-      { text: "IA à parte (OpenAI/Gemini)", included: true },
-      { text: "Assinatura de documentos (30/mês)", included: true },
-      { text: "Transferir para IA", included: false },
-      { text: "Base de conhecimento IA", included: false },
-    ],
-    color: "border-border",
-  },
-  {
-    name: "Business",
-    description: "Para empresas com equipe comercial estruturada",
-    price: "Sob consulta",
-    period: "",
-    popular: true,
-    cta: "Falar com Consultor",
-    features: [
-      { text: "3 conexões WhatsApp", included: true },
-      { text: "8 usuários", included: true },
-      { text: "Tudo do Starter +", included: true },
-      { text: "Departamentos e setores", included: true },
-      { text: "Distribuição de leads", included: true },
-      { text: "Gestão de grupos internos", included: true },
-      { text: "Secretária IA nos grupos", included: true },
-      { text: "Disparos em massa", included: true },
-      { text: "Consulta IA no chat", included: true },
-      { text: "Assinatura de documentos (30/mês)", included: true },
-      { text: "Transferir para IA", included: false },
-      { text: "Base de conhecimento IA", included: false },
-    ],
-    color: "border-primary ring-2 ring-primary/20",
-  },
-  {
-    name: "Premium",
-    description: "Para empresas que querem IA e automação total",
-    price: "Sob consulta",
-    period: "",
-    popular: false,
-    cta: "Falar com Consultor",
-    features: [
-      { text: "6 conexões WhatsApp", included: true },
-      { text: "20 usuários", included: true },
-      { text: "Tudo do Business +", included: true },
-      { text: "IA comercial ilimitada", included: true },
-      { text: "Transferir para IA", included: true },
-      { text: "Base de conhecimento IA (RAG)", included: true },
-      { text: "Múltiplos agentes especializados", included: true },
-      { text: "Assistente de vendas IA", included: true },
-      { text: "Resumos de conversas por IA", included: true },
-      { text: "Assinatura de documentos ilimitada", included: true },
-      { text: "Análise fantasma de conversas", included: true },
-      { text: "Relatórios gerenciais", included: true },
-      { text: "Suporte prioritário", included: true },
-    ],
-    color: "border-border",
-  },
-  {
-    name: "Enterprise",
-    description: "Para grandes empresas e operações complexas",
-    price: "Sob consulta",
-    period: "",
-    popular: false,
-    cta: "Falar com Consultor",
-    features: [
-      { text: "WhatsApps ilimitados", included: true },
-      { text: "Usuários ilimitados", included: true },
-      { text: "Tudo do Premium +", included: true },
-      { text: "Assinatura de documentos ilimitada", included: true },
-      { text: "Análise fantasma de conversas", included: true },
-      { text: "Onboarding dedicado", included: true },
-      { text: "SLA garantido", included: true },
-      { text: "Suporte 24/7", included: true },
-      { text: "Multi-filiais", included: true },
-    ],
-    color: "border-border bg-gradient-to-br from-background to-muted/50",
-  },
-];
+function FeatureSection({ f, index }: { f: FeatureBlock; index: number }) {
+  const Icon = f.icon;
+  const isEven = index % 2 === 0;
 
-const stats = [
-  { value: "100%", label: "Focado em resultados" },
-  { value: "99.9%", label: "Uptime garantido" },
-  { value: "24/7", label: "IA atendendo seus clientes" },
-  { value: "<3s", label: "Tempo de resposta" },
-];
+  return (
+    <section id={f.id} className={`py-16 ${isEven ? "bg-white" : "bg-gray-50/60"}`}>
+      <div className="mx-auto max-w-6xl px-6">
+        <div className={`flex flex-col lg:flex-row gap-10 items-center ${!isEven ? "lg:flex-row-reverse" : ""}`}>
+          {/* Icon side */}
+          <div className="lg:w-5/12 flex justify-center">
+            <div className="relative">
+              <div className="h-48 w-48 rounded-3xl bg-gradient-to-br from-violet-100 to-purple-50 flex items-center justify-center shadow-lg shadow-violet-100/50">
+                <Icon className="h-20 w-20 text-violet-600" />
+              </div>
+              <div className="absolute -bottom-3 -right-3 h-12 w-12 rounded-xl bg-violet-600 flex items-center justify-center text-white font-bold text-lg shadow-md">
+                {String(index + 1).padStart(2, "0")}
+              </div>
+            </div>
+          </div>
 
-const testimonials = [
-  {
-    name: "Ricardo Almeida",
-    role: "Diretor Comercial - Tech Solutions",
-    text: "Organizamos todo o WhatsApp da empresa. Cada vendedor atende seus leads sem confusão e a IA ajuda no fechamento.",
-  },
-  {
-    name: "Camila Santos",
-    role: "CEO - Santos Distribuidora",
-    text: "Os lembretes automáticos e o chatbot de triagem mudaram nossa operação. Nunca mais perdemos um follow-up.",
-  },
-  {
-    name: "Fernando Costa",
-    role: "Gerente de Vendas - Costa Importações",
-    text: "A distribuição automática de leads entre 15 vendedores e o CRM integrado ao WhatsApp ficou impecável.",
-  },
-];
+          {/* Content side */}
+          <div className="lg:w-7/12">
+            <Badge className={`mb-3 ${f.badgeColor} hover:opacity-90`}>{f.badge}</Badge>
+            <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mb-6">
+              {f.title}{" "}
+              {f.titleHighlight && <span className="text-violet-600">{f.titleHighlight}</span>}
+            </h2>
 
-export default function LandingPage() {
-  const { branding } = useBranding();
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [activeCategory, setActiveCategory] = useState("WhatsApp Organizado");
+            <div className="grid sm:grid-cols-2 gap-2.5 mb-4">
+              {f.items.map(item => (
+                <div key={item} className="flex items-center gap-2.5">
+                  <CheckCircle2 className="h-4 w-4 text-violet-500 shrink-0" />
+                  <span className="text-gray-700 text-sm">{item}</span>
+                </div>
+              ))}
+            </div>
 
-  const [showPreRegister, setShowPreRegister] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [formData, setFormData] = useState({
-    name: "",
-    email: "",
-    whatsapp: "",
-  });
+            {f.extraItems && (
+              <div className="mt-4 bg-violet-50/70 rounded-xl p-4 border border-violet-100">
+                <p className="text-sm font-semibold text-violet-700 mb-2">{f.extraItems.label}:</p>
+                <div className="flex flex-wrap gap-2">
+                  {f.extraItems.items.map(ei => (
+                    <span key={ei} className="text-xs bg-white rounded-full px-3 py-1 text-violet-700 border border-violet-200">
+                      {ei}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
 
-  const handlePreRegister = async (e: React.FormEvent) => {
+            <p className="mt-6 text-lg font-semibold text-gray-800 italic border-l-4 border-violet-400 pl-4">
+              "{f.quote}"
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ─────────────── POSITIONING ─────────────── */
+function PositioningSection({ onCta }: { onCta: () => void }) {
+  return (
+    <section className="py-20 bg-gradient-to-br from-violet-600 via-purple-600 to-violet-700 text-white relative overflow-hidden">
+      <div className="pointer-events-none absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iMiIgY3k9IjIiIHI9IjEiIGZpbGw9InJnYmEoMjU1LDI1NSwyNTUsMC4wNykiLz48L3N2Zz4=')] opacity-60" />
+      <div className="mx-auto max-w-4xl px-6 text-center relative z-10">
+        <Star className="h-10 w-10 mx-auto mb-6 text-violet-200" />
+        <h2 className="text-3xl md:text-4xl font-bold mb-6">
+          Um sistema completo para quem quer crescer com operação organizada
+        </h2>
+        <p className="text-lg text-violet-100 mb-4 max-w-2xl mx-auto">
+          O Ayratech não é só uma ferramenta.
+          É a base para estruturar uma operação profissional de merchandising.
+        </p>
+        <p className="text-xl font-semibold text-white/90 italic mb-10">
+          "Se sua operação depende de pessoas, ela precisa de controle."
+        </p>
+        <Button
+          size="lg"
+          onClick={onCta}
+          className="bg-white text-violet-700 hover:bg-violet-50 text-lg px-10 h-14 rounded-xl shadow-lg font-semibold"
+        >
+          Quero implementar o Ayratech na minha agência <ArrowRight className="ml-2 h-5 w-5" />
+        </Button>
+      </div>
+    </section>
+  );
+}
+
+/* ─────────────── FAQ ─────────────── */
+function FAQSection() {
+  const [open, setOpen] = useState<number | null>(null);
+  const faqs = [
+    { q: "O sistema funciona para qualquer tamanho de agência?", a: "Sim, o Ayratech atende desde agências com 5 promotores até operações com centenas de profissionais em campo." },
+    { q: "Precisa instalar algo no supermercado?", a: "O totem de acesso pode rodar em um tablet comum. Não exige infraestrutura especial no PDV." },
+    { q: "A IA substitui o supervisor?", a: "Não. A IA complementa a supervisão, identificando padrões e problemas que passariam despercebidos." },
+    { q: "O promotor precisa de um celular especial?", a: "Não. O app funciona em qualquer smartphone Android ou iOS com câmera." },
+    { q: "Como funciona a cobrança?", a: "A agência paga por promotor ativo. O supermercado usa o sistema gratuitamente." },
+  ];
+
+  return (
+    <section className="py-20 bg-gray-50">
+      <div className="mx-auto max-w-3xl px-6">
+        <h2 className="text-3xl font-bold text-center text-gray-900 mb-12">Perguntas frequentes</h2>
+        <div className="space-y-3">
+          {faqs.map((faq, i) => (
+            <div key={i} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+              <button
+                onClick={() => setOpen(open === i ? null : i)}
+                className="w-full flex items-center justify-between p-5 text-left"
+              >
+                <span className="font-medium text-gray-800">{faq.q}</span>
+                {open === i ? <ChevronUp className="h-5 w-5 text-violet-500" /> : <ChevronDown className="h-5 w-5 text-gray-400" />}
+              </button>
+              {open === i && (
+                <div className="px-5 pb-5 pt-0 text-gray-600 text-sm leading-relaxed">{faq.a}</div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ─────────────── CONTACT FORM ─────────────── */
+function ContactSection() {
+  const [form, setForm] = useState({ name: "", email: "", phone: "", company: "" });
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!formData.name.trim() || !formData.email.trim() || !formData.whatsapp.trim()) {
-      toast.error("Por favor, preencha todos os campos");
+    if (!form.name || !form.phone) {
+      toast.error("Preencha nome e telefone");
       return;
     }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(formData.email)) {
-      toast.error("Por favor, insira um email válido");
-      return;
-    }
-
-    const phone = formData.whatsapp.replace(/\D/g, "");
-    if (phone.length < 10) {
-      toast.error("Por favor, insira um WhatsApp válido");
-      return;
-    }
-
-    setIsSubmitting(true);
+    setLoading(true);
     try {
-      const response = await fetch(`${API_URL}/api/public/pre-register`, {
+      await fetch(`${API_URL}/api/leads/landing`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: formData.name.trim(),
-          email: formData.email.trim(),
-          whatsapp: phone,
-        }),
+        body: JSON.stringify({ ...form, source: "landing-agencia" }),
       });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Erro ao enviar cadastro");
-      }
-
-      toast.success("Cadastro recebido! Entraremos em contato em breve.");
-      setShowPreRegister(false);
-      setFormData({ name: "", email: "", whatsapp: "" });
-    } catch (error: any) {
-      toast.error(error.message || "Erro ao enviar cadastro");
+      toast.success("Recebemos seu contato! Entraremos em breve.");
+      setForm({ name: "", email: "", phone: "", company: "" });
+    } catch {
+      toast.error("Erro ao enviar. Tente novamente.");
     } finally {
-      setIsSubmitting(false);
+      setLoading(false);
     }
   };
 
-  const activeFeatures = featureCategories.find(c => c.category === activeCategory)?.features || [];
+  return (
+    <section id="contato" className="py-20">
+      <div className="mx-auto max-w-xl px-6">
+        <h2 className="text-3xl font-bold text-center text-gray-900 mb-3">
+          Quero implementar o Ayratech
+        </h2>
+        <p className="text-center text-gray-500 mb-10">Preencha e nossa equipe entra em contato</p>
+
+        <form onSubmit={handleSubmit} className="space-y-4 bg-white p-8 rounded-2xl border border-gray-200 shadow-sm">
+          <div>
+            <Label className="text-gray-700">Nome *</Label>
+            <Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Seu nome" className="mt-1" />
+          </div>
+          <div>
+            <Label className="text-gray-700">E-mail</Label>
+            <Input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} placeholder="email@empresa.com" className="mt-1" />
+          </div>
+          <div>
+            <Label className="text-gray-700">Telefone / WhatsApp *</Label>
+            <Input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} placeholder="(11) 99999-9999" className="mt-1" />
+          </div>
+          <div>
+            <Label className="text-gray-700">Agência / Empresa</Label>
+            <Input value={form.company} onChange={e => setForm({ ...form, company: e.target.value })} placeholder="Nome da sua agência" className="mt-1" />
+          </div>
+          <Button type="submit" disabled={loading} className="w-full bg-violet-600 hover:bg-violet-700 text-white h-12 rounded-xl text-base">
+            {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <>Enviar <Send className="ml-2 h-4 w-4" /></>}
+          </Button>
+        </form>
+      </div>
+    </section>
+  );
+}
+
+/* ─────────────── NAVBAR ─────────────── */
+function Navbar({ onCta }: { onCta: () => void }) {
+  const [menuOpen, setMenuOpen] = useState(false);
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Navigation */}
-      <nav className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-lg border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            {/* Left - Nav Links */}
-            <div className="hidden md:flex items-center gap-6 flex-1">
-              <a href="#funcionalidades" className="text-sm text-muted-foreground hover:text-foreground transition">
-                Funcionalidades
-              </a>
-              <a href="#precos" className="text-sm text-muted-foreground hover:text-foreground transition">
-                Planos
-              </a>
-              <a href="#depoimentos" className="text-sm text-muted-foreground hover:text-foreground transition">
-                Depoimentos
-              </a>
-            </div>
+    <nav className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-lg border-b border-gray-200/60">
+      <div className="mx-auto max-w-6xl px-6 flex items-center justify-between h-16">
+        <Link to="/" className="text-xl font-extrabold bg-gradient-to-r from-violet-600 to-purple-600 bg-clip-text text-transparent">
+          Ayratech
+        </Link>
 
-            {/* Center - Logo */}
-            <div className="flex items-center justify-center gap-2">
-              <img src={branding.logo_topbar || ayratechLogo} alt={branding.company_name || "Ayratech"} className="h-10 w-10 object-contain" />
-              <span className="font-bold text-lg">{branding.company_name || "Ayratech"}</span>
-            </div>
-
-            {/* Right - Buttons */}
-            <div className="hidden md:flex items-center gap-4 flex-1 justify-end">
-              <Link to="/login">
-                <Button variant="ghost" size="sm">Entrar</Button>
-              </Link>
-              <Button size="sm" className="gap-2" onClick={() => setShowPreRegister(true)}>
-                Testar Grátis
-                <ArrowRight className="h-4 w-4" />
-              </Button>
-            </div>
-
-            <button className="md:hidden p-2" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
-              {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-            </button>
-          </div>
-
-          {mobileMenuOpen && (
-            <div className="md:hidden py-4 border-t">
-              <div className="flex flex-col gap-4">
-                <a href="#funcionalidades" className="text-sm text-muted-foreground hover:text-foreground" onClick={() => setMobileMenuOpen(false)}>Funcionalidades</a>
-                <a href="#precos" className="text-sm text-muted-foreground hover:text-foreground" onClick={() => setMobileMenuOpen(false)}>Planos</a>
-                <a href="#depoimentos" className="text-sm text-muted-foreground hover:text-foreground" onClick={() => setMobileMenuOpen(false)}>Depoimentos</a>
-                <div className="flex gap-2 pt-2">
-                  <Link to="/login" className="flex-1">
-                    <Button variant="outline" className="w-full">Entrar</Button>
-                  </Link>
-                  <Button className="flex-1" onClick={() => { setMobileMenuOpen(false); setShowPreRegister(true); }}>Testar Grátis</Button>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      </nav>
-
-      {/* Hero Section */}
-      <section className="pt-32 pb-20 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center max-w-4xl mx-auto">
-            <Badge className="mb-6 px-4 py-1.5" variant="secondary">
-              <Building2 className="h-3 w-3 mr-1" />
-              Plataforma completa para gestão de promotores
-            </Badge>
-
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight mb-6">
-              Gerencie seus{" "}
-              <span className="bg-gradient-to-r from-[hsl(217,75%,55%)] via-[hsl(152,55%,48%)] to-[hsl(24,92%,55%)] bg-clip-text text-transparent">Promotores e Merchandising</span>{" "}
-              com IA{" "}
-              <span className="bg-gradient-to-r from-[hsl(24,92%,55%)] via-[hsl(340,70%,55%)] to-[hsl(217,75%,55%)] bg-clip-text text-transparent">inteligente</span>
-            </h1>
-
-            <p className="text-lg sm:text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
-              Centralize a comunicação com promotores via WhatsApp, acompanhe roteiros, gerencie tarefas de merchandising,
-              e use inteligência artificial para otimizar a operação da sua equipe em campo.
-            </p>
-
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Button
-                size="lg"
-                className="gap-2 px-8 h-12 text-base w-full sm:w-auto"
-                onClick={() => setShowPreRegister(true)}
-              >
-                Testar 7 Dias Grátis
-                <ArrowRight className="h-5 w-5" />
-              </Button>
-              <a href="#funcionalidades">
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className="gap-2 px-8 h-12 text-base w-full sm:w-auto"
-                >
-                  Conhecer Funcionalidades
-                </Button>
-              </a>
-            </div>
-
-            <p className="text-sm text-muted-foreground mt-4">
-              Sem cartão de crédito • Para qualquer segmento • Suporte especializado
-            </p>
-          </div>
-
-          {/* Stats */}
-          <div className="mt-12 grid grid-cols-2 md:grid-cols-4 gap-4 max-w-3xl mx-auto">
-            {stats.map((stat, index) => (
-              <div key={index} className="text-center p-4">
-                <div className="text-2xl md:text-3xl font-bold text-primary">{stat.value}</div>
-                <div className="text-xs md:text-sm text-muted-foreground">{stat.label}</div>
-              </div>
-            ))}
-          </div>
-
-          {/* Hero Image */}
-          <div className="mt-16 relative">
-            <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent z-10 pointer-events-none" />
-            <div className="rounded-xl border shadow-2xl bg-card overflow-hidden">
-              <div className="flex items-center gap-2 px-4 py-3 border-b bg-muted/30">
-                <div className="flex gap-1.5">
-                  <div className="w-3 h-3 rounded-full bg-red-500" />
-                  <div className="w-3 h-3 rounded-full bg-yellow-500" />
-                  <div className="w-3 h-3 rounded-full bg-green-500" />
-                </div>
-                <div className="flex-1 text-center text-xs text-muted-foreground">
-                  {branding.company_name || "Ayratech"} — Gestão de Promotores
-                </div>
-              </div>
-              <img src={heroImage} alt="Plataforma de gestão comercial com WhatsApp e CRM integrado" className="w-full h-auto" />
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Dores Section */}
-      <ScrollReveal><section className="py-20 px-4 sm:px-6 lg:px-8 border-y bg-muted/20">
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-14">
-            <Badge variant="secondary" className="mb-4 px-3 py-1 text-destructive bg-destructive/10 border-destructive/20">
-              <AlertTriangle className="h-3 w-3 mr-1" />
-              Você se identifica?
-            </Badge>
-            <h2 className="text-3xl sm:text-4xl font-bold mb-4">
-              As dores que <span className="text-destructive">travam</span> o crescimento da sua empresa
-            </h2>
-            <p className="text-muted-foreground max-w-2xl mx-auto">
-              Se sua equipe comercial sofre com algum desses problemas, você está perdendo dinheiro todos os dias.
-            </p>
-          </div>
-
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[
-              { icon: MessageSquare, title: "WhatsApp caótico", desc: "Conversas misturadas, clientes sem resposta, vendedores usando celular pessoal. Impossível saber quem atendeu quem." },
-              { icon: Clock, title: "Leads esfriando", desc: "Ninguém lembra de retornar. O cliente que pediu orçamento ontem já comprou do concorrente." },
-              { icon: FolderOpen, title: "Pipeline invisível", desc: "Ninguém sabe quantas negociações estão abertas, em que fase estão ou quando vão fechar." },
-              { icon: Users, title: "Equipe desalinhada", desc: "Dois vendedores atendem o mesmo lead. Outro lead fica sem resposta. Sem distribuição justa." },
-              { icon: Brain, title: "Sem padrão de atendimento", desc: "Cada vendedor responde de um jeito. Sem scripts, sem propostas padronizadas, sem controle de qualidade." },
-              { icon: Shield, title: "Zero visibilidade gerencial", desc: "Gestor não sabe o volume de conversas, tempo de resposta nem taxa de conversão da equipe." },
-            ].map((item, i) => (
-              <div key={i} className="group p-5 rounded-xl bg-background border border-destructive/20 hover:border-destructive/40 transition-all hover:shadow-lg">
-                <div className="w-11 h-11 rounded-lg bg-destructive/10 flex items-center justify-center mb-3">
-                  <item.icon className="h-5 w-5 text-destructive" />
-                </div>
-                <h4 className="font-semibold mb-2">{item.title}</h4>
-                <p className="text-sm text-muted-foreground leading-relaxed">{item.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section></ScrollReveal>
-
-      {/* Gatilhos / Urgência Section */}
-      <ScrollReveal><section className="py-20 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-5xl mx-auto">
-          <div className="text-center mb-14">
-            <Badge variant="secondary" className="mb-4 px-3 py-1">
-              <Zap className="h-3 w-3 mr-1" />
-              Por que agir agora?
-            </Badge>
-            <h2 className="text-3xl sm:text-4xl font-bold mb-4">
-              Cada dia sem organização é{" "}
-              <span className="bg-gradient-to-r from-[hsl(24,92%,55%)] to-[hsl(340,70%,55%)] bg-clip-text text-transparent">
-                dinheiro perdido
-              </span>
-            </h2>
-          </div>
-
-          <div className="grid md:grid-cols-2 gap-8">
-            {[
-              {
-                emoji: "💸",
-                trigger: "Você perde 30% dos leads por demora na resposta",
-                detail: "Pesquisas mostram que responder em até 5 minutos aumenta 21x a chance de conversão. Quanto tempo seu time demora?",
-              },
-              {
-                emoji: "📉",
-                trigger: "Seu concorrente já automatizou o atendimento",
-                detail: "Enquanto sua equipe responde manualmente, empresas do seu mercado já usam IA para qualificar e atender 24h.",
-              },
-              {
-                emoji: "🔥",
-                trigger: "Sua equipe trabalha mais, mas vende menos",
-                detail: "Sem processo, sem CRM e sem automação, seus vendedores gastam 60% do tempo em tarefas operacionais.",
-              },
-              {
-                emoji: "⏰",
-                trigger: "Crescer sem controle é receita para o caos",
-                detail: "Mais vendedores sem sistema = mais confusão. A hora de organizar é antes de escalar, não depois.",
-              },
-            ].map((item, i) => (
-              <div key={i} className="flex gap-4 p-6 rounded-xl border bg-card hover:shadow-md transition-shadow">
-                <span className="text-3xl shrink-0">{item.emoji}</span>
-                <div>
-                  <h4 className="font-bold text-lg mb-2">{item.trigger}</h4>
-                  <p className="text-sm text-muted-foreground leading-relaxed">{item.detail}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="text-center mt-10">
-            <Button size="lg" className="gap-2 px-8 h-12 text-base" onClick={() => setShowPreRegister(true)}>
-              Quero parar de perder vendas
-              <ArrowRight className="h-5 w-5" />
+        <div className="hidden md:flex items-center gap-6 text-sm text-gray-600">
+          {[
+            { label: "Recursos", href: "#features" },
+            { label: "FAQ", href: "#faq" },
+            { label: "Contato", href: "#contato" },
+          ].map(l => (
+            <a key={l.href} href={l.href} className="hover:text-violet-600 transition-colors">{l.label}</a>
+          ))}
+          <Link to="/login">
+            <Button variant="outline" size="sm" className="border-violet-300 text-violet-600 hover:bg-violet-50">
+              Entrar
             </Button>
+          </Link>
+          <Button size="sm" onClick={onCta} className="bg-violet-600 hover:bg-violet-700 text-white">
+            Começar agora
+          </Button>
+        </div>
+
+        <button className="md:hidden" onClick={() => setMenuOpen(!menuOpen)}>
+          {menuOpen ? <X className="h-6 w-6 text-gray-700" /> : <Menu className="h-6 w-6 text-gray-700" />}
+        </button>
+      </div>
+
+      {menuOpen && (
+        <div className="md:hidden bg-white border-b border-gray-200 px-6 py-4 space-y-3">
+          <a href="#features" className="block text-gray-700" onClick={() => setMenuOpen(false)}>Recursos</a>
+          <a href="#faq" className="block text-gray-700" onClick={() => setMenuOpen(false)}>FAQ</a>
+          <a href="#contato" className="block text-gray-700" onClick={() => setMenuOpen(false)}>Contato</a>
+          <Link to="/login" className="block text-violet-600 font-medium">Entrar</Link>
+          <Button onClick={() => { onCta(); setMenuOpen(false); }} className="w-full bg-violet-600 hover:bg-violet-700 text-white">
+            Começar agora
+          </Button>
+        </div>
+      )}
+    </nav>
+  );
+}
+
+/* ─────────────── FOOTER ─────────────── */
+function Footer() {
+  return (
+    <footer className="bg-gray-900 text-gray-400 py-12">
+      <div className="mx-auto max-w-6xl px-6">
+        <div className="flex flex-col md:flex-row justify-between items-center gap-6">
+          <div>
+            <span className="text-xl font-extrabold text-white">Ayratech</span>
+            <p className="text-sm mt-1">Sistema completo para agências de merchandising</p>
+          </div>
+          <div className="flex gap-6 text-sm">
+            <Link to="/politica-privacidade" className="hover:text-white transition-colors">Privacidade</Link>
+            <Link to="/termos-servico" className="hover:text-white transition-colors">Termos</Link>
+            <a href="#contato" className="hover:text-white transition-colors">Contato</a>
           </div>
         </div>
-      </section></ScrollReveal>
-
-      {/* Como Resolvemos Section */}
-      <ScrollReveal><section className="py-20 px-4 sm:px-6 lg:px-8 border-y bg-muted/20">
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-14">
-            <Badge variant="secondary" className="mb-4 px-3 py-1 text-primary bg-primary/10 border-primary/20">
-              <CheckCircle2 className="h-3 w-3 mr-1" />
-              A solução
-            </Badge>
-            <h2 className="text-3xl sm:text-4xl font-bold mb-4">
-              Como a{" "}
-              <span className="bg-gradient-to-r from-[hsl(217,75%,55%)] via-[hsl(152,55%,48%)] to-[hsl(24,92%,55%)] bg-clip-text text-transparent">
-                Ayratech
-              </span>{" "}
-              resolve cada problema
-            </h2>
-            <p className="text-muted-foreground max-w-2xl mx-auto">
-              Cada dor da sua operação tem uma funcionalidade específica para resolver. Veja o antes e depois:
-            </p>
-          </div>
-
-          <div className="space-y-6">
-            {[
-              {
-                pain: "WhatsApp caótico",
-                solution: "Chat centralizado com multi-atendentes",
-                desc: "Todas as conversas em um painel único. Cada vendedor vê apenas seus clientes, com filas organizadas e transferências entre departamentos.",
-                icon: MessageSquare,
-              },
-              {
-                pain: "Leads esfriando sem retorno",
-                solution: "Lembretes + Follow-up automático",
-                desc: "Crie lembretes para cada cliente. Configure sequências automáticas de acompanhamento para leads que não responderam. Nunca mais esqueça um follow-up.",
-                icon: Bell,
-              },
-              {
-                pain: "Pipeline invisível",
-                solution: "CRM Kanban integrado ao WhatsApp",
-                desc: "Veja todas as negociações em um quadro visual por etapa. Arraste cards entre colunas, adicione tarefas e acompanhe o valor total do funil em tempo real.",
-                icon: FolderOpen,
-              },
-              {
-                pain: "Equipe desalinhada",
-                solution: "Distribuição automática de leads",
-                desc: "Novos leads são distribuídos automaticamente entre vendedores por rodízio, área ou regra personalizada. Fim do conflito e dos leads perdidos.",
-                icon: UserCheck,
-              },
-              {
-                pain: "Sem padrão de atendimento",
-                solution: "IA comercial com base de conhecimento",
-                desc: "Alimente a IA com catálogos e manuais da empresa. Ela sugere respostas, cria propostas e ajuda no fechamento usando informações reais do seu negócio.",
-                icon: Brain,
-              },
-              {
-                pain: "Atendimento fora do horário",
-                solution: "Agentes IA atendem 24h por você",
-                desc: "Transfira conversas para agentes IA especializados que atendem, qualificam e agendam reuniões automaticamente — mesmo de madrugada.",
-                icon: Bot,
-              },
-            ].map((item, i) => (
-              <div key={i} className="flex flex-col md:flex-row items-start gap-4 p-6 rounded-xl border bg-card hover:shadow-md transition-shadow">
-                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                  <item.icon className="h-6 w-6 text-primary" />
-                </div>
-                <div className="flex-1">
-                  <div className="flex flex-wrap items-center gap-3 mb-2">
-                    <span className="text-sm font-medium text-destructive bg-destructive/10 px-2.5 py-0.5 rounded-full">
-                      ❌ {item.pain}
-                    </span>
-                    <ArrowRight className="h-4 w-4 text-muted-foreground hidden sm:block" />
-                    <span className="text-sm font-medium text-primary bg-primary/10 px-2.5 py-0.5 rounded-full">
-                      ✅ {item.solution}
-                    </span>
-                  </div>
-                  <p className="text-sm text-muted-foreground leading-relaxed">{item.desc}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="text-center mt-12">
-            <Button size="lg" variant="outline" className="gap-2 px-8 h-12 text-base" onClick={() => setShowPreRegister(true)}>
-              <Sparkles className="h-5 w-5" />
-              Quero essa solução para minha empresa
-            </Button>
-          </div>
+        <div className="mt-8 pt-6 border-t border-gray-800 text-center text-xs text-gray-500">
+          © {new Date().getFullYear()} Ayratech. Todos os direitos reservados.
         </div>
-      </section></ScrollReveal>
+      </div>
+    </footer>
+  );
+}
 
-      {/* Features Section */}
-      <ScrollReveal><section id="funcionalidades" className="py-20 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-12">
-            <Badge variant="outline" className="mb-4">+30 Funcionalidades</Badge>
-            <h2 className="text-3xl sm:text-4xl font-bold mb-4">
-              Tudo que sua empresa precisa no WhatsApp
-            </h2>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Da organização de conversas à IA com base de conhecimento, CRM integrado, transferência para agentes inteligentes e automação comercial.
-            </p>
-          </div>
+/* ─────────────── MAIN PAGE ─────────────── */
+export default function LandingPage() {
+  const scrollToContact = () => document.getElementById("contato")?.scrollIntoView({ behavior: "smooth" });
 
-          <div className="flex flex-wrap justify-center gap-2 mb-10">
-            {featureCategories.map((cat) => (
-              <button
-                key={cat.category}
-                onClick={() => setActiveCategory(cat.category)}
-                className={cn(
-                  "flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all",
-                  activeCategory === cat.category
-                    ? `${cat.bgColor} ${cat.color} ring-2 ring-current/20`
-                    : "bg-muted border text-muted-foreground hover:text-foreground"
-                )}
-              >
-                <cat.icon className="h-4 w-4" />
-                {cat.category}
-              </button>
-            ))}
-          </div>
+  return (
+    <div className="min-h-screen bg-white">
+      <Navbar onCta={scrollToContact} />
+      <Hero onCta={scrollToContact} />
+      <ProblemSection />
+      <SolutionSection />
 
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {activeFeatures.map((feature, index) => (
-              <Card key={index} className="group hover:shadow-lg transition-all duration-300 hover:-translate-y-1 bg-background">
-                <CardContent className="p-5">
-                  <div className={cn(
-                    "w-10 h-10 rounded-lg flex items-center justify-center mb-3",
-                    featureCategories.find(c => c.category === activeCategory)?.bgColor
-                  )}>
-                    <feature.icon className={cn(
-                      "h-5 w-5",
-                      featureCategories.find(c => c.category === activeCategory)?.color
-                    )} />
-                  </div>
-                  <h3 className="font-semibold mb-1">{feature.title}</h3>
-                  <p className="text-muted-foreground text-sm">{feature.description}</p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+      <div id="features">
+        {features.map((f, i) => (
+          <FeatureSection key={f.id} f={f} index={i} />
+        ))}
+      </div>
 
-          {/* Summary Grid */}
-          <div className="mt-16 grid md:grid-cols-3 gap-6">
-            {featureCategories.map((cat, index) => (
-              <div key={index} className="flex items-start gap-3 p-4 rounded-lg bg-muted/30 border">
-                <div className={cn("w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0", cat.bgColor)}>
-                  <cat.icon className={cn("h-5 w-5", cat.color)} />
-                </div>
-                <div>
-                  <h4 className="font-medium mb-1">{cat.category}</h4>
-                  <p className="text-sm text-muted-foreground">
-                    {cat.features.map(f => f.title).join(", ")}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section></ScrollReveal>
-
-      {/* Testimonials */}
-      <ScrollReveal><section id="depoimentos" className="py-20 px-4 sm:px-6 lg:px-8 bg-muted/30">
-        <div className="max-w-5xl mx-auto">
-          <div className="text-center mb-12">
-            <Badge variant="outline" className="mb-4">Depoimentos</Badge>
-            <h2 className="text-3xl sm:text-4xl font-bold mb-4">
-              O que nossos clientes dizem
-            </h2>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-6">
-            {testimonials.map((t, i) => (
-              <Card key={i} className="bg-background">
-                <CardContent className="p-6">
-                  <div className="flex gap-1 mb-4">
-                    {[...Array(5)].map((_, j) => (
-                      <Star key={j} className="h-4 w-4 fill-amber-400 text-amber-400" />
-                    ))}
-                  </div>
-                  <p className="text-sm text-muted-foreground mb-4 italic">"{t.text}"</p>
-                  <div>
-                    <p className="font-semibold text-sm">{t.name}</p>
-                    <p className="text-xs text-muted-foreground">{t.role}</p>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-      </section></ScrollReveal>
-
-      {/* Pricing */}
-      <ScrollReveal><section id="precos" className="py-20 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-12">
-            <Badge variant="outline" className="mb-4">Planos</Badge>
-            <h2 className="text-3xl sm:text-4xl font-bold mb-4">
-              Planos pensados para sua empresa crescer
-            </h2>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Comece pequeno e escale conforme sua operação cresce. Teste grátis por 7 dias.
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {pricingPlans.map((plan, index) => (
-              <Card key={index} className={cn("relative flex flex-col", plan.color)}>
-                {plan.popular && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                    <Badge className="gap-1 px-3 py-1">
-                      <Star className="h-3 w-3 fill-current" />
-                      Mais Popular
-                    </Badge>
-                  </div>
-                )}
-                <CardHeader className="pb-4">
-                  <CardTitle className="text-xl">{plan.name}</CardTitle>
-                  <CardDescription className="min-h-[40px]">{plan.description}</CardDescription>
-                  <div className="pt-2">
-                    <span className="text-3xl font-bold">{plan.price}</span>
-                    <span className="text-muted-foreground">{plan.period}</span>
-                  </div>
-                </CardHeader>
-                <CardContent className="flex-1 flex flex-col">
-                  <ul className="space-y-2 mb-6 flex-1">
-                    {plan.features.map((feature, fIndex) => (
-                      <li key={fIndex} className="flex items-start gap-2 text-sm">
-                        {feature.included ? (
-                          <CheckCircle2 className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
-                        ) : (
-                          <X className="h-4 w-4 text-muted-foreground/40 flex-shrink-0 mt-0.5" />
-                        )}
-                        <span className={feature.included ? "" : "text-muted-foreground/60"}>
-                          {feature.text}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                  <Button
-                    className="w-full"
-                    variant={plan.popular ? "default" : "outline"}
-                    onClick={() => setShowPreRegister(true)}
-                  >
-                    {plan.cta}
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-      </section></ScrollReveal>
-
-      {/* Trust Section */}
-      <ScrollReveal><section className="py-20 px-4 sm:px-6 lg:px-8 bg-muted/30">
-        <div className="max-w-5xl mx-auto text-center">
-          <h2 className="text-2xl sm:text-3xl font-bold mb-12">
-            Por que empresas confiam na nossa plataforma?
-          </h2>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            <Card className="p-6">
-              <Shield className="h-8 w-8 mx-auto text-primary mb-3" />
-              <h3 className="font-semibold mb-1">Segurança Total</h3>
-              <p className="text-sm text-muted-foreground">Criptografia ponta a ponta e conformidade com LGPD</p>
-            </Card>
-            <Card className="p-6">
-              <TrendingUp className="h-8 w-8 mx-auto text-primary mb-3" />
-              <h3 className="font-semibold mb-1">Foco em Resultados</h3>
-              <p className="text-sm text-muted-foreground">CRM e métricas para aumentar suas vendas e conversões</p>
-            </Card>
-            <Card className="p-6">
-              <Headphones className="h-8 w-8 mx-auto text-primary mb-3" />
-              <h3 className="font-semibold mb-1">Suporte Dedicado</h3>
-              <p className="text-sm text-muted-foreground">Equipe que entende as necessidades do seu negócio</p>
-            </Card>
-            <Card className="p-6">
-              <Zap className="h-8 w-8 mx-auto text-primary mb-3" />
-              <h3 className="font-semibold mb-1">Setup Personalizado</h3>
-              <p className="text-sm text-muted-foreground">Configuração sob medida para a realidade da sua empresa</p>
-            </Card>
-          </div>
-        </div>
-      </section></ScrollReveal>
-
-      {/* FAQ Section */}
-      <ScrollReveal><section id="faq" className="py-20 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-3xl mx-auto">
-          <div className="text-center mb-12">
-            <Badge variant="outline" className="mb-4">FAQ</Badge>
-            <h2 className="text-3xl sm:text-4xl font-bold mb-4">
-              Perguntas frequentes
-            </h2>
-            <p className="text-muted-foreground">
-              Tire suas dúvidas antes de começar
-            </p>
-          </div>
-
-          <div className="space-y-3">
-            {[
-              {
-                q: "Preciso trocar meu número de WhatsApp?",
-                a: "Não. Você conecta o WhatsApp que já usa na empresa. A plataforma funciona em paralelo ao app do celular sem interferir.",
-              },
-              {
-                q: "Quantos atendentes podem usar ao mesmo tempo?",
-                a: "Depende do plano. No Starter são 2 usuários, Business até 8, Premium até 20 e no Enterprise é ilimitado. Todos acessam simultaneamente.",
-              },
-              {
-                q: "A IA responde sozinha para os clientes?",
-                a: "Sim, se você quiser. Você pode configurar agentes IA especializados que atendem automaticamente usando a base de conhecimento da sua empresa. Mas o controle é sempre seu — pode ativar/desativar a qualquer momento.",
-              },
-              {
-                q: "Meus dados e conversas ficam seguros?",
-                a: "Sim. Utilizamos criptografia, servidores seguros e somos compatíveis com a LGPD. Seus dados nunca são compartilhados com terceiros.",
-              },
-              {
-                q: "Funciona no celular?",
-                a: "Sim. A plataforma é responsiva e funciona em qualquer navegador, tanto no computador quanto no celular ou tablet.",
-              },
-              {
-                q: "Consigo enviar mensagens em massa?",
-                a: "Sim. Você pode criar campanhas de disparos em massa para toda sua base de contatos ou segmentos específicos com tags.",
-              },
-              {
-                q: "Como funciona o período de teste?",
-                a: "Você testa por 7 dias com todas as funcionalidades do plano escolhido, sem precisar de cartão de crédito. Nossa equipe ajuda na configuração.",
-              },
-              {
-                q: "Posso integrar com outros sistemas?",
-                a: "Sim. Oferecemos webhooks, API e integrações com ferramentas como Google Calendar, sistemas de cobrança e formulários externos.",
-              },
-            ].map((item, i) => (
-              <details key={i} className="group border rounded-xl bg-card">
-                <summary className="flex items-center justify-between cursor-pointer p-5 font-medium text-sm sm:text-base list-none">
-                  {item.q}
-                  <ArrowRight className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-90 shrink-0 ml-4" />
-                </summary>
-                <div className="px-5 pb-5 text-sm text-muted-foreground leading-relaxed border-t pt-4">
-                  {item.a}
-                </div>
-              </details>
-            ))}
-          </div>
-        </div>
-      </section></ScrollReveal>
-
-      {/* Final CTA */}
-      <ScrollReveal><section className="py-20 px-4 sm:px-6 lg:px-8 bg-primary text-primary-foreground">
-        <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-3xl sm:text-4xl font-bold mb-4">
-            Pronto para escalar suas vendas?
-          </h2>
-          <p className="text-lg opacity-90 mb-8">
-            Comece agora e descubra como a IA e o CRM podem transformar o comercial da sua empresa.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button
-              size="lg"
-              variant="secondary"
-              className="gap-2 px-8 h-12 text-base w-full sm:w-auto"
-              onClick={() => setShowPreRegister(true)}
-            >
-              Começar Teste Grátis
-              <ArrowRight className="h-5 w-5" />
-            </Button>
-            <Link to="/login">
-              <Button size="lg" variant="ghost" className="gap-2 px-8 h-12 text-base w-full sm:w-auto border-2 border-white/40 text-white hover:bg-white/10 hover:text-white">
-                Já tenho conta
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </section></ScrollReveal>
-
-      {/* Footer */}
-      <footer className="py-12 px-4 sm:px-6 lg:px-8 border-t">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-6">
-            <div className="flex items-center gap-3">
-              {branding.logo_topbar ? (
-                <img src={branding.logo_topbar} alt={branding.company_name || "Logo"} className="h-8 object-contain" />
-              ) : (
-                <>
-                  <img src={ayratechLogo} alt="Ayratech" className="h-8 w-8 object-contain" />
-                  <span className="font-semibold text-lg">{branding.company_name || "Ayratech"}</span>
-                </>
-              )}
-            </div>
-            <div className="flex items-center gap-6 text-sm text-muted-foreground">
-              <Link to="/politica-privacidade" className="hover:text-foreground transition">Política de Privacidade</Link>
-              <a href="#funcionalidades" className="hover:text-foreground transition">Funcionalidades</a>
-              <a href="#precos" className="hover:text-foreground transition">Planos</a>
-            </div>
-          </div>
-          <div className="mt-8 pt-8 border-t flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-muted-foreground">
-            <div className="flex items-center gap-2">
-              <Building2 className="h-4 w-4" />
-              <span>CNPJ: 04.609.030/0001-29</span>
-            </div>
-            <span>© {new Date().getFullYear()} {branding.company_name || "Ayratech"}. Todos os direitos reservados.</span>
-          </div>
-        </div>
-      </footer>
-
-      {/* Pre-registration Dialog */}
-      <Dialog open={showPreRegister} onOpenChange={setShowPreRegister}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Building2 className="h-5 w-5 text-primary" />
-              Teste Grátis por 7 Dias
-            </DialogTitle>
-            <DialogDescription>
-              Preencha seus dados e nossa equipe entrará em contato para ativar seu acesso.
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handlePreRegister} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Nome completo</Label>
-              <Input
-                id="name"
-                placeholder="Dr(a). Nome Sobrenome"
-                value={formData.name}
-                onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="email">E-mail profissional</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="contato@escritorio.com.br"
-                value={formData.email}
-                onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="whatsapp">WhatsApp</Label>
-              <Input
-                id="whatsapp"
-                placeholder="(11) 99999-9999"
-                value={formData.whatsapp}
-                onChange={(e) => setFormData(prev => ({ ...prev, whatsapp: e.target.value }))}
-                required
-              />
-            </div>
-            <DialogFooter className="pt-2">
-              <Button type="submit" className="w-full gap-2" disabled={isSubmitting}>
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Enviando...
-                  </>
-                ) : (
-                  <>
-                    Solicitar Acesso
-                    <ArrowRight className="h-4 w-4" />
-                  </>
-                )}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <PositioningSection onCta={scrollToContact} />
+      <div id="faq"><FAQSection /></div>
+      <ContactSection />
+      <Footer />
     </div>
   );
 }
