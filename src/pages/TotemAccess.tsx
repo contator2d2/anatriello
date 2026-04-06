@@ -620,7 +620,7 @@ const TotemAccess = () => {
               {result.agency_name && <p className="text-lg opacity-80">Agência: {result.agency_name}</p>}
             </Card>
           )}
-          {!isAuthorized && !isCheckout && <p className="text-2xl mt-4 opacity-90">{result.block_reason}</p>}
+          {!isAuthorized && !isCheckout && !isRegistration && <p className="text-2xl mt-4 opacity-90">{result.block_reason}</p>}
           <div className="mt-8 flex gap-4 justify-center">
             {isAuthorized && result.entry_id && (
               <Button size="lg" onClick={handleCheckout} className="bg-white text-green-700 hover:bg-white/90 text-xl px-8 py-6">Registrar Saída</Button>
