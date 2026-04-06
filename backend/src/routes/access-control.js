@@ -4021,32 +4021,72 @@ router.post('/totem/register-freelance', async (req, res) => {
     // Check if CPF already exists for this agency
     const existing = await query('SELECT id FROM agency_promoters WHERE agency_id = $1 AND cpf = $2', [regKey.agency_id, onlyDigits(cpf)]);
     if (existing.rows.length) return res.status(409).json({ error: 'CPF já cadastrado nesta agência', promoter_id: existing.rows[0].id });
-    // Create promoter
+
+    // Check if agency is over promoter limit (don't block, just flag for billing)
+    const agency = await query('SELECT a.*, au.email FROM agencies a LEFT JOIN agency_users au ON au.agency_id = a.id WHERE a.id = $1 LIMIT 1', [regKey.agency_id]);
+    const agencyData = agency.rows[0];
+    const activeCount = await query('SELECT COUNT(*) as c FROM agency_promoters WHERE agency_id = $1 AND status = \'active\'', [regKey.agency_id]);
+    const currentCount = parseInt(activeCount.rows[0]?.c || '0');
+    const maxPromoters = agencyData?.max_promoters || 10;
+    const isOverLimit = currentCount >= maxPromoters;
+
+    // Create promoter (never block on-site registration)
     const pR = await query(`INSERT INTO agency_promoters (agency_id, name, cpf, phone, photo_url, status) VALUES ($1,$2,$3,$4,$5,'active') RETURNING *`,
       [regKey.agency_id, name, onlyDigits(cpf), phone ? onlyDigits(phone) : null, normalizePhotoUrl(photo_url)]);
+    
     // Mark key as used
-    // Get unit from totem session
     const session = await query(`SELECT su.id, su.name FROM totem_sessions ts JOIN supermarket_units su ON su.id = ts.supermarket_unit_id WHERE ts.token_hash = $1 AND ts.expires_at > NOW()`, [totemToken]);
     const unitId = session.rows[0]?.id || null;
     await query(`UPDATE onsite_registration_keys SET status = 'used', used_at = NOW(), used_by_promoter_id = $1, supermarket_unit_id = $2 WHERE id = $3`,
       [pR.rows[0].id, unitId, regKey.id]);
     
     // Notify agency via WhatsApp (best effort)
+    const orgId = agencyData?.organization_id;
     try {
-      const agency = await query('SELECT a.*, au.email FROM agencies a LEFT JOIN agency_users au ON au.agency_id = a.id WHERE a.id = $1 LIMIT 1', [regKey.agency_id]);
-      if (agency.rows[0]) {
-        const orgId = agency.rows[0].organization_id;
-        const conn = await query(`SELECT c.* FROM connections c WHERE c.organization_id = $1 AND c.active = true ORDER BY c.is_default DESC LIMIT 1`, [orgId]);
-        if (conn.rows[0] && agency.rows[0].responsible_phone) {
-          const { sendWhatsAppMessage } = await import('../lib/whatsapp-provider.js');
-          const unitName = session.rows[0]?.name || 'PDV';
-          const msg = `✅ *Cadastro Realizado no PDV*\n\nO promotor *${name}* (CPF: ${onlyDigits(cpf)}) foi cadastrado com sucesso no ${unitName}.\n\nChave utilizada: ${key_code}`;
-          await sendWhatsAppMessage(conn.rows[0], onlyDigits(agency.rows[0].responsible_phone), msg).catch(() => {});
-        }
+      const conn = await query(`SELECT c.* FROM connections c WHERE c.organization_id = $1 AND c.active = true ORDER BY c.is_default DESC LIMIT 1`, [orgId]);
+      if (conn.rows[0] && agencyData?.responsible_phone) {
+        const { sendWhatsAppMessage } = await import('../lib/whatsapp-provider.js');
+        const unitName = session.rows[0]?.name || 'PDV';
+        const overLimitMsg = isOverLimit ? `\n\n⚠️ *Atenção:* Este cadastro excedeu o limite do plano (${maxPromoters} promotores). Uma cobrança avulsa será gerada.` : '';
+        const msg = `✅ *Cadastro Realizado no PDV*\n\nO promotor *${name}* (CPF: ${onlyDigits(cpf)}) foi cadastrado com sucesso no ${unitName}.\n\nChave utilizada: ${key_code}${overLimitMsg}`;
+        await sendWhatsAppMessage(conn.rows[0], onlyDigits(agencyData.responsible_phone), msg).catch(() => {});
       }
     } catch {}
 
-    res.json({ success: true, promoter: pR.rows[0] });
+    // If over limit, notify Ayratech admin for extra billing
+    if (isOverLimit && orgId) {
+      try {
+        // Log audit entry for billing
+        await query(`INSERT INTO access_audit_logs (organization_id, action, entity_type, entity_id, agency_id, agency_promoter_id, details)
+          VALUES ($1, 'overlimit_registration', 'promoter', $2, $3, $4, $5)`,
+          [orgId, pR.rows[0].id, regKey.agency_id, pR.rows[0].id,
+           JSON.stringify({
+             agency_name: agencyData.name,
+             promoter_name: name,
+             promoter_cpf: onlyDigits(cpf),
+             current_count: currentCount + 1,
+             max_promoters: maxPromoters,
+             unit_name: session.rows[0]?.name || null,
+             registration_type: 'onsite_freelance',
+             requires_extra_billing: true
+           })
+          ]);
+
+        // Notify org admins via WhatsApp
+        const admins = await query(`SELECT u.phone FROM users u JOIN organization_members om ON om.user_id = u.id WHERE om.organization_id = $1 AND om.role IN ('owner','admin') AND u.phone IS NOT NULL LIMIT 3`, [orgId]);
+        const conn = await query(`SELECT c.* FROM connections c WHERE c.organization_id = $1 AND c.active = true ORDER BY c.is_default DESC LIMIT 1`, [orgId]);
+        if (conn.rows[0]) {
+          const { sendWhatsAppMessage } = await import('../lib/whatsapp-provider.js');
+          const unitName = session.rows[0]?.name || 'PDV';
+          const billingMsg = `💰 *Cobrança Avulsa Necessária*\n\nA agência *${agencyData.name}* cadastrou um promotor freelance acima do limite do plano.\n\n👤 ${name} (CPF: ${onlyDigits(cpf)})\n📍 ${unitName}\n📊 Promotores: ${currentCount + 1}/${maxPromoters}\n\nÉ necessário gerar uma cobrança avulsa para este promotor adicional.`;
+          for (const admin of admins.rows) {
+            await sendWhatsAppMessage(conn.rows[0], onlyDigits(admin.phone), billingMsg).catch(() => {});
+          }
+        }
+      } catch (billingErr) { logError('totem.register-freelance.billing-notify', billingErr); }
+    }
+
+    res.json({ success: true, promoter: pR.rows[0], over_limit: isOverLimit });
   } catch (err) { logError('totem.register-freelance', err); res.status(500).json({ error: 'Erro ao cadastrar' }); }
 });
 
