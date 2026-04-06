@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { CheckCircle2, XCircle, Loader2, ShieldCheck, Clock, Store, Delete, Settings, UserCheck, LogOut, LogIn, Lock, Unplug, QrCode, Camera, ScanFace, AlertTriangle } from "lucide-react";
+import { CheckCircle2, XCircle, Loader2, ShieldCheck, Clock, Store, Delete, Settings, UserCheck, LogOut, LogIn, Lock, Unplug, QrCode, Camera, ScanFace, AlertTriangle, KeyRound, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -135,6 +135,14 @@ const TotemAccess = () => {
   // LGPD
   const [lgpdAccepted, setLgpdAccepted] = useState(false);
   const [showLgpd, setShowLgpd] = useState(false);
+
+  // Freelance registration
+  const [showFreelanceRegister, setShowFreelanceRegister] = useState(false);
+  const [regKeyInput, setRegKeyInput] = useState('');
+  const [regKeyValid, setRegKeyValid] = useState<any>(null);
+  const [regForm, setRegForm] = useState({ name: '', cpf: '', phone: '' });
+  const [regLoading, setRegLoading] = useState(false);
+  const [regError, setRegError] = useState('');
 
   // Facial verification
   const [showFacialVerify, setShowFacialVerify] = useState(false);
@@ -468,9 +476,55 @@ const TotemAccess = () => {
     setSelfieRequired(false); setSelfieCapture(null); setShowCamera(false); setLgpdAccepted(false); setShowLgpd(false);
     setFacialVerified(false); setFacialPendingAction(null); setShowFacialVerify(false);
     setShowNumpad(false);
+    setShowFreelanceRegister(false); setRegKeyInput(''); setRegKeyValid(null); setRegForm({ name: '', cpf: '', phone: '' }); setRegError('');
     stopCamera();
-    // Reset to mode selection if multiple modes available
     if (authConfig.cpf_entry_enabled && authConfig.qr_entry_enabled) setAuthMode("select");
+  };
+
+  // ═══ Freelance registration ═══
+  const handleValidateRegKey = async () => {
+    if (regKeyInput.length !== 6) return;
+    setRegLoading(true); setRegError('');
+    try {
+      const res = await fetch(`${API_URL}/api/access-control/totem/validate-registration-key`, {
+        method: "POST", headers: { "Content-Type": "application/json", "x-totem-token": config.token },
+        body: JSON.stringify({ key_code: regKeyInput }),
+      });
+      const data = await res.json();
+      if (res.ok && data.valid) {
+        setRegKeyValid(data.key);
+        setRegForm(f => ({ ...f, name: data.key.promoter_name || '' }));
+      } else {
+        setRegError(data.error || 'Chave inválida ou expirada');
+      }
+    } catch { setRegError('Erro de conexão'); }
+    finally { setRegLoading(false); }
+  };
+
+  const handleRegisterFreelance = async () => {
+    if (!regForm.name || !regForm.cpf || regForm.cpf.length < 11) {
+      setRegError('Nome e CPF são obrigatórios'); return;
+    }
+    setRegLoading(true); setRegError('');
+    try {
+      const res = await fetch(`${API_URL}/api/access-control/totem/register-freelance`, {
+        method: "POST", headers: { "Content-Type": "application/json", "x-totem-token": config.token },
+        body: JSON.stringify({ key_code: regKeyInput, name: regForm.name, cpf: regForm.cpf, phone: regForm.phone || null }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setResult({ status: "authorized", promoter_name: data.promoter.name, block_reason: "CADASTRO REALIZADO" });
+        setShowFreelanceRegister(false); setRegKeyInput(''); setRegKeyValid(null); setRegForm({ name: '', cpf: '', phone: '' });
+      } else {
+        setRegError(data.error || 'Erro ao cadastrar');
+      }
+    } catch { setRegError('Erro de conexão'); }
+    finally { setRegLoading(false); }
+  };
+
+  const resetFreelanceRegister = () => {
+    setShowFreelanceRegister(false); setRegKeyInput(''); setRegKeyValid(null);
+    setRegForm({ name: '', cpf: '', phone: '' }); setRegError('');
   };
 
   const handleSaveConfig = () => {
@@ -524,17 +578,26 @@ const TotemAccess = () => {
   if (result) {
     const isAuthorized = result.status === "authorized";
     const isCheckout = result.block_reason === "SAÍDA REGISTRADA";
-    const bgColor = isCheckout ? "#2563eb" : isAuthorized ? "#16a34a" : "#dc2626";
+    const isRegistration = result.block_reason === "CADASTRO REALIZADO";
+    const bgColor = isRegistration ? "#7c3aed" : isCheckout ? "#2563eb" : isAuthorized ? "#16a34a" : "#dc2626";
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-8 transition-colors duration-500" style={{ background: bgColor }}>
         <div className="text-center text-white max-w-lg w-full">
           {config.logoUrl && <img src={config.logoUrl} alt="Logo" className="h-16 mx-auto mb-6 object-contain" />}
-          {isCheckout ? <LogOut className="h-32 w-32 mx-auto mb-6 animate-in zoom-in duration-500" /> :
+          {isRegistration ? <UserPlus className="h-32 w-32 mx-auto mb-6 animate-in zoom-in duration-500" /> :
+           isCheckout ? <LogOut className="h-32 w-32 mx-auto mb-6 animate-in zoom-in duration-500" /> :
            isAuthorized ? <CheckCircle2 className="h-32 w-32 mx-auto mb-6 animate-in zoom-in duration-500" /> :
            <XCircle className="h-32 w-32 mx-auto mb-6 animate-in zoom-in duration-500" />}
           <h1 className="text-5xl font-bold mb-4">
-            {isCheckout ? "SAÍDA REGISTRADA" : isAuthorized ? "ACESSO LIBERADO" : "ACESSO BLOQUEADO"}
+            {isRegistration ? "CADASTRO REALIZADO" : isCheckout ? "SAÍDA REGISTRADA" : isAuthorized ? "ACESSO LIBERADO" : "ACESSO BLOQUEADO"}
           </h1>
+          {isRegistration && (
+            <Card className="bg-white/20 backdrop-blur border-white/30 p-6 mt-6 text-white">
+              <p className="text-2xl font-semibold mb-2">{result.promoter_name}</p>
+              <p className="text-lg opacity-80">Cadastro efetuado com sucesso!</p>
+              <p className="text-sm opacity-60 mt-2">Sua agência foi notificada. Agora você pode fazer o check-in normalmente.</p>
+            </Card>
+          )}
           {isAuthorized && !isCheckout && (
             <Card className="bg-white/20 backdrop-blur border-white/30 p-6 mt-6 text-white">
               {result.promoter_photo && <img src={result.promoter_photo} alt="Foto" className="w-24 h-24 rounded-full mx-auto mb-4 border-4 border-white object-cover" />}
@@ -557,7 +620,7 @@ const TotemAccess = () => {
               {result.agency_name && <p className="text-lg opacity-80">Agência: {result.agency_name}</p>}
             </Card>
           )}
-          {!isAuthorized && !isCheckout && <p className="text-2xl mt-4 opacity-90">{result.block_reason}</p>}
+          {!isAuthorized && !isCheckout && !isRegistration && <p className="text-2xl mt-4 opacity-90">{result.block_reason}</p>}
           <div className="mt-8 flex gap-4 justify-center">
             {isAuthorized && result.entry_id && (
               <Button size="lg" onClick={handleCheckout} className="bg-white text-green-700 hover:bg-white/90 text-xl px-8 py-6">Registrar Saída</Button>
@@ -878,12 +941,101 @@ const TotemAccess = () => {
         )}
 
         {/* Lookup error */}
-        {lookupError && (
+        {lookupError && !showFreelanceRegister && (
           <div className="rounded-2xl p-6 backdrop-blur text-center" style={{ backgroundColor: "#dc262644", border: "2px solid #dc262666" }}>
             <XCircle className="h-16 w-16 mx-auto mb-3 text-red-300" />
             <p className="text-white text-xl font-semibold mb-1">Não encontrado</p>
             <p className="text-white/80">{lookupError}</p>
-            <Button onClick={handleReset} variant="outline" className="mt-4 border-white/40 text-white hover:bg-white/10">Tentar novamente</Button>
+            <div className="flex gap-3 mt-4 justify-center">
+              <Button onClick={handleReset} variant="outline" className="border-white/40 text-white hover:bg-white/10">Tentar novamente</Button>
+              <Button onClick={() => { setShowFreelanceRegister(true); setRegForm(f => ({ ...f, cpf: cpfDigits })); }} className="gap-2" style={btnStyle}>
+                <UserPlus className="h-4 w-4" /> Cadastrar com Chave
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Freelance registration */}
+        {showFreelanceRegister && (
+          <div className="rounded-2xl p-6 backdrop-blur animate-in fade-in zoom-in-95 duration-300 text-left"
+            style={{ backgroundColor: `${config.primaryColor}15`, border: `2px solid ${config.primaryColor}33` }}>
+            <div className="text-center mb-4">
+              <KeyRound className="h-10 w-10 mx-auto text-white/70 mb-2" />
+              <p className="text-white text-xl font-bold">Cadastro com Chave de Acesso</p>
+              <p className="text-white/60 text-sm">Solicite a chave à sua agência</p>
+            </div>
+
+            {!regKeyValid ? (
+              <div className="space-y-3">
+                <div>
+                  <label className="text-white/70 text-sm">Chave de Acesso (6 dígitos)</label>
+                  <input
+                    type="text"
+                    maxLength={6}
+                    value={regKeyInput}
+                    onChange={e => setRegKeyInput(e.target.value.replace(/\D/g, ''))}
+                    className="w-full h-16 text-center text-3xl font-mono tracking-[0.3em] rounded-xl border-2 bg-transparent text-white"
+                    style={{ borderColor: `${config.primaryColor}55` }}
+                    placeholder="000000"
+                    inputMode="numeric"
+                  />
+                </div>
+                {regError && <p className="text-red-400 text-sm text-center">{regError}</p>}
+                <div className="flex gap-3">
+                  <Button onClick={resetFreelanceRegister} variant="outline" className="flex-1 h-12 border-white/30 text-white hover:bg-white/10">Voltar</Button>
+                  <Button onClick={handleValidateRegKey} disabled={regKeyInput.length !== 6 || regLoading} className="flex-1 h-12 font-bold" style={btnStyle}>
+                    {regLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Validar'}
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="p-2 rounded-lg text-center" style={{ backgroundColor: `${config.primaryColor}33` }}>
+                  <p className="text-white/60 text-xs">Agência</p>
+                  <p className="text-white font-semibold">{regKeyValid.agency_name}</p>
+                </div>
+                <div>
+                  <label className="text-white/70 text-sm">Nome Completo *</label>
+                  <input
+                    value={regForm.name}
+                    onChange={e => setRegForm(f => ({ ...f, name: e.target.value }))}
+                    className="w-full h-12 rounded-xl border-2 bg-transparent text-white px-4"
+                    style={{ borderColor: `${config.primaryColor}55` }}
+                    placeholder="Seu nome completo"
+                  />
+                </div>
+                <div>
+                  <label className="text-white/70 text-sm">CPF *</label>
+                  <input
+                    value={formatCpf(regForm.cpf)}
+                    onChange={e => setRegForm(f => ({ ...f, cpf: e.target.value.replace(/\D/g, '').slice(0, 11) }))}
+                    className="w-full h-12 rounded-xl border-2 bg-transparent text-white px-4"
+                    style={{ borderColor: `${config.primaryColor}55` }}
+                    placeholder="000.000.000-00"
+                    inputMode="numeric"
+                  />
+                </div>
+                <div>
+                  <label className="text-white/70 text-sm">Telefone (opcional)</label>
+                  <input
+                    value={regForm.phone}
+                    onChange={e => setRegForm(f => ({ ...f, phone: e.target.value.replace(/\D/g, '').slice(0, 11) }))}
+                    className="w-full h-12 rounded-xl border-2 bg-transparent text-white px-4"
+                    style={{ borderColor: `${config.primaryColor}55` }}
+                    placeholder="00 00000-0000"
+                    inputMode="numeric"
+                  />
+                </div>
+                {regError && <p className="text-red-400 text-sm text-center">{regError}</p>}
+                <div className="flex gap-3">
+                  <Button onClick={resetFreelanceRegister} variant="outline" className="flex-1 h-12 border-white/30 text-white hover:bg-white/10">Cancelar</Button>
+                  <Button onClick={handleRegisterFreelance} disabled={!regForm.name || regForm.cpf.length < 11 || regLoading} className="flex-1 h-12 font-bold gap-2" style={btnStyle}>
+                    {regLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <UserPlus className="h-5 w-5" />}
+                    Cadastrar
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

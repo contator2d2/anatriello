@@ -15,7 +15,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useToast } from '@/hooks/use-toast';
 import { useUpload } from '@/hooks/use-upload';
-import { Plus, Search, Edit, Ban, CheckCircle, Users, FileText, Camera, CalendarDays, Loader2, Phone, Mail, MapPin } from 'lucide-react';
+import { Plus, Search, Edit, Ban, CheckCircle, Users, FileText, Camera, CalendarDays, Loader2, Phone, Mail, MapPin, Key } from 'lucide-react';
+import { RegistrationKeyDialog } from '@/components/access-control/RegistrationKeyDialog';
 import { AuthorizationLetterDialog } from '@/components/access-control/AuthorizationLetterDialog';
 import { formatCpf, formatPhone, isValidCpf, onlyDigits } from '@/lib/br-utils';
 import { format, differenceInYears } from 'date-fns';
@@ -45,6 +46,7 @@ export default function AgencyPromoters() {
   const [editing, setEditing] = useState<any>(null);
   const [form, setForm] = useState(defaultForm);
   const [detailPromoter, setDetailPromoter] = useState<any>(null);
+  const [regKeyOpen, setRegKeyOpen] = useState(false);
 
   const { data: promoters = [], isLoading } = useQuery({
     queryKey: ['agency-promoters'],
@@ -169,9 +171,14 @@ export default function AgencyPromoters() {
           <h1 className="text-2xl font-bold text-foreground">Promotores</h1>
           <p className="text-muted-foreground">Gerencie os promotores da sua agência</p>
         </div>
-        <Button onClick={() => { setForm(defaultForm); setEditing(null); setDialogTab('dados'); setDialogOpen(true); }}>
-          <Plus className="h-4 w-4 mr-2" /> Novo Promotor
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setRegKeyOpen(true)}>
+            <Key className="h-4 w-4 mr-2" /> Chave Cadastro PDV
+          </Button>
+          <Button onClick={() => { setForm(defaultForm); setEditing(null); setDialogTab('dados'); setDialogOpen(true); }}>
+            <Plus className="h-4 w-4 mr-2" /> Novo Promotor
+          </Button>
+        </div>
       </div>
 
       <div className="relative max-w-sm">
@@ -460,6 +467,8 @@ export default function AgencyPromoters() {
         availableBrands={agencyBrands.filter((b: any) => b.active !== false).map((b: any) => ({ id: b.id, name: b.name }))}
         availableUnits={allowedUnits.map((u: any) => ({ id: u.id, name: u.name, address: u.address, city: u.city, state: u.state, networkName: u.network_name, cnpj: u.cnpj }))}
       />
+
+      <RegistrationKeyDialog open={regKeyOpen} onOpenChange={setRegKeyOpen} />
     </div>
   );
 }

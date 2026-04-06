@@ -3858,4 +3858,196 @@ router.post('/whatsapp-agent-config', authenticate, async (req, res) => {
   } catch (err) { logError('wa.agent.config.save', err); res.status(500).json({ error: 'Erro ao salvar' }); }
 });
 
+// ============ SHARED AUTHORIZATION LETTERS ============
+let sharedLettersSchemaReady = null;
+async function ensureSharedLettersSchema() {
+  if (sharedLettersSchemaReady) return sharedLettersSchemaReady;
+  sharedLettersSchemaReady = (async () => {
+    await query(`CREATE TABLE IF NOT EXISTS shared_authorization_letters (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id UUID NOT NULL,
+      agency_id UUID,
+      agency_name TEXT,
+      promoter_name TEXT NOT NULL,
+      promoter_cpf TEXT NOT NULL,
+      supermarket_unit_id UUID REFERENCES supermarket_units(id) ON DELETE CASCADE,
+      unit_name TEXT,
+      network_name TEXT,
+      brands TEXT[] DEFAULT '{}',
+      allowed_weekdays INTEGER[] DEFAULT '{1,2,3,4,5}',
+      start_time TIME DEFAULT '08:00',
+      end_time TIME DEFAULT '18:00',
+      valid_from TEXT,
+      valid_until TEXT,
+      is_digitally_signed BOOLEAN DEFAULT false,
+      signature_hash TEXT,
+      signed_at TEXT,
+      signed_by TEXT,
+      pdf_url TEXT,
+      status TEXT DEFAULT 'active',
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+    await query('CREATE INDEX IF NOT EXISTS idx_shared_letters_unit ON shared_authorization_letters(supermarket_unit_id, status)');
+    await query('CREATE INDEX IF NOT EXISTS idx_shared_letters_agency ON shared_authorization_letters(agency_id)');
+  })();
+  try { await sharedLettersSchemaReady; } catch { sharedLettersSchemaReady = null; throw arguments[0]; }
+}
+
+// Agency: save shared letter
+router.post('/agency/shared-letters', authenticateAgency, async (req, res) => {
+  try {
+    await ensureSharedLettersSchema();
+    const { promoter_name, promoter_cpf, supermarket_unit_id, unit_name, network_name, brands, allowed_weekdays, start_time, end_time, valid_from, valid_until, is_digitally_signed, signature_hash, signed_at, signed_by, pdf_url } = req.body;
+    const agency = await query('SELECT organization_id, name FROM agencies WHERE id = $1', [req.agencyId]);
+    const orgId = agency.rows[0]?.organization_id;
+    const agencyName = agency.rows[0]?.name;
+    const r = await query(`INSERT INTO shared_authorization_letters (organization_id, agency_id, agency_name, promoter_name, promoter_cpf, supermarket_unit_id, unit_name, network_name, brands, allowed_weekdays, start_time, end_time, valid_from, valid_until, is_digitally_signed, signature_hash, signed_at, signed_by, pdf_url)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING *`,
+      [orgId, req.agencyId, agencyName, promoter_name, onlyDigits(promoter_cpf), supermarket_unit_id || null, unit_name, network_name, brands || [], allowed_weekdays || [1,2,3,4,5], start_time, end_time, valid_from, valid_until, is_digitally_signed, signature_hash, signed_at, signed_by, pdf_url]);
+    res.json(r.rows[0]);
+  } catch (err) { logError('shared-letter.create', err); res.status(500).json({ error: 'Erro ao salvar carta' }); }
+});
+
+// Agency: list own shared letters
+router.get('/agency/shared-letters', authenticateAgency, async (req, res) => {
+  try {
+    await ensureSharedLettersSchema();
+    const r = await query('SELECT * FROM shared_authorization_letters WHERE agency_id = $1 ORDER BY created_at DESC', [req.agencyId]);
+    res.json(r.rows);
+  } catch (err) { logError('shared-letter.list', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// Supermarket: list shared letters for this unit
+router.get('/supermarket-portal/shared-letters', authenticateSupermarket, async (req, res) => {
+  try {
+    await ensureSharedLettersSchema();
+    const r = await query('SELECT * FROM shared_authorization_letters WHERE supermarket_unit_id = $1 AND status = $2 ORDER BY created_at DESC', [req.unitId, 'active']);
+    res.json(r.rows);
+  } catch (err) { logError('sm.shared-letters', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// ============ ONSITE REGISTRATION KEYS (Freelance) ============
+let registrationKeysSchemaReady = null;
+async function ensureRegistrationKeysSchema() {
+  if (registrationKeysSchemaReady) return registrationKeysSchemaReady;
+  registrationKeysSchemaReady = (async () => {
+    await query(`CREATE TABLE IF NOT EXISTS onsite_registration_keys (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id UUID NOT NULL,
+      agency_id UUID NOT NULL REFERENCES agencies(id) ON DELETE CASCADE,
+      key_code VARCHAR(8) NOT NULL,
+      whatsapp_number TEXT,
+      promoter_name TEXT,
+      sent_at TIMESTAMPTZ,
+      used_at TIMESTAMPTZ,
+      used_by_promoter_id UUID REFERENCES agency_promoters(id) ON DELETE SET NULL,
+      supermarket_unit_id UUID REFERENCES supermarket_units(id) ON DELETE SET NULL,
+      expires_at TIMESTAMPTZ NOT NULL,
+      status TEXT DEFAULT 'pending',
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+    await query('CREATE INDEX IF NOT EXISTS idx_reg_keys_agency ON onsite_registration_keys(agency_id, status)');
+    await query('CREATE UNIQUE INDEX IF NOT EXISTS idx_reg_keys_code ON onsite_registration_keys(key_code) WHERE status = \'pending\'');
+  })();
+  try { await registrationKeysSchemaReady; } catch { registrationKeysSchemaReady = null; throw arguments[0]; }
+}
+
+// Agency: generate registration key and send via WhatsApp
+router.post('/agency/registration-keys', authenticateAgency, async (req, res) => {
+  try {
+    await ensureRegistrationKeysSchema();
+    const { whatsapp_number, promoter_name } = req.body;
+    if (!whatsapp_number) return res.status(400).json({ error: 'Número de WhatsApp é obrigatório' });
+    const agency = await query('SELECT organization_id, name FROM agencies WHERE id = $1', [req.agencyId]);
+    const orgId = agency.rows[0]?.organization_id;
+    const agencyName = agency.rows[0]?.name;
+    // Generate 6-digit key
+    const keyCode = String(Math.floor(100000 + Math.random() * 900000));
+    const expiresAt = new Date(Date.now() + 4 * 60 * 60 * 1000); // 4 hours
+    const r = await query(`INSERT INTO onsite_registration_keys (organization_id, agency_id, key_code, whatsapp_number, promoter_name, sent_at, expires_at)
+      VALUES ($1,$2,$3,$4,$5,NOW(),$6) RETURNING *`,
+      [orgId, req.agencyId, keyCode, onlyDigits(whatsapp_number), promoter_name || null, expiresAt]);
+    
+    // Try to send via WhatsApp (best effort)
+    try {
+      const conn = await query(`SELECT c.* FROM connections c JOIN organization_members om ON om.organization_id = c.organization_id WHERE c.organization_id = $1 AND c.active = true ORDER BY c.is_default DESC LIMIT 1`, [orgId]);
+      if (conn.rows[0]) {
+        const { sendWhatsAppMessage } = await import('../lib/whatsapp-provider.js');
+        const phone = onlyDigits(whatsapp_number);
+        const msg = `🔑 *Chave de Cadastro no PDV*\n\nOlá${promoter_name ? ` ${promoter_name}` : ''}!\n\nSua chave de cadastro para acesso ao PDV é:\n\n*${keyCode}*\n\nUse esta chave no totem do supermercado para se cadastrar.\n\n⏰ Válida por 4 horas.\n\n_${agencyName}_`;
+        await sendWhatsAppMessage(conn.rows[0], phone, msg).catch(() => {});
+      }
+    } catch {}
+
+    res.json(r.rows[0]);
+  } catch (err) { logError('reg-key.create', err); res.status(500).json({ error: 'Erro ao gerar chave' }); }
+});
+
+// Agency: list registration keys
+router.get('/agency/registration-keys', authenticateAgency, async (req, res) => {
+  try {
+    await ensureRegistrationKeysSchema();
+    const r = await query('SELECT * FROM onsite_registration_keys WHERE agency_id = $1 ORDER BY created_at DESC LIMIT 50', [req.agencyId]);
+    res.json(r.rows);
+  } catch (err) { logError('reg-key.list', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// Totem: validate registration key
+router.post('/totem/validate-registration-key', async (req, res) => {
+  try {
+    const totemToken = req.headers['x-totem-token'];
+    if (!totemToken) return res.status(401).json({ error: 'Token do totem não fornecido' });
+    await ensureRegistrationKeysSchema();
+    const { key_code } = req.body;
+    if (!key_code || key_code.length !== 6) return res.status(400).json({ error: 'Chave inválida' });
+    const r = await query(`SELECT rk.*, a.name as agency_name FROM onsite_registration_keys rk JOIN agencies a ON a.id = rk.agency_id WHERE rk.key_code = $1 AND rk.status = 'pending' AND rk.expires_at > NOW()`, [key_code]);
+    if (!r.rows.length) return res.status(404).json({ error: 'Chave inválida ou expirada' });
+    res.json({ valid: true, key: r.rows[0] });
+  } catch (err) { logError('reg-key.validate', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// Totem: register freelance promoter with key
+router.post('/totem/register-freelance', async (req, res) => {
+  try {
+    const totemToken = req.headers['x-totem-token'];
+    if (!totemToken) return res.status(401).json({ error: 'Token do totem não fornecido' });
+    await ensureRegistrationKeysSchema();
+    const { key_code, name, cpf, phone, photo_url } = req.body;
+    if (!key_code || !name || !cpf) return res.status(400).json({ error: 'Dados incompletos' });
+    // Validate key
+    const keyR = await query(`SELECT * FROM onsite_registration_keys WHERE key_code = $1 AND status = 'pending' AND expires_at > NOW()`, [key_code]);
+    if (!keyR.rows.length) return res.status(404).json({ error: 'Chave inválida ou expirada' });
+    const regKey = keyR.rows[0];
+    // Check if CPF already exists for this agency
+    const existing = await query('SELECT id FROM agency_promoters WHERE agency_id = $1 AND cpf = $2', [regKey.agency_id, onlyDigits(cpf)]);
+    if (existing.rows.length) return res.status(409).json({ error: 'CPF já cadastrado nesta agência', promoter_id: existing.rows[0].id });
+    // Create promoter
+    const pR = await query(`INSERT INTO agency_promoters (agency_id, name, cpf, phone, photo_url, status) VALUES ($1,$2,$3,$4,$5,'active') RETURNING *`,
+      [regKey.agency_id, name, onlyDigits(cpf), phone ? onlyDigits(phone) : null, normalizePhotoUrl(photo_url)]);
+    // Mark key as used
+    // Get unit from totem session
+    const session = await query(`SELECT su.id, su.name FROM totem_sessions ts JOIN supermarket_units su ON su.id = ts.supermarket_unit_id WHERE ts.token_hash = $1 AND ts.expires_at > NOW()`, [totemToken]);
+    const unitId = session.rows[0]?.id || null;
+    await query(`UPDATE onsite_registration_keys SET status = 'used', used_at = NOW(), used_by_promoter_id = $1, supermarket_unit_id = $2 WHERE id = $3`,
+      [pR.rows[0].id, unitId, regKey.id]);
+    
+    // Notify agency via WhatsApp (best effort)
+    try {
+      const agency = await query('SELECT a.*, au.email FROM agencies a LEFT JOIN agency_users au ON au.agency_id = a.id WHERE a.id = $1 LIMIT 1', [regKey.agency_id]);
+      if (agency.rows[0]) {
+        const orgId = agency.rows[0].organization_id;
+        const conn = await query(`SELECT c.* FROM connections c WHERE c.organization_id = $1 AND c.active = true ORDER BY c.is_default DESC LIMIT 1`, [orgId]);
+        if (conn.rows[0] && agency.rows[0].responsible_phone) {
+          const { sendWhatsAppMessage } = await import('../lib/whatsapp-provider.js');
+          const unitName = session.rows[0]?.name || 'PDV';
+          const msg = `✅ *Cadastro Realizado no PDV*\n\nO promotor *${name}* (CPF: ${onlyDigits(cpf)}) foi cadastrado com sucesso no ${unitName}.\n\nChave utilizada: ${key_code}`;
+          await sendWhatsAppMessage(conn.rows[0], onlyDigits(agency.rows[0].responsible_phone), msg).catch(() => {});
+        }
+      }
+    } catch {}
+
+    res.json({ success: true, promoter: pR.rows[0] });
+  } catch (err) { logError('totem.register-freelance', err); res.status(500).json({ error: 'Erro ao cadastrar' }); }
+});
+
 export default router;

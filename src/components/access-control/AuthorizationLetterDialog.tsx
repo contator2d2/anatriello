@@ -8,8 +8,9 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { downloadAuthorizationLetter, type AuthorizationLetterData } from '@/lib/authorization-letter-pdf';
 import { useToast } from '@/hooks/use-toast';
-import { FileText, Download, Signature, Printer } from 'lucide-react';
+import { FileText, Download, Signature, Share2, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
+import { api } from '@/lib/api';
 
 const WEEKDAYS = [
   { value: 0, label: 'Domingo' },
@@ -39,21 +40,22 @@ interface AvailableUnit {
 interface AuthorizationLetterDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  // Pre-fill data
   promoter?: { name: string; cpf: string; phone?: string; isInternal?: boolean };
   agency?: { name: string; cnpj?: string; responsible?: string };
   unit?: { name: string; address?: string; cnpj?: string; networkName?: string };
   rule?: { allowed_weekdays?: number[]; start_time?: string; end_time?: string; brands?: string[] };
   organizationName?: string;
-  // Available options for selection
   availableBrands?: AvailableBrand[];
   availableUnits?: AvailableUnit[];
+  agencyAuthToken?: string;
 }
 
 export function AuthorizationLetterDialog({
-  open, onOpenChange, promoter, agency, unit, rule, organizationName, availableBrands, availableUnits,
+  open, onOpenChange, promoter, agency, unit, rule, organizationName, availableBrands, availableUnits, agencyAuthToken,
 }: AuthorizationLetterDialogProps) {
   const { toast } = useToast();
+  const [sharing, setSharing] = useState(false);
+  const [selectedUnitId, setSelectedUnitId] = useState<string>('');
   const [form, setForm] = useState<AuthorizationLetterData>({
     promoterName: '',
     promoterCpf: '',
@@ -77,7 +79,6 @@ export function AuthorizationLetterDialog({
 
   const [brandInput, setBrandInput] = useState('');
 
-  // Pre-fill when props change
   useEffect(() => {
     if (open) {
       setForm(f => ({
@@ -98,6 +99,7 @@ export function AuthorizationLetterDialog({
         brands: rule?.brands || f.brands,
         isDigitallySigned: promoter?.isInternal || false,
       }));
+      setSelectedUnitId('');
     }
   }, [open, promoter, agency, unit, rule]);
 
@@ -121,6 +123,25 @@ export function AuthorizationLetterDialog({
     setForm(f => ({ ...f, brands: f.brands.filter(b => b !== brand) }));
   };
 
+  const generateLetterData = () => {
+    const now = new Date();
+    const hash = Array.from(
+      new Uint8Array(
+        new TextEncoder().encode(
+          `${form.promoterCpf}${form.unitName}${now.toISOString()}`
+        )
+      )
+    ).map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 64);
+
+    return {
+      ...form,
+      isDigitallySigned: true,
+      signedBy: form.organizationName || 'Ayratech',
+      signedAt: format(now, "dd/MM/yyyy 'às' HH:mm:ss (xxx)"),
+      signatureHash: hash.toUpperCase(),
+    };
+  };
+
   const handleGenerate = () => {
     if (!form.promoterName || !form.promoterCpf || !form.unitName) {
       toast({ title: 'Preencha os campos obrigatórios', variant: 'destructive' });
@@ -128,26 +149,60 @@ export function AuthorizationLetterDialog({
     }
 
     if (form.isDigitallySigned) {
-      const now = new Date();
-      const hash = Array.from(
-        new Uint8Array(
-          new TextEncoder().encode(
-            `${form.promoterCpf}${form.unitName}${now.toISOString()}`
-          )
-        )
-      ).map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 64);
-
-      downloadAuthorizationLetter({
-        ...form,
-        signedBy: form.organizationName || 'Ayratech',
-        signedAt: format(now, "dd/MM/yyyy 'às' HH:mm:ss (xxx)"),
-        signatureHash: hash.toUpperCase(),
-      });
+      const data = generateLetterData();
+      downloadAuthorizationLetter(data);
     } else {
       downloadAuthorizationLetter(form);
     }
 
     toast({ title: 'Carta de autorização gerada!', description: 'O download iniciou automaticamente' });
+  };
+
+  const handleShareWithSupermarket = async () => {
+    if (!form.promoterName || !form.promoterCpf || !form.unitName) {
+      toast({ title: 'Preencha os campos obrigatórios', variant: 'destructive' });
+      return;
+    }
+
+    setSharing(true);
+    try {
+      const letterData = generateLetterData();
+      // Also download locally
+      downloadAuthorizationLetter(letterData);
+
+      // Save to backend for supermarket visibility
+      const token = agencyAuthToken || localStorage.getItem('agency_auth_token');
+      const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+
+      await api('/api/access-control/agency/shared-letters', {
+        method: 'POST',
+        body: {
+          promoter_name: form.promoterName,
+          promoter_cpf: form.promoterCpf,
+          supermarket_unit_id: selectedUnitId || null,
+          unit_name: form.unitName,
+          network_name: form.networkName,
+          brands: form.brands,
+          allowed_weekdays: form.allowedWeekdays,
+          start_time: form.startTime,
+          end_time: form.endTime,
+          valid_from: form.validFrom,
+          valid_until: form.validUntil,
+          is_digitally_signed: true,
+          signature_hash: letterData.signatureHash,
+          signed_at: letterData.signedAt,
+          signed_by: letterData.signedBy,
+        },
+        headers,
+      });
+
+      toast({ title: 'Carta compartilhada!', description: 'A carta foi assinada digitalmente e está disponível no portal do supermercado.' });
+      onOpenChange(false);
+    } catch (err: any) {
+      toast({ title: 'Erro ao compartilhar', description: err?.message, variant: 'destructive' });
+    } finally {
+      setSharing(false);
+    }
   };
 
   return (
@@ -221,22 +276,25 @@ export function AuthorizationLetterDialog({
                 <label className="text-xs font-medium text-muted-foreground">Nome do PDV *</label>
                 {availableUnits && availableUnits.length > 0 ? (
                   <Select
-                    value={form.unitName}
+                    value={selectedUnitId || form.unitName}
                     onValueChange={(v) => {
-                      const selected = availableUnits.find(u => u.name === v);
-                      setForm(f => ({
-                        ...f,
-                        unitName: selected?.name || v,
-                        unitAddress: selected?.address || f.unitAddress,
-                        unitCnpj: selected?.cnpj || f.unitCnpj,
-                        networkName: selected?.networkName || f.networkName,
-                      }));
+                      const selected = availableUnits.find(u => u.id === v);
+                      if (selected) {
+                        setSelectedUnitId(selected.id);
+                        setForm(f => ({
+                          ...f,
+                          unitName: selected.name,
+                          unitAddress: selected.address || f.unitAddress,
+                          unitCnpj: selected.cnpj || f.unitCnpj,
+                          networkName: selected.networkName || f.networkName,
+                        }));
+                      }
                     }}
                   >
                     <SelectTrigger><SelectValue placeholder="Selecione o PDV" /></SelectTrigger>
                     <SelectContent>
                       {availableUnits.map(u => (
-                        <SelectItem key={u.id} value={u.name}>
+                        <SelectItem key={u.id} value={u.id}>
                           {u.name} {u.city ? `— ${u.city}/${u.state}` : ''}
                         </SelectItem>
                       ))}
@@ -354,21 +412,28 @@ export function AuthorizationLetterDialog({
           </fieldset>
         </div>
 
-        <DialogFooter className="gap-2">
+        <DialogFooter className="gap-2 flex-wrap">
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-          <Button onClick={handleGenerate} className="gap-2">
-            {form.isDigitallySigned ? (
-              <>
-                <Signature className="h-4 w-4" />
-                Gerar com Assinatura Digital
-              </>
-            ) : (
-              <>
-                <Download className="h-4 w-4" />
-                Gerar para Impressão
-              </>
-            )}
-          </Button>
+          {agencyAuthToken || localStorage.getItem('agency_auth_token') ? (
+            <Button onClick={handleShareWithSupermarket} disabled={sharing} className="gap-2 bg-green-600 hover:bg-green-700">
+              {sharing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Share2 className="h-4 w-4" />}
+              Assinar e Compartilhar com PDV
+            </Button>
+          ) : (
+            <Button onClick={handleGenerate} className="gap-2">
+              {form.isDigitallySigned ? (
+                <>
+                  <Signature className="h-4 w-4" />
+                  Gerar com Assinatura Digital
+                </>
+              ) : (
+                <>
+                  <Download className="h-4 w-4" />
+                  Gerar para Impressão
+                </>
+              )}
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

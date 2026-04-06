@@ -11,6 +11,7 @@ import { IncidentCreateDialog } from '@/components/incidents/IncidentCreateDialo
 import { IncidentDetailDialog } from '@/components/incidents/IncidentDetailDialog';
 import { useIncidents, usePromoterScores } from '@/hooks/use-incidents';
 import DailySummaryWidget from '@/components/access-control/DailySummaryWidget';
+import { SharedLettersPanel } from '@/components/access-control/SharedLettersPanel';
 import { Users, CheckCircle, XCircle, Clock, Tag, ShieldAlert, CalendarDays, CalendarPlus, Star, AlertTriangle, Plus, ScanFace, QrCode, Fingerprint, CreditCard } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -305,6 +306,8 @@ export default function SupermarketDashboard() {
         onRespond={(data) => respondIncident.mutate(data)}
         onAnalyze={(id) => analyzeIncident.mutate(id)}
         isAnalyzing={analyzeIncident.isPending} />
+
+      <SharedLettersPanel portalType="supermarket" />
     </div>
   );
 }
