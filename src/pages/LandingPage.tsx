@@ -317,7 +317,6 @@ const features: FeatureBlock[] = [
     quote: "Você vê a operação acontecendo.",
     icon: BarChart3,
   },
-  },
   {
     id: "score",
     badge: "Score de Promotor",
