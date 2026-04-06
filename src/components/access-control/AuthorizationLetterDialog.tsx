@@ -21,6 +21,21 @@ const WEEKDAYS = [
   { value: 6, label: 'Sábado' },
 ];
 
+interface AvailableBrand {
+  id: string;
+  name: string;
+}
+
+interface AvailableUnit {
+  id: string;
+  name: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  networkName?: string;
+  cnpj?: string;
+}
+
 interface AuthorizationLetterDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -30,6 +45,9 @@ interface AuthorizationLetterDialogProps {
   unit?: { name: string; address?: string; cnpj?: string; networkName?: string };
   rule?: { allowed_weekdays?: number[]; start_time?: string; end_time?: string; brands?: string[] };
   organizationName?: string;
+  // Available options for selection
+  availableBrands?: AvailableBrand[];
+  availableUnits?: AvailableUnit[];
 }
 
 export function AuthorizationLetterDialog({
