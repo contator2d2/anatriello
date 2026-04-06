@@ -15,6 +15,8 @@ import {
   Camera, ClipboardList, Bot, Send, Building2,
   Lock, AlertTriangle, TrendingUp, Calendar,
   Layers, Clock, Eye, ChevronDown, ChevronUp,
+  MapPin, Route, Fingerprint, Navigation, Wallet,
+  Monitor, UserCheck, Globe, Radio, Gauge,
 } from "lucide-react";
 
 /* ─────────────── HERO ─────────────── */
