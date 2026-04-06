@@ -454,6 +454,56 @@ function FeatureSection({ f, index }: { f: FeatureBlock; index: number }) {
   );
 }
 
+/* ─────────────── COMMERCIAL MODEL ─────────────── */
+function CommercialModelSection() {
+  return (
+    <section className="py-20 bg-gray-50">
+      <div className="mx-auto max-w-6xl px-6">
+        <div className="text-center mb-12">
+          <Badge className="mb-4 bg-violet-50 text-violet-600 border-violet-200 hover:bg-violet-50">Modelo comercial</Badge>
+          <h2 className="text-3xl md:text-4xl font-bold text-gray-900">
+            Pagamento simples:{" "}
+            <span className="text-violet-600">por promotor ativo</span>
+          </h2>
+          <p className="mt-4 text-gray-600 max-w-2xl mx-auto">
+            Sem taxa de implantação, sem surpresas. Você paga apenas pelos promotores cadastrados e ativos na plataforma.
+          </p>
+        </div>
+
+        <div className="grid md:grid-cols-3 gap-6 max-w-4xl mx-auto">
+          <div className="bg-white rounded-2xl p-8 border border-gray-200 shadow-sm text-center">
+            <div className="h-14 w-14 rounded-xl bg-violet-100 flex items-center justify-center mx-auto mb-4">
+              <Wallet className="h-7 w-7 text-violet-600" />
+            </div>
+            <h3 className="font-bold text-gray-900 text-lg mb-2">Agência paga</h3>
+            <p className="text-gray-600 text-sm">Cobrança por promotor ativo cadastrado. Mensalidade fixa e previsível.</p>
+          </div>
+
+          <div className="bg-white rounded-2xl p-8 border border-violet-200 shadow-sm text-center ring-2 ring-violet-100">
+            <div className="h-14 w-14 rounded-xl bg-green-100 flex items-center justify-center mx-auto mb-4">
+              <Building2 className="h-7 w-7 text-green-600" />
+            </div>
+            <h3 className="font-bold text-gray-900 text-lg mb-2">Supermercado grátis</h3>
+            <p className="text-gray-600 text-sm">O PDV usa o sistema AyraAccess sem nenhum custo. Controle total gratuito.</p>
+          </div>
+
+          <div className="bg-white rounded-2xl p-8 border border-gray-200 shadow-sm text-center">
+            <div className="h-14 w-14 rounded-xl bg-violet-100 flex items-center justify-center mx-auto mb-4">
+              <Gauge className="h-7 w-7 text-violet-600" />
+            </div>
+            <h3 className="font-bold text-gray-900 text-lg mb-2">Tudo incluso</h3>
+            <p className="text-gray-600 text-sm">IA, WhatsApp, CRM, rotas, mapas, RH, ponto facial — tudo na mesma plataforma.</p>
+          </div>
+        </div>
+
+        <p className="text-center mt-10 text-lg font-semibold text-gray-800 italic">
+          "Quem precisa acessar a loja é quem paga pelo controle."
+        </p>
+      </div>
+    </section>
+  );
+}
+
 /* ─────────────── POSITIONING ─────────────── */
 function PositioningSection({ onCta }: { onCta: () => void }) {
   return (
