@@ -21,6 +21,21 @@ const WEEKDAYS = [
   { value: 6, label: 'Sábado' },
 ];
 
+interface AvailableBrand {
+  id: string;
+  name: string;
+}
+
+interface AvailableUnit {
+  id: string;
+  name: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  networkName?: string;
+  cnpj?: string;
+}
+
 interface AuthorizationLetterDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -30,10 +45,13 @@ interface AuthorizationLetterDialogProps {
   unit?: { name: string; address?: string; cnpj?: string; networkName?: string };
   rule?: { allowed_weekdays?: number[]; start_time?: string; end_time?: string; brands?: string[] };
   organizationName?: string;
+  // Available options for selection
+  availableBrands?: AvailableBrand[];
+  availableUnits?: AvailableUnit[];
 }
 
 export function AuthorizationLetterDialog({
-  open, onOpenChange, promoter, agency, unit, rule, organizationName,
+  open, onOpenChange, promoter, agency, unit, rule, organizationName, availableBrands, availableUnits,
 }: AuthorizationLetterDialogProps) {
   const { toast } = useToast();
   const [form, setForm] = useState<AuthorizationLetterData>({
@@ -201,15 +219,40 @@ export function AuthorizationLetterDialog({
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <label className="text-xs font-medium text-muted-foreground">Nome do PDV *</label>
-                <Input value={form.unitName} onChange={e => setForm(f => ({ ...f, unitName: e.target.value }))} />
+                {availableUnits && availableUnits.length > 0 ? (
+                  <Select
+                    value={form.unitName}
+                    onValueChange={(v) => {
+                      const selected = availableUnits.find(u => u.name === v);
+                      setForm(f => ({
+                        ...f,
+                        unitName: selected?.name || v,
+                        unitAddress: selected?.address || f.unitAddress,
+                        unitCnpj: selected?.cnpj || f.unitCnpj,
+                        networkName: selected?.networkName || f.networkName,
+                      }));
+                    }}
+                  >
+                    <SelectTrigger><SelectValue placeholder="Selecione o PDV" /></SelectTrigger>
+                    <SelectContent>
+                      {availableUnits.map(u => (
+                        <SelectItem key={u.id} value={u.name}>
+                          {u.name} {u.city ? `— ${u.city}/${u.state}` : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input value={form.unitName} onChange={e => setForm(f => ({ ...f, unitName: e.target.value }))} />
+                )}
               </div>
               <div className="space-y-1">
                 <label className="text-xs font-medium text-muted-foreground">Rede</label>
-                <Input value={form.networkName} onChange={e => setForm(f => ({ ...f, networkName: e.target.value }))} />
+                <Input value={form.networkName} onChange={e => setForm(f => ({ ...f, networkName: e.target.value }))} readOnly={!!availableUnits?.length} className={availableUnits?.length ? 'bg-muted' : ''} />
               </div>
               <div className="col-span-2 space-y-1">
                 <label className="text-xs font-medium text-muted-foreground">Endereço</label>
-                <Input value={form.unitAddress} onChange={e => setForm(f => ({ ...f, unitAddress: e.target.value }))} />
+                <Input value={form.unitAddress} onChange={e => setForm(f => ({ ...f, unitAddress: e.target.value }))} readOnly={!!availableUnits?.length} className={availableUnits?.length ? 'bg-muted' : ''} />
               </div>
             </div>
           </fieldset>
@@ -246,23 +289,55 @@ export function AuthorizationLetterDialog({
 
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground">Marcas</label>
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Nome da marca..."
-                  value={brandInput}
-                  onChange={e => setBrandInput(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addBrand())}
-                />
-                <Button type="button" size="sm" variant="outline" onClick={addBrand}>Adicionar</Button>
-              </div>
-              {form.brands.length > 0 && (
-                <div className="flex gap-1.5 flex-wrap mt-2">
-                  {form.brands.map(b => (
-                    <Badge key={b} variant="secondary" className="cursor-pointer" onClick={() => removeBrand(b)}>
-                      {b} ×
-                    </Badge>
-                  ))}
+              {availableBrands && availableBrands.length > 0 ? (
+                <div className="space-y-2">
+                  <Select
+                    value=""
+                    onValueChange={(v) => {
+                      const brand = availableBrands.find(b => b.id === v);
+                      if (brand && !form.brands.includes(brand.name)) {
+                        setForm(f => ({ ...f, brands: [...f.brands, brand.name] }));
+                      }
+                    }}
+                  >
+                    <SelectTrigger><SelectValue placeholder="Selecione uma marca" /></SelectTrigger>
+                    <SelectContent>
+                      {availableBrands.filter(b => !form.brands.includes(b.name)).map(b => (
+                        <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {form.brands.length > 0 && (
+                    <div className="flex gap-1.5 flex-wrap">
+                      {form.brands.map(b => (
+                        <Badge key={b} variant="secondary" className="cursor-pointer" onClick={() => removeBrand(b)}>
+                          {b} ×
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
                 </div>
+              ) : (
+                <>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Nome da marca..."
+                      value={brandInput}
+                      onChange={e => setBrandInput(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addBrand())}
+                    />
+                    <Button type="button" size="sm" variant="outline" onClick={addBrand}>Adicionar</Button>
+                  </div>
+                  {form.brands.length > 0 && (
+                    <div className="flex gap-1.5 flex-wrap mt-2">
+                      {form.brands.map(b => (
+                        <Badge key={b} variant="secondary" className="cursor-pointer" onClick={() => removeBrand(b)}>
+                          {b} ×
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                </>
               )}
             </div>
 

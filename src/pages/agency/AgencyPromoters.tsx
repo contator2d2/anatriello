@@ -58,6 +58,18 @@ export default function AgencyPromoters() {
     enabled: !!user && !isAuthLoading,
   });
 
+  const { data: agencyBrands = [] } = useQuery({
+    queryKey: ['agency-brands'],
+    queryFn: () => api<any[]>('/api/access-control/agency/brands', { headers: getHeaders() }),
+    enabled: !!user && !isAuthLoading,
+  });
+
+  const { data: allowedUnits = [] } = useQuery({
+    queryKey: ['agency-allowed-units'],
+    queryFn: () => api<any[]>('/api/access-control/agency/allowed-units', { headers: getHeaders() }),
+    enabled: !!user && !isAuthLoading,
+  });
+
   const saveMutation = useMutation({
     mutationFn: (data: any) => {
       const payload = {
@@ -445,6 +457,8 @@ export default function AgencyPromoters() {
           isInternal: false,
         } : undefined}
         agency={user ? { name: user.agency_name || '' } : undefined}
+        availableBrands={agencyBrands.filter((b: any) => b.active !== false).map((b: any) => ({ id: b.id, name: b.name }))}
+        availableUnits={allowedUnits.map((u: any) => ({ id: u.id, name: u.name, address: u.address, city: u.city, state: u.state, networkName: u.network_name, cnpj: u.cnpj }))}
       />
     </div>
   );
