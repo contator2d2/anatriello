@@ -1793,6 +1793,7 @@ router.get('/supermarket/history', authenticateSupermarket, async (req, res) => 
                LEFT JOIN agency_promoters ap ON ap.id = el.agency_promoter_id
                LEFT JOIN agencies a ON a.id = ap.agency_id
                WHERE el.supermarket_unit_id = $1`;
+    const params = [req.unitId];
     if (date) { params.push(date); sql += ` AND el.entry_at::date = $${params.length}`; }
     if (status) { params.push(status); sql += ` AND el.status = $${params.length}`; }
     sql += ' ORDER BY el.entry_at DESC LIMIT 200';
