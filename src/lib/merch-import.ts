@@ -55,8 +55,14 @@ export function getImportValue(row: ImportParsedRow, candidates: string[]) {
   return "";
 }
 
+const cleanNull = (value: string) => {
+  const v = String(value || "").trim();
+  if (!v || v.toLowerCase() === "null") return "";
+  return v;
+};
+
 const normalizeStatus = (value: string) => {
-  const normalized = String(value || "").trim().toLowerCase();
+  const normalized = cleanNull(value).toLowerCase();
   if (!normalized) return "active";
   if (["1", "true", "ativo", "active", "sim", "yes"].includes(normalized)) return "active";
   if (["0", "false", "inativo", "inactive", "nao", "não", "no"].includes(normalized)) return "inactive";
