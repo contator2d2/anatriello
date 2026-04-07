@@ -708,4 +708,278 @@ router.get('/reports/pdv/:pdvId', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ==================== BRAND CONTRACTS ====================
+
+async function ensureContractInfra() {
+  const stmts = [
+    `CREATE TABLE IF NOT EXISTS merch_brand_contracts (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id UUID NOT NULL,
+      brand_id UUID NOT NULL REFERENCES merch_brands(id) ON DELETE CASCADE,
+      deal_id UUID,
+      title VARCHAR(255) NOT NULL,
+      status VARCHAR(20) DEFAULT 'draft',
+      start_date DATE,
+      end_date DATE,
+      auto_renew BOOLEAN DEFAULT false,
+      hours_per_visit NUMERIC(5,2),
+      visits_per_week INTEGER,
+      total_monthly_hours NUMERIC(7,2),
+      pdv_ids UUID[] DEFAULT '{}',
+      contract_value NUMERIC(12,2),
+      payment_terms VARCHAR(100),
+      clauses JSONB DEFAULT '[]',
+      letterhead_url TEXT,
+      header_logo_url TEXT,
+      footer_text TEXT,
+      signed_document_url TEXT,
+      signed_at TIMESTAMPTZ,
+      signature_document_id UUID,
+      compliance_score NUMERIC(5,2),
+      last_compliance_check TIMESTAMPTZ,
+      notes TEXT,
+      created_by UUID,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )`,
+    `CREATE TABLE IF NOT EXISTS merch_contract_compliance (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      contract_id UUID NOT NULL REFERENCES merch_brand_contracts(id) ON DELETE CASCADE,
+      period_start DATE NOT NULL,
+      period_end DATE NOT NULL,
+      expected_visits INTEGER,
+      actual_visits INTEGER,
+      expected_hours NUMERIC(7,2),
+      actual_hours NUMERIC(7,2),
+      compliance_pct NUMERIC(5,2),
+      status VARCHAR(20) DEFAULT 'ok',
+      details JSONB,
+      notified BOOLEAN DEFAULT false,
+      notified_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )`,
+    `CREATE TABLE IF NOT EXISTS merch_org_letterhead (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id UUID NOT NULL UNIQUE,
+      logo_url TEXT,
+      header_text TEXT,
+      footer_text TEXT,
+      background_url TEXT,
+      primary_color VARCHAR(20),
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_brand_contracts_brand ON merch_brand_contracts(brand_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_brand_contracts_org ON merch_brand_contracts(organization_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_contract_compliance_contract ON merch_contract_compliance(contract_id)`,
+  ];
+  for (const sql of stmts) {
+    try { await query(sql); } catch (e) { /* ignore if exists */ }
+  }
+}
+
+// List contracts for a brand
+router.get('/contracts/brand/:brandId', async (req, res) => {
+  try {
+    await ensureContractInfra();
+    const r = await query(
+      'SELECT * FROM merch_brand_contracts WHERE brand_id=$1 AND organization_id=$2 ORDER BY created_at DESC',
+      [req.params.brandId, req.orgId]
+    );
+    res.json(r.rows);
+  } catch (e) { logError('get contracts', e); res.status(500).json({ error: e.message }); }
+});
+
+// Get single contract
+router.get('/contracts/:id', async (req, res) => {
+  try {
+    await ensureContractInfra();
+    const r = await query('SELECT * FROM merch_brand_contracts WHERE id=$1 AND organization_id=$2', [req.params.id, req.orgId]);
+    if (!r.rows.length) return res.status(404).json({ error: 'Contrato não encontrado' });
+    res.json(r.rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Create contract
+router.post('/contracts', async (req, res) => {
+  try {
+    await ensureContractInfra();
+    const { brand_id, deal_id, title, status, start_date, end_date, auto_renew,
+      hours_per_visit, visits_per_week, total_monthly_hours, pdv_ids,
+      contract_value, payment_terms, clauses, letterhead_url, header_logo_url, footer_text, notes } = req.body;
+    const r = await query(
+      `INSERT INTO merch_brand_contracts (organization_id, brand_id, deal_id, title, status, start_date, end_date,
+        auto_renew, hours_per_visit, visits_per_week, total_monthly_hours, pdv_ids,
+        contract_value, payment_terms, clauses, letterhead_url, header_logo_url, footer_text, notes, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) RETURNING *`,
+      [req.orgId, brand_id, deal_id || null, title, status || 'draft', start_date, end_date,
+        auto_renew || false, hours_per_visit, visits_per_week, total_monthly_hours, pdv_ids || [],
+        contract_value, payment_terms, JSON.stringify(clauses || []), letterhead_url, header_logo_url, footer_text, notes, req.userId]
+    );
+    res.json(r.rows[0]);
+  } catch (e) { logError('create contract', e); res.status(500).json({ error: e.message }); }
+});
+
+// Update contract
+router.put('/contracts/:id', async (req, res) => {
+  try {
+    const { title, status, start_date, end_date, auto_renew, hours_per_visit, visits_per_week,
+      total_monthly_hours, pdv_ids, contract_value, payment_terms, clauses,
+      letterhead_url, header_logo_url, footer_text, notes,
+      signed_document_url, signed_at, signature_document_id } = req.body;
+    const r = await query(
+      `UPDATE merch_brand_contracts SET title=$1, status=$2, start_date=$3, end_date=$4, auto_renew=$5,
+        hours_per_visit=$6, visits_per_week=$7, total_monthly_hours=$8, pdv_ids=$9,
+        contract_value=$10, payment_terms=$11, clauses=$12, letterhead_url=$13, header_logo_url=$14,
+        footer_text=$15, notes=$16, signed_document_url=COALESCE($17, signed_document_url),
+        signed_at=COALESCE($18, signed_at), signature_document_id=COALESCE($19, signature_document_id),
+        updated_at=NOW()
+       WHERE id=$20 AND organization_id=$21 RETURNING *`,
+      [title, status, start_date, end_date, auto_renew, hours_per_visit, visits_per_week,
+        total_monthly_hours, pdv_ids || [], contract_value, payment_terms, JSON.stringify(clauses || []),
+        letterhead_url, header_logo_url, footer_text, notes,
+        signed_document_url || null, signed_at || null, signature_document_id || null,
+        req.params.id, req.orgId]
+    );
+    res.json(r.rows[0]);
+  } catch (e) { logError('update contract', e); res.status(500).json({ error: e.message }); }
+});
+
+// Delete contract
+router.delete('/contracts/:id', async (req, res) => {
+  try {
+    await query('DELETE FROM merch_brand_contracts WHERE id=$1 AND organization_id=$2', [req.params.id, req.orgId]);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Compliance history for a contract
+router.get('/contracts/:id/compliance', async (req, res) => {
+  try {
+    await ensureContractInfra();
+    const r = await query(
+      'SELECT * FROM merch_contract_compliance WHERE contract_id=$1 ORDER BY period_start DESC LIMIT 52',
+      [req.params.id]
+    );
+    res.json(r.rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Run compliance check for a contract
+router.post('/contracts/:id/check-compliance', async (req, res) => {
+  try {
+    await ensureContractInfra();
+    const contract = (await query('SELECT * FROM merch_brand_contracts WHERE id=$1 AND organization_id=$2', [req.params.id, req.orgId])).rows[0];
+    if (!contract) return res.status(404).json({ error: 'Contrato não encontrado' });
+
+    const { period_start, period_end } = req.body;
+    if (!period_start || !period_end) return res.status(400).json({ error: 'Período obrigatório' });
+
+    // Count actual visits from merch_routes in the period for this brand's PDVs
+    const routeResult = await query(
+      `SELECT COUNT(DISTINCT r.id) as visit_count,
+              COALESCE(SUM(EXTRACT(EPOCH FROM (r.checkout_at - r.checkin_at)) / 3600), 0) as total_hours
+       FROM merch_routes r
+       WHERE r.brand_id = $1
+         AND r.organization_id = $2
+         AND r.status IN ('completed', 'in_progress')
+         AND r.scheduled_date >= $3
+         AND r.scheduled_date <= $4
+         AND ($5::uuid[] IS NULL OR array_length($5::uuid[], 1) IS NULL OR r.pdv_id = ANY($5::uuid[]))`,
+      [contract.brand_id, req.orgId, period_start, period_end, contract.pdv_ids]
+    );
+
+    const actual_visits = parseInt(routeResult.rows[0]?.visit_count || '0');
+    const actual_hours = parseFloat(routeResult.rows[0]?.total_hours || '0');
+
+    // Calculate expected
+    const days = Math.ceil((new Date(period_end) - new Date(period_start)) / (1000 * 60 * 60 * 24));
+    const weeks = days / 7;
+    const expected_visits = Math.round((contract.visits_per_week || 0) * weeks * (contract.pdv_ids?.length || 1));
+    const expected_hours = parseFloat(contract.total_monthly_hours || 0) * (days / 30);
+
+    const compliance_pct = expected_visits > 0 ? Math.min(100, (actual_visits / expected_visits) * 100) : 100;
+    const compStatus = compliance_pct >= 90 ? 'ok' : compliance_pct >= 70 ? 'warning' : 'breach';
+
+    // Upsert compliance record
+    const comp = await query(
+      `INSERT INTO merch_contract_compliance (contract_id, period_start, period_end, expected_visits, actual_visits, expected_hours, actual_hours, compliance_pct, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       ON CONFLICT DO NOTHING RETURNING *`,
+      [contract.id, period_start, period_end, expected_visits, actual_visits, expected_hours, actual_hours, compliance_pct, compStatus]
+    );
+
+    // Update contract compliance score
+    await query('UPDATE merch_brand_contracts SET compliance_score=$1, last_compliance_check=NOW() WHERE id=$2',
+      [compliance_pct, contract.id]);
+
+    res.json({
+      compliance_pct, status: compStatus,
+      expected_visits, actual_visits, expected_hours, actual_hours,
+      record: comp.rows[0] || null
+    });
+  } catch (e) { logError('check compliance', e); res.status(500).json({ error: e.message }); }
+});
+
+// Organization letterhead
+router.get('/letterhead', async (req, res) => {
+  try {
+    await ensureContractInfra();
+    const r = await query('SELECT * FROM merch_org_letterhead WHERE organization_id=$1', [req.orgId]);
+    res.json(r.rows[0] || null);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put('/letterhead', async (req, res) => {
+  try {
+    await ensureContractInfra();
+    const { logo_url, header_text, footer_text, background_url, primary_color } = req.body;
+    const r = await query(
+      `INSERT INTO merch_org_letterhead (organization_id, logo_url, header_text, footer_text, background_url, primary_color)
+       VALUES ($1,$2,$3,$4,$5,$6)
+       ON CONFLICT (organization_id) DO UPDATE SET logo_url=$2, header_text=$3, footer_text=$4, background_url=$5, primary_color=$6, updated_at=NOW()
+       RETURNING *`,
+      [req.orgId, logo_url, header_text, footer_text, background_url, primary_color]
+    );
+    res.json(r.rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Convert CRM deal to brand contract
+router.post('/contracts/from-deal', async (req, res) => {
+  try {
+    await ensureContractInfra();
+    await ensureMerchandisingInfra();
+    const { deal_id, brand_id, create_brand, brand_data, contract_data } = req.body;
+
+    let finalBrandId = brand_id;
+
+    // Create new brand if requested
+    if (create_brand && brand_data) {
+      const br = await query(
+        `INSERT INTO merch_brands (organization_id, name, razao_social, cnpj, logo_url, description, segment, responsible, phone, email, status)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'active') RETURNING *`,
+        [req.orgId, brand_data.name, brand_data.razao_social, brand_data.cnpj, brand_data.logo_url,
+         brand_data.description, brand_data.segment, brand_data.responsible, brand_data.phone, brand_data.email]
+      );
+      finalBrandId = br.rows[0].id;
+    }
+
+    if (!finalBrandId) return res.status(400).json({ error: 'brand_id ou brand_data obrigatório' });
+
+    // Create contract
+    const cd = contract_data || {};
+    const r = await query(
+      `INSERT INTO merch_brand_contracts (organization_id, brand_id, deal_id, title, status, start_date, end_date,
+        hours_per_visit, visits_per_week, total_monthly_hours, pdv_ids, contract_value, payment_terms, clauses, notes, created_by)
+       VALUES ($1,$2,$3,$4,'draft',$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
+      [req.orgId, finalBrandId, deal_id, cd.title || 'Contrato ' + (brand_data?.name || ''),
+        cd.start_date, cd.end_date, cd.hours_per_visit, cd.visits_per_week, cd.total_monthly_hours,
+        cd.pdv_ids || [], cd.contract_value, cd.payment_terms, JSON.stringify(cd.clauses || []), cd.notes, req.userId]
+    );
+
+    res.json({ brand_id: finalBrandId, contract: r.rows[0] });
+  } catch (e) { logError('contract from deal', e); res.status(500).json({ error: e.message }); }
+});
+
 export default router;
