@@ -13,8 +13,6 @@ import { mapBrandImportRow, mapCategoryImportRow, mapProductImportRow, parseImpo
 import { toast } from "sonner";
 import { Upload, FileSpreadsheet, CheckCircle2, XCircle, Loader2, Download, AlertTriangle, Tags, Package, FolderTree } from "lucide-react";
 
-type ImportType = "brands" | "categories" | "products";
-
 interface ParsedRow {
   [key: string]: string;
 }
@@ -42,12 +40,10 @@ interface ImportResult {
 }
 
 export function MerchImportTab() {
-  const [importType, setImportType] = useState<ImportType>("brands");
   const [parsedData, setParsedData] = useState<ParsedRow[]>([]);
   const [fileName, setFileName] = useState("");
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
-  const [autoCreate, setAutoCreate] = useState(true);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -68,13 +64,7 @@ export function MerchImportTab() {
     }
   };
 
-  const getExpectedColumns = () => {
-    switch (importType) {
-      case "brands": return ["name", "codigo", "razao_social", "cnpj", "phone", "status"];
-      case "categories": return ["Nome", "Categoria Pai", "Descrição"];
-      case "products": return ["id_familia/brand_name", "name/descricao", "sku/codigo", "barcode/codigo_barras", "category_name", "status"];
-    }
-  };
+  const expectedColumns = ["id_familia/codigo", "brand_name/marca", "name/produto", "sku/codigo_interno", "barcode/ean", "categoria", "subcategoria", "status"];
 
   const handleImport = async () => {
     if (!parsedData.length) { toast.error("Nenhum dado para importar"); return; }
@@ -82,54 +72,19 @@ export function MerchImportTab() {
     setResult(null);
 
     try {
-      let res: ImportResult;
-      switch (importType) {
-        case "brands":
-          {
-            const items = parsedData.map(mapBrandImportRow).filter((item) => item.name);
-            if (!items.length) {
-              toast.error("Nenhuma linha válida de marca foi reconhecida no arquivo");
-              return;
-            }
-          res = await api<ImportResult>("/api/merchandising/brands/import", {
-            method: "POST",
-            body: { items },
-          });
-          }
-          break;
-        case "categories":
-          {
-            const items = parsedData.map(mapCategoryImportRow).filter((item) => item.name);
-            if (!items.length) {
-              toast.error("Nenhuma linha válida de categoria foi reconhecida no arquivo");
-              return;
-            }
-          res = await api<ImportResult>("/api/merchandising/categories/import", {
-            method: "POST",
-            body: { items },
-          });
-          }
-          break;
-        case "products":
-          {
-            const items = parsedData.map(mapProductImportRow).filter((item) => item.name);
-            if (!items.length) {
-              toast.error("Nenhuma linha válida de produto foi reconhecida no arquivo");
-              return;
-            }
-          res = await api<ImportResult>("/api/merchandising/products/import", {
-            method: "POST",
-            body: {
-              auto_create: autoCreate,
-              items,
-            },
-          });
-          }
-          break;
+      const items = parsedData.map(mapProductImportRow).filter((item) => item.name);
+      if (!items.length) {
+        toast.error("Nenhuma linha válida reconhecida no arquivo");
+        setImporting(false);
+        return;
       }
+      const res = await api<ImportResult>("/api/merchandising/products/import", {
+        method: "POST",
+        body: { auto_create: true, items },
+      });
       setResult(res);
-      const total = res.created ?? res.imported ?? res.success ?? ((res.categories_created || 0) + (res.subcategories_created || 0));
-      if (total > 0) toast.success(`Importação concluída: ${total} registros criados`);
+      const total = res.imported ?? res.success ?? 0;
+      if (total > 0) toast.success(`Importação concluída: ${total} produtos importados`);
       else toast.error("Nenhum item novo foi importado");
     } catch (err: any) {
       toast.error(err.message);
@@ -139,24 +94,15 @@ export function MerchImportTab() {
   };
 
   const downloadTemplate = () => {
-    const cols = getExpectedColumns();
-    const csv = cols.join(",") + "\n";
+    const csv = expectedColumns.join(",") + "\n";
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `template_${importType}.csv`;
+    a.download = "template_importacao.csv";
     a.click();
     URL.revokeObjectURL(url);
   };
-
-  const typeConfig = {
-    brands: { icon: Tags, label: "Marcas", color: "text-blue-500" },
-    categories: { icon: FolderTree, label: "Categorias & Subcategorias", color: "text-green-500" },
-    products: { icon: Package, label: "Produtos", color: "text-purple-500" },
-  };
-
-  const TypeIcon = typeConfig[importType].icon;
 
   return (
     <div className="space-y-6">
@@ -264,7 +210,7 @@ export function MerchImportTab() {
           {parsedData.length > 0 && !result && (
             <Button onClick={handleImport} disabled={importing} className="w-full" size="lg">
               {importing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
-              Importar {parsedData.length} {typeConfig[importType].label}
+              Importar {parsedData.length} Produtos
             </Button>
           )}
 
@@ -274,9 +220,7 @@ export function MerchImportTab() {
               <Alert className="border-green-500/30 bg-green-500/5">
                 <CheckCircle2 className="h-4 w-4 text-green-500" />
                 <AlertDescription>
-                  {importType === "brands" && `${result.created} marcas criadas, ${result.skipped} já existiam`}
-                  {importType === "categories" && `${result.categories_created} categorias e ${result.subcategories_created} subcategorias criadas`}
-                  {importType === "products" && `${result.imported ?? result.success ?? 0} produtos importados${result.failed ? `, ${result.failed} com erro` : ""}`}
+                  {result.imported ?? result.success ?? 0} produtos importados{result.failed ? `, ${result.failed} com erro` : ""}
                 </AlertDescription>
               </Alert>
 
