@@ -640,6 +640,10 @@ export function DealDetailDialog({ deal, open, onOpenChange }: DealDetailDialogP
                 <MessageSquare className="h-4 w-4 mr-2" />
                 Chat
               </Button>
+              <Button variant="outline" size="sm" onClick={() => { setConvertBrandName(currentDeal?.company_name || currentDeal?.title || ''); setShowConvertBrand(true); }} title="Converter em Marca com Contrato">
+                <ShoppingBag className="h-4 w-4 mr-2" />
+                Marca
+              </Button>
               <Select value={currentDeal?.status} onValueChange={handleStatusChange}>
                 <SelectTrigger className="w-32">
                   <SelectValue />
