@@ -70,9 +70,9 @@ export function MerchImportTab() {
 
   const getExpectedColumns = () => {
     switch (importType) {
-      case "brands": return ["name", "razao_social", "cnpj", "phone", "status"];
+      case "brands": return ["name", "codigo", "razao_social", "cnpj", "phone", "status"];
       case "categories": return ["Nome", "Categoria Pai", "Descrição"];
-      case "products": return ["brand_name", "name", "sku", "barcode", "category_name", "subcategory_name", "status"];
+      case "products": return ["id_familia/brand_name", "name/descricao", "sku/codigo", "barcode/codigo_barras", "category_name", "status"];
     }
   };
 

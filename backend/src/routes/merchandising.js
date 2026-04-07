@@ -121,12 +121,14 @@ async function ensureMerchandisingInfra() {
       UNIQUE(pdv_id, brand_id, product_id)
     )`,
     `CREATE INDEX IF NOT EXISTS idx_merch_brands_org ON merch_brands(organization_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_merch_brands_code ON merch_brands(organization_id, internal_code)`,
     `CREATE INDEX IF NOT EXISTS idx_merch_products_brand ON merch_products(brand_id)`,
     `CREATE INDEX IF NOT EXISTS idx_merch_products_category ON merch_products(category_id)`,
     `CREATE INDEX IF NOT EXISTS idx_merch_pdv_brands_pdv ON merch_pdv_brands(pdv_id)`,
     `CREATE INDEX IF NOT EXISTS idx_merch_pdv_brands_brand ON merch_pdv_brands(brand_id)`,
     `CREATE INDEX IF NOT EXISTS idx_merch_pdv_bp_pdv ON merch_pdv_brand_products(pdv_id)`,
     `CREATE INDEX IF NOT EXISTS idx_merch_pdv_bp_brand ON merch_pdv_brand_products(brand_id)`,
+    `DO $$ BEGIN ALTER TABLE merch_brands ADD COLUMN IF NOT EXISTS internal_code VARCHAR(100); EXCEPTION WHEN others THEN NULL; END $$`,
   ];
   for (const sql of statements) {
     try { await query(sql); } catch (err) { logError('merch infra stmt', err, { sql: sql.slice(0, 80) }); }
@@ -186,15 +188,15 @@ router.delete('/brands/:id', async (req, res) => {
 router.post('/brands/import', async (req, res) => {
   try {
     await ensureMerchandisingInfra();
-    const { items } = req.body; // [{name, razao_social?, cnpj?, phone?, status?}]
+    const { items } = req.body; // [{name, internal_code?, razao_social?, cnpj?, phone?, status?}]
     if (!items?.length) return res.status(400).json({ error: 'Nenhum item enviado' });
     let created = 0, skipped = 0;
     for (const item of items) {
       const existing = await query('SELECT id FROM merch_brands WHERE organization_id=$1 AND LOWER(name)=LOWER($2)', [req.orgId, item.name.trim()]);
       if (existing.rows.length) { skipped++; continue; }
       await query(
-        'INSERT INTO merch_brands (organization_id, name, razao_social, cnpj, phone, status) VALUES ($1,$2,$3,$4,$5,$6)',
-        [req.orgId, item.name.trim(), item.razao_social || null, item.cnpj || null, item.phone || null, item.status || 'active']
+        'INSERT INTO merch_brands (organization_id, name, internal_code, razao_social, cnpj, phone, status) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+        [req.orgId, item.name.trim(), item.internal_code || null, item.razao_social || null, item.cnpj || null, item.phone || null, item.status || 'active']
       );
       created++;
     }
@@ -431,13 +433,17 @@ router.post('/products/import', async (req, res) => {
     await client.query('BEGIN');
 
     const [brandRows, categoryRows, subcategoryRows, productRows] = await Promise.all([
-      client.query('SELECT id, name FROM merch_brands WHERE organization_id=$1', [orgId]),
+      client.query('SELECT id, name, internal_code FROM merch_brands WHERE organization_id=$1', [orgId]),
       client.query('SELECT id, name FROM merch_categories WHERE organization_id=$1', [orgId]),
       client.query('SELECT id, category_id, name FROM merch_subcategories WHERE organization_id=$1', [orgId]),
       client.query('SELECT brand_id, name FROM merch_products WHERE organization_id=$1', [orgId]),
     ]);
 
     const brandMap = new Map(brandRows.rows.map((row) => [normalizeMerchKey(row.name), row.id]));
+    const brandCodeMap = new Map();
+    for (const row of brandRows.rows) {
+      if (row.internal_code) brandCodeMap.set(String(row.internal_code).trim(), row.id);
+    }
     const categoryMap = new Map(categoryRows.rows.map((row) => [normalizeMerchKey(row.name), row.id]));
     const subcategoryMap = new Map(
       subcategoryRows.rows.map((row) => [`${row.category_id}:${normalizeMerchKey(row.name)}`, row.id])
@@ -449,6 +455,7 @@ router.post('/products/import', async (req, res) => {
     for (const [index, item] of items.entries()) {
       try {
         const name = normalizeMerchText(item.name || item.descricao || item.product_name);
+        const brandCode = normalizeMerchText(item.brand_code || item.id_familia || item.familia);
         const brandName = normalizeMerchText(item.brand_name || item.brand || item.marca);
         const categoryName = normalizeMerchText(item.category_name || item.category || item.categoria);
         const subcategoryName = normalizeMerchText(
@@ -468,12 +475,10 @@ router.post('/products/import', async (req, res) => {
         }
 
         let brandId = item.brand_id || null;
-        if (!brandId) {
-          if (!brandName) {
-            results.errors.push(buildProductImportError(item, index, 'Marca não informada'));
-            continue;
-          }
-
+        if (!brandId && brandCode) {
+          brandId = brandCodeMap.get(brandCode) || null;
+        }
+        if (!brandId && brandName) {
           const brandKey = normalizeMerchKey(brandName);
           brandId = brandMap.get(brandKey) || null;
           if (!brandId && auto_create) {
@@ -486,7 +491,8 @@ router.post('/products/import', async (req, res) => {
           }
         }
         if (!brandId) {
-          results.errors.push(buildProductImportError(item, index, `Marca "${brandName}" não encontrada`));
+          const ref = brandCode || brandName || '?';
+          results.errors.push(buildProductImportError(item, index, `Marca "${ref}" não encontrada`));
           continue;
         }
 
