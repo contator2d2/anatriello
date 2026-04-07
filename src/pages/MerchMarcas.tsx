@@ -307,6 +307,9 @@ export default function MerchMarcas() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Brand Contract Panel */}
+      <BrandContractPanel brand={contractBrand} open={!!contractBrand} onOpenChange={() => setContractBrand(null)} />
     </MainLayout>
   );
 }
