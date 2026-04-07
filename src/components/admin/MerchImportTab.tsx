@@ -1,17 +1,14 @@
 import { useState, useRef } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { api } from "@/lib/api";
-import { mapBrandImportRow, mapCategoryImportRow, mapProductImportRow, parseImportFile } from "@/lib/merch-import";
+import { mapProductImportRow, parseImportFile } from "@/lib/merch-import";
 import { toast } from "sonner";
-import { Upload, FileSpreadsheet, CheckCircle2, XCircle, Loader2, Download, AlertTriangle, Tags, Package, FolderTree } from "lucide-react";
+import { Upload, FileSpreadsheet, CheckCircle2, Loader2, Download, AlertTriangle, Tags } from "lucide-react";
 
 interface ParsedRow {
   [key: string]: string;
@@ -21,12 +18,12 @@ interface ImportResult {
   ok?: boolean;
   created?: number;
   skipped?: number;
-  categories_created?: number;
-  subcategories_created?: number;
   total?: number;
   imported?: number;
   failed?: number;
   success?: number;
+  brands_created?: number;
+  categories_created?: number;
   errors?: {
     row?: string | number;
     line?: number;
@@ -38,6 +35,8 @@ interface ImportResult {
     error: string;
   }[];
 }
+
+const EXPECTED_COLUMNS = ["id_familia/codigo", "brand_name/marca", "name/produto", "sku/codigo_interno", "barcode/ean", "categoria", "subcategoria", "status"];
 
 export function MerchImportTab() {
   const [parsedData, setParsedData] = useState<ParsedRow[]>([]);
@@ -51,33 +50,22 @@ export function MerchImportTab() {
     if (!file) return;
     setFileName(file.name);
     setResult(null);
-
     try {
       const rows = await parseImportFile(file);
-      if (!rows.length) {
-        toast.error("Arquivo vazio ou sem linhas válidas");
-        return;
-      }
+      if (!rows.length) { toast.error("Arquivo vazio ou sem linhas válidas"); return; }
       setParsedData(rows);
     } catch (err: any) {
       toast.error(err.message || "Não foi possível ler o arquivo");
     }
   };
 
-  const expectedColumns = ["id_familia/codigo", "brand_name/marca", "name/produto", "sku/codigo_interno", "barcode/ean", "categoria", "subcategoria", "status"];
-
   const handleImport = async () => {
     if (!parsedData.length) { toast.error("Nenhum dado para importar"); return; }
     setImporting(true);
     setResult(null);
-
     try {
       const items = parsedData.map(mapProductImportRow).filter((item) => item.name);
-      if (!items.length) {
-        toast.error("Nenhuma linha válida reconhecida no arquivo");
-        setImporting(false);
-        return;
-      }
+      if (!items.length) { toast.error("Nenhuma linha válida reconhecida"); setImporting(false); return; }
       const res = await api<ImportResult>("/api/merchandising/products/import", {
         method: "POST",
         body: { auto_create: true, items },
@@ -94,7 +82,7 @@ export function MerchImportTab() {
   };
 
   const downloadTemplate = () => {
-    const csv = expectedColumns.join(",") + "\n";
+    const csv = EXPECTED_COLUMNS.join(",") + "\n";
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -110,41 +98,16 @@ export function MerchImportTab() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Upload className="h-5 w-5" />
-            Importação em Massa - Merchandising
+            Importação em Massa
           </CardTitle>
           <CardDescription>
-            Importe marcas, categorias e produtos via CSV ou Excel (.xlsx)
+            Importe sua planilha de produtos. Marcas (famílias) e categorias serão criadas automaticamente.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* Step 1: Select type */}
-          <div className="space-y-2">
-            <Label className="text-sm font-semibold">1. Tipo de importação</Label>
-            <div className="grid grid-cols-3 gap-3">
-              {(Object.entries(typeConfig) as [ImportType, typeof typeConfig.brands][]).map(([key, cfg]) => {
-                const Icon = cfg.icon;
-                return (
-                  <button
-                    key={key}
-                    onClick={() => { setImportType(key); setParsedData([]); setResult(null); setFileName(""); }}
-                    className={`p-4 rounded-lg border-2 transition-all text-left ${
-                      importType === key
-                        ? "border-primary bg-primary/5"
-                        : "border-border hover:border-muted-foreground/30"
-                    }`}
-                  >
-                    <Icon className={`h-5 w-5 mb-2 ${cfg.color}`} />
-                    <p className="font-medium text-sm">{cfg.label}</p>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Step 2: Upload file */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label className="text-sm font-semibold">2. Selecionar arquivo</Label>
+              <Label className="text-sm font-semibold">1. Selecionar arquivo</Label>
               <Button variant="ghost" size="sm" onClick={downloadTemplate}>
                 <Download className="h-4 w-4 mr-1" /> Baixar template
               </Button>
@@ -162,22 +125,19 @@ export function MerchImportTab() {
               )}
             </div>
             <p className="text-xs text-muted-foreground">
-              Colunas esperadas: <code>{getExpectedColumns().join(", ")}</code>
+              Colunas esperadas: <code>{EXPECTED_COLUMNS.join(", ")}</code>
             </p>
+            <Alert className="border-primary/30 bg-primary/5">
+              <Tags className="h-4 w-4 text-primary" />
+              <AlertDescription className="text-xs">
+                Marcas (famílias) e categorias serão criadas automaticamente. Use <strong>id_familia</strong> para vincular produtos às marcas pelo código.
+              </AlertDescription>
+            </Alert>
           </div>
 
-          {/* Options */}
-          {importType === "products" && (
-            <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
-              <Switch checked={autoCreate} onCheckedChange={setAutoCreate} />
-              <Label className="text-sm">Auto-criar marcas, categorias e subcategorias ausentes</Label>
-            </div>
-          )}
-
-          {/* Preview */}
           {parsedData.length > 0 && (
             <div className="space-y-2">
-              <Label className="text-sm font-semibold">3. Pré-visualização ({parsedData.length} registros)</Label>
+              <Label className="text-sm font-semibold">2. Pré-visualização ({parsedData.length} registros)</Label>
               <ScrollArea className="h-64 border rounded-lg">
                 <Table>
                   <TableHeader>
@@ -206,7 +166,6 @@ export function MerchImportTab() {
             </div>
           )}
 
-          {/* Import button */}
           {parsedData.length > 0 && !result && (
             <Button onClick={handleImport} disabled={importing} className="w-full" size="lg">
               {importing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
@@ -214,13 +173,15 @@ export function MerchImportTab() {
             </Button>
           )}
 
-          {/* Results */}
           {result && (
             <div className="space-y-3">
               <Alert className="border-green-500/30 bg-green-500/5">
                 <CheckCircle2 className="h-4 w-4 text-green-500" />
                 <AlertDescription>
-                  {result.imported ?? result.success ?? 0} produtos importados{result.failed ? `, ${result.failed} com erro` : ""}
+                  {result.imported ?? result.success ?? 0} produtos importados
+                  {result.brands_created ? `, ${result.brands_created} marcas criadas` : ""}
+                  {result.categories_created ? `, ${result.categories_created} categorias criadas` : ""}
+                  {result.failed ? `, ${result.failed} com erro` : ""}
                 </AlertDescription>
               </Alert>
 
