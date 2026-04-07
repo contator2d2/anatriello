@@ -66,7 +66,8 @@ const normalizeStatus = (value: string) => {
 export function mapBrandImportRow(row: ImportParsedRow) {
   return {
     name: getImportValue(row, ["name", "nome", "descricao", "descrição"]),
-    razao_social: getImportValue(row, ["razao_social", "razão social"]),
+    internal_code: getImportValue(row, ["codigo", "código", "code", "internal_code", "id"]),
+    razao_social: getImportValue(row, ["razao_social", "razão social", "razao social"]),
     cnpj: getImportValue(row, ["cnpj"]),
     phone: getImportValue(row, ["phone", "telefone"]),
     status: normalizeStatus(getImportValue(row, ["status", "ativo"])),
@@ -88,10 +89,11 @@ export function mapProductImportRow(row: ImportParsedRow) {
 
   return {
     __line: getImportValue(row, ["__line"]),
-    brand_name: getImportValue(row, ["brand_name", "marca", "brand", "familia", "família", "family", "cliente"]),
+    brand_code: getImportValue(row, ["id_familia", "familia", "família", "family_id", "brand_code", "codigo_familia"]),
+    brand_name: getImportValue(row, ["brand_name", "marca", "brand", "cliente"]),
     name: getImportValue(row, ["name", "nome", "produto", "descricao", "descrição", "product", "product_name"]),
     sku: getImportValue(row, ["sku", "codigo", "código", "internal_code", "codigo_interno"]),
-    barcode: getImportValue(row, ["barcode", "codigo_barras", "código de barras", "ean"]),
+    barcode: getImportValue(row, ["barcode", "codigo_barras", "código de barras", "ean", "codigo_barras"]),
     category_name: categoryName,
     subcategory_name: subcategoryName,
     image_url: getImportValue(row, ["image_url", "imagem", "foto", "image"]),
