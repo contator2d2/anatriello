@@ -37,6 +37,15 @@ export function useDeleteBrand() {
   });
 }
 
+export function useImportBrands() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { items: any[] }) =>
+      api<any>('/api/merchandising/brands/import', { method: 'POST', body: data }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['merch-brands'] }),
+  });
+}
+
 // ===== CATEGORIES =====
 export function useCategories() {
   return useQuery({
