@@ -1835,6 +1835,82 @@ export function DealDetailDialog({ deal, open, onOpenChange }: DealDetailDialogP
       contactPhone={currentDeal?.contacts?.[0]?.phone || undefined}
       dealId={deal?.id}
     />
+
+    {/* Convert Deal to Brand/Contract */}
+    <Dialog open={showConvertBrand} onOpenChange={setShowConvertBrand}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <ShoppingBag className="h-5 w-5 text-primary" />
+            Converter em Marca
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-2">
+            <Button variant={convertMode === 'new' ? 'default' : 'outline'} size="sm" onClick={() => setConvertMode('new')}>
+              Criar Nova Marca
+            </Button>
+            <Button variant={convertMode === 'existing' ? 'default' : 'outline'} size="sm" onClick={() => setConvertMode('existing')}>
+              Vincular Existente
+            </Button>
+          </div>
+
+          {convertMode === 'new' ? (
+            <div className="space-y-2">
+              <Label>Nome da Marca</Label>
+              <Input value={convertBrandName} onChange={e => setConvertBrandName(e.target.value)} />
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <Label>Selecionar Marca</Label>
+              <Select value={convertBrandId} onValueChange={setConvertBrandId}>
+                <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                <SelectContent>
+                  {existingBrands.map((b: any) => (
+                    <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setShowConvertBrand(false)}>Cancelar</Button>
+          <Button
+            disabled={convertDealToContract.isPending || (convertMode === 'new' ? !convertBrandName : !convertBrandId)}
+            onClick={async () => {
+              try {
+                const payload: any = {
+                  deal_id: deal?.id,
+                  contract_data: {
+                    title: `Contrato ${convertMode === 'new' ? convertBrandName : existingBrands.find((b: any) => b.id === convertBrandId)?.name || ''}`,
+                    contract_value: currentDeal?.value,
+                  },
+                };
+                if (convertMode === 'new') {
+                  payload.create_brand = true;
+                  payload.brand_data = {
+                    name: convertBrandName,
+                    razao_social: currentDeal?.company_name,
+                    email: currentDeal?.contacts?.[0]?.email,
+                    phone: currentDeal?.contacts?.[0]?.phone,
+                    responsible: currentDeal?.contacts?.[0]?.name,
+                  };
+                } else {
+                  payload.brand_id = convertBrandId;
+                }
+                await convertDealToContract.mutateAsync(payload);
+                toast.success('Marca e contrato criados com sucesso!');
+                setShowConvertBrand(false);
+              } catch (e: any) { toast.error(e.message); }
+            }}
+          >
+            {convertDealToContract.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+            Converter
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
     </>
   );
 }
