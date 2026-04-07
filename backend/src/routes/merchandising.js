@@ -428,10 +428,13 @@ router.post('/products', async (req, res) => {
 router.put('/products/:id', async (req, res) => {
   try {
     const { name, brand_id, category_id, subcategory_id, sku, internal_code, barcode, description, image_url, unit, status } = req.body;
+    const safeSub = subcategory_id || null;
+    const safeBrand = brand_id || null;
+    const safeCat = category_id || null;
     const r = await query(
       `UPDATE merch_products SET name=$1, brand_id=$2, category_id=$3, subcategory_id=$4, sku=$5, internal_code=$6, barcode=$7, description=$8, image_url=$9, unit=$10, status=$11, updated_at=NOW()
        WHERE id=$12 AND organization_id=$13 RETURNING *`,
-      [name, brand_id, category_id, subcategory_id, sku, internal_code, barcode, description, image_url, unit, status, req.params.id, req.orgId]
+      [name, safeBrand, safeCat, safeSub, sku, internal_code, barcode, description, image_url, unit, status, req.params.id, req.orgId]
     );
     res.json(r.rows[0]);
   } catch (e) { res.status(500).json({ error: e.message }); }
