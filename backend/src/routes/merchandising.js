@@ -121,12 +121,14 @@ async function ensureMerchandisingInfra() {
       UNIQUE(pdv_id, brand_id, product_id)
     )`,
     `CREATE INDEX IF NOT EXISTS idx_merch_brands_org ON merch_brands(organization_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_merch_brands_code ON merch_brands(organization_id, internal_code)`,
     `CREATE INDEX IF NOT EXISTS idx_merch_products_brand ON merch_products(brand_id)`,
     `CREATE INDEX IF NOT EXISTS idx_merch_products_category ON merch_products(category_id)`,
     `CREATE INDEX IF NOT EXISTS idx_merch_pdv_brands_pdv ON merch_pdv_brands(pdv_id)`,
     `CREATE INDEX IF NOT EXISTS idx_merch_pdv_brands_brand ON merch_pdv_brands(brand_id)`,
     `CREATE INDEX IF NOT EXISTS idx_merch_pdv_bp_pdv ON merch_pdv_brand_products(pdv_id)`,
     `CREATE INDEX IF NOT EXISTS idx_merch_pdv_bp_brand ON merch_pdv_brand_products(brand_id)`,
+    `DO $$ BEGIN ALTER TABLE merch_brands ADD COLUMN IF NOT EXISTS internal_code VARCHAR(100); EXCEPTION WHEN others THEN NULL; END $$`,
   ];
   for (const sql of statements) {
     try { await query(sql); } catch (err) { logError('merch infra stmt', err, { sql: sql.slice(0, 80) }); }
@@ -186,15 +188,15 @@ router.delete('/brands/:id', async (req, res) => {
 router.post('/brands/import', async (req, res) => {
   try {
     await ensureMerchandisingInfra();
-    const { items } = req.body; // [{name, razao_social?, cnpj?, phone?, status?}]
+    const { items } = req.body; // [{name, internal_code?, razao_social?, cnpj?, phone?, status?}]
     if (!items?.length) return res.status(400).json({ error: 'Nenhum item enviado' });
     let created = 0, skipped = 0;
     for (const item of items) {
       const existing = await query('SELECT id FROM merch_brands WHERE organization_id=$1 AND LOWER(name)=LOWER($2)', [req.orgId, item.name.trim()]);
       if (existing.rows.length) { skipped++; continue; }
       await query(
-        'INSERT INTO merch_brands (organization_id, name, razao_social, cnpj, phone, status) VALUES ($1,$2,$3,$4,$5,$6)',
-        [req.orgId, item.name.trim(), item.razao_social || null, item.cnpj || null, item.phone || null, item.status || 'active']
+        'INSERT INTO merch_brands (organization_id, name, internal_code, razao_social, cnpj, phone, status) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+        [req.orgId, item.name.trim(), item.internal_code || null, item.razao_social || null, item.cnpj || null, item.phone || null, item.status || 'active']
       );
       created++;
     }
