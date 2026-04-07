@@ -83,11 +83,35 @@ export default function MerchExecucao() {
           <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
             <Activity className="h-5 w-5 text-primary" /> Execução em Campo
           </h1>
-          <p className="text-sm text-muted-foreground">Acompanhamento em tempo real das rotas do dia</p>
+          <p className="text-sm text-muted-foreground">Acompanhamento das rotas {periodLabel}</p>
         </div>
 
-        {/* KPIs */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        {/* Period Filter */}
+        <Card className="p-3">
+          <div className="flex gap-3 flex-wrap items-end">
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Período</label>
+              <Select value={period} onValueChange={setPeriod}>
+                <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {PERIOD_PRESETS.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            {period === 'custom' && (
+              <>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">De</label>
+                  <Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="w-40" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Até</label>
+                  <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="w-40" />
+                </div>
+              </>
+            )}
+          </div>
+        </Card>
           <Card><CardContent className="p-3 text-center">
             <div className="text-2xl font-bold text-primary">{liveRoutes.length}</div>
             <div className="text-xs text-muted-foreground">Total Hoje</div>
