@@ -52,7 +52,16 @@ const DAMAGE_STATUS: Record<string, string> = {
 };
 
 export default function MerchExecucao() {
-  const { data: liveRoutes = [] } = useLiveRoutes();
+  const [period, setPeriod] = useState('today');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+
+  const dateRange = useMemo(() => {
+    if (period === 'custom' && dateFrom && dateTo) return { from: dateFrom, to: dateTo };
+    return getDateRange(period);
+  }, [period, dateFrom, dateTo]);
+
+  const { data: liveRoutes = [] } = useLiveRoutes({ date_from: dateRange.from, date_to: dateRange.to });
   const [damageFilter, setDamageFilter] = useState('');
   const { data: damages = [] } = useMerchDamages({ status: damageFilter || undefined });
   const { data: returnRequests = [] } = useReturnRequests();
@@ -64,6 +73,8 @@ export default function MerchExecucao() {
 
   const totalProducts = liveRoutes.reduce((sum: number, r: any) => sum + (parseInt(r.total_products) || 0), 0);
   const completedProducts = liveRoutes.reduce((sum: number, r: any) => sum + (parseInt(r.completed_products) || 0), 0);
+
+  const periodLabel = period === 'today' ? 'do dia' : period === 'yesterday' ? 'de ontem' : period === 'week' ? 'da semana' : period === 'month' ? 'do mês' : 'do período';
 
   return (
     <MainLayout>
