@@ -32,12 +32,13 @@ let infraDone = false;
 
 const normalizeMerchText = (value) => String(value ?? '').replace(/\s+/g, ' ').trim();
 const normalizeMerchKey = (value) => normalizeMerchText(value).toLowerCase();
+const normalizeMerchCode = (value) => normalizeMerchText(value).replace(/\.0+$/, '');
 const buildProductImportError = (item, index, error) => ({
   line: Number(item?.__line) || index + 2,
   row: Number(item?.__line) || index + 2,
   sku: normalizeMerchText(item?.sku || item?.codigo),
   name: normalizeMerchText(item?.name || item?.descricao || item?.product_name),
-  brand_name: normalizeMerchText(item?.brand_name || item?.brand || item?.marca),
+  brand_name: normalizeMerchText(item?.brand_name || item?.brand || item?.marca || item?.brand_code || item?.id_familia || item?.familia || item?.codigo_familia || item?.codigo),
   category_name: normalizeMerchText(item?.category_name || item?.category || item?.categoria),
   subcategory_name: normalizeMerchText(item?.subcategory_name || item?.subcategory || item?.subcategoria),
   error,
@@ -190,17 +191,67 @@ router.post('/brands/import', async (req, res) => {
     await ensureMerchandisingInfra();
     const { items } = req.body; // [{name, internal_code?, razao_social?, cnpj?, phone?, status?}]
     if (!items?.length) return res.status(400).json({ error: 'Nenhum item enviado' });
-    let created = 0, skipped = 0;
+    let created = 0, skipped = 0, updated = 0;
     for (const item of items) {
-      const existing = await query('SELECT id FROM merch_brands WHERE organization_id=$1 AND LOWER(name)=LOWER($2)', [req.orgId, item.name.trim()]);
-      if (existing.rows.length) { skipped++; continue; }
+      const name = normalizeMerchText(item.name);
+      const internalCode = normalizeMerchCode(item.internal_code || item.codigo || item.code);
+      if (!name) {
+        skipped++;
+        continue;
+      }
+
+      const existing = await query(
+        `SELECT id, internal_code FROM merch_brands
+         WHERE organization_id=$1
+           AND (
+             LOWER(name)=LOWER($2)
+             OR ($3 <> '' AND COALESCE(TRIM(internal_code), '') = $3)
+           )
+         LIMIT 1`,
+        [req.orgId, name, internalCode]
+      );
+
+      if (existing.rows.length) {
+        await query(
+          `UPDATE merch_brands
+           SET name = COALESCE(NULLIF($2, ''), name),
+               internal_code = COALESCE(NULLIF($3, ''), internal_code),
+               razao_social = COALESCE(NULLIF($4, ''), razao_social),
+               cnpj = COALESCE(NULLIF($5, ''), cnpj),
+               phone = COALESCE(NULLIF($6, ''), phone),
+               status = COALESCE(NULLIF($7, ''), status),
+               updated_at = NOW()
+           WHERE id = $1`,
+          [
+            existing.rows[0].id,
+            name,
+            internalCode,
+            normalizeMerchText(item.razao_social),
+            normalizeMerchText(item.cnpj),
+            normalizeMerchText(item.phone),
+            normalizeMerchText(item.status) || 'active',
+          ]
+        );
+        if (!existing.rows[0].internal_code && internalCode) updated++;
+        else skipped++;
+        continue;
+      }
+
       await query(
         'INSERT INTO merch_brands (organization_id, name, internal_code, razao_social, cnpj, phone, status) VALUES ($1,$2,$3,$4,$5,$6,$7)',
-        [req.orgId, item.name.trim(), item.internal_code || null, item.razao_social || null, item.cnpj || null, item.phone || null, item.status || 'active']
+        [
+          req.orgId,
+          name,
+          internalCode || null,
+          normalizeMerchText(item.razao_social) || null,
+          normalizeMerchText(item.cnpj) || null,
+          normalizeMerchText(item.phone) || null,
+          normalizeMerchText(item.status) || 'active',
+        ]
       );
       created++;
     }
-    res.json({ ok: true, created, skipped });
+    res.json({ ok: true, created, skipped, updated });
   } catch (e) { logError('import brands', e); res.status(500).json({ error: e.message }); }
 });
 
@@ -442,7 +493,8 @@ router.post('/products/import', async (req, res) => {
     const brandMap = new Map(brandRows.rows.map((row) => [normalizeMerchKey(row.name), row.id]));
     const brandCodeMap = new Map();
     for (const row of brandRows.rows) {
-      if (row.internal_code) brandCodeMap.set(String(row.internal_code).trim(), row.id);
+      const normalizedCode = normalizeMerchCode(row.internal_code);
+      if (normalizedCode) brandCodeMap.set(normalizedCode, row.id);
     }
     const categoryMap = new Map(categoryRows.rows.map((row) => [normalizeMerchKey(row.name), row.id]));
     const subcategoryMap = new Map(
@@ -455,12 +507,14 @@ router.post('/products/import', async (req, res) => {
     for (const [index, item] of items.entries()) {
       try {
         const name = normalizeMerchText(item.name || item.descricao || item.product_name);
-        const brandCode = normalizeMerchText(item.brand_code || item.id_familia || item.familia);
+        const brandCode = normalizeMerchCode(item.brand_code || item.id_familia || item.familia || item.codigo_familia || item.codigo);
         const brandName = normalizeMerchText(item.brand_name || item.brand || item.marca);
-        const categoryName = normalizeMerchText(item.category_name || item.category || item.categoria);
-        const subcategoryName = normalizeMerchText(
+        const rawCategoryName = normalizeMerchText(item.category_name || item.category || item.categoria);
+        const rawSubcategoryName = normalizeMerchText(
           item.subcategory_name || item.subcategory || item.subcategoria || categoryName
         );
+        const categoryName = rawCategoryName || 'Sem categoria';
+        const subcategoryName = rawSubcategoryName || categoryName;
         const sku = normalizeMerchText(item.sku || item.codigo);
         const internalCode = normalizeMerchText(item.internal_code || item.codigo_interno || item.codigo);
         const barcode = normalizeMerchText(item.barcode || item.codigo_barras);
@@ -498,14 +552,9 @@ router.post('/products/import', async (req, res) => {
 
         let categoryId = item.category_id || null;
         if (!categoryId) {
-          if (!categoryName) {
-            results.errors.push(buildProductImportError(item, index, 'Categoria não informada'));
-            continue;
-          }
-
           const categoryKey = normalizeMerchKey(categoryName);
           categoryId = categoryMap.get(categoryKey) || null;
-          if (!categoryId && auto_create) {
+          if (!categoryId && (auto_create || !rawCategoryName)) {
             const insertedCategory = await client.query(
               'INSERT INTO merch_categories (organization_id, name) VALUES ($1,$2) RETURNING id',
               [orgId, categoryName]
@@ -521,14 +570,9 @@ router.post('/products/import', async (req, res) => {
 
         let subcategoryId = item.subcategory_id || null;
         if (!subcategoryId) {
-          if (!subcategoryName) {
-            results.errors.push(buildProductImportError(item, index, 'Subcategoria não informada'));
-            continue;
-          }
-
           const subcategoryKey = `${categoryId}:${normalizeMerchKey(subcategoryName)}`;
           subcategoryId = subcategoryMap.get(subcategoryKey) || null;
-          if (!subcategoryId && auto_create) {
+          if (!subcategoryId && (auto_create || !rawSubcategoryName || !rawCategoryName)) {
             const insertedSubcategory = await client.query(
               'INSERT INTO merch_subcategories (organization_id, category_id, name) VALUES ($1,$2,$3) RETURNING id',
               [orgId, categoryId, subcategoryName]
