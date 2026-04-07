@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,10 +11,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { useBrands, useCreateBrand, useUpdateBrand, useDeleteBrand, useBrandPdvs, useAddPdvBrand, useRemovePdvBrand } from "@/hooks/use-merchandising";
+import { useBrands, useCreateBrand, useUpdateBrand, useDeleteBrand, useImportBrands, useBrandPdvs, useAddPdvBrand, useRemovePdvBrand } from "@/hooks/use-merchandising";
 import { usePDVs } from "@/hooks/use-promotor";
 import { FileUploadInput } from "@/components/ui/file-upload-input";
-import { Plus, Search, Pencil, Trash2, Building2, Store, ArrowRight, ArrowLeft } from "lucide-react";
+import { parseImportFile, mapBrandImportRow } from "@/lib/merch-import";
+import { Plus, Search, Pencil, Trash2, Building2, Store, ArrowRight, ArrowLeft, Upload } from "lucide-react";
 import { toast } from "sonner";
 
 const emptyBrand = { name: '', razao_social: '', cnpj: '', logo_url: '', description: '', segment: '', responsible: '', phone: '', email: '', status: 'active', notes: '' };
@@ -28,12 +29,13 @@ export default function MerchMarcas() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [pdvDialogBrand, setPdvDialogBrand] = useState<any>(null);
   const [pdvSearch, setPdvSearch] = useState('');
-  
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const { data: brands = [], isLoading } = useBrands({ search, status: statusFilter });
   const createBrand = useCreateBrand();
   const updateBrand = useUpdateBrand();
   const deleteBrand = useDeleteBrand();
+  const importBrands = useImportBrands();
 
   // PDV assignment
   const { data: allPdvs = [] } = usePDVs();
@@ -134,6 +136,10 @@ export default function MerchMarcas() {
                 <Trash2 className="h-4 w-4 mr-2" />Excluir {selectedIds.size}
               </Button>
             )}
+            <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleImportFile} />
+            <Button variant="outline" onClick={() => fileRef.current?.click()}>
+              <Upload className="h-4 w-4 mr-2" />Importar
+            </Button>
             <Button onClick={openNew}><Plus className="h-4 w-4 mr-2" />Nova Marca</Button>
           </div>
         </div>
