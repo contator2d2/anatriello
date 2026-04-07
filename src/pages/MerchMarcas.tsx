@@ -26,6 +26,7 @@ export default function MerchMarcas() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState<any>(emptyBrand);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [pdvDialogBrand, setPdvDialogBrand] = useState<any>(null);
   const [pdvSearch, setPdvSearch] = useState('');
   const [importOpen, setImportOpen] = useState(false);
@@ -34,9 +35,7 @@ export default function MerchMarcas() {
   const createBrand = useCreateBrand();
   const updateBrand = useUpdateBrand();
   const deleteBrand = useDeleteBrand();
-  const importBrands = useImportBrands();
 
-  // PDV assignment
   const { data: allPdvs = [] } = usePDVs();
   const { data: brandPdvs = [] } = useBrandPdvs(pdvDialogBrand?.id);
   const addPdvBrand = useAddPdvBrand();
@@ -97,19 +96,6 @@ export default function MerchMarcas() {
 
   const set = (k: string, v: any) => setForm((p: any) => ({ ...p, [k]: v }));
 
-  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      const rows = await parseImportFile(file);
-      const items = rows.map(mapBrandImportRow).filter(item => item.name);
-      if (!items.length) { toast.error('Nenhuma marca válida encontrada no arquivo'); return; }
-      const result = await importBrands.mutateAsync({ items });
-      toast.success(`${result.created} marca(s) importada(s)${result.skipped ? `, ${result.skipped} já existente(s)` : ''}`);
-    } catch (err: any) { toast.error(err.message); }
-    if (fileRef.current) fileRef.current.value = '';
-  };
-
   const handleLinkPdv = async (pdvId: string) => {
     try {
       await addPdvBrand.mutateAsync({ pdv_id: pdvId, brand_id: pdvDialogBrand.id });
@@ -148,8 +134,7 @@ export default function MerchMarcas() {
                 <Trash2 className="h-4 w-4 mr-2" />Excluir {selectedIds.size}
               </Button>
             )}
-            <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleImportFile} />
-            <Button variant="outline" onClick={() => fileRef.current?.click()}>
+            <Button variant="outline" onClick={() => setImportOpen(true)}>
               <Upload className="h-4 w-4 mr-2" />Importar
             </Button>
             <Button onClick={openNew}><Plus className="h-4 w-4 mr-2" />Nova Marca</Button>
@@ -164,6 +149,7 @@ export default function MerchMarcas() {
                   <TableHead className="w-10">
                     <Checkbox checked={brands.length > 0 && selectedIds.size === brands.length} onCheckedChange={toggleAll} />
                   </TableHead>
+                  <TableHead className="w-20">Código</TableHead>
                   <TableHead>Marca</TableHead>
                   <TableHead className="hidden md:table-cell">Segmento</TableHead>
                   <TableHead className="hidden md:table-cell">Responsável</TableHead>
@@ -178,6 +164,7 @@ export default function MerchMarcas() {
                     <TableCell>
                       <Checkbox checked={selectedIds.has(b.id)} onCheckedChange={() => toggleOne(b.id)} />
                     </TableCell>
+                    <TableCell className="font-mono text-xs font-bold text-primary">{b.internal_code || '-'}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-3">
                         {b.logo_url ? (
@@ -214,13 +201,16 @@ export default function MerchMarcas() {
                   </TableRow>
                 ))}
                 {!isLoading && brands.length === 0 && (
-                  <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Nenhuma marca cadastrada</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">Nenhuma marca cadastrada</TableCell></TableRow>
                 )}
               </TableBody>
             </Table>
           </CardContent>
         </Card>
       </div>
+
+      {/* Brand Import Dialog */}
+      <BrandImportDialog open={importOpen} onOpenChange={setImportOpen} />
 
       {/* Brand Form Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -255,7 +245,7 @@ export default function MerchMarcas() {
         </DialogContent>
       </Dialog>
 
-      {/* PDV Assignment Dialog - 2 columns */}
+      {/* PDV Assignment Dialog */}
       <Dialog open={!!pdvDialogBrand} onOpenChange={() => setPdvDialogBrand(null)}>
         <DialogContent className="max-w-3xl max-h-[85vh]">
           <DialogHeader>
@@ -269,7 +259,6 @@ export default function MerchMarcas() {
             <Input placeholder="Buscar PDV..." value={pdvSearch} onChange={e => setPdvSearch(e.target.value)} className="pl-9" />
           </div>
           <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-3">
-            {/* Available PDVs */}
             <div className="border rounded-lg p-3">
               <p className="text-sm font-medium text-muted-foreground mb-2">Disponíveis ({filteredAvailable.length})</p>
               <ScrollArea className="h-[350px]">
@@ -289,14 +278,10 @@ export default function MerchMarcas() {
                 {filteredAvailable.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">Nenhum PDV disponível</p>}
               </ScrollArea>
             </div>
-
-            {/* Arrows */}
             <div className="flex md:flex-col items-center justify-center gap-2">
               <ArrowRight className="h-5 w-5 text-primary hidden md:block" />
               <ArrowLeft className="h-5 w-5 text-destructive hidden md:block" />
             </div>
-
-            {/* Linked PDVs */}
             <div className="border rounded-lg p-3 border-primary/30 bg-primary/5">
               <p className="text-sm font-medium mb-2">Selecionados ({filteredLinked.length})</p>
               <ScrollArea className="h-[350px]">
