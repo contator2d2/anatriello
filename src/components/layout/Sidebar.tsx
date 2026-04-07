@@ -150,6 +150,7 @@ const getNavSections = (hasConnections: boolean): NavSection[] => [
       { name: "Auditoria", href: "/merch/auditoria", icon: Shield, pageKey: 'merch_auditoria' },
       { name: "Pesq. Preços", href: "/merch/pesquisa-precos", icon: DollarSign, pageKey: 'merch_pesquisa_precos' },
       { name: "Dashboard Preços", href: "/merch/pesquisa-dashboard", icon: BarChart3, pageKey: 'merch_pesquisa_dashboard' },
+      { name: "Contratos", href: "/merch/contratos", icon: FileText, pageKey: 'merch_contratos' },
       { name: "Relatórios", href: "/merch/relatorios", icon: BarChart3, pageKey: 'merch_relatorios' },
     ],
   },
