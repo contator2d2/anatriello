@@ -433,13 +433,17 @@ router.post('/products/import', async (req, res) => {
     await client.query('BEGIN');
 
     const [brandRows, categoryRows, subcategoryRows, productRows] = await Promise.all([
-      client.query('SELECT id, name FROM merch_brands WHERE organization_id=$1', [orgId]),
+      client.query('SELECT id, name, internal_code FROM merch_brands WHERE organization_id=$1', [orgId]),
       client.query('SELECT id, name FROM merch_categories WHERE organization_id=$1', [orgId]),
       client.query('SELECT id, category_id, name FROM merch_subcategories WHERE organization_id=$1', [orgId]),
       client.query('SELECT brand_id, name FROM merch_products WHERE organization_id=$1', [orgId]),
     ]);
 
     const brandMap = new Map(brandRows.rows.map((row) => [normalizeMerchKey(row.name), row.id]));
+    const brandCodeMap = new Map();
+    for (const row of brandRows.rows) {
+      if (row.internal_code) brandCodeMap.set(String(row.internal_code).trim(), row.id);
+    }
     const categoryMap = new Map(categoryRows.rows.map((row) => [normalizeMerchKey(row.name), row.id]));
     const subcategoryMap = new Map(
       subcategoryRows.rows.map((row) => [`${row.category_id}:${normalizeMerchKey(row.name)}`, row.id])
@@ -451,6 +455,7 @@ router.post('/products/import', async (req, res) => {
     for (const [index, item] of items.entries()) {
       try {
         const name = normalizeMerchText(item.name || item.descricao || item.product_name);
+        const brandCode = normalizeMerchText(item.brand_code || item.id_familia || item.familia);
         const brandName = normalizeMerchText(item.brand_name || item.brand || item.marca);
         const categoryName = normalizeMerchText(item.category_name || item.category || item.categoria);
         const subcategoryName = normalizeMerchText(
@@ -470,12 +475,10 @@ router.post('/products/import', async (req, res) => {
         }
 
         let brandId = item.brand_id || null;
-        if (!brandId) {
-          if (!brandName) {
-            results.errors.push(buildProductImportError(item, index, 'Marca não informada'));
-            continue;
-          }
-
+        if (!brandId && brandCode) {
+          brandId = brandCodeMap.get(brandCode) || null;
+        }
+        if (!brandId && brandName) {
           const brandKey = normalizeMerchKey(brandName);
           brandId = brandMap.get(brandKey) || null;
           if (!brandId && auto_create) {
@@ -488,7 +491,8 @@ router.post('/products/import', async (req, res) => {
           }
         }
         if (!brandId) {
-          results.errors.push(buildProductImportError(item, index, `Marca "${brandName}" não encontrada`));
+          const ref = brandCode || brandName || '?';
+          results.errors.push(buildProductImportError(item, index, `Marca "${ref}" não encontrada`));
           continue;
         }
 
