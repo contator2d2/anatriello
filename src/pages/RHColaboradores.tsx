@@ -959,6 +959,18 @@ export default function RHColaboradores() {
           </div>
         </DialogContent>
       </Dialog>
+      <EmployeeImportExportDialog
+        open={importExportOpen}
+        onOpenChange={setImportExportOpen}
+        employees={rawEmployees}
+        departments={departments}
+        branches={branches}
+        onImport={async (rows) => {
+          for (const row of rows) {
+            await createMut.mutateAsync(row);
+          }
+        }}
+      />
     </MainLayout>
   );
 }
