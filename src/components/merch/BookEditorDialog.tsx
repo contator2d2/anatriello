@@ -31,13 +31,21 @@ interface BookPhoto {
   caption?: string;
 }
 
+interface BrandOption {
+  id: string;
+  name: string;
+  logo_url?: string;
+}
+
 interface BookEditorDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   photos: BookPhoto[];
   brandName?: string;
+  brandLogoUrl?: string;
   clientEmail?: string;
   clientPhone?: string;
+  brands?: BrandOption[];
 }
 
 const PHOTO_TYPES: Record<string, string> = {
@@ -47,12 +55,21 @@ const PHOTO_TYPES: Record<string, string> = {
   damage: 'Avaria', expiry: 'Validade', contingency: 'Contingência',
 };
 
-export function BookEditorDialog({ open, onOpenChange, photos: initialPhotos, brandName, clientEmail, clientPhone }: BookEditorDialogProps) {
+export function BookEditorDialog({ open, onOpenChange, photos: initialPhotos, brandName, brandLogoUrl, clientEmail, clientPhone, brands = [] }: BookEditorDialogProps) {
   const { toast } = useToast();
   const { branding } = useBranding();
   const sendEmail = useSendEmail();
   
   const [tab, setTab] = useState("edit");
+  const [selectedBrandId, setSelectedBrandId] = useState<string>(() => {
+    if (!brandName || !brands.length) return '';
+    const match = brands.find(b => b.name === brandName);
+    return match?.id || '';
+  });
+  const selectedBrand = brands.find(b => b.id === selectedBrandId);
+  const activeBrandName = selectedBrand?.name || brandName || 'Cliente';
+  const activeBrandLogo = selectedBrand?.logo_url ? resolveMediaUrl(selectedBrand.logo_url) : (brandLogoUrl ? resolveMediaUrl(brandLogoUrl) : null);
+
   const [title, setTitle] = useState(`Book de Fotos — ${brandName || 'Cliente'}`);
   const [subtitle, setSubtitle] = useState(`Relatório fotográfico de merchandising`);
   const [notes, setNotes] = useState('');
@@ -66,6 +83,15 @@ export function BookEditorDialog({ open, onOpenChange, photos: initialPhotos, br
   const [sendTo, setSendTo] = useState<'whatsapp' | 'email' | ''>('');
   const [recipientEmail, setRecipientEmail] = useState(clientEmail || '');
   const [recipientPhone, setRecipientPhone] = useState(clientPhone || '');
+
+  // Update title when brand changes
+  const handleBrandChange = (brandId: string) => {
+    setSelectedBrandId(brandId);
+    const brand = brands.find(b => b.id === brandId);
+    if (brand) {
+      setTitle(`Book de Fotos — ${brand.name}`);
+    }
+  };
 
   const removePhoto = useCallback((id: string) => {
     setBookPhotos(prev => prev.filter(p => p.id !== id));
