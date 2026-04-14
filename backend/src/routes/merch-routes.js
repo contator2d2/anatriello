@@ -1016,7 +1016,7 @@ router.post('/photo-book/share', authenticate, async (req, res) => {
     const orgRes = await query('SELECT organization_id FROM organization_members WHERE user_id=$1 LIMIT 1', [req.userId]);
     if (!orgRes.rows.length) return res.status(403).json({ error: 'Sem organização' });
     const orgId = orgRes.rows[0].organization_id;
-    const { title, subtitle, notes, photo_ids, captions } = req.body;
+    const { title, subtitle, notes, photo_ids, captions, brand_logo_url } = req.body;
 
     // Create table if not exists
     await query(`CREATE TABLE IF NOT EXISTS photo_book_shares (
@@ -1038,8 +1038,8 @@ router.post('/photo-book/share', authenticate, async (req, res) => {
     const token = crypto.randomBytes(32).toString('hex');
 
     await query(
-      `INSERT INTO photo_book_shares (organization_id, token, title, subtitle, notes, photo_ids, captions, created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-      [orgId, token, title, subtitle, notes, JSON.stringify(photo_ids), JSON.stringify(captions || {}), req.userId]
+      `INSERT INTO photo_book_shares (organization_id, token, title, subtitle, notes, photo_ids, captions, brand_logo_url, created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      [orgId, token, title, subtitle, notes, JSON.stringify(photo_ids), JSON.stringify(captions || {}), brand_logo_url || null, req.userId]
     );
 
     res.json({ token, url: `/book/${token}` });
@@ -1074,7 +1074,7 @@ router.get('/photo-book/public/:token', async (req, res) => {
       return res.json({ 
         title: share.title, subtitle: share.subtitle, notes: share.notes, 
         photos: [], created_at: share.created_at, expires_at: share.expires_at,
-        logo_url: branding.logo_topbar || null, company_name: branding.company_name || null 
+        logo_url: share.brand_logo_url || branding.logo_topbar || null, company_name: branding.company_name || null 
       });
     }
 
@@ -1117,7 +1117,7 @@ router.get('/photo-book/public/:token', async (req, res) => {
     res.json({
       title: share.title, subtitle: share.subtitle, notes: share.notes,
       photos: orderedPhotos, created_at: share.created_at, expires_at: share.expires_at,
-      logo_url: branding.logo_topbar || null, company_name: branding.company_name || null,
+      logo_url: share.brand_logo_url || branding.logo_topbar || null, company_name: branding.company_name || null,
     });
   } catch (err) {
     if (err.code === '42P01') return res.status(404).json({ error: 'Não encontrado' });

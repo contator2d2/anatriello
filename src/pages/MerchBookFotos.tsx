@@ -55,6 +55,21 @@ export default function MerchBookFotos() {
     }
   };
 
+  // Select all photos from a specific brand within a specific PDV
+  const selectAllBrandPdv = (brandName: string, pdvName: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      const matching = (photos as any[]).filter((p: any) => (p.brand_name || 'Marca') === brandName && (p.pdv_name || 'PDV') === pdvName);
+      const allSelected = matching.every(p => next.has(p.id));
+      if (allSelected) {
+        matching.forEach(p => next.delete(p.id));
+      } else {
+        matching.forEach(p => next.add(p.id));
+      }
+      return next;
+    });
+  };
+
   const selectedPhotos = useMemo(() => 
     (photos as any[]).filter((p: any) => selectedIds.has(p.id)),
     [photos, selectedIds]
@@ -62,6 +77,12 @@ export default function MerchBookFotos() {
 
   // Get the first brand name from selection for the editor
   const firstBrand = selectedPhotos.length > 0 ? selectedPhotos[0].brand_name : '';
+  
+  // Find the matching brand object to pass logo_url
+  const selectedBrandObj = useMemo(() => {
+    if (!firstBrand) return null;
+    return (brands as any[]).find((b: any) => b.name === firstBrand) || null;
+  }, [firstBrand, brands]);
 
   // Group by date → PDV → brand
   const grouped = (photos as any[]).reduce((acc: any, p: any) => {
@@ -167,12 +188,23 @@ export default function MerchBookFotos() {
                   <CardTitle className="text-sm flex items-center gap-2"><MapPin className="h-4 w-4" /> {pdv}</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  {Object.entries(brandGroups).map(([brand, bPhotos]: [string, any]) => (
+                  {Object.entries(brandGroups).map(([brand, bPhotos]: [string, any]) => {
+                    const allBrandPdvSelected = bPhotos.every((p: any) => selectedIds.has(p.id));
+                    return (
                     <div key={brand}>
                       <div className="flex items-center gap-2 mb-2">
                         <Tag className="h-3.5 w-3.5 text-muted-foreground" />
                         <span className="text-xs font-medium">{brand}</span>
                         <Badge variant="secondary" className="text-[10px]">{bPhotos.length} fotos</Badge>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="h-6 px-2 text-[10px]"
+                          onClick={() => selectAllBrandPdv(brand, pdv)}
+                        >
+                          <CheckSquare className="h-3 w-3 mr-1" />
+                          {allBrandPdvSelected ? 'Desmarcar' : 'Selecionar todas'}
+                        </Button>
                       </div>
                       <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
                         {bPhotos.map((photo: any) => {
@@ -205,7 +237,7 @@ export default function MerchBookFotos() {
                         )})}
                       </div>
                     </div>
-                  ))}
+                  )})}
                 </CardContent>
               </Card>
             ))}
@@ -253,6 +285,8 @@ export default function MerchBookFotos() {
           onOpenChange={setBookEditorOpen}
           photos={selectedPhotos}
           brandName={firstBrand}
+          brandLogoUrl={selectedBrandObj?.logo_url || undefined}
+          brands={brands as any[]}
         />
       )}
     </MainLayout>

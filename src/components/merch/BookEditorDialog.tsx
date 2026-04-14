@@ -31,13 +31,21 @@ interface BookPhoto {
   caption?: string;
 }
 
+interface BrandOption {
+  id: string;
+  name: string;
+  logo_url?: string;
+}
+
 interface BookEditorDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   photos: BookPhoto[];
   brandName?: string;
+  brandLogoUrl?: string;
   clientEmail?: string;
   clientPhone?: string;
+  brands?: BrandOption[];
 }
 
 const PHOTO_TYPES: Record<string, string> = {
@@ -47,12 +55,21 @@ const PHOTO_TYPES: Record<string, string> = {
   damage: 'Avaria', expiry: 'Validade', contingency: 'Contingência',
 };
 
-export function BookEditorDialog({ open, onOpenChange, photos: initialPhotos, brandName, clientEmail, clientPhone }: BookEditorDialogProps) {
+export function BookEditorDialog({ open, onOpenChange, photos: initialPhotos, brandName, brandLogoUrl, clientEmail, clientPhone, brands = [] }: BookEditorDialogProps) {
   const { toast } = useToast();
   const { branding } = useBranding();
   const sendEmail = useSendEmail();
   
   const [tab, setTab] = useState("edit");
+  const [selectedBrandId, setSelectedBrandId] = useState<string>(() => {
+    if (!brandName || !brands.length) return '';
+    const match = brands.find(b => b.name === brandName);
+    return match?.id || '';
+  });
+  const selectedBrand = brands.find(b => b.id === selectedBrandId);
+  const activeBrandName = selectedBrand?.name || brandName || 'Cliente';
+  const activeBrandLogo = selectedBrand?.logo_url ? resolveMediaUrl(selectedBrand.logo_url) : (brandLogoUrl ? resolveMediaUrl(brandLogoUrl) : null);
+
   const [title, setTitle] = useState(`Book de Fotos — ${brandName || 'Cliente'}`);
   const [subtitle, setSubtitle] = useState(`Relatório fotográfico de merchandising`);
   const [notes, setNotes] = useState('');
@@ -66,6 +83,15 @@ export function BookEditorDialog({ open, onOpenChange, photos: initialPhotos, br
   const [sendTo, setSendTo] = useState<'whatsapp' | 'email' | ''>('');
   const [recipientEmail, setRecipientEmail] = useState(clientEmail || '');
   const [recipientPhone, setRecipientPhone] = useState(clientPhone || '');
+
+  // Update title when brand changes
+  const handleBrandChange = (brandId: string) => {
+    setSelectedBrandId(brandId);
+    const brand = brands.find(b => b.id === brandId);
+    if (brand) {
+      setTitle(`Book de Fotos — ${brand.name}`);
+    }
+  };
 
   const removePhoto = useCallback((id: string) => {
     setBookPhotos(prev => prev.filter(p => p.id !== id));
@@ -99,10 +125,11 @@ export function BookEditorDialog({ open, onOpenChange, photos: initialPhotos, br
       doc.setFillColor(30, 30, 30);
       doc.rect(0, 0, pageW, pageH, 'F');
 
-      // Logo if available
-      if (branding.logo_topbar) {
+      // Brand logo (priority) or org logo
+      const logoToUse = activeBrandLogo || branding.logo_topbar;
+      if (logoToUse) {
         try {
-          const img = await loadImage(branding.logo_topbar);
+          const img = await loadImage(logoToUse);
           const logoH = 20;
           const logoW = (img.width / img.height) * logoH;
           doc.addImage(img, 'PNG', (pageW - logoW) / 2, 40, logoW, logoH);
@@ -222,6 +249,7 @@ export function BookEditorDialog({ open, onOpenChange, photos: initialPhotos, br
           title, subtitle, notes,
           photo_ids: bookPhotos.map(p => p.id),
           captions: bookPhotos.reduce((acc, p) => ({ ...acc, [p.id]: p.caption || '' }), {}),
+          brand_logo_url: activeBrandLogo || undefined,
         },
       });
       const fullUrl = `${window.location.origin}/book/${result.token}`;
@@ -292,9 +320,30 @@ export function BookEditorDialog({ open, onOpenChange, photos: initialPhotos, br
             <TabsTrigger value="share">📤 Compartilhar</TabsTrigger>
           </TabsList>
 
-          {/* EDIT TAB */}
           <TabsContent value="edit" className="space-y-4 mt-4">
             <div className="grid gap-3">
+              {brands.length > 0 && (
+                <div>
+                  <Label>Cliente / Marca</Label>
+                  <div className="flex items-center gap-3">
+                    <Select value={selectedBrandId || '__none__'} onValueChange={v => handleBrandChange(v === '__none__' ? '' : v)}>
+                      <SelectTrigger className="flex-1">
+                        <SelectValue placeholder="Selecione o cliente" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">Sem marca específica</SelectItem>
+                        {brands.map(b => (
+                          <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {activeBrandLogo && (
+                      <img src={activeBrandLogo} alt="Logo" className="h-8 w-auto rounded border object-contain" />
+                    )}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mt-1">A logo do cliente aparecerá na capa do book</p>
+                </div>
+              )}
               <div>
                 <Label>Título do Book</Label>
                 <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="Título do relatório" />
@@ -353,8 +402,8 @@ export function BookEditorDialog({ open, onOpenChange, photos: initialPhotos, br
             <div className="border rounded-lg overflow-hidden bg-muted/30">
               {/* Cover preview */}
               <div className="bg-zinc-900 text-white p-8 text-center space-y-3">
-                {branding.logo_topbar && (
-                  <img src={branding.logo_topbar} alt="Logo" className="h-10 mx-auto mb-4" />
+                {(activeBrandLogo || branding.logo_topbar) && (
+                  <img src={activeBrandLogo || branding.logo_topbar} alt="Logo" className="h-10 mx-auto mb-4" />
                 )}
                 <h1 className="text-xl font-bold">{title}</h1>
                 <p className="text-sm text-zinc-400">{subtitle}</p>

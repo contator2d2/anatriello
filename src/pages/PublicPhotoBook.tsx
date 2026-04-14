@@ -119,8 +119,13 @@ export default function PublicPhotoBook() {
                     <span className="inline-block px-2 py-0.5 text-xs bg-orange-100 text-orange-700 rounded-full">
                       {PHOTO_TYPES[photo.photo_type] || photo.photo_type}
                     </span>
-                    <span className="text-xs text-zinc-600 truncate">{photo.product_name || photo.category_name || ''}</span>
+                    {photo.brand_name && (
+                      <span className="inline-block px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded-full font-medium">
+                        {photo.brand_name}
+                      </span>
+                    )}
                   </div>
+                  <span className="text-xs text-zinc-600 truncate block">{photo.product_name || photo.category_name || ''}</span>
                   <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-zinc-400">
                     {photo.pdv_name && <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{photo.pdv_name}</span>}
                     {photo.promoter_name && <span className="flex items-center gap-1"><User className="h-3 w-3" />{photo.promoter_name}</span>}
