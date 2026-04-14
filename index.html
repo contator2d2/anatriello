@@ -38,12 +38,29 @@
   </head>
 
   <body>
-    <!-- Splash Screen -->
-    <div id="splash" style="position:fixed;inset:0;z-index:99999;background:#000;display:flex;align-items:center;justify-content:center;transition:opacity .5s ease">
-      <video id="splash-video" autoplay muted playsinline style="max-width:60%;max-height:60%;object-fit:contain">
+    <!-- Splash Screen - only for promotor/supervisor mobile routes -->
+    <div id="splash" style="position:fixed;inset:0;z-index:99999;background:#000;display:flex;align-items:center;justify-content:center;transition:opacity .5s ease;display:none">
+      <video id="splash-video" muted playsinline style="max-width:60%;max-height:60%;object-fit:contain">
         <source src="/logo-intro.mp4" type="video/mp4" />
       </video>
     </div>
+    <script>
+      (function(){
+        var isPromotor = /^\/promotor(\/|$)/.test(window.location.pathname);
+        var isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || window.innerWidth < 768;
+        var splash = document.getElementById('splash');
+        var root = document.getElementById('root');
+        if(isPromotor && isMobile && splash){
+          splash.style.display = 'flex';
+          root.style.visibility = 'hidden';
+          var vid = document.getElementById('splash-video');
+          if(vid) vid.play().catch(function(){});
+        } else if(splash){
+          splash.remove();
+          if(root) root.style.visibility = 'visible';
+        }
+      })();
+    </script>
     <div id="root" style="visibility:hidden"></div>
     <!-- Desenvolvido por Thiago Nicodemos -->
     <script type="module" src="/src/main.tsx"></script>
