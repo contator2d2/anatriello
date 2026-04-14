@@ -122,7 +122,16 @@ import SupermarketContacts from "./pages/supermarket/SupermarketContacts";
 import SupermarketAssistant from "./pages/supermarket/SupermarketAssistant";
 import SupermarketSettings from "./pages/supermarket/SupermarketSettings";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: (failureCount, error: any) => {
+        if (error?.status === 401) return false;
+        return failureCount < 1;
+      },
+    },
+  },
+});
 
 // Component to handle favicon update
 function FaviconUpdater() {

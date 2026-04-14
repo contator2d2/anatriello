@@ -3,7 +3,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -69,6 +68,7 @@ export function EmployeeImportExportDialog({ open, onOpenChange, employees, depa
   const [mapping, setMapping] = useState<Record<string, string>>({});
   const [importRows, setImportRows] = useState<ImportRow[]>([]);
   const [importProgress, setImportProgress] = useState(0);
+  const [importError, setImportError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const reset = () => {
@@ -78,6 +78,7 @@ export function EmployeeImportExportDialog({ open, onOpenChange, employees, depa
     setMapping({});
     setImportRows([]);
     setImportProgress(0);
+    setImportError(null);
   };
 
   const handleClose = (v: boolean) => {
@@ -119,41 +120,47 @@ export function EmployeeImportExportDialog({ open, onOpenChange, employees, depa
 
   // ========== IMPORT ==========
   const handleFile = (file: File) => {
+    setImportError(null);
     const reader = new FileReader();
     reader.onload = (e) => {
-      const data = new Uint8Array(e.target?.result as ArrayBuffer);
-      const wb = XLSX.read(data, { type: "array" });
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const json = XLSX.utils.sheet_to_json<Record<string, string>>(ws, { defval: "" });
-      if (!json.length) return;
-
-      const cols = Object.keys(json[0]);
-      setColumns(cols);
-      setRawRows(json.map(r => {
-        const clean: Record<string, string> = {};
-        cols.forEach(c => { clean[c] = String(r[c] ?? "").trim(); });
-        return clean;
-      }));
-
-      // Auto-map by label similarity
-      const autoMap: Record<string, string> = {};
-      EMPLOYEE_FIELDS.forEach(f => {
-        const match = cols.find(c => {
-          const cl = c.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-          const fl = f.label.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-          return cl === fl || cl.includes(fl) || fl.includes(cl);
-        });
-        if (match) autoMap[f.key] = match;
-      });
-      // Also try key-based matching
-      EMPLOYEE_FIELDS.forEach(f => {
-        if (!autoMap[f.key]) {
-          const match = cols.find(c => c.toLowerCase().replace(/[^a-z]/g, "") === f.key.toLowerCase().replace(/[^a-z]/g, ""));
-          if (match) autoMap[f.key] = match;
+      try {
+        const data = new Uint8Array(e.target?.result as ArrayBuffer);
+        const wb = XLSX.read(data, { type: "array" });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const json = XLSX.utils.sheet_to_json<Record<string, string>>(ws, { defval: "" });
+        if (!json.length) {
+          setImportError("A planilha está vazia.");
+          return;
         }
-      });
-      setMapping(autoMap);
-      setMode("import-mapping");
+
+        const cols = Object.keys(json[0]);
+        setColumns(cols);
+        setRawRows(json.map(r => {
+          const clean: Record<string, string> = {};
+          cols.forEach(c => { clean[c] = String(r[c] ?? "").trim(); });
+          return clean;
+        }));
+
+        const autoMap: Record<string, string> = {};
+        EMPLOYEE_FIELDS.forEach(f => {
+          const match = cols.find(c => {
+            const cl = c.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            const fl = f.label.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            return cl === fl || cl.includes(fl) || fl.includes(cl);
+          });
+          if (match) autoMap[f.key] = match;
+        });
+        EMPLOYEE_FIELDS.forEach(f => {
+          if (!autoMap[f.key]) {
+            const match = cols.find(c => c.toLowerCase().replace(/[^a-z]/g, "") === f.key.toLowerCase().replace(/[^a-z]/g, ""));
+            if (match) autoMap[f.key] = match;
+          }
+        });
+        setMapping(autoMap);
+        setMode("import-mapping");
+      } catch {
+        setImportError("Não foi possível ler a planilha.");
+      }
     };
     reader.readAsArrayBuffer(file);
   };
@@ -183,40 +190,44 @@ export function EmployeeImportExportDialog({ open, onOpenChange, employees, depa
   const doImport = async () => {
     const selected = importRows.filter(r => r.selected && r.errors.length === 0);
     if (!selected.length) return;
+    setImportError(null);
     setMode("importing");
-    const batch: Record<string, any>[] = [];
-    for (const row of selected) {
-      const emp: Record<string, any> = { ...row.mapped };
-      // Normalize dates
-      ["birth_date", "admission_date"].forEach(dk => {
-        if (emp[dk]) {
-          const parsed = parseFlexDate(emp[dk]);
-          emp[dk] = parsed || "";
-        }
-      });
-      if (emp.salary) emp.salary = String(emp.salary).replace(/[^\d.,]/g, "").replace(",", ".");
-      if (!emp.status) emp.status = "ativo";
-      if (!emp.worker_profile) emp.worker_profile = "operacional";
-      if (!emp.employment_type) emp.employment_type = "clt";
-      batch.push(emp);
-    }
+    try {
+      const batch: Record<string, any>[] = [];
+      for (const row of selected) {
+        const emp: Record<string, any> = { ...row.mapped };
+        ["birth_date", "admission_date"].forEach(dk => {
+          if (emp[dk]) {
+            const parsed = parseFlexDate(emp[dk]);
+            emp[dk] = parsed || "";
+          }
+        });
+        if (emp.salary) emp.salary = String(emp.salary).replace(/[^\d.,]/g, "").replace(",", ".");
+        if (!emp.status) emp.status = "ativo";
+        if (!emp.worker_profile) emp.worker_profile = "operacional";
+        if (!emp.employment_type) emp.employment_type = "clt";
+        batch.push(emp);
+      }
 
-    // Import in chunks
-    const chunkSize = 10;
-    for (let i = 0; i < batch.length; i += chunkSize) {
-      const chunk = batch.slice(i, i + chunkSize);
-      await onImport(chunk);
-      setImportProgress(Math.round(((i + chunk.length) / batch.length) * 100));
+      const chunkSize = 10;
+      for (let i = 0; i < batch.length; i += chunkSize) {
+        const chunk = batch.slice(i, i + chunkSize);
+        await onImport(chunk);
+        setImportProgress(Math.round(((i + chunk.length) / batch.length) * 100));
+      }
+      setImportProgress(100);
+      setTimeout(() => handleClose(false), 1500);
+    } catch (error: any) {
+      setImportError(error?.message || "Não foi possível concluir a importação.");
+      setMode("import-preview");
     }
-    setImportProgress(100);
-    setTimeout(() => handleClose(false), 1500);
   };
 
   const selectedCount = importRows.filter(r => r.selected && r.errors.length === 0).length;
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="flex h-[90vh] max-w-4xl flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileSpreadsheet className="h-5 w-5" />
@@ -228,6 +239,12 @@ export function EmployeeImportExportDialog({ open, onOpenChange, employees, depa
         </DialogHeader>
 
         <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
+
+        {importError && mode !== "import-preview" && (
+          <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+            {importError}
+          </div>
+        )}
 
         {mode === "choose" && (
           <div className="grid grid-cols-2 gap-4 py-6">
@@ -258,9 +275,9 @@ export function EmployeeImportExportDialog({ open, onOpenChange, employees, depa
         )}
 
         {mode === "import-mapping" && (
-          <div className="space-y-4">
+          <div className="flex min-h-0 flex-1 flex-col space-y-4">
             <p className="text-sm text-muted-foreground">Mapeie as colunas da planilha para os campos do sistema. Encontramos <strong>{rawRows.length}</strong> linhas.</p>
-            <ScrollArea className="max-h-[50vh]">
+            <div className="min-h-0 flex-1 overflow-y-auto pr-2">
               <div className="space-y-2">
                 {EMPLOYEE_FIELDS.map(f => (
                   <div key={f.key} className="flex items-center gap-3">
@@ -282,8 +299,8 @@ export function EmployeeImportExportDialog({ open, onOpenChange, employees, depa
                   </div>
                 ))}
               </div>
-            </ScrollArea>
-            <div className="flex justify-between">
+            </div>
+            <div className="flex justify-between border-t pt-3">
               <Button variant="outline" onClick={() => setMode("import-upload")}>Voltar</Button>
               <Button onClick={applyMapping} disabled={!mapping.full_name}>Pré-visualizar</Button>
             </div>
@@ -291,7 +308,12 @@ export function EmployeeImportExportDialog({ open, onOpenChange, employees, depa
         )}
 
         {mode === "import-preview" && (
-          <div className="space-y-4">
+          <div className="flex min-h-0 flex-1 flex-col space-y-4">
+            {importError && (
+              <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                {importError}
+              </div>
+            )}
             <div className="flex items-center justify-between">
               <p className="text-sm text-muted-foreground">
                 <strong>{selectedCount}</strong> de {importRows.length} prontos para importar
@@ -301,7 +323,7 @@ export function EmployeeImportExportDialog({ open, onOpenChange, employees, depa
                 <Button variant="outline" size="sm" onClick={() => setImportRows(r => r.map(row => ({ ...row, selected: false })))}>Desmarcar todos</Button>
               </div>
             </div>
-            <ScrollArea className="max-h-[50vh]">
+            <div className="min-h-0 flex-1 overflow-y-auto rounded-md border">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -338,8 +360,8 @@ export function EmployeeImportExportDialog({ open, onOpenChange, employees, depa
                   ))}
                 </TableBody>
               </Table>
-            </ScrollArea>
-            <div className="flex justify-between">
+            </div>
+            <div className="flex justify-between border-t pt-3">
               <Button variant="outline" onClick={() => setMode("import-mapping")}>Voltar</Button>
               <Button onClick={doImport} disabled={selectedCount === 0} className="gap-2">
                 <Upload className="h-4 w-4" /> Importar {selectedCount} colaboradores
