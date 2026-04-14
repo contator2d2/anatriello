@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { authApi, setAuthToken, clearAuthToken, getAuthToken } from '@/lib/api';
+import { authApi, setAuthToken, clearAuthToken, getAuthToken, AUTH_INVALID_EVENT } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 
 interface ModulesEnabled {
@@ -76,7 +76,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const { user } = await authApi.getMe();
         setUser(user);
       } catch {
-        // Ignore errors on refresh
+        clearAuthToken();
+        sessionStorage.removeItem('user_org_id');
+        setUser(null);
       }
     }
   };
@@ -100,6 +102,25 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
     checkAuth();
   }, []);
+
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      clearAuthToken();
+      localStorage.removeItem('agency_auth_token');
+      localStorage.removeItem('supermarket_auth_token');
+      localStorage.removeItem('promotor_token');
+      sessionStorage.removeItem('user_org_id');
+      setUser(null);
+      setIsLoading(false);
+
+      if (user) {
+        toast({ title: 'Sessão expirada', description: 'Faça login novamente.', variant: 'destructive' });
+      }
+    };
+
+    window.addEventListener(AUTH_INVALID_EVENT, handleUnauthorized);
+    return () => window.removeEventListener(AUTH_INVALID_EVENT, handleUnauthorized);
+  }, [toast, user]);
 
   const login = async (email: string, password: string) => {
     const { user: userData, token } = await authApi.login(email, password);
