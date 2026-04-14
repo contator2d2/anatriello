@@ -125,10 +125,11 @@ export function BookEditorDialog({ open, onOpenChange, photos: initialPhotos, br
       doc.setFillColor(30, 30, 30);
       doc.rect(0, 0, pageW, pageH, 'F');
 
-      // Logo if available
-      if (branding.logo_topbar) {
+      // Brand logo (priority) or org logo
+      const logoToUse = activeBrandLogo || branding.logo_topbar;
+      if (logoToUse) {
         try {
-          const img = await loadImage(branding.logo_topbar);
+          const img = await loadImage(logoToUse);
           const logoH = 20;
           const logoW = (img.width / img.height) * logoH;
           doc.addImage(img, 'PNG', (pageW - logoW) / 2, 40, logoW, logoH);
