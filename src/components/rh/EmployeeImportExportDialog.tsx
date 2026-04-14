@@ -11,6 +11,25 @@ import { FileSpreadsheet, Upload, Download, Check, X, AlertCircle, Loader2 } fro
 import { cn } from "@/lib/utils";
 import * as XLSX from "xlsx";
 
+const UF_MAP: Record<string, string> = {
+  'ACRE':'AC','ALAGOAS':'AL','AMAPA':'AP','AMAZONAS':'AM','BAHIA':'BA',
+  'CEARA':'CE','DISTRITO FEDERAL':'DF','ESPIRITO SANTO':'ES','GOIAS':'GO',
+  'MARANHAO':'MA','MATO GROSSO':'MT','MATO GROSSO DO SUL':'MS',
+  'MINAS GERAIS':'MG','PARA':'PA','PARAIBA':'PB','PARANA':'PR',
+  'PERNAMBUCO':'PE','PIAUI':'PI','RIO DE JANEIRO':'RJ',
+  'RIO GRANDE DO NORTE':'RN','RIO GRANDE DO SUL':'RS','RONDONIA':'RO',
+  'RORAIMA':'RR','SANTA CATARINA':'SC','SAO PAULO':'SP','SERGIPE':'SE',
+  'TOCANTINS':'TO',
+};
+
+function normalizeUF(val: string): string {
+  if (!val) return "";
+  const s = val.trim().toUpperCase();
+  if (s.length <= 2) return s;
+  const normalized = s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  return UF_MAP[normalized] || s.substring(0, 2);
+}
+
 const EMPLOYEE_FIELDS = [
   { key: "full_name", label: "Nome Completo", required: true },
   { key: "social_name", label: "Nome Social" },
@@ -203,6 +222,9 @@ export function EmployeeImportExportDialog({ open, onOpenChange, employees, depa
           }
         });
         if (emp.salary) emp.salary = String(emp.salary).replace(/[^\d.,]/g, "").replace(",", ".");
+        if (emp.state) emp.state = normalizeUF(emp.state);
+        if (emp.gender) emp.gender = emp.gender.substring(0, 20);
+        if (emp.zip_code) emp.zip_code = String(emp.zip_code).replace(/[^\d-]/g, "").substring(0, 10);
         if (!emp.status) emp.status = "ativo";
         if (!emp.worker_profile) emp.worker_profile = "operacional";
         if (!emp.employment_type) emp.employment_type = "clt";
@@ -210,10 +232,15 @@ export function EmployeeImportExportDialog({ open, onOpenChange, employees, depa
       }
 
       const chunkSize = 10;
-      for (let i = 0; i < batch.length; i += chunkSize) {
-        const chunk = batch.slice(i, i + chunkSize);
-        await onImport(chunk);
-        setImportProgress(Math.round(((i + chunk.length) / batch.length) * 100));
+      let imported = 0;
+      for (let i = 0; i < batch.length; i++) {
+        try {
+          await onImport([batch[i]]);
+        } catch {
+          // skip individual failures, continue importing
+        }
+        imported++;
+        setImportProgress(Math.round((imported / batch.length) * 100));
       }
       setImportProgress(100);
       setTimeout(() => handleClose(false), 1500);
