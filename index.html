@@ -44,6 +44,7 @@
         <source src="/logo-intro.mp4" type="video/mp4" />
       </video>
     </div>
+    <div id="root"></div>
     <script>
       (function(){
         var isPromotor = /^\/promotor(\/|$)/.test(window.location.pathname);
@@ -57,11 +58,9 @@
           if(vid) vid.play().catch(function(){});
         } else if(splash){
           splash.remove();
-          if(root) root.style.visibility = 'visible';
         }
       })();
     </script>
-    <div id="root" style="visibility:hidden"></div>
     <!-- Desenvolvido por Thiago Nicodemos -->
     <script type="module" src="/src/main.tsx"></script>
   </body>
