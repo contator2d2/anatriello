@@ -1016,7 +1016,7 @@ router.post('/photo-book/share', authenticate, async (req, res) => {
     const orgRes = await query('SELECT organization_id FROM organization_members WHERE user_id=$1 LIMIT 1', [req.userId]);
     if (!orgRes.rows.length) return res.status(403).json({ error: 'Sem organização' });
     const orgId = orgRes.rows[0].organization_id;
-    const { title, subtitle, notes, photo_ids, captions, brand_logo_url } = req.body;
+    const { title, subtitle, notes, photo_ids, captions, brand_logo_url, photos_per_page, report_branding } = req.body;
 
     // Create table if not exists
     await query(`CREATE TABLE IF NOT EXISTS photo_book_shares (
