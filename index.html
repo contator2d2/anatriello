@@ -38,7 +38,13 @@
   </head>
 
   <body>
-    <div id="root"></div>
+    <!-- Splash Screen -->
+    <div id="splash" style="position:fixed;inset:0;z-index:99999;background:#000;display:flex;align-items:center;justify-content:center;transition:opacity .5s ease">
+      <video id="splash-video" autoplay muted playsinline style="max-width:60%;max-height:60%;object-fit:contain">
+        <source src="/logo-intro.mp4" type="video/mp4" />
+      </video>
+    </div>
+    <div id="root" style="visibility:hidden"></div>
     <!-- Desenvolvido por Thiago Nicodemos -->
     <script type="module" src="/src/main.tsx"></script>
   </body>
