@@ -83,6 +83,7 @@ import MerchRotas from "./pages/MerchRotas";
 import MerchExecucao from "./pages/MerchExecucao";
 import MerchChecklists from "./pages/MerchChecklists";
 import MerchBookFotos from "./pages/MerchBookFotos";
+import PublicPhotoBook from "./pages/PublicPhotoBook";
 import MerchContratos from "./pages/MerchContratos";
 import MerchAuditoria from "./pages/MerchAuditoria";
 import MerchEquipe from "./pages/MerchEquipe";
@@ -296,6 +297,7 @@ const App = () => (
             <Route path="/api-docs" element={<ApiDocumentation />} />
             <Route path="/f/:slug" element={<PublicFormPage />} />
             <Route path="/assinar/:token" element={<AssinarDocumento />} />
+            <Route path="/book/:token" element={<PublicPhotoBook />} />
             <Route path="/verificar/:documentId" element={<VerificarDocumento />} />
             <Route path="/politica-privacidade" element={<PoliticaPrivacidade />} />
             <Route path="/termos-servico" element={<TermosServico />} />

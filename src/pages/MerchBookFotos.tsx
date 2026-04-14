@@ -1,17 +1,19 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { usePhotoBook } from "@/hooks/use-merch-routes";
 import { useBrands } from "@/hooks/use-merchandising";
 import { usePDVs } from "@/hooks/use-promotor";
 import { resolveMediaUrl } from "@/lib/media";
 import { format, startOfMonth, endOfMonth } from "date-fns";
-import { Camera, Image, Download, Eye, Filter, Calendar, MapPin, Tag, User, ZoomIn } from "lucide-react";
+import { Camera, Image, Eye, Calendar, MapPin, Tag, User, ZoomIn, FileText, CheckSquare } from "lucide-react";
+import { BookEditorDialog } from "@/components/merch/BookEditorDialog";
 
 const PHOTO_TYPES: Record<string, string> = {
   checkin: 'Check-in', checkout: 'Check-out', before: 'Antes', after: 'Depois',
@@ -26,6 +28,8 @@ export default function MerchBookFotos() {
   const [dateFrom, setDateFrom] = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
   const [dateTo, setDateTo] = useState(format(endOfMonth(new Date()), 'yyyy-MM-dd'));
   const [viewPhoto, setViewPhoto] = useState<any>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bookEditorOpen, setBookEditorOpen] = useState(false);
 
   const { data: brands = [] } = useBrands();
   const { data: pdvs = [] } = usePDVs();
@@ -34,6 +38,30 @@ export default function MerchBookFotos() {
     pdv_id: pdvFilter || undefined,
     date_from: dateFrom, date_to: dateTo,
   });
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === photos.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set((photos as any[]).map((p: any) => p.id)));
+    }
+  };
+
+  const selectedPhotos = useMemo(() => 
+    (photos as any[]).filter((p: any) => selectedIds.has(p.id)),
+    [photos, selectedIds]
+  );
+
+  // Get the first brand name from selection for the editor
+  const firstBrand = selectedPhotos.length > 0 ? selectedPhotos[0].brand_name : '';
 
   // Group by date → PDV → brand
   const grouped = (photos as any[]).reduce((acc: any, p: any) => {
@@ -84,6 +112,24 @@ export default function MerchBookFotos() {
           </CardContent>
         </Card>
 
+        {/* Selection bar */}
+        {photos.length > 0 && (
+          <div className="flex items-center gap-3 flex-wrap">
+            <Button variant="outline" size="sm" onClick={toggleSelectAll}>
+              <CheckSquare className="h-4 w-4 mr-1" />
+              {selectedIds.size === photos.length ? 'Desmarcar tudo' : 'Selecionar tudo'}
+            </Button>
+            {selectedIds.size > 0 && (
+              <>
+                <Badge variant="default" className="text-sm">{selectedIds.size} selecionadas</Badge>
+                <Button size="sm" onClick={() => setBookEditorOpen(true)}>
+                  <FileText className="h-4 w-4 mr-1" /> Criar Book
+                </Button>
+              </>
+            )}
+          </div>
+        )}
+
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <Card><CardContent className="pt-4 text-center">
@@ -131,17 +177,23 @@ export default function MerchBookFotos() {
                       <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
                         {bPhotos.map((photo: any) => {
                           const photoUrl = resolveMediaUrl(photo.photo_url);
+                          const isSelected = selectedIds.has(photo.id);
 
                           return (
-                          <div key={photo.id} className="relative group cursor-pointer aspect-square rounded-lg overflow-hidden border bg-muted"
-                            onClick={() => setViewPhoto({ ...photo, photo_url: photoUrl })}>
-                            {photoUrl ? (
-                              <img src={photoUrl} alt={photo.product_name || photo.category_name || 'Foto de execução'} className="w-full h-full object-cover" loading="lazy" />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center"><Image className="h-6 w-6 text-muted-foreground" /></div>
-                            )}
-                            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                              <ZoomIn className="h-5 w-5 text-white" />
+                          <div key={photo.id} className={`relative group cursor-pointer aspect-square rounded-lg overflow-hidden border bg-muted ${isSelected ? 'ring-2 ring-primary' : ''}`}>
+                            {/* Checkbox */}
+                            <div className="absolute top-1 left-1 z-10" onClick={e => { e.stopPropagation(); toggleSelect(photo.id); }}>
+                              <Checkbox checked={isSelected} className="bg-background/80 border-background/80" />
+                            </div>
+                            <div onClick={() => setViewPhoto({ ...photo, photo_url: photoUrl })}>
+                              {photoUrl ? (
+                                <img src={photoUrl} alt={photo.product_name || photo.category_name || 'Foto de execução'} className="w-full h-full object-cover" loading="lazy" />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center"><Image className="h-6 w-6 text-muted-foreground" /></div>
+                              )}
+                              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                                <ZoomIn className="h-5 w-5 text-white" />
+                              </div>
                             </div>
                             <Badge className="absolute bottom-1 left-1 text-[8px] py-0 px-1" variant="secondary">
                               {PHOTO_TYPES[photo.photo_type] || photo.photo_type}
@@ -176,6 +228,7 @@ export default function MerchBookFotos() {
               <Camera className="h-4 w-4" />
               {PHOTO_TYPES[viewPhoto?.photo_type] || viewPhoto?.photo_type} — {viewPhoto?.product_name || viewPhoto?.category_name || 'Geral'}
             </DialogTitle>
+            <DialogDescription>Detalhes da foto de execução</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             {viewPhoto?.photo_url && (
@@ -192,6 +245,16 @@ export default function MerchBookFotos() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Book Editor */}
+      {bookEditorOpen && (
+        <BookEditorDialog
+          open={bookEditorOpen}
+          onOpenChange={setBookEditorOpen}
+          photos={selectedPhotos}
+          brandName={firstBrand}
+        />
+      )}
     </MainLayout>
   );
 }

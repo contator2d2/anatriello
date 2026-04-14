@@ -1010,6 +1010,122 @@ router.get('/photo-book', authenticate, async (req, res) => {
   }
 });
 
+// ===== PHOTO BOOK SHARE (create token) =====
+router.post('/photo-book/share', authenticate, async (req, res) => {
+  try {
+    const orgRes = await query('SELECT organization_id FROM organization_members WHERE user_id=$1 LIMIT 1', [req.userId]);
+    if (!orgRes.rows.length) return res.status(403).json({ error: 'Sem organização' });
+    const orgId = orgRes.rows[0].organization_id;
+    const { title, subtitle, notes, photo_ids, captions } = req.body;
+
+    // Create table if not exists
+    await query(`CREATE TABLE IF NOT EXISTS photo_book_shares (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id UUID NOT NULL,
+      token VARCHAR(64) UNIQUE NOT NULL,
+      title TEXT,
+      subtitle TEXT,
+      notes TEXT,
+      photo_ids JSONB,
+      captions JSONB,
+      created_by UUID,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      expires_at TIMESTAMPTZ DEFAULT (NOW() + INTERVAL '90 days'),
+      views INTEGER DEFAULT 0
+    )`);
+
+    const crypto = await import('crypto');
+    const token = crypto.randomBytes(32).toString('hex');
+
+    await query(
+      `INSERT INTO photo_book_shares (organization_id, token, title, subtitle, notes, photo_ids, captions, created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+      [orgId, token, title, subtitle, notes, JSON.stringify(photo_ids), JSON.stringify(captions || {}), req.userId]
+    );
+
+    res.json({ token, url: `/book/${token}` });
+  } catch (err) {
+    logError('photo-book-share', err);
+    res.status(500).json({ error: 'Erro ao criar link' });
+  }
+});
+
+// ===== PHOTO BOOK PUBLIC VIEW =====
+router.get('/photo-book/public/:token', async (req, res) => {
+  try {
+    const { token } = req.params;
+    const shareRes = await query(
+      `SELECT * FROM photo_book_shares WHERE token=$1 AND (expires_at IS NULL OR expires_at > NOW())`,
+      [token]
+    );
+    if (!shareRes.rows.length) return res.status(404).json({ error: 'Não encontrado ou expirado' });
+
+    const share = shareRes.rows[0];
+    const photoIds = share.photo_ids || [];
+    const captions = share.captions || {};
+
+    // Increment views
+    await query(`UPDATE photo_book_shares SET views=views+1 WHERE id=$1`, [share.id]);
+
+    // Get branding
+    const brandingRes = await query(`SELECT logo_topbar, company_name FROM organization_settings WHERE organization_id=$1 LIMIT 1`, [share.organization_id]);
+    const branding = brandingRes.rows[0] || {};
+
+    if (photoIds.length === 0) {
+      return res.json({ 
+        title: share.title, subtitle: share.subtitle, notes: share.notes, 
+        photos: [], created_at: share.created_at, expires_at: share.expires_at,
+        logo_url: branding.logo_topbar || null, company_name: branding.company_name || null 
+      });
+    }
+
+    // Get photos
+    const placeholders = photoIds.map((_,i) => `$${i+1}`).join(',');
+    const photosRes = await query(`
+      SELECT * FROM (
+        SELECT lpb.id, lpb.photo_url, lpb.photo_type, lpb.captured_at,
+               pr.name as product_name, pc.name as category_name, p.name as pdv_name, 
+               b.name as brand_name, e.full_name as promoter_name
+        FROM live_photo_books lpb
+        LEFT JOIN merch_products pr ON pr.id=lpb.product_id
+        LEFT JOIN merch_categories pc ON pc.id=lpb.category_id
+        LEFT JOIN pdvs p ON p.id=lpb.pdv_id
+        LEFT JOIN merch_brands b ON b.id=lpb.brand_id
+        LEFT JOIN employees e ON e.id=lpb.promoter_id
+        WHERE lpb.id IN (${placeholders})
+        UNION ALL
+        SELECT rp.id, rp.photo_url, rp.photo_type, COALESCE(rp.captured_at, rp.created_at) as captured_at,
+               pr2.name as product_name, pc2.name as category_name, p2.name as pdv_name,
+               b2.name as brand_name, e2.full_name as promoter_name
+        FROM route_photos rp
+        JOIN merch_routes r ON r.id=rp.route_id
+        LEFT JOIN merch_products pr2 ON pr2.id=rp.product_id
+        LEFT JOIN merch_categories pc2 ON pc2.id=rp.category_id
+        LEFT JOIN pdvs p2 ON p2.id=r.pdv_id
+        LEFT JOIN merch_brands b2 ON b2.id=r.brand_id
+        LEFT JOIN employees e2 ON e2.id=r.promoter_id
+        WHERE rp.id IN (${placeholders})
+      ) combined
+    `, [...photoIds, ...photoIds]);
+
+    // Maintain order from photo_ids and add captions
+    const photoMap = new Map(photosRes.rows.map(p => [p.id, p]));
+    const orderedPhotos = photoIds
+      .map(id => photoMap.get(id))
+      .filter(Boolean)
+      .map(p => ({ ...p, caption: captions[p.id] || '' }));
+
+    res.json({
+      title: share.title, subtitle: share.subtitle, notes: share.notes,
+      photos: orderedPhotos, created_at: share.created_at, expires_at: share.expires_at,
+      logo_url: branding.logo_topbar || null, company_name: branding.company_name || null,
+    });
+  } catch (err) {
+    if (err.code === '42P01') return res.status(404).json({ error: 'Não encontrado' });
+    logError('photo-book-public', err);
+    res.status(500).json({ error: 'Erro' });
+  }
+});
+
 // ===== RETURN REQUESTS =====
 router.get('/return-requests', authenticate, async (req, res) => {
   try {
