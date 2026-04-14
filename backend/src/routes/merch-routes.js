@@ -1033,13 +1033,16 @@ router.post('/photo-book/share', authenticate, async (req, res) => {
       expires_at TIMESTAMPTZ DEFAULT (NOW() + INTERVAL '90 days'),
       views INTEGER DEFAULT 0
     )`);
+    await query(`ALTER TABLE photo_book_shares ADD COLUMN IF NOT EXISTS brand_logo_url TEXT`);
+    await query(`ALTER TABLE photo_book_shares ADD COLUMN IF NOT EXISTS photos_per_page INTEGER DEFAULT 2`);
+    await query(`ALTER TABLE photo_book_shares ADD COLUMN IF NOT EXISTS report_branding JSONB`);
 
     const crypto = await import('crypto');
     const token = crypto.randomBytes(32).toString('hex');
 
     await query(
-      `INSERT INTO photo_book_shares (organization_id, token, title, subtitle, notes, photo_ids, captions, brand_logo_url, created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-      [orgId, token, title, subtitle, notes, JSON.stringify(photo_ids), JSON.stringify(captions || {}), brand_logo_url || null, req.userId]
+      `INSERT INTO photo_book_shares (organization_id, token, title, subtitle, notes, photo_ids, captions, brand_logo_url, photos_per_page, report_branding, created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+      [orgId, token, title, subtitle, notes, JSON.stringify(photo_ids), JSON.stringify(captions || {}), brand_logo_url || null, photos_per_page || 2, JSON.stringify(report_branding || null), req.userId]
     );
 
     res.json({ token, url: `/book/${token}` });
