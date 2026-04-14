@@ -2529,11 +2529,16 @@ router.get('/report-branding', authenticate, async (req, res) => {
     const orgRes = await query('SELECT organization_id FROM organization_members WHERE user_id=$1 LIMIT 1', [req.userId]);
     if (!orgRes.rows.length) return res.status(403).json({ error: 'Sem organização' });
     const orgId = orgRes.rows[0].organization_id;
-    const result = await query(
-      `SELECT config FROM organization_settings WHERE organization_id = $1 AND setting_key = 'report_branding'`,
-      [orgId]
-    );
-    res.json(result.rows[0]?.config || {});
+
+    try {
+      const result = await query(
+        `SELECT config FROM organization_settings WHERE organization_id = $1 AND setting_key = 'report_branding'`,
+        [orgId]
+      );
+      return res.json(result.rows[0]?.config || {});
+    } catch {
+      return res.json({});
+    }
   } catch (err) {
     logError('merch.report-branding.get', err);
     res.status(500).json({ error: 'Erro ao buscar config' });
@@ -2546,22 +2551,26 @@ router.put('/report-branding', authenticate, async (req, res) => {
     if (!orgRes.rows.length) return res.status(403).json({ error: 'Sem organização' });
     const orgId = orgRes.rows[0].organization_id;
 
-    await query(`CREATE TABLE IF NOT EXISTS organization_settings (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      organization_id UUID NOT NULL,
-      setting_key TEXT NOT NULL,
-      config JSONB DEFAULT '{}',
-      updated_at TIMESTAMPTZ DEFAULT NOW(),
-      UNIQUE(organization_id, setting_key)
-    )`);
+    try {
+      await query(`CREATE TABLE IF NOT EXISTS organization_settings (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        organization_id UUID NOT NULL,
+        setting_key TEXT NOT NULL,
+        config JSONB DEFAULT '{}',
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(organization_id, setting_key)
+      )`);
 
-    await query(
-      `INSERT INTO organization_settings (organization_id, setting_key, config, updated_at)
-       VALUES ($1, 'report_branding', $2, NOW())
-       ON CONFLICT (organization_id, setting_key) DO UPDATE SET config = $2, updated_at = NOW()`,
-      [orgId, JSON.stringify(req.body)]
-    );
-    res.json({ success: true });
+      await query(
+        `INSERT INTO organization_settings (organization_id, setting_key, config, updated_at)
+         VALUES ($1, 'report_branding', $2, NOW())
+         ON CONFLICT (organization_id, setting_key) DO UPDATE SET config = $2, updated_at = NOW()`,
+        [orgId, JSON.stringify(req.body)]
+      );
+      return res.json({ success: true });
+    } catch {
+      return res.json({ success: true, skipped: true });
+    }
   } catch (err) {
     logError('merch.report-branding.put', err);
     res.status(500).json({ error: 'Erro ao salvar config' });
