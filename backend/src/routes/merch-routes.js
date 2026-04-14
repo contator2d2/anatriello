@@ -1054,7 +1054,7 @@ router.get('/photo-book/public/:token', async (req, res) => {
   try {
     const { token } = req.params;
     const shareRes = await query(
-      `SELECT * FROM photo_book_shares WHERE token=$1 AND (expires_at IS NULL OR expires_at > NOW())`,
+      `SELECT * FROM photo_book_shares WHERE token=$1`,
       [token]
     );
     if (!shareRes.rows.length) return res.status(404).json({ error: 'Não encontrado ou expirado' });
