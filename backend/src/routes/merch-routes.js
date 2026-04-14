@@ -1074,7 +1074,7 @@ router.get('/photo-book/public/:token', async (req, res) => {
       return res.json({ 
         title: share.title, subtitle: share.subtitle, notes: share.notes, 
         photos: [], created_at: share.created_at, expires_at: share.expires_at,
-        logo_url: branding.logo_topbar || null, company_name: branding.company_name || null 
+        logo_url: share.brand_logo_url || branding.logo_topbar || null, company_name: branding.company_name || null 
       });
     }
 
@@ -1117,7 +1117,7 @@ router.get('/photo-book/public/:token', async (req, res) => {
     res.json({
       title: share.title, subtitle: share.subtitle, notes: share.notes,
       photos: orderedPhotos, created_at: share.created_at, expires_at: share.expires_at,
-      logo_url: branding.logo_topbar || null, company_name: branding.company_name || null,
+      logo_url: share.brand_logo_url || branding.logo_topbar || null, company_name: branding.company_name || null,
     });
   } catch (err) {
     if (err.code === '42P01') return res.status(404).json({ error: 'Não encontrado' });
