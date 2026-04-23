@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { Switch } from "@/components/ui/switch";
 import { Plus, Search, UserCircle, Building2, FileText, Edit, Trash2, Eye, EyeOff, Users, Loader2, Calendar, Briefcase, X, MapPin, UserCog, DollarSign, Gift, Smartphone, KeyRound, Copy, RefreshCw, FileSpreadsheet } from "lucide-react";
@@ -153,6 +154,7 @@ export default function RHColaboradores() {
   const [cpfError, setCpfError] = useState("");
   const [cepLoading, setCepLoading] = useState(false);
   const [importExportOpen, setImportExportOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const { toast } = useToast();
 
   const { data: rawEmployees = [], isLoading } = useEmployees({
@@ -279,6 +281,33 @@ export default function RHColaboradores() {
     toast({ title: "Colaborador desligado" });
   };
 
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    if (!confirm(`Deseja desligar os ${selectedIds.length} colaboradores selecionados?`)) return;
+    
+    try {
+      await Promise.all(selectedIds.map(id => deleteMut.mutateAsync(id)));
+      toast({ title: `${selectedIds.length} colaboradores desligados com sucesso` });
+      setSelectedIds([]);
+    } catch (error) {
+      toast({ title: "Erro ao desligar alguns colaboradores", variant: "destructive" });
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => 
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.length === employees.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(employees.map((e: any) => e.id));
+    }
+  };
+
   const setField = (key: string, val: any) => setForm((p: any) => ({ ...p, [key]: val }));
 
   const stats = {
@@ -297,6 +326,11 @@ export default function RHColaboradores() {
             <p className="text-sm text-muted-foreground">Gestão de pessoas e fichas cadastrais</p>
           </div>
           <div className="flex gap-2">
+            {selectedIds.length > 0 && (
+              <Button variant="destructive" onClick={handleBulkDelete} className="gap-2">
+                <Trash2 className="h-4 w-4" /> Apagar Selecionados ({selectedIds.length})
+              </Button>
+            )}
             <Button variant="outline" onClick={() => setImportExportOpen(true)} className="gap-2"><FileSpreadsheet className="h-4 w-4" /> Importar / Exportar</Button>
             <Button onClick={openNew} className="gap-2"><Plus className="h-4 w-4" /> Novo Colaborador</Button>
           </div>
@@ -357,6 +391,12 @@ export default function RHColaboradores() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-10">
+                    <Checkbox 
+                      checked={selectedIds.length === employees.length && employees.length > 0} 
+                      onCheckedChange={toggleSelectAll}
+                    />
+                  </TableHead>
                   <TableHead>Nome</TableHead>
                   <TableHead className="hidden md:table-cell">CPF</TableHead>
                   <TableHead className="hidden md:table-cell">Cargo</TableHead>
@@ -368,11 +408,17 @@ export default function RHColaboradores() {
               </TableHeader>
               <TableBody>
                 {isLoading ? (
-                  <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Carregando...</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">Carregando...</TableCell></TableRow>
                 ) : employees.length === 0 ? (
-                  <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Nenhum colaborador encontrado</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">Nenhum colaborador encontrado</TableCell></TableRow>
                 ) : employees.map((emp: any) => (
                   <TableRow key={emp.id} className="cursor-pointer hover:bg-muted/50" onClick={() => openEdit(emp)}>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <Checkbox 
+                        checked={selectedIds.includes(emp.id)} 
+                        onCheckedChange={() => toggleSelect(emp.id)} 
+                      />
+                    </TableCell>
                     <TableCell className="font-medium">
                       <div className="flex items-center gap-2">
                         <UserCircle className="h-8 w-8 text-muted-foreground" />
