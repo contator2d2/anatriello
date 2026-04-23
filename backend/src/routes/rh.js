@@ -556,14 +556,26 @@ router.put('/employees/:id', async (req, res) => {
   }
 });
 
-// Delete employee (soft: set status desligado)
+// Delete employee (soft by default, hard delete with ?hard=true)
 router.delete('/employees/:id', async (req, res) => {
   try {
-    await query(`UPDATE employees SET status = 'desligado', termination_date = NOW(), updated_at = NOW() WHERE id = $1`, [req.params.id]);
+    const hard = req.query.hard === 'true' || req.query.hard === '1';
+    if (hard) {
+      // Hard delete: remove dependents first, then employee
+      await query(`DELETE FROM employee_dependents WHERE employee_id = $1`, [req.params.id]).catch(() => {});
+      await query(`DELETE FROM employee_documents WHERE employee_id = $1`, [req.params.id]).catch(() => {});
+      await query(`DELETE FROM time_records WHERE employee_id = $1`, [req.params.id]).catch(() => {});
+      await query(`DELETE FROM hour_bank WHERE employee_id = $1`, [req.params.id]).catch(() => {});
+      await query(`DELETE FROM employee_absences WHERE employee_id = $1`, [req.params.id]).catch(() => {});
+      await query(`DELETE FROM payslips WHERE employee_id = $1`, [req.params.id]).catch(() => {});
+      await query(`DELETE FROM employees WHERE id = $1`, [req.params.id]);
+    } else {
+      await query(`UPDATE employees SET status = 'desligado', termination_date = NOW(), updated_at = NOW() WHERE id = $1`, [req.params.id]);
+    }
     res.json({ ok: true });
   } catch (err) {
     logError('rh.employees.delete', err);
-    res.status(500).json({ error: 'Erro' });
+    res.status(500).json({ error: 'Erro ao apagar colaborador' });
   }
 });
 
