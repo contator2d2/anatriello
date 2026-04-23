@@ -283,14 +283,14 @@ export default function RHColaboradores() {
 
   const handleBulkDelete = async () => {
     if (selectedIds.length === 0) return;
-    if (!confirm(`Deseja desligar os ${selectedIds.length} colaboradores selecionados?`)) return;
+    if (!confirm(`ATENÇÃO: Apagar PERMANENTEMENTE ${selectedIds.length} colaboradores selecionados? Esta ação não pode ser desfeita.`)) return;
     
     try {
-      await Promise.all(selectedIds.map(id => deleteMut.mutateAsync(id)));
-      toast({ title: `${selectedIds.length} colaboradores desligados com sucesso` });
+      await Promise.all(selectedIds.map(id => deleteMut.mutateAsync({ id, hard: true })));
+      toast({ title: `${selectedIds.length} colaboradores apagados com sucesso` });
       setSelectedIds([]);
     } catch (error) {
-      toast({ title: "Erro ao desligar alguns colaboradores", variant: "destructive" });
+      toast({ title: "Erro ao apagar alguns colaboradores", variant: "destructive" });
     }
   };
 
