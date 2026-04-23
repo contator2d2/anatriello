@@ -281,6 +281,33 @@ export default function RHColaboradores() {
     toast({ title: "Colaborador desligado" });
   };
 
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    if (!confirm(`Deseja desligar os ${selectedIds.length} colaboradores selecionados?`)) return;
+    
+    try {
+      await Promise.all(selectedIds.map(id => deleteMut.mutateAsync(id)));
+      toast({ title: `${selectedIds.length} colaboradores desligados com sucesso` });
+      setSelectedIds([]);
+    } catch (error) {
+      toast({ title: "Erro ao desligar alguns colaboradores", variant: "destructive" });
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => 
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.length === employees.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(employees.map((e: any) => e.id));
+    }
+  };
+
   const setField = (key: string, val: any) => setForm((p: any) => ({ ...p, [key]: val }));
 
   const stats = {
