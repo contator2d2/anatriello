@@ -171,19 +171,16 @@ export function EmployeeImportExportDialog({ open, onOpenChange, employees, depa
         }));
 
         const autoMap: Record<string, string> = {};
+        const colsNorm = cols.map(c => ({ raw: c, norm: normalizeColName(c) }));
         EMPLOYEE_FIELDS.forEach(f => {
-          const match = cols.find(c => {
-            const cl = c.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-            const fl = f.label.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-            return cl === fl || cl.includes(fl) || fl.includes(cl);
-          });
-          if (match) autoMap[f.key] = match;
-        });
-        EMPLOYEE_FIELDS.forEach(f => {
-          if (!autoMap[f.key]) {
-            const match = cols.find(c => c.toLowerCase().replace(/[^a-z]/g, "") === f.key.toLowerCase().replace(/[^a-z]/g, ""));
-            if (match) autoMap[f.key] = match;
+          // Try alias exact match first
+          const aliases = [f.label, f.key, ...((f as any).aliases || [])].map(normalizeColName);
+          let match = colsNorm.find(c => aliases.includes(c.norm));
+          // Then partial includes
+          if (!match) {
+            match = colsNorm.find(c => aliases.some(a => a && (c.norm === a || c.norm.includes(a) || a.includes(c.norm))));
           }
+          if (match) autoMap[f.key] = match.raw;
         });
         setMapping(autoMap);
         setMode("import-mapping");
