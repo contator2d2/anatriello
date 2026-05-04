@@ -17,6 +17,11 @@ interface MappedBrand {
   razao_social: string;
   cnpj: string;
   phone: string;
+  street?: string;
+  number?: string;
+  neighborhood?: string;
+  city?: string;
+  zip?: string;
   status: string;
   _selected: boolean;
 }
@@ -67,6 +72,11 @@ export function BrandImportDialog({ open, onOpenChange }: Props) {
           razao_social: cleanNull(item.razao_social),
           cnpj: cleanNull(item.cnpj),
           phone: cleanNull(item.phone),
+          street: cleanNull(item.street || ""),
+          number: cleanNull(item.number || ""),
+          neighborhood: cleanNull(item.neighborhood || ""),
+          city: cleanNull(item.city || ""),
+          zip: cleanNull(item.zip || ""),
           _selected: true,
         }))
         .filter(item => item.name);
@@ -133,7 +143,7 @@ export function BrandImportDialog({ open, onOpenChange }: Props) {
               <FileSpreadsheet className="h-12 w-12 mx-auto mb-3 text-muted-foreground" />
               <p className="text-sm text-muted-foreground">Clique para selecionar o arquivo CSV ou Excel</p>
               <p className="text-xs text-muted-foreground mt-1">
-                Colunas esperadas: <code>codigo, descricao/nome, razao_social, cnpj, telefone</code>
+                Colunas esperadas: <code>codigo, nome, razao_social, cnpj, telefone, rua, numero, bairro, cidade, cep</code>
               </p>
             </div>
             <Alert className="border-primary/30 bg-primary/5">
@@ -172,6 +182,7 @@ export function BrandImportDialog({ open, onOpenChange }: Props) {
                     <TableHead className="text-xs">Razão Social</TableHead>
                     <TableHead className="text-xs">CNPJ</TableHead>
                     <TableHead className="text-xs">Telefone</TableHead>
+                    <TableHead className="text-xs">Endereço</TableHead>
                     <TableHead className="text-xs">Status</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -186,6 +197,10 @@ export function BrandImportDialog({ open, onOpenChange }: Props) {
                       <TableCell className="text-xs text-muted-foreground">{b.razao_social || "-"}</TableCell>
                       <TableCell className="text-xs">{b.cnpj || "-"}</TableCell>
                       <TableCell className="text-xs">{b.phone || "-"}</TableCell>
+                      <TableCell className="text-xs">
+                        {b.street ? `${b.street}, ${b.number || 'S/N'}` : '-'}
+                        {b.city && <div className="text-[10px] text-muted-foreground">{b.city} - {b.zip}</div>}
+                      </TableCell>
                       <TableCell>
                         <Badge variant={b.status === "active" ? "default" : "secondary"} className="text-[10px]">
                           {b.status === "active" ? "Ativo" : "Inativo"}

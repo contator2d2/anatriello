@@ -18,7 +18,25 @@ import { BrandImportDialog } from "@/components/merchandising/BrandImportDialog"
 import { Plus, Search, Pencil, Trash2, Building2, Store, ArrowRight, ArrowLeft, Upload } from "lucide-react";
 import { toast } from "sonner";
 
-const emptyBrand = { name: '', razao_social: '', cnpj: '', logo_url: '', description: '', segment: '', responsible: '', phone: '', email: '', status: 'active', notes: '' };
+const emptyBrand = { 
+  name: '', 
+  internal_code: '',
+  razao_social: '', 
+  cnpj: '', 
+  logo_url: '', 
+  description: '', 
+  segment: '', 
+  responsible: '', 
+  phone: '', 
+  email: '', 
+  street: '',
+  number: '',
+  neighborhood: '',
+  city: '',
+  zip: '',
+  status: 'active', 
+  notes: '' 
+};
 
 export default function MerchMarcas() {
   const [search, setSearch] = useState('');
@@ -217,6 +235,7 @@ export default function MerchMarcas() {
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{editingId ? 'Editar Marca' : 'Nova Marca'}</DialogTitle></DialogHeader>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2"><Label>Código Interno</Label><Input value={form.internal_code || ''} onChange={e => set('internal_code', e.target.value)} /></div>
             <div className="space-y-2"><Label>Nome *</Label><Input value={form.name} onChange={e => set('name', e.target.value)} /></div>
             <div className="space-y-2"><Label>Razão Social</Label><Input value={form.razao_social} onChange={e => set('razao_social', e.target.value)} /></div>
             <div className="space-y-2"><Label>CNPJ</Label><Input value={form.cnpj} onChange={e => set('cnpj', e.target.value)} /></div>
@@ -224,6 +243,13 @@ export default function MerchMarcas() {
             <div className="space-y-2"><Label>Responsável</Label><Input value={form.responsible} onChange={e => set('responsible', e.target.value)} /></div>
             <div className="space-y-2"><Label>Telefone</Label><Input value={form.phone} onChange={e => set('phone', e.target.value)} /></div>
             <div className="space-y-2"><Label>E-mail</Label><Input value={form.email} onChange={e => set('email', e.target.value)} /></div>
+            <div className="space-y-2"><Label>CEP</Label><Input value={form.zip} onChange={e => set('zip', e.target.value)} /></div>
+            <div className="space-y-2"><Label>Cidade</Label><Input value={form.city} onChange={e => set('city', e.target.value)} /></div>
+            <div className="col-span-full grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="md:col-span-2 space-y-2"><Label>Rua</Label><Input value={form.street} onChange={e => set('street', e.target.value)} /></div>
+              <div className="space-y-2"><Label>Número</Label><Input value={form.number} onChange={e => set('number', e.target.value)} /></div>
+            </div>
+            <div className="space-y-2"><Label>Bairro</Label><Input value={form.neighborhood} onChange={e => set('neighborhood', e.target.value)} /></div>
             <div className="space-y-2">
               <Label>Status</Label>
               <Select value={form.status} onValueChange={v => set('status', v)}>

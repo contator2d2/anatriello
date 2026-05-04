@@ -45,6 +45,7 @@ const buildProductImportError = (item, index, error) => ({
 });
 
 async function ensureMerchandisingInfra() {
+  logInfo('Checking merchandising infrastructure');
   if (infraDone) return;
   const statements = [
     `CREATE TABLE IF NOT EXISTS merch_brands (
