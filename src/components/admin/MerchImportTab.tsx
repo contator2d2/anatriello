@@ -37,7 +37,7 @@ interface ImportResult {
   }[];
 }
 
-const BRAND_COLUMNS = ["codigo/id", "name/nome/descricao", "razao_social", "cnpj", "telefone", "status"];
+const BRAND_COLUMNS = ["codigo/id", "name/nome/descricao", "razao_social", "cnpj", "telefone", "rua", "numero", "bairro", "cidade", "cep", "status"];
 const PRODUCT_COLUMNS = ["id_familia/codigo_familia", "brand_name/marca", "name/produto", "sku/codigo_interno", "barcode/ean", "categoria", "subcategoria", "status"];
 
 function ImportSection({ type }: { type: "brands" | "products" }) {

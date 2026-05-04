@@ -76,6 +76,11 @@ export function mapBrandImportRow(row: ImportParsedRow) {
     razao_social: cleanNull(getImportValue(row, ["razao_social", "razão social", "razao social"])),
     cnpj: cleanNull(getImportValue(row, ["cnpj"])),
     phone: cleanNull(getImportValue(row, ["phone", "telefone"])),
+    street: cleanNull(getImportValue(row, ["street", "rua", "logradouro"])),
+    number: cleanNull(getImportValue(row, ["number", "numero", "nº"])),
+    neighborhood: cleanNull(getImportValue(row, ["neighborhood", "bairro"])),
+    city: cleanNull(getImportValue(row, ["city", "cidade"])),
+    zip: cleanNull(getImportValue(row, ["zip", "cep", "postal_code"])),
     status: normalizeStatus(getImportValue(row, ["status", "ativo"])),
   };
 }

@@ -18,7 +18,7 @@ const getHeaders = () => {
   return t ? { Authorization: `Bearer ${t}` } : undefined;
 };
 
-const defaultForm = { name: '', cnpj: '', segment: '', contact_name: '', contact_phone: '', contact_email: '', notes: '' };
+const defaultForm = { name: '', cnpj: '', segment: '', contact_name: '', contact_phone: '', contact_email: '', notes: '', razao_social: '', street: '', number: '', neighborhood: '', city: '', zip: '' };
 
 export default function AgencyBrands() {
   const { user, isLoading: isAuthLoading } = useAgencyAuth();
@@ -65,6 +65,9 @@ export default function AgencyBrands() {
       name: b.name || '', cnpj: b.cnpj || '', segment: b.segment || '',
       contact_name: b.contact_name || '', contact_phone: b.contact_phone || '',
       contact_email: b.contact_email || '', notes: b.notes || '',
+      razao_social: b.razao_social || '', street: b.street || '',
+      number: b.number || '', neighborhood: b.neighborhood || '',
+      city: b.city || '', zip: b.zip || '',
     });
     setDialogOpen(true);
   };
@@ -163,7 +166,19 @@ export default function AgencyBrands() {
           <div className="space-y-4">
             <div><Label>Nome da Marca *</Label><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Ex: Nestlé" /></div>
             <div className="grid grid-cols-2 gap-3">
+              <div><Label>Razão Social</Label><Input value={form.razao_social} onChange={e => setForm(f => ({ ...f, razao_social: e.target.value }))} /></div>
               <div><Label>CNPJ</Label><Input value={form.cnpj} onChange={e => setForm(f => ({ ...f, cnpj: e.target.value }))} placeholder="00.000.000/0000-00" /></div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>Rua</Label><Input value={form.street} onChange={e => setForm(f => ({ ...f, street: e.target.value }))} /></div>
+              <div><Label>Número</Label><Input value={form.number} onChange={e => setForm(f => ({ ...f, number: e.target.value }))} /></div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>Bairro</Label><Input value={form.neighborhood} onChange={e => setForm(f => ({ ...f, neighborhood: e.target.value }))} /></div>
+              <div><Label>CEP</Label><Input value={form.zip} onChange={e => setForm(f => ({ ...f, zip: e.target.value }))} /></div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>Cidade</Label><Input value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} /></div>
               <div><Label>Segmento</Label><Input value={form.segment} onChange={e => setForm(f => ({ ...f, segment: e.target.value }))} placeholder="Ex: Alimentos" /></div>
             </div>
             <div><Label>Nome do Contato</Label><Input value={form.contact_name} onChange={e => setForm(f => ({ ...f, contact_name: e.target.value }))} /></div>
