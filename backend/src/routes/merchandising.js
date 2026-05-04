@@ -130,6 +130,11 @@ async function ensureMerchandisingInfra() {
     `CREATE INDEX IF NOT EXISTS idx_merch_pdv_bp_pdv ON merch_pdv_brand_products(pdv_id)`,
     `CREATE INDEX IF NOT EXISTS idx_merch_pdv_bp_brand ON merch_pdv_brand_products(brand_id)`,
     `DO $$ BEGIN ALTER TABLE merch_brands ADD COLUMN IF NOT EXISTS internal_code VARCHAR(100); EXCEPTION WHEN others THEN NULL; END $$`,
+    `DO $$ BEGIN ALTER TABLE merch_brands ADD COLUMN IF NOT EXISTS street VARCHAR(255); EXCEPTION WHEN others THEN NULL; END $$`,
+    `DO $$ BEGIN ALTER TABLE merch_brands ADD COLUMN IF NOT EXISTS number VARCHAR(50); EXCEPTION WHEN others THEN NULL; END $$`,
+    `DO $$ BEGIN ALTER TABLE merch_brands ADD COLUMN IF NOT EXISTS neighborhood VARCHAR(255); EXCEPTION WHEN others THEN NULL; END $$`,
+    `DO $$ BEGIN ALTER TABLE merch_brands ADD COLUMN IF NOT EXISTS city VARCHAR(255); EXCEPTION WHEN others THEN NULL; END $$`,
+    `DO $$ BEGIN ALTER TABLE merch_brands ADD COLUMN IF NOT EXISTS zip VARCHAR(20); EXCEPTION WHEN others THEN NULL; END $$`,
   ];
   for (const sql of statements) {
     try { await query(sql); } catch (err) { logError('merch infra stmt', err, { sql: sql.slice(0, 80) }); }
@@ -157,11 +162,11 @@ router.post('/brands', async (req, res) => {
   try {
     await ensureMerchandisingInfra();
     const orgId = req.orgId;
-    const { name, razao_social, cnpj, logo_url, description, segment, responsible, phone, email, status, notes } = req.body;
+    const { name, razao_social, cnpj, logo_url, description, segment, responsible, phone, email, status, notes, street, number, neighborhood, city, zip } = req.body;
     const r = await query(
-      `INSERT INTO merch_brands (organization_id, name, razao_social, cnpj, logo_url, description, segment, responsible, phone, email, status, notes)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
-      [orgId, name, razao_social, cnpj, logo_url, description, segment, responsible, phone, email, status || 'active', notes]
+      `INSERT INTO merch_brands (organization_id, name, razao_social, cnpj, logo_url, description, segment, responsible, phone, email, status, notes, street, number, neighborhood, city, zip)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING *`,
+      [orgId, name, razao_social, cnpj, logo_url, description, segment, responsible, phone, email, status || 'active', notes, street, number, neighborhood, city, zip]
     );
     res.json(r.rows[0]);
   } catch (e) { logError('create brand', e); res.status(500).json({ error: e.message }); }
@@ -169,10 +174,10 @@ router.post('/brands', async (req, res) => {
 
 router.put('/brands/:id', async (req, res) => {
   try {
-    const { name, razao_social, cnpj, logo_url, description, segment, responsible, phone, email, status, notes } = req.body;
+    const { name, razao_social, cnpj, logo_url, description, segment, responsible, phone, email, status, notes, street, number, neighborhood, city, zip } = req.body;
     const r = await query(
-      `UPDATE merch_brands SET name=$1, razao_social=$2, cnpj=$3, logo_url=$4, description=$5, segment=$6, responsible=$7, phone=$8, email=$9, status=$10, notes=$11, updated_at=NOW() WHERE id=$12 AND organization_id=$13 RETURNING *`,
-      [name, razao_social, cnpj, logo_url, description, segment, responsible, phone, email, status, notes, req.params.id, req.orgId]
+      `UPDATE merch_brands SET name=$1, razao_social=$2, cnpj=$3, logo_url=$4, description=$5, segment=$6, responsible=$7, phone=$8, email=$9, status=$10, notes=$11, street=$12, number=$13, neighborhood=$14, city=$15, zip=$16, updated_at=NOW() WHERE id=$17 AND organization_id=$18 RETURNING *`,
+      [name, razao_social, cnpj, logo_url, description, segment, responsible, phone, email, status, notes, street, number, neighborhood, city, zip, req.params.id, req.orgId]
     );
     res.json(r.rows[0]);
   } catch (e) { logError('update brand', e); res.status(500).json({ error: e.message }); }
@@ -189,7 +194,7 @@ router.delete('/brands/:id', async (req, res) => {
 router.post('/brands/import', async (req, res) => {
   try {
     await ensureMerchandisingInfra();
-    const { items } = req.body; // [{name, internal_code?, razao_social?, cnpj?, phone?, status?}]
+    const { items } = req.body; // [{name, internal_code?, razao_social?, cnpj?, phone?, street?, number?, neighborhood?, city?, zip?, status?}]
     if (!items?.length) return res.status(400).json({ error: 'Nenhum item enviado' });
     let created = 0, skipped = 0, updated = 0;
     for (const item of items) {
@@ -211,6 +216,20 @@ router.post('/brands/import', async (req, res) => {
         [req.orgId, name, internalCode]
       );
 
+      const brandData = {
+        name,
+        internal_code: internalCode || null,
+        razao_social: normalizeMerchText(item.razao_social) || null,
+        cnpj: normalizeMerchText(item.cnpj) || null,
+        phone: normalizeMerchText(item.phone) || null,
+        street: normalizeMerchText(item.street) || null,
+        number: normalizeMerchText(item.number) || null,
+        neighborhood: normalizeMerchText(item.neighborhood) || null,
+        city: normalizeMerchText(item.city) || null,
+        zip: normalizeMerchText(item.zip) || null,
+        status: normalizeMerchText(item.status) || 'active',
+      };
+
       if (existing.rows.length) {
         await query(
           `UPDATE merch_brands
@@ -219,34 +238,51 @@ router.post('/brands/import', async (req, res) => {
                razao_social = COALESCE(NULLIF($4, ''), razao_social),
                cnpj = COALESCE(NULLIF($5, ''), cnpj),
                phone = COALESCE(NULLIF($6, ''), phone),
-               status = COALESCE(NULLIF($7, ''), status),
+               street = COALESCE(NULLIF($7, ''), street),
+               number = COALESCE(NULLIF($8, ''), number),
+               neighborhood = COALESCE(NULLIF($9, ''), neighborhood),
+               city = COALESCE(NULLIF($10, ''), city),
+               zip = COALESCE(NULLIF($11, ''), zip),
+               status = COALESCE(NULLIF($12, ''), status),
                updated_at = NOW()
            WHERE id = $1`,
           [
             existing.rows[0].id,
-            name,
-            internalCode,
-            normalizeMerchText(item.razao_social),
-            normalizeMerchText(item.cnpj),
-            normalizeMerchText(item.phone),
-            normalizeMerchText(item.status) || 'active',
+            brandData.name,
+            brandData.internal_code,
+            brandData.razao_social,
+            brandData.cnpj,
+            brandData.phone,
+            brandData.street,
+            brandData.number,
+            brandData.neighborhood,
+            brandData.city,
+            brandData.zip,
+            brandData.status,
           ]
         );
-        if (!existing.rows[0].internal_code && internalCode) updated++;
-        else skipped++;
+        updated++;
         continue;
       }
 
       await query(
-        'INSERT INTO merch_brands (organization_id, name, internal_code, razao_social, cnpj, phone, status) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+        `INSERT INTO merch_brands (
+          organization_id, name, internal_code, razao_social, cnpj, phone, 
+          street, number, neighborhood, city, zip, status
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
         [
           req.orgId,
-          name,
-          internalCode || null,
-          normalizeMerchText(item.razao_social) || null,
-          normalizeMerchText(item.cnpj) || null,
-          normalizeMerchText(item.phone) || null,
-          normalizeMerchText(item.status) || 'active',
+          brandData.name,
+          brandData.internal_code,
+          brandData.razao_social,
+          brandData.cnpj,
+          brandData.phone,
+          brandData.street,
+          brandData.number,
+          brandData.neighborhood,
+          brandData.city,
+          brandData.zip,
+          brandData.status,
         ]
       );
       created++;
