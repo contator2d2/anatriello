@@ -928,6 +928,71 @@ router.put('/rh/pdvs/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: 'Erro' }); }
 });
 
+router.post('/rh/pdvs/import', async (req, res) => {
+  try {
+    const orgId = req.body.organization_id || (await query(`SELECT organization_id FROM organization_members WHERE user_id = $1 LIMIT 1`, [req.userId])).rows[0]?.organization_id;
+    const { items } = req.body;
+    if (!items?.length) return res.status(400).json({ error: 'Nenhum item enviado' });
+
+    let created = 0, updated = 0, skipped = 0;
+
+    for (const item of items) {
+      const name = String(item.name || item.fantasia || '').trim();
+      const cnpj = String(item.cnpj || '').replace(/\D/g, '');
+      const clientName = String(item.client_name || item.rede || '').trim();
+      const address = String(item.address || item.endereco || '').trim();
+      const zipCode = String(item.zip_code || item.cep || '').replace(/\D/g, '');
+      const city = String(item.city || item.cidade || '').trim();
+      const state = String(item.state || item.estado || '').trim();
+      const neighborhood = String(item.neighborhood || item.bairro || '').trim();
+      const externalCode = String(item.external_code || item.codigo || '').trim();
+
+      if (!name) { skipped++; continue; }
+
+      const existing = await query(
+        `SELECT id FROM pdvs WHERE organization_id = $1 AND (name = $2 OR (NULLIF($3, '') IS NOT NULL AND cnpj = $3))`,
+        [orgId, name, cnpj]
+      );
+
+      if (existing.rows.length) {
+        await query(
+          `UPDATE pdvs SET 
+            client_name = COALESCE(NULLIF($2, ''), client_name),
+            address = COALESCE(NULLIF($3, ''), address),
+            zip_code = COALESCE(NULLIF($4, ''), zip_code),
+            city = COALESCE(NULLIF($5, ''), city),
+            state = COALESCE(NULLIF($6, ''), state),
+            neighborhood = COALESCE(NULLIF($7, ''), neighborhood),
+            cnpj = COALESCE(NULLIF($8, ''), cnpj),
+            notes = COALESCE(notes, '') || CASE WHEN $9 <> '' THEN '\nCód: ' || $9 ELSE '' END,
+            updated_at = NOW()
+           WHERE id = $1`,
+          [existing.rows[0].id, clientName, address, zipCode, city, state, neighborhood, cnpj, externalCode]
+        );
+        updated++;
+      } else {
+        let lat = null, lng = null;
+        try {
+          const geo = await autoGeocode(address, city, state, zipCode, neighborhood);
+          if (geo) { lat = geo.lat; lng = geo.lng; }
+        } catch (_) {}
+
+        await query(
+          `INSERT INTO pdvs (organization_id, name, client_name, address, zip_code, city, state, neighborhood, cnpj, latitude, longitude, radius_meters, notes)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,200,$12)`,
+          [orgId, name, clientName, address, zipCode, city, state, neighborhood, cnpj, lat, lng, externalCode ? `Cód: ${externalCode}` : null]
+        );
+        created++;
+      }
+    }
+
+    res.json({ ok: true, created, updated, skipped });
+  } catch (err) {
+    logError('promotor.pdvs.import', err);
+    res.status(500).json({ error: 'Erro na importação' });
+  }
+});
+
 // =============================================
 // RH: VÍNCULO COLABORADOR ↔ PDV
 // =============================================

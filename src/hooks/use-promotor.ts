@@ -388,3 +388,11 @@ export function useSendNotice() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['rh-doc-deliveries'] }),
   });
 }
+
+export function useImportPDVs() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { items: any[] }) => api<any>('/api/promotor/rh/pdvs/import', { method: 'POST', body: data }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['rh-pdvs'] }),
+  });
+}

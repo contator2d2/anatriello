@@ -11,9 +11,10 @@ import { useToast } from "@/hooks/use-toast";
 import { useEmployees } from "@/hooks/use-rh";
 import { usePDVs, useCreatePDV, useUpdatePDV } from "@/hooks/use-promotor";
 import { useGeocode } from "@/hooks/use-rh";
-import { MapPin, Plus, Edit, Search, Loader2, Navigation } from "lucide-react";
+import { MapPin, Plus, Edit, Search, Loader2, Navigation, Upload } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { PDVImportDialog } from "@/components/promotor/PDVImportDialog";
 
 const EMPTY_PDV = { name: '', client_name: '', address: '', address_number: '', complement: '', zip_code: '', city: '', state: '', neighborhood: '', latitude: '', longitude: '', radius_meters: 200, supervisor_id: '', notes: '', active: true };
 
@@ -26,6 +27,7 @@ function splitAddressAndNumber(address: string) {
 
 export default function RHPDVs() {
   const [showDialog, setShowDialog] = useState(false);
+  const [showImportDialog, setShowImportDialog] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState(EMPTY_PDV);
   const [search, setSearch] = useState("");
@@ -80,7 +82,10 @@ export default function RHPDVs() {
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-bold flex items-center gap-2"><MapPin className="h-5 w-5" /> Cadastro de PDVs</h1>
-          <Button onClick={openCreate}><Plus className="h-4 w-4 mr-2" /> Novo PDV</Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setShowImportDialog(true)}><Upload className="h-4 w-4 mr-2" /> Importar</Button>
+            <Button onClick={openCreate}><Plus className="h-4 w-4 mr-2" /> Novo PDV</Button>
+          </div>
         </div>
 
         <div className="relative max-w-sm"><Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" /><Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar PDV..." className="pl-9" /></div>
@@ -114,6 +119,8 @@ export default function RHPDVs() {
             </TableBody>
           </Table>
         </Card>
+
+        <PDVImportDialog open={showImportDialog} onOpenChange={setShowImportDialog} />
       </div>
 
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
