@@ -939,16 +939,19 @@ router.post('/rh/pdvs/import', async (req, res) => {
     for (const item of items) {
       const name = String(item.name || item.fantasia || '').trim();
       const cnpj = String(item.cnpj || '').replace(/\D/g, '');
-      const clientName = String(item.client_name || item.rede || '').trim();
-      const address = String(item.address || item.endereco || '').trim();
-      const zipCode = String(item.zip_code || item.cep || '').replace(/\D/g, '');
-      const city = String(item.city || item.cidade || '').trim();
-      const state = String(item.state || item.estado || '').trim();
-      const neighborhood = String(item.neighborhood || item.bairro || '').trim();
-      const externalCode = String(item.external_code || item.codigo || '').trim();
+      const clientName = String(item.rede || item.client_name || '').trim();
+      const address = String(item.endereco || item.address || '').trim();
+      const zipCode = String(item.cep || item.zip_code || '').replace(/\D/g, '');
+      const city = String(item.cidade || item.city || '').trim();
+      const state = String(item.estado || item.state || '').trim();
+      const neighborhood = String(item.bairro || item.neighborhood || '').trim();
+      const externalCode = String(item.codigo || item.external_code || '').trim();
 
       if (!name) { skipped++; continue; }
 
+      // No sistema, "Rede" é o campo client_name da tabela pdvs.
+      // Ele é um campo de texto livre na tabela pdvs, então não precisa criar em outra tabela antes.
+      
       const existing = await query(
         `SELECT id FROM pdvs WHERE organization_id = $1 AND (name = $2 OR (NULLIF($3, '') IS NOT NULL AND cnpj = $3))`,
         [orgId, name, cnpj]
