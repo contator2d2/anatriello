@@ -928,9 +928,11 @@ router.put('/rh/pdvs/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: 'Erro' }); }
 });
 
-router.post('/rh/pdvs/import', async (req, res) => {
+router.post('/rh/pdvs/import', authenticate, async (req, res) => {
   try {
-    const orgId = req.body.organization_id || (await query(`SELECT organization_id FROM organization_members WHERE user_id = $1 LIMIT 1`, [req.userId])).rows[0]?.organization_id;
+    const orgId = await resolveOrganizationId(req);
+    if (!orgId) return res.status(401).json({ error: 'Organização não encontrada para o usuário' });
+    
     const { items } = req.body;
     if (!items?.length) return res.status(400).json({ error: 'Nenhum item enviado' });
 
@@ -953,7 +955,7 @@ router.post('/rh/pdvs/import', async (req, res) => {
       // Ele é um campo de texto livre na tabela pdvs, então não precisa criar em outra tabela antes.
       
       const existing = await query(
-        `SELECT id FROM pdvs WHERE organization_id = $1 AND (name = $2 OR (NULLIF($3, '') IS NOT NULL AND cnpj = $3))`,
+        `SELECT id FROM pdvs WHERE organization_id = $1 AND (name = $2 OR (NULLIF($3, '') IS NOT NULL AND cnpj = $3)) LIMIT 1`,
         [orgId, name, cnpj]
       );
 
@@ -991,8 +993,9 @@ router.post('/rh/pdvs/import', async (req, res) => {
 
     res.json({ ok: true, created, updated, skipped });
   } catch (err) {
+    console.error('Error in PDV import:', err);
     logError('promotor.pdvs.import', err);
-    res.status(500).json({ error: 'Erro na importação' });
+    res.status(500).json({ error: 'Erro na importação: ' + err.message });
   }
 });
 
