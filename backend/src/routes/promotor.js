@@ -955,7 +955,7 @@ router.post('/rh/pdvs/import', async (req, res) => {
       // Ele é um campo de texto livre na tabela pdvs, então não precisa criar em outra tabela antes.
       
       const existing = await query(
-        `SELECT id FROM pdvs WHERE organization_id = $1 AND (name = $2 OR (NULLIF($3, '') IS NOT NULL AND cnpj = $3))`,
+        `SELECT id FROM pdvs WHERE organization_id = $1 AND (name = $2 OR (NULLIF($3, '') IS NOT NULL AND cnpj = $3)) LIMIT 1`,
         [orgId, name, cnpj]
       );
 
