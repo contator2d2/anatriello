@@ -3840,7 +3840,8 @@ ALTER TABLE employee_absences ADD COLUMN IF NOT EXISTS organization_id UUID;
 // ============================================
 const step43PromotorApp = `
 -- PDVs
-CREATE TABLE IF NOT EXISTS pdvs (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE, name VARCHAR(255) NOT NULL, client_name VARCHAR(255), address TEXT, zip_code VARCHAR(10), city VARCHAR(100), state VARCHAR(2), neighborhood VARCHAR(100), latitude NUMERIC(10,7), longitude NUMERIC(10,7), radius_meters INTEGER DEFAULT 200, supervisor_id UUID, active BOOLEAN DEFAULT true, notes TEXT, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW());
+CREATE TABLE IF NOT EXISTS pdvs (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE, name VARCHAR(255) NOT NULL, client_name VARCHAR(255), cnpj VARCHAR(20), address TEXT, zip_code VARCHAR(10), city VARCHAR(100), state VARCHAR(2), neighborhood VARCHAR(100), latitude NUMERIC(10,7), longitude NUMERIC(10,7), radius_meters INTEGER DEFAULT 200, supervisor_id UUID, active BOOLEAN DEFAULT true, notes TEXT, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW());
+DO $$ BEGIN ALTER TABLE pdvs ADD COLUMN IF NOT EXISTS cnpj VARCHAR(20); EXCEPTION WHEN duplicate_column THEN null; END $$;
 CREATE INDEX IF NOT EXISTS idx_pdvs_org ON pdvs(organization_id);
 
 -- Collaborator PDVs

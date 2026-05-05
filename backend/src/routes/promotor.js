@@ -955,8 +955,8 @@ router.post('/rh/pdvs/import', authenticate, async (req, res) => {
       // Ele é um campo de texto livre na tabela pdvs, então não precisa criar em outra tabela antes.
       
       const existing = await query(
-        `SELECT id FROM pdvs WHERE organization_id = $1 AND (name = $2 OR (NULLIF($3, '') IS NOT NULL AND cnpj = $3)) LIMIT 1`,
-        [orgId, name, cnpj]
+        `SELECT id FROM pdvs WHERE organization_id = $1 AND name = $2 LIMIT 1`,
+        [orgId, name]
       );
 
       if (existing.rows.length) {
@@ -968,11 +968,10 @@ router.post('/rh/pdvs/import', authenticate, async (req, res) => {
             city = COALESCE(NULLIF($5, ''), city),
             state = COALESCE(NULLIF($6, ''), state),
             neighborhood = COALESCE(NULLIF($7, ''), neighborhood),
-            cnpj = COALESCE(NULLIF($8, ''), cnpj),
-            notes = COALESCE(notes, '') || CASE WHEN $9 <> '' THEN '\nCód: ' || $9 ELSE '' END,
+            notes = COALESCE(notes, '') || CASE WHEN $8 <> '' THEN '\nCód: ' || $8 ELSE '' END,
             updated_at = NOW()
            WHERE id = $1`,
-          [existing.rows[0].id, clientName, address, zipCode, city, state, neighborhood, cnpj, externalCode]
+          [existing.rows[0].id, clientName, address, zipCode, city, state, neighborhood, externalCode]
         );
         updated++;
       } else {
@@ -983,9 +982,9 @@ router.post('/rh/pdvs/import', authenticate, async (req, res) => {
         } catch (_) {}
 
         await query(
-          `INSERT INTO pdvs (organization_id, name, client_name, address, zip_code, city, state, neighborhood, cnpj, latitude, longitude, radius_meters, notes)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,200,$12)`,
-          [orgId, name, clientName, address, zipCode, city, state, neighborhood, cnpj, lat, lng, externalCode ? `Cód: ${externalCode}` : null]
+          `INSERT INTO pdvs (organization_id, name, client_name, address, zip_code, city, state, neighborhood, latitude, longitude, radius_meters, notes)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,200,$11)`,
+          [orgId, name, clientName, address, zipCode, city, state, neighborhood, lat, lng, externalCode ? `Cód: ${externalCode}` : null]
         );
         created++;
       }
