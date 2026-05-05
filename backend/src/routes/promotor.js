@@ -931,6 +931,8 @@ router.put('/rh/pdvs/:id', async (req, res) => {
 router.post('/rh/pdvs/import', async (req, res) => {
   try {
     const orgId = await resolveOrganizationId(req);
+    if (!orgId) return res.status(401).json({ error: 'Organização não encontrada para o usuário' });
+    
     const { items } = req.body;
     if (!items?.length) return res.status(400).json({ error: 'Nenhum item enviado' });
 
