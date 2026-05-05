@@ -928,7 +928,7 @@ router.put('/rh/pdvs/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: 'Erro' }); }
 });
 
-router.post('/rh/pdvs/import', async (req, res) => {
+router.post('/rh/pdvs/import', authenticate, async (req, res) => {
   try {
     const orgId = await resolveOrganizationId(req);
     if (!orgId) return res.status(401).json({ error: 'Organização não encontrada para o usuário' });
