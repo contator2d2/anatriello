@@ -930,7 +930,7 @@ router.put('/rh/pdvs/:id', async (req, res) => {
 
 router.post('/rh/pdvs/import', async (req, res) => {
   try {
-    const orgId = req.body.organization_id || (await query(`SELECT organization_id FROM organization_members WHERE user_id = $1 LIMIT 1`, [req.userId])).rows[0]?.organization_id;
+    const orgId = await resolveOrganizationId(req);
     const { items } = req.body;
     if (!items?.length) return res.status(400).json({ error: 'Nenhum item enviado' });
 
