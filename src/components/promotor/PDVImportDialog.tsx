@@ -21,7 +21,7 @@ export function PDVImportDialog({ open, onOpenChange }: Props) {
   const [items, setItems] = useState<any[]>([]);
   const [fileName, setFileName] = useState("");
   const [importing, setImporting] = useState(false);
-  const [result, setResult] = useState<{ created: number; updated: number; skipped: number } | null>(null);
+  const [result, setResult] = useState<{ created: number; updated: number; skipped: number; networks_created?: number } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const importPDVs = useImportPDVs();
 
