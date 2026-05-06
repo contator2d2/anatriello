@@ -16,7 +16,7 @@ const isPreviewHost =
   window.location.hostname.includes("id-preview--") ||
   window.location.hostname.includes("lovableproject.com");
 
-const shouldWatchForUpdates = import.meta.env.PROD && !isInIframe && !isPreviewHost;
+const shouldWatchForUpdates = !isInIframe && !isPreviewHost;
 
 export function PWAUpdateBanner() {
   const [showPopup, setShowPopup] = useState(false);

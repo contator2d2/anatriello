@@ -990,7 +990,7 @@ router.post('/rh/pdvs/import', authenticate, async (req, res) => {
       const address = String(item.endereco || item.address || '').trim();
       const zipCode = String(item.cep || item.zip_code || '').replace(/\D/g, '');
       const city = String(item.cidade || item.city || '').trim();
-      const state = String(item.estado || item.state || '').trim();
+      const state = String(item.estado || item.state || '').trim().substring(0, 2).toUpperCase();
       const neighborhood = String(item.bairro || item.neighborhood || '').trim();
       const externalCode = String(item.codigo || item.external_code || '').trim();
 
