@@ -695,15 +695,17 @@ router.post('/products/import', async (req, res) => {
           );
           results.updated++;
         } else {
-          await client.query(
+          const insertedProduct = await client.query(
             `INSERT INTO merch_products (organization_id, brand_id, category_id, subcategory_id, name, sku, internal_code, barcode, description, image_url, unit, status)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+             RETURNING id`,
             [orgId, brandId, categoryId, subcategoryId, name, sku || null, internalCode || null, barcode || null, description || null, imageUrl || null, unit, status]
           );
+          productMap.set(productKey, insertedProduct.rows[0].id);
           results.created++;
         }
         
-        productMap.set(productKey, true); // Mark as processed in this batch
+        if (existingProductId && typeof existingProductId === 'string') productMap.set(productKey, existingProductId);
         results.success++;
       } catch (itemErr) {
         results.errors.push(buildProductImportError(item, index, itemErr.message || 'Erro desconhecido'));
