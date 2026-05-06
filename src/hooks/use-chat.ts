@@ -191,7 +191,7 @@ export const useChat = () => {
     pollAlerts();
 
     // Poll every 15 seconds
-    alertsPollingRef.current = setInterval(pollAlerts, 15000);
+    alertsPollingRef.current = setInterval(pollAlerts, 60000);
   }, [getAlerts, markAlertsRead]);
 
   const stopAlertsPolling = useCallback(() => {
