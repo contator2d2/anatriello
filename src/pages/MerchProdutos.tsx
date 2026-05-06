@@ -28,8 +28,11 @@ export default function MerchProdutos() {
   const [form, setForm] = useState<any>(emptyProduct);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [importProgress, setImportProgress] = useState<{ total: number; current: number; success: number; created: number; updated: number; errors: number; isOpen: boolean }>({
-    total: 0, current: 0, success: 0, created: 0, updated: 0, errors: 0, isOpen: false
+  const [importProgress, setImportProgress] = useState<{ 
+    total: number; current: number; success: number; created: number; updated: number; errors: number; isOpen: boolean;
+    errorList: any[];
+  }>({
+    total: 0, current: 0, success: 0, created: 0, updated: 0, errors: 0, isOpen: false, errorList: []
   });
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -109,7 +112,8 @@ export default function MerchProdutos() {
         created: 0,
         updated: 0,
         errors: 0,
-        isOpen: true
+        isOpen: true,
+        errorList: []
       });
       
       const chunkSize = 10;
@@ -127,8 +131,10 @@ export default function MerchProdutos() {
           createdCount += result.created || 0;
           updatedCount += result.updated || 0;
           
+          let chunkErrors = [];
           if (result.errors?.length > 0) {
             totalErrors += result.errors.length;
+            chunkErrors = result.errors;
             if (!firstErrorMessage) {
               const firstError = result.errors[0];
               firstErrorMessage = `Linha ${firstError.line || firstError.row || '-'}: ${firstError.error}`;
@@ -141,17 +147,25 @@ export default function MerchProdutos() {
             success: successCount,
             created: createdCount,
             updated: updatedCount,
-            errors: totalErrors
+            errors: totalErrors,
+            errorList: [...prev.errorList, ...chunkErrors]
           }));
         } catch (chunkErr: any) {
           console.error("Erro no lote de importação:", chunkErr);
+          const chunkErrors = chunk.map((item, idx) => ({
+            line: i + idx + 2,
+            error: chunkErr.message || 'Falha na conexão/servidor',
+            name: item.name
+          }));
+          
           totalErrors += chunk.length;
           if (!firstErrorMessage) firstErrorMessage = chunkErr.message;
           
           setImportProgress(prev => ({
             ...prev,
             current: Math.min(i + chunkSize, allItems.length),
-            errors: totalErrors
+            errors: totalErrors,
+            errorList: [...prev.errorList, ...chunkErrors]
           }));
         }
       }
@@ -267,46 +281,68 @@ export default function MerchProdutos() {
       </div>
 
       <Dialog open={importProgress.isOpen} onOpenChange={(open) => !importProgress.current || importProgress.current === importProgress.total ? setImportProgress(prev => ({ ...prev, isOpen: open })) : null}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
           <DialogHeader><DialogTitle>Importando Produtos</DialogTitle></DialogHeader>
-          <div className="py-6 space-y-4">
+          <div className="py-6 space-y-4 overflow-y-auto flex-1 px-1">
             <div className="w-full bg-secondary rounded-full h-4 overflow-hidden">
               <div 
                 className="bg-primary h-full transition-all duration-300" 
                 style={{ width: `${(importProgress.current / importProgress.total) * 100}%` }}
               />
             </div>
-            <div className="grid grid-cols-2 gap-4 text-sm">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
               <div className="flex flex-col">
-                <span className="text-muted-foreground">Progresso</span>
+                <span className="text-muted-foreground text-xs uppercase">Progresso</span>
                 <span className="font-bold">{importProgress.current} / {importProgress.total}</span>
               </div>
               <div className="flex flex-col">
-                <span className="text-muted-foreground">Sucesso</span>
+                <span className="text-muted-foreground text-xs uppercase text-green-600">Sucesso</span>
                 <span className="font-bold text-green-600">{importProgress.success}</span>
               </div>
               <div className="flex flex-col">
-                <span className="text-muted-foreground">Novos</span>
+                <span className="text-muted-foreground text-xs uppercase">Novos</span>
                 <span className="font-bold">{importProgress.created}</span>
               </div>
               <div className="flex flex-col">
-                <span className="text-muted-foreground">Atualizados</span>
+                <span className="text-muted-foreground text-xs uppercase text-blue-600">Atualizados</span>
                 <span className="font-bold text-blue-600">{importProgress.updated}</span>
               </div>
-              {importProgress.errors > 0 && (
-                <div className="flex flex-col col-span-2">
-                  <span className="text-muted-foreground">Erros</span>
-                  <span className="font-bold text-destructive">{importProgress.errors}</span>
-                </div>
-              )}
             </div>
+
+            {importProgress.errorList.length > 0 && (
+              <div className="mt-4 space-y-2">
+                <h4 className="font-bold text-sm text-destructive flex items-center gap-2">
+                  <span>Lista de Erros ({importProgress.errorList.length})</span>
+                </h4>
+                <div className="border rounded-md max-h-[250px] overflow-y-auto bg-destructive/5">
+                  <Table>
+                    <TableHeader className="bg-muted/50 sticky top-0 z-10">
+                      <TableRow>
+                        <TableHead className="w-16 h-8 text-xs py-2">Linha</TableHead>
+                        <TableHead className="h-8 text-xs py-2">Produto</TableHead>
+                        <TableHead className="h-8 text-xs py-2">Motivo do Erro</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {importProgress.errorList.map((err, i) => (
+                        <TableRow key={i}>
+                          <TableCell className="py-2 text-xs font-mono">{err.line || err.row || '-'}</TableCell>
+                          <TableCell className="py-2 text-xs font-medium">{err.name || 'Desconhecido'}</TableCell>
+                          <TableCell className="py-2 text-xs text-destructive">{err.error}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            )}
           </div>
-          <DialogFooter>
+          <DialogFooter className="pt-4 border-t">
             <Button 
               disabled={importProgress.current < importProgress.total} 
               onClick={() => setImportProgress(prev => ({ ...prev, isOpen: false }))}
             >
-              Fechar
+              {importProgress.current < importProgress.total ? 'Importando...' : 'Fechar'}
             </Button>
           </DialogFooter>
         </DialogContent>
