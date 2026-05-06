@@ -617,12 +617,17 @@ router.post('/products/import', async (req, res) => {
           const brandKey = normalizeMerchKey(brandName);
           brandId = brandMap.get(brandKey) || null;
           if (!brandId && auto_create) {
-            const insertedBrand = await client.query(
-              'INSERT INTO merch_brands (organization_id, name) VALUES ($1,$2) RETURNING id',
-              [orgId, brandName]
-            );
-            brandId = insertedBrand.rows[0].id;
-            brandMap.set(brandKey, brandId);
+            try {
+              const insertedBrand = await client.query(
+                'INSERT INTO merch_brands (organization_id, name) VALUES ($1,$2) RETURNING id',
+                [orgId, brandName]
+              );
+              brandId = insertedBrand.rows[0].id;
+              brandMap.set(brandKey, brandId);
+            } catch (brandErr) {
+              results.errors.push(buildProductImportError(item, index, `Erro ao criar marca: ${brandErr.message}`));
+              continue;
+            }
           }
         }
         if (!brandId) {
@@ -636,12 +641,17 @@ router.post('/products/import', async (req, res) => {
           const categoryKey = normalizeMerchKey(categoryName);
           categoryId = categoryMap.get(categoryKey) || null;
           if (!categoryId && (auto_create || !rawCategoryName)) {
-            const insertedCategory = await client.query(
-              'INSERT INTO merch_categories (organization_id, name) VALUES ($1,$2) RETURNING id',
-              [orgId, categoryName]
-            );
-            categoryId = insertedCategory.rows[0].id;
-            categoryMap.set(categoryKey, categoryId);
+            try {
+              const insertedCategory = await client.query(
+                'INSERT INTO merch_categories (organization_id, name) VALUES ($1,$2) RETURNING id',
+                [orgId, categoryName]
+              );
+              categoryId = insertedCategory.rows[0].id;
+              categoryMap.set(categoryKey, categoryId);
+            } catch (catErr) {
+              results.errors.push(buildProductImportError(item, index, `Erro ao criar categoria: ${catErr.message}`));
+              continue;
+            }
           }
         }
         if (!categoryId) {
@@ -654,12 +664,17 @@ router.post('/products/import', async (req, res) => {
           const subcategoryKey = `${categoryId}:${normalizeMerchKey(subcategoryName)}`;
           subcategoryId = subcategoryMap.get(subcategoryKey) || null;
           if (!subcategoryId && (auto_create || !rawSubcategoryName || !rawCategoryName)) {
-            const insertedSubcategory = await client.query(
-              'INSERT INTO merch_subcategories (organization_id, category_id, name) VALUES ($1,$2,$3) RETURNING id',
-              [orgId, categoryId, subcategoryName]
-            );
-            subcategoryId = insertedSubcategory.rows[0].id;
-            subcategoryMap.set(subcategoryKey, subcategoryId);
+            try {
+              const insertedSubcategory = await client.query(
+                'INSERT INTO merch_subcategories (organization_id, category_id, name) VALUES ($1,$2,$3) RETURNING id',
+                [orgId, categoryId, subcategoryName]
+              );
+              subcategoryId = insertedSubcategory.rows[0].id;
+              subcategoryMap.set(subcategoryKey, subcategoryId);
+            } catch (subErr) {
+              results.errors.push(buildProductImportError(item, index, `Erro ao criar subcategoria: ${subErr.message}`));
+              continue;
+            }
           }
         }
         if (!subcategoryId) {
@@ -670,7 +685,7 @@ router.post('/products/import', async (req, res) => {
         const productKey = `${brandId}:${normalizeMerchKey(name)}`;
         const existingProductId = productMap.get(productKey);
 
-        if (existingProductId) {
+        if (existingProductId && typeof existingProductId === 'string') {
           await client.query(
             `UPDATE merch_products 
              SET category_id=$1, subcategory_id=$2, sku=$3, internal_code=$4, barcode=$5, description=$6, image_url=$7, unit=$8, status=$9, updated_at=NOW()
@@ -691,6 +706,7 @@ router.post('/products/import', async (req, res) => {
         results.success++;
       } catch (itemErr) {
         results.errors.push(buildProductImportError(item, index, itemErr.message || 'Erro desconhecido'));
+        // We don't throw here, allowing other items in the chunk to continue
       }
     }
 
