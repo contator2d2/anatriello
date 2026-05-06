@@ -292,6 +292,47 @@ router.post('/brands/import', async (req, res) => {
   } catch (e) { logError('import brands', e); res.status(500).json({ error: e.message }); }
 });
 
+// Export brands
+router.get('/brands/export', async (req, res) => {
+  try {
+    await ensureMerchandisingInfra();
+    const orgId = req.orgId;
+    const { status, search } = req.query;
+    let sql = 'SELECT * FROM merch_brands WHERE organization_id = $1';
+    const params = [orgId];
+    if (status && status !== 'all') { params.push(status); sql += ` AND status = $${params.length}`; }
+    if (search) { params.push(`%${search}%`); sql += ` AND (name ILIKE $${params.length} OR razao_social ILIKE $${params.length})`; }
+    sql += ' ORDER BY name';
+    
+    const result = await query(sql, params);
+    
+    const headers = ['Código Interno', 'Nome', 'Razão Social', 'CNPJ', 'Segmento', 'Responsável', 'Telefone', 'E-mail', 'Endereço', 'Número', 'Bairro', 'Cidade', 'CEP', 'Status', 'Notas'];
+    const escape = (v) => {
+      if (v === null || v === undefined) return '';
+      const s = String(v).replace(/"/g, '""');
+      return /[",;\n]/.test(s) ? `"${s}"` : s;
+    };
+    
+    const lines = [headers.join(';')];
+    for (const r of result.rows) {
+      lines.push([
+        r.internal_code, r.name, r.razao_social, r.cnpj, r.segment, r.responsible, r.phone, r.email,
+        r.street, r.number, r.neighborhood, r.city, r.zip, 
+        r.status === 'active' ? 'Ativo' : 'Inativo',
+        r.notes
+      ].map(escape).join(';'));
+    }
+    
+    const csv = '\ufeff' + lines.join('\n');
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="marcas_${new Date().toISOString().slice(0,10)}.csv"`);
+    res.send(csv);
+  } catch (err) {
+    logError('merch.brands.export', err);
+    res.status(500).json({ error: 'Erro ao exportar marcas' });
+  }
+});
+
 // ==================== CATEGORIES ====================
 router.get('/categories', async (req, res) => {
   try {

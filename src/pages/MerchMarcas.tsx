@@ -15,7 +15,9 @@ import { useBrands, useCreateBrand, useUpdateBrand, useDeleteBrand, useBrandPdvs
 import { usePDVs } from "@/hooks/use-promotor";
 import { FileUploadInput } from "@/components/ui/file-upload-input";
 import { BrandImportDialog } from "@/components/merchandising/BrandImportDialog";
-import { Plus, Search, Pencil, Trash2, Building2, Store, ArrowRight, ArrowLeft, Upload } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, Building2, Store, ArrowRight, ArrowLeft, Upload, Download } from "lucide-react";
+import { getAuthToken } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
 const emptyBrand = { 
@@ -48,6 +50,10 @@ export default function MerchMarcas() {
   const [pdvDialogBrand, setPdvDialogBrand] = useState<any>(null);
   const [pdvSearch, setPdvSearch] = useState('');
   const [importOpen, setImportOpen] = useState(false);
+
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'owner' || user?.role === 'admin';
+  const [exporting, setExporting] = useState(false);
 
   const { data: brands = [], isLoading } = useBrands({ search, status: statusFilter });
   const createBrand = useCreateBrand();
@@ -114,6 +120,39 @@ export default function MerchMarcas() {
 
   const set = (k: string, v: any) => setForm((p: any) => ({ ...p, [k]: v }));
 
+  const handleExport = async () => {
+    try {
+      setExporting(true);
+      const token = getAuthToken();
+      const params = new URLSearchParams();
+      if (statusFilter && statusFilter !== 'all') params.set('status', statusFilter);
+      if (search) params.set('search', search);
+      const qs = params.toString();
+      
+      const res = await fetch(`/api/merchandising/brands/export${qs ? `?${qs}` : ''}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Erro ao exportar marcas');
+      }
+      
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `marcas_${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('Exportação concluída');
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const handleLinkPdv = async (pdvId: string) => {
     try {
       await addPdvBrand.mutateAsync({ pdv_id: pdvId, brand_id: pdvDialogBrand.id });
@@ -152,9 +191,17 @@ export default function MerchMarcas() {
                 <Trash2 className="h-4 w-4 mr-2" />Excluir {selectedIds.size}
               </Button>
             )}
-            <Button variant="outline" onClick={() => setImportOpen(true)}>
-              <Upload className="h-4 w-4 mr-2" />Importar
-            </Button>
+            {isAdmin && (
+              <>
+                <Button variant="outline" onClick={handleExport} disabled={exporting}>
+                  <Download className="h-4 w-4 mr-2" />
+                  {exporting ? 'Exportando...' : 'Exportar'}
+                </Button>
+                <Button variant="outline" onClick={() => setImportOpen(true)}>
+                  <Upload className="h-4 w-4 mr-2" />Importar
+                </Button>
+              </>
+            )}
             <Button onClick={openNew}><Plus className="h-4 w-4 mr-2" />Nova Marca</Button>
           </div>
         </div>
