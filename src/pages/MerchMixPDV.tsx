@@ -10,8 +10,9 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useBrands, useProducts, usePdvBrands, useAddPdvBrand, useRemovePdvBrand, useBrandPdvs, useMix, useAddToMix, useRemoveFromMix } from "@/hooks/use-merchandising";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { Search, Plus, Trash2, Store, Building2, Package, ArrowRight, ArrowLeft, ChevronRight } from "lucide-react";
+import { Search, Plus, Trash2, Store, Building2, Package, ArrowRight, ArrowLeft, ChevronRight, Upload } from "lucide-react";
 import { toast } from "sonner";
+import { MixImportDialog } from "@/components/merchandising/MixImportDialog";
 
 export default function MerchMixPDV() {
   const [selectedBrandId, setSelectedBrandId] = useState<string>('');
@@ -19,6 +20,7 @@ export default function MerchMixPDV() {
   const [productSearch, setProductSearch] = useState('');
   const [selectedToAdd, setSelectedToAdd] = useState<string[]>([]);
   const [selectedToRemove, setSelectedToRemove] = useState<string[]>([]);
+  const [importOpen, setImportOpen] = useState(false);
 
   const { data: allBrands = [] } = useBrands({ status: 'active' });
   const { data: brandPdvs = [] } = useBrandPdvs(selectedBrandId || undefined);
@@ -81,9 +83,14 @@ export default function MerchMixPDV() {
                   {brandPdvs.length} PDV(s) vinculado(s)
                 </div>
               )}
+              <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
+                <Upload className="h-4 w-4 mr-2" />
+                Importar Mix
+              </Button>
             </div>
           </CardContent>
         </Card>
+        <MixImportDialog open={importOpen} onOpenChange={setImportOpen} />
 
         {selectedBrandId && (
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">

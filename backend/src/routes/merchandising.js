@@ -846,6 +846,110 @@ router.delete('/pdv-brands/:id', async (req, res) => {
 });
 
 // ==================== MIX (PDV BRAND PRODUCTS) ====================
+
+// Bulk import mix entries from spreadsheet rows: { items: [{pdv_name, brand_name, product_name, sku?, mandatory?, priority?}] }
+router.post('/mix/import', async (req, res) => {
+  try {
+    await ensureMerchandisingInfra();
+    const { items } = req.body || {};
+    if (!Array.isArray(items) || !items.length) {
+      return res.status(400).json({ error: 'Nenhum item enviado' });
+    }
+    const orgId = req.orgId;
+    const norm = (s) => String(s || '')
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase().trim().replace(/\s+/g, ' ');
+
+    const [brandsRes, pdvsRes, productsRes] = await Promise.all([
+      query(`SELECT id, name FROM merch_brands WHERE organization_id=$1`, [orgId]),
+      query(`SELECT id, name FROM pdvs WHERE organization_id=$1`, [orgId]),
+      query(`SELECT id, name, sku, brand_id FROM merch_products WHERE organization_id=$1`, [orgId]),
+    ]);
+    const brandsMap = new Map(brandsRes.rows.map(b => [norm(b.name), b.id]));
+    const pdvsMap = new Map(pdvsRes.rows.map(p => [norm(p.name), p.id]));
+    const productsByBrandName = new Map();
+    const productsBySku = new Map();
+    for (const p of productsRes.rows) {
+      productsByBrandName.set(`${p.brand_id}|${norm(p.name)}`, p.id);
+      if (p.sku) productsBySku.set(`${p.brand_id}|${norm(p.sku)}`, p.id);
+    }
+
+    const linkedBrands = new Set();
+    let inserted = 0, updated = 0, skipped = 0;
+    const missing_pdvs = [], missing_brands = [], missing_products = [], errors = [];
+
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i] || {};
+      const line = it.__line || (i + 2);
+      const pdvName = String(it.pdv_name || it.pdv || '').trim();
+      const brandName = String(it.brand_name || it.marca || it.cliente || '').trim();
+      const productName = String(it.product_name || it.produto || it.name || '').trim();
+      const sku = String(it.sku || '').trim();
+      const mandatory = ['1','true','sim','obrigatorio','obrigatório','yes'].includes(String(it.mandatory || '').toLowerCase());
+      const priority = ['alta','media','média','baixa'].includes(String(it.priority || '').toLowerCase())
+        ? String(it.priority).toLowerCase().replace('média','media') : 'media';
+
+      if (!pdvName || !brandName || !productName) { skipped++; continue; }
+
+      const pdvId = pdvsMap.get(norm(pdvName));
+      if (!pdvId) {
+        if (missing_pdvs.length < 100) missing_pdvs.push({ line, pdv: pdvName });
+        continue;
+      }
+      const brandId = brandsMap.get(norm(brandName));
+      if (!brandId) {
+        if (missing_brands.length < 100) missing_brands.push({ line, brand: brandName });
+        continue;
+      }
+      let productId = (sku && productsBySku.get(`${brandId}|${norm(sku)}`)) || productsByBrandName.get(`${brandId}|${norm(productName)}`);
+      if (!productId) {
+        if (missing_products.length < 200) missing_products.push({ line, brand: brandName, product: productName });
+        continue;
+      }
+
+      try {
+        // Ensure pdv-brand link exists (only once per pair)
+        const pairKey = `${pdvId}|${brandId}`;
+        if (!linkedBrands.has(pairKey)) {
+          await query(
+            `INSERT INTO merch_pdv_brands (organization_id, pdv_id, brand_id) VALUES ($1,$2,$3)
+             ON CONFLICT (pdv_id, brand_id) DO UPDATE SET active=true`,
+            [orgId, pdvId, brandId]
+          );
+          linkedBrands.add(pairKey);
+        }
+
+        const r = await query(
+          `INSERT INTO merch_pdv_brand_products (organization_id, pdv_id, brand_id, product_id, mandatory, priority)
+           VALUES ($1,$2,$3,$4,$5,$6)
+           ON CONFLICT (pdv_id, brand_id, product_id)
+           DO UPDATE SET active=true, mandatory=EXCLUDED.mandatory, priority=EXCLUDED.priority, updated_at=NOW()
+           RETURNING (xmax = 0) AS inserted`,
+          [orgId, pdvId, brandId, productId, mandatory, priority]
+        );
+        if (r.rows[0]?.inserted) inserted++; else updated++;
+      } catch (err) {
+        if (errors.length < 100) errors.push({ line, product: productName, error: err.message });
+      }
+    }
+
+    res.json({
+      ok: true,
+      total: items.length,
+      inserted,
+      updated,
+      skipped,
+      missing_pdvs,
+      missing_brands,
+      missing_products,
+      errors,
+    });
+  } catch (e) {
+    logError('import mix', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 router.get('/mix/:pdvId/:brandId', async (req, res) => {
   try {
     await ensureMerchandisingInfra();

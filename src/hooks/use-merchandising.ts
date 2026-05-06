@@ -243,6 +243,19 @@ export function useAddToMix() {
   });
 }
 
+export function useImportMix() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { items: any[] }) =>
+      api<any>('/api/merchandising/mix/import', { method: 'POST', body: data }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['merch-mix'] });
+      qc.invalidateQueries({ queryKey: ['merch-pdv-brands'] });
+      qc.invalidateQueries({ queryKey: ['merch-brand-pdvs'] });
+    },
+  });
+}
+
 export function useUpdateMixItem() {
   const qc = useQueryClient();
   return useMutation({
