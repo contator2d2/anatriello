@@ -10,8 +10,9 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useBrands, useProducts, usePdvBrands, useAddPdvBrand, useRemovePdvBrand, useBrandPdvs, useMix, useAddToMix, useRemoveFromMix } from "@/hooks/use-merchandising";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { Search, Plus, Trash2, Store, Building2, Package, ArrowRight, ArrowLeft, ChevronRight } from "lucide-react";
+import { Search, Plus, Trash2, Store, Building2, Package, ArrowRight, ArrowLeft, ChevronRight, Upload } from "lucide-react";
 import { toast } from "sonner";
+import { MixImportDialog } from "@/components/merchandising/MixImportDialog";
 
 export default function MerchMixPDV() {
   const [selectedBrandId, setSelectedBrandId] = useState<string>('');
