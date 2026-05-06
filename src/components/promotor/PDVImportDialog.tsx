@@ -151,7 +151,7 @@ export function PDVImportDialog({ open, onOpenChange }: Props) {
             <Alert className="border-green-500/30 bg-green-500/5">
               <CheckCircle2 className="h-4 w-4 text-green-500" />
               <AlertDescription>
-                <strong>{result.created}</strong> criados, <strong>{result.updated}</strong> atualizados, <strong>{result.skipped}</strong> pulados.
+                <strong>{result.created}</strong> criados, <strong>{result.updated}</strong> atualizados, <strong>{result.skipped}</strong> pulados{result.networks_created ? <>, <strong>{result.networks_created}</strong> redes criadas</> : null}.
               </AlertDescription>
             </Alert>
           </div>
