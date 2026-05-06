@@ -338,9 +338,9 @@ export default function MerchMarcas() {
             <Input placeholder="Buscar PDV..." value={pdvSearch} onChange={e => setPdvSearch(e.target.value)} className="pl-9" />
           </div>
           <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-3 flex-1 min-h-0 overflow-hidden">
-            <div className="border rounded-lg p-3">
-              <p className="text-sm font-medium text-muted-foreground mb-2">Disponíveis ({filteredAvailable.length})</p>
-              <ScrollArea className="h-[350px]">
+            <div className="border rounded-lg p-3 flex flex-col min-h-0 overflow-hidden">
+              <p className="text-sm font-medium text-muted-foreground mb-2 shrink-0">Disponíveis ({filteredAvailable.length})</p>
+              <ScrollArea className="flex-1 min-h-0">
                 {filteredAvailable.map((p: any) => (
                   <div key={p.id} className="flex items-center justify-between p-2 hover:bg-muted rounded-md mb-1 cursor-pointer group"
                     onClick={() => handleLinkPdv(p.id)}>
