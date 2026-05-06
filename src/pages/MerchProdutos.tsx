@@ -97,7 +97,7 @@ export default function MerchProdutos() {
         toast.error('Nenhuma linha válida de produto foi reconhecida no arquivo');
         return;
       }
-      const result = await importProducts.mutateAsync({ items, auto_create: false });
+      const result = await importProducts.mutateAsync({ items, auto_create: true });
       if (result.success > 0) toast.success(`${result.success} produtos importados`);
       if (result.errors?.length > 0) {
         const firstError = result.errors[0];

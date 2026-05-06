@@ -326,21 +326,21 @@ export default function MerchMarcas() {
 
       {/* PDV Assignment Dialog */}
       <Dialog open={!!pdvDialogBrand} onOpenChange={() => setPdvDialogBrand(null)}>
-        <DialogContent className="max-w-3xl max-h-[85vh]">
+        <DialogContent className="max-w-4xl w-[95vw] max-h-[90vh] h-[90vh] flex flex-col overflow-hidden p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Store className="h-5 w-5 text-primary" />
               PDVs da marca: {pdvDialogBrand?.name}
             </DialogTitle>
           </DialogHeader>
-          <div className="relative mb-3">
+          <div className="relative mb-3 shrink-0">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input placeholder="Buscar PDV..." value={pdvSearch} onChange={e => setPdvSearch(e.target.value)} className="pl-9" />
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-3">
-            <div className="border rounded-lg p-3">
-              <p className="text-sm font-medium text-muted-foreground mb-2">Disponíveis ({filteredAvailable.length})</p>
-              <ScrollArea className="h-[350px]">
+          <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-3 flex-1 min-h-0 overflow-hidden">
+            <div className="border rounded-lg p-3 flex flex-col min-h-0 overflow-hidden">
+              <p className="text-sm font-medium text-muted-foreground mb-2 shrink-0">Disponíveis ({filteredAvailable.length})</p>
+              <ScrollArea className="flex-1 min-h-0">
                 {filteredAvailable.map((p: any) => (
                   <div key={p.id} className="flex items-center justify-between p-2 hover:bg-muted rounded-md mb-1 cursor-pointer group"
                     onClick={() => handleLinkPdv(p.id)}>
@@ -361,9 +361,9 @@ export default function MerchMarcas() {
               <ArrowRight className="h-5 w-5 text-primary hidden md:block" />
               <ArrowLeft className="h-5 w-5 text-destructive hidden md:block" />
             </div>
-            <div className="border rounded-lg p-3 border-primary/30 bg-primary/5">
-              <p className="text-sm font-medium mb-2">Selecionados ({filteredLinked.length})</p>
-              <ScrollArea className="h-[350px]">
+            <div className="border rounded-lg p-3 border-primary/30 bg-primary/5 flex flex-col min-h-0 overflow-hidden">
+              <p className="text-sm font-medium mb-2 shrink-0">Selecionados ({filteredLinked.length})</p>
+              <ScrollArea className="flex-1 min-h-0">
                 {filteredLinked.map((bp: any) => (
                   <div key={bp.id} className="flex items-center justify-between p-2 hover:bg-destructive/10 rounded-md mb-1 cursor-pointer group"
                     onClick={() => handleUnlinkPdv(bp.id)}>
