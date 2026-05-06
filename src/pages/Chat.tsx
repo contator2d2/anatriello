@@ -186,7 +186,7 @@ const Chat = () => {
   useEffect(() => {
     const interval = setInterval(() => {
       loadAttendanceCounts();
-    }, isMobile ? 20000 : 10000);
+    }, isMobile ? 40000 : 20000);
     return () => clearInterval(interval);
   }, [loadAttendanceCounts, isMobile]);
 
