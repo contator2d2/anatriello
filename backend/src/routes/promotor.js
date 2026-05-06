@@ -87,6 +87,16 @@ async function tableExists(tableName) {
   return Boolean(result.rows[0]?.table_name);
 }
 
+async function isOrgAdmin(userId, orgId) {
+  if (!userId || !orgId) return false;
+  const r = await query(
+    `SELECT role FROM organization_members WHERE user_id = $1 AND organization_id = $2 LIMIT 1`,
+    [userId, orgId]
+  );
+  const role = r.rows[0]?.role;
+  return role === 'owner' || role === 'admin';
+}
+
 // ===== MIDDLEWARE: Promotor Auth =====
 const authenticatePromotor = async (req, res, next) => {
   const authHeader = req.headers.authorization;
