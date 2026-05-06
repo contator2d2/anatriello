@@ -668,17 +668,26 @@ router.post('/products/import', async (req, res) => {
         }
 
         const productKey = `${brandId}:${normalizeMerchKey(name)}`;
-        if (productKeySet.has(productKey)) {
-          results.errors.push(buildProductImportError(item, index, 'Produto duplicado'));
-          continue;
-        }
+        const existingProductId = productMap.get(productKey);
 
-        await client.query(
-          `INSERT INTO merch_products (organization_id, brand_id, category_id, subcategory_id, name, sku, internal_code, barcode, description, image_url, unit, status)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
-          [orgId, brandId, categoryId, subcategoryId, name, sku || null, internalCode || null, barcode || null, description || null, imageUrl || null, unit, status]
-        );
-        productKeySet.add(productKey);
+        if (existingProductId) {
+          await client.query(
+            `UPDATE merch_products 
+             SET category_id=$1, subcategory_id=$2, sku=$3, internal_code=$4, barcode=$5, description=$6, image_url=$7, unit=$8, status=$9, updated_at=NOW()
+             WHERE id=$10`,
+            [categoryId, subcategoryId, sku || null, internalCode || null, barcode || null, description || null, imageUrl || null, unit, status, existingProductId]
+          );
+          results.updated++;
+        } else {
+          await client.query(
+            `INSERT INTO merch_products (organization_id, brand_id, category_id, subcategory_id, name, sku, internal_code, barcode, description, image_url, unit, status)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+            [orgId, brandId, categoryId, subcategoryId, name, sku || null, internalCode || null, barcode || null, description || null, imageUrl || null, unit, status]
+          );
+          results.created++;
+        }
+        
+        productMap.set(productKey, true); // Mark as processed in this batch
         results.success++;
       } catch (itemErr) {
         results.errors.push(buildProductImportError(item, index, itemErr.message || 'Erro desconhecido'));
