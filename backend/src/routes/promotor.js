@@ -1055,7 +1055,11 @@ router.post('/rh/pdvs/import', authenticate, async (req, res) => {
   } catch (err) {
     console.error('Error in PDV import:', err);
     logError('promotor.pdvs.import', err);
-    res.status(500).json({ error: 'Erro na importação: ' + err.message });
+    // Include stack trace in response for debugging during development
+    res.status(500).json({ 
+      error: 'Erro na importação: ' + err.message,
+      stack: err.stack 
+    });
   }
 });
 
