@@ -984,82 +984,89 @@ router.post('/rh/pdvs/import', authenticate, async (req, res) => {
     };
 
     for (const item of items) {
-      const name = String(item.name || item.fantasia || '').trim();
-      const cnpj = String(item.cnpj || '').replace(/\D/g, '');
-      const redeName = String(item.rede || item.client_name || '').trim();
-      const address = String(item.endereco || item.address || '').trim();
-      const zipCode = String(item.cep || item.zip_code || '').replace(/\D/g, '');
-      const city = String(item.cidade || item.city || '').trim();
-      const state = String(item.estado || item.state || '').trim().substring(0, 2).toUpperCase();
-      const neighborhood = String(item.bairro || item.neighborhood || '').trim();
-      const externalCode = String(item.codigo || item.external_code || '').trim();
-
-      if (!name) { skipped++; continue; }
-
-      const networkId = await findOrCreateNetwork(redeName);
-
-      let existing;
       try {
-        existing = await query(
-          `SELECT id FROM pdvs WHERE organization_id = $1 AND name = $2 LIMIT 1`,
-          [orgId, name]
-        );
-      } catch (e) {
-        // Fallback for case where name might be different column or table missing
-        console.error('Error checking existing PDV:', e);
-        existing = { rows: [] };
-      }
+        const name = String(item.name || item.fantasia || '').trim();
+        const cnpj = String(item.cnpj || '').replace(/\D/g, '');
+        const redeName = String(item.rede || item.client_name || '').trim();
+        const address = String(item.endereco || item.address || '').trim();
+        const zipCode = String(item.cep || item.zip_code || '').replace(/\D/g, '');
+        const city = String(item.cidade || item.city || '').trim();
+        const state = String(item.estado || item.state || '').trim().substring(0, 2).toUpperCase();
+        const neighborhood = String(item.bairro || item.neighborhood || '').trim();
+        const externalCode = String(item.codigo || item.external_code || '').trim();
 
-      if (existing.rows.length) {
+        if (!name) { skipped++; continue; }
+
+        const networkId = await findOrCreateNetwork(redeName);
+
+        let existing;
         try {
-          await query(
-            `UPDATE pdvs SET 
-              client_name = COALESCE(NULLIF($2, ''), client_name),
-              address = COALESCE(NULLIF($3, ''), address),
-              zip_code = COALESCE(NULLIF($4, ''), zip_code),
-              city = COALESCE(NULLIF($5, ''), city),
-              state = COALESCE(NULLIF($6, ''), state),
-              neighborhood = COALESCE(NULLIF($7, ''), neighborhood),
-              network_id = COALESCE($9, network_id),
-              notes = COALESCE(notes, '') || CASE WHEN $8 <> '' THEN E'\nCód: ' || $8 ELSE '' END,
-              updated_at = NOW()
-             WHERE id = $1`,
-            [existing.rows[0].id, redeName, address, zipCode, city, state, neighborhood, externalCode, networkId]
+          existing = await query(
+            `SELECT id FROM pdvs WHERE organization_id = $1 AND name = $2 LIMIT 1`,
+            [orgId, name]
           );
         } catch (e) {
-          console.error('Update PDV error:', e);
-          skipped++;
-          continue;
+          console.error('Error checking existing PDV:', e);
+          existing = { rows: [] };
         }
-        updated++;
-      } else {
-        let lat = null, lng = null;
-        try {
-          const geo = await autoGeocode(address, city, state, zipCode, neighborhood);
-          if (geo) { lat = geo.lat; lng = geo.lng; }
-        } catch (_) {}
 
-        // Tenta inserir com CNPJ, se falhar por coluna inexistente, tenta sem ela
-        try {
-          await query(
-            `INSERT INTO pdvs (organization_id, name, client_name, address, zip_code, city, state, neighborhood, latitude, longitude, radius_meters, notes, network_id, cnpj)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,200,$11,$12,$13)`,
-            [orgId, name, redeName, address, zipCode, city, state, neighborhood, lat, lng, externalCode ? `Cód: ${externalCode}` : null, networkId, cnpj]
-          );
-        } catch (e) {
-          const msg = String(e.message || '').toLowerCase();
-          if (msg.includes('cnpj') && (msg.includes('coluna') || msg.includes('column') || msg.includes('does not exist') || msg.includes('não existe'))) {
-            // Se a coluna não existir, tenta sem ela
+        if (existing.rows.length) {
+          try {
             await query(
-              `INSERT INTO pdvs (organization_id, name, client_name, address, zip_code, city, state, neighborhood, latitude, longitude, radius_meters, notes, network_id)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,200,$11,$12)`,
-              [orgId, name, redeName, address, zipCode, city, state, neighborhood, lat, lng, externalCode ? `Cód: ${externalCode}` : null, networkId]
+              `UPDATE pdvs SET 
+                client_name = COALESCE(NULLIF($2, ''), client_name),
+                address = COALESCE(NULLIF($3, ''), address),
+                zip_code = COALESCE(NULLIF($4, ''), zip_code),
+                city = COALESCE(NULLIF($5, ''), city),
+                state = COALESCE(NULLIF($6, ''), state),
+                neighborhood = COALESCE(NULLIF($7, ''), neighborhood),
+                network_id = COALESCE($9, network_id),
+                notes = COALESCE(notes, '') || CASE WHEN $8 <> '' THEN E'\nCód: ' || $8 ELSE '' END,
+                updated_at = NOW()
+               WHERE id = $1`,
+              [existing.rows[0].id, redeName, address, zipCode, city, state, neighborhood, externalCode, networkId]
             );
-          } else {
-            throw e;
+          } catch (e) {
+            console.error('Update PDV error:', e);
+            skipped++;
+            continue;
           }
+          updated++;
+        } else {
+          let lat = null, lng = null;
+          // Desativamos geocode automático pesado durante importação em lote para evitar 504 Gateway Timeout
+          /* 
+          try {
+            const geo = await autoGeocode(address, city, state, zipCode, neighborhood);
+            if (geo) { lat = geo.lat; lng = geo.lng; }
+          } catch (_) {}
+          */
+
+          try {
+            await query(
+              `INSERT INTO pdvs (organization_id, name, client_name, address, zip_code, city, state, neighborhood, latitude, longitude, radius_meters, notes, network_id, cnpj)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,200,$11,$12,$13)`,
+              [orgId, name, redeName, address, zipCode, city, state, neighborhood, lat, lng, externalCode ? `Cód: ${externalCode}` : null, networkId, cnpj]
+            );
+          } catch (e) {
+            const msg = String(e.message || '').toLowerCase();
+            if (msg.includes('cnpj') && (msg.includes('coluna') || msg.includes('column') || msg.includes('does not exist') || msg.includes('não existe'))) {
+              await query(
+                `INSERT INTO pdvs (organization_id, name, client_name, address, zip_code, city, state, neighborhood, latitude, longitude, radius_meters, notes, network_id)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,200,$11,$12)`,
+                [orgId, name, redeName, address, zipCode, city, state, neighborhood, lat, lng, externalCode ? `Cód: ${externalCode}` : null, networkId]
+              );
+            } else {
+              console.error('Insert error for PDV:', name, e.message);
+              skipped++;
+              continue;
+            }
+          }
+          created++;
         }
-        created++;
+      } catch (err) {
+        console.error('Error processing item in import:', err);
+        skipped++;
       }
     }
 
