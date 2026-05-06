@@ -83,9 +83,14 @@ export default function MerchMixPDV() {
                   {brandPdvs.length} PDV(s) vinculado(s)
                 </div>
               )}
+              <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
+                <Upload className="h-4 w-4 mr-2" />
+                Importar Mix
+              </Button>
             </div>
           </CardContent>
         </Card>
+        <MixImportDialog open={importOpen} onOpenChange={setImportOpen} />
 
         {selectedBrandId && (
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
