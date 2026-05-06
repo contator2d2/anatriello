@@ -92,18 +92,47 @@ export default function MerchProdutos() {
     if (!file) return;
     try {
       const rows = await parseImportFile(file);
-      const items = rows.map(mapProductImportRow).filter(item => item.name);
-      if (!items.length) {
+      const allItems = rows.map(mapProductImportRow).filter(item => item.name);
+      
+      if (!allItems.length) {
         toast.error('Nenhuma linha válida de produto foi reconhecida no arquivo');
         return;
       }
-      const result = await importProducts.mutateAsync({ items, auto_create: true });
-      if (result.success > 0) toast.success(`${result.success} produtos importados`);
-      if (result.errors?.length > 0) {
-        const firstError = result.errors[0];
-        toast.error(`${result.errors.length} erro(s). Linha ${firstError.line || firstError.row || '-'}: ${firstError.error}`);
+
+      toast.info(`Iniciando importação de ${allItems.length} produtos...`);
+      
+      const chunkSize = 100;
+      let successCount = 0;
+      let totalErrors = 0;
+      let firstErrorMessage = "";
+
+      for (let i = 0; i < allItems.length; i += chunkSize) {
+        const chunk = allItems.slice(i, i + chunkSize);
+        try {
+          const result = await importProducts.mutateAsync({ items: chunk, auto_create: true });
+          successCount += result.success || 0;
+          if (result.errors?.length > 0) {
+            totalErrors += result.errors.length;
+            if (!firstErrorMessage) {
+              const firstError = result.errors[0];
+              firstErrorMessage = `Linha ${firstError.line || firstError.row || '-'}: ${firstError.error}`;
+            }
+          }
+        } catch (chunkErr: any) {
+          console.error("Erro no lote de importação:", chunkErr);
+          totalErrors += chunk.length;
+          if (!firstErrorMessage) firstErrorMessage = chunkErr.message;
+        }
       }
-    } catch (err: any) { toast.error(err.message); }
+
+      if (successCount > 0) toast.success(`${successCount} produtos importados com sucesso`);
+      if (totalErrors > 0) {
+        toast.error(`${totalErrors} erro(s) durante a importação. ${firstErrorMessage}`);
+      }
+    } catch (err: any) { 
+      console.error("Erro ao processar arquivo:", err);
+      toast.error(err.message); 
+    }
     if (fileRef.current) fileRef.current.value = '';
   };
 
