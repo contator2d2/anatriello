@@ -178,7 +178,7 @@ const Chat = () => {
   useEffect(() => {
     const interval = setInterval(() => {
       loadConversationsRef.current();
-    }, isMobile ? 30000 : 15000);
+    }, isMobile ? 45000 : 30000);
     return () => clearInterval(interval);
   }, [isMobile]);
 
