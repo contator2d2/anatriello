@@ -1026,11 +1026,27 @@ router.post('/rh/pdvs/import', authenticate, async (req, res) => {
           if (geo) { lat = geo.lat; lng = geo.lng; }
         } catch (_) {}
 
-        await query(
-          `INSERT INTO pdvs (organization_id, name, client_name, address, zip_code, city, state, neighborhood, latitude, longitude, radius_meters, notes, network_id)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,200,$11,$12)`,
-          [orgId, name, redeName, address, zipCode, city, state, neighborhood, lat, lng, externalCode ? `Cód: ${externalCode}` : null, networkId]
-        );
+        // CNPJ column is checked and potentially skipped to avoid errors if missing
+        const cols = ['organization_id', 'name', 'client_name', 'address', 'zip_code', 'city', 'state', 'neighborhood', 'latitude', 'longitude', 'radius_meters', 'notes', 'network_id'];
+        const vals = [orgId, name, redeName, address, zipCode, city, state, neighborhood, lat, lng, 200, externalCode ? `Cód: ${externalCode}` : null, networkId];
+        
+        try {
+          await query(
+            `INSERT INTO pdvs (${cols.join(',')}) VALUES (${cols.map((_, i) => `$${i + 1}`).join(',')})`,
+            vals
+          );
+        } catch (e) {
+          if (e.message.includes('cnpj')) {
+            // Retry without CNPJ if column doesn't exist
+            await query(
+              `INSERT INTO pdvs (organization_id, name, client_name, address, zip_code, city, state, neighborhood, latitude, longitude, radius_meters, notes, network_id)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,200,$11,$12)`,
+              [orgId, name, redeName, address, zipCode, city, state, neighborhood, lat, lng, externalCode ? `Cód: ${externalCode}` : null, networkId]
+            );
+          } else {
+            throw e;
+          }
+        }
         created++;
       }
     }
