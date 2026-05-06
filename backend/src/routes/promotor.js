@@ -998,26 +998,39 @@ router.post('/rh/pdvs/import', authenticate, async (req, res) => {
 
       const networkId = await findOrCreateNetwork(redeName);
 
-      const existing = await query(
-        `SELECT id FROM pdvs WHERE organization_id = $1 AND name = $2 LIMIT 1`,
-        [orgId, name]
-      );
+      let existing;
+      try {
+        existing = await query(
+          `SELECT id FROM pdvs WHERE organization_id = $1 AND name = $2 LIMIT 1`,
+          [orgId, name]
+        );
+      } catch (e) {
+        // Fallback for case where name might be different column or table missing
+        console.error('Error checking existing PDV:', e);
+        existing = { rows: [] };
+      }
 
       if (existing.rows.length) {
-        await query(
-          `UPDATE pdvs SET 
-            client_name = COALESCE(NULLIF($2, ''), client_name),
-            address = COALESCE(NULLIF($3, ''), address),
-            zip_code = COALESCE(NULLIF($4, ''), zip_code),
-            city = COALESCE(NULLIF($5, ''), city),
-            state = COALESCE(NULLIF($6, ''), state),
-            neighborhood = COALESCE(NULLIF($7, ''), neighborhood),
-            network_id = COALESCE($9, network_id),
-            notes = COALESCE(notes, '') || CASE WHEN $8 <> '' THEN E'\nCód: ' || $8 ELSE '' END,
-            updated_at = NOW()
-           WHERE id = $1`,
-          [existing.rows[0].id, redeName, address, zipCode, city, state, neighborhood, externalCode, networkId]
-        );
+        try {
+          await query(
+            `UPDATE pdvs SET 
+              client_name = COALESCE(NULLIF($2, ''), client_name),
+              address = COALESCE(NULLIF($3, ''), address),
+              zip_code = COALESCE(NULLIF($4, ''), zip_code),
+              city = COALESCE(NULLIF($5, ''), city),
+              state = COALESCE(NULLIF($6, ''), state),
+              neighborhood = COALESCE(NULLIF($7, ''), neighborhood),
+              network_id = COALESCE($9, network_id),
+              notes = COALESCE(notes, '') || CASE WHEN $8 <> '' THEN E'\nCód: ' || $8 ELSE '' END,
+              updated_at = NOW()
+             WHERE id = $1`,
+            [existing.rows[0].id, redeName, address, zipCode, city, state, neighborhood, externalCode, networkId]
+          );
+        } catch (e) {
+          console.error('Update PDV error:', e);
+          skipped++;
+          continue;
+        }
         updated++;
       } else {
         let lat = null, lng = null;
