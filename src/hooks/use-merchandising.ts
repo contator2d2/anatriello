@@ -256,6 +256,18 @@ export function useImportMix() {
   });
 }
 
+export function useClearMixByBrand() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (brandId: string) =>
+      api<any>('/api/merchandising/mix/clear-by-brand', { method: 'POST', body: { brand_id: brandId } }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['merch-mix'] });
+      qc.invalidateQueries({ queryKey: ['merch-brand-pdvs'] });
+    },
+  });
+}
+
 export function useUpdateMixItem() {
   const qc = useQueryClient();
   return useMutation({
