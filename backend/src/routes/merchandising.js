@@ -496,10 +496,13 @@ router.post('/products', async (req, res) => {
     await ensureMerchandisingInfra();
     const orgId = req.orgId;
     const { name, brand_id, category_id, subcategory_id, sku, internal_code, barcode, description, image_url, unit, status } = req.body;
+    const safeCat = category_id || null;
+    const safeSub = subcategory_id || null;
+    const safeBrand = brand_id || null;
     const r = await query(
       `INSERT INTO merch_products (organization_id, brand_id, category_id, subcategory_id, name, sku, internal_code, barcode, description, image_url, unit, status)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
-      [orgId, brand_id, category_id, subcategory_id, name, sku, internal_code, barcode, description, image_url, unit || 'un', status || 'active']
+      [orgId, safeBrand, safeCat, safeSub, name, sku, internal_code, barcode, description, image_url, unit || 'un', status || 'active']
     );
     res.json(r.rows[0]);
   } catch (e) { logError('create product', e); res.status(500).json({ error: e.message }); }
