@@ -135,8 +135,10 @@ async function ensureMerchandisingInfra() {
     `DO $$ BEGIN ALTER TABLE merch_brands ADD COLUMN IF NOT EXISTS number VARCHAR(50); EXCEPTION WHEN others THEN NULL; END $$`,
     `DO $$ BEGIN ALTER TABLE merch_brands ADD COLUMN IF NOT EXISTS neighborhood VARCHAR(255); EXCEPTION WHEN others THEN NULL; END $$`,
     `DO $$ BEGIN ALTER TABLE merch_brands ADD COLUMN IF NOT EXISTS city VARCHAR(255); EXCEPTION WHEN others THEN NULL; END $$`,
-    `DO $$ BEGIN ALTER TABLE merch_brands ADD COLUMN IF NOT EXISTS zip VARCHAR(20); EXCEPTION WHEN others THEN NULL; END $$`,
-  ];
+      `DO $$ BEGIN ALTER TABLE merch_brands ADD COLUMN IF NOT EXISTS zip VARCHAR(20); EXCEPTION WHEN others THEN NULL; END $$`,
+      `ALTER TABLE merch_products ALTER COLUMN category_id DROP NOT NULL`,
+      `ALTER TABLE merch_products ALTER COLUMN subcategory_id DROP NOT NULL`,
+    ];
   for (const sql of statements) {
     try { await query(sql); } catch (err) { logError('merch infra stmt', err, { sql: sql.slice(0, 80) }); }
   }
