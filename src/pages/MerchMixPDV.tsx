@@ -7,12 +7,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { useBrands, useProducts, usePdvBrands, useAddPdvBrand, useRemovePdvBrand, useBrandPdvs, useMix, useAddToMix, useRemoveFromMix } from "@/hooks/use-merchandising";
+import { useBrands, useProducts, usePdvBrands, useAddPdvBrand, useRemovePdvBrand, useBrandPdvs, useMix, useAddToMix, useRemoveFromMix, useClearMixByBrand } from "@/hooks/use-merchandising";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { Search, Plus, Trash2, Store, Building2, Package, ArrowRight, ArrowLeft, ChevronRight, Upload } from "lucide-react";
+import { Search, Plus, Trash2, Store, Building2, Package, ArrowRight, ArrowLeft, ChevronRight, Upload, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { MixImportDialog } from "@/components/merchandising/MixImportDialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
 export default function MerchMixPDV() {
   const [selectedBrandId, setSelectedBrandId] = useState<string>('');
@@ -29,6 +30,7 @@ export default function MerchMixPDV() {
 
   const addToMix = useAddToMix();
   const removeFromMix = useRemoveFromMix();
+  const clearMix = useClearMixByBrand();
 
   const selectedPdv = brandPdvs.find((bp: any) => bp.pdv_id === selectedPdvId);
   const mixProductIds = new Set(mixProducts.map((m: any) => m.product_id));
@@ -83,10 +85,46 @@ export default function MerchMixPDV() {
                   {brandPdvs.length} PDV(s) vinculado(s)
                 </div>
               )}
-              <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
-                <Upload className="h-4 w-4 mr-2" />
-                Importar Mix
-              </Button>
+              <div className="flex gap-2">
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" disabled={!selectedBrandId || clearMix.isPending}>
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Limpar Mix da Marca
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Tem certeza?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Isso irá remover permanentemente todos os produtos de todos os PDVs vinculados a esta marca.
+                        Esta ação não pode ser desfeita.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                      <AlertDialogAction
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        onClick={async () => {
+                          try {
+                            const res = await clearMix.mutateAsync(selectedBrandId);
+                            toast.success(`Mix limpo com sucesso! ${res.deleted} itens removidos.`);
+                          } catch (e: any) {
+                            toast.error(e.message);
+                          }
+                        }}
+                      >
+                        Sim, apagar tudo
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+
+                <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
+                  <Upload className="h-4 w-4 mr-2" />
+                  Importar Mix
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>

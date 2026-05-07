@@ -973,6 +973,18 @@ router.get('/mix/:pdvId/:brandId', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+router.post('/mix/clear-by-brand', async (req, res) => {
+  try {
+    const { brand_id } = req.body;
+    if (!brand_id) return res.status(400).json({ error: 'Marca não informada' });
+    const r = await query(
+      'DELETE FROM merch_pdv_brand_products WHERE brand_id = $1 AND organization_id = $2',
+      [brand_id, req.orgId]
+    );
+    res.json({ ok: true, deleted: r.rowCount });
+  } catch (e) { logError('clear mix by brand', e); res.status(500).json({ error: e.message }); }
+});
+
 router.post('/mix', async (req, res) => {
   try {
     await ensureMerchandisingInfra();
