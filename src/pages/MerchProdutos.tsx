@@ -51,7 +51,7 @@ export default function MerchProdutos() {
   const set = (k: string, v: any) => setForm((p: any) => ({ ...p, [k]: v }));
 
   const handleSave = async () => {
-    if (!form.name || !form.brand_id || !form.category_id) { toast.error('Preencha nome, marca e categoria'); return; }
+    if (!form.name || !form.brand_id) { toast.error('Preencha nome e marca'); return; }
     try {
       if (editingId) { await updateProduct.mutateAsync({ id: editingId, ...form }); toast.success('Atualizado'); }
       else { await createProduct.mutateAsync(form); toast.success('Criado'); }
