@@ -757,7 +757,7 @@ function RouteFormDialog({ open, route, onClose, pdvs, employees, onSave, onDele
                 )}
               </div>
 
-              {availableBrands.length > 0 && (
+              {availableBrands.length > 0 && form.pdv_id && (
                 <Select value="" onValueChange={(v) => {
                   if (v) setMultiBrands(prev => [...prev, { brand_id: v }]);
                 }}>
