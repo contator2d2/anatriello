@@ -17,7 +17,7 @@ import { Calendar, ChevronLeft, ChevronRight, Plus, MapPin, Clock, User, Eye, Co
 import { cn } from "@/lib/utils";
 import AIRoutePlanner from "@/components/merch/AIRoutePlanner";
 import { useMerchRoutes, useCreateMerchRoute, useUpdateMerchRoute, useDeleteMerchRoute, useDuplicateMerchRoute, useBrandChecklists, useBrandPromoters, useRouteMixPreview, useRouteProducts, useAddRouteProduct, useRemoveRouteProduct, useSyncRouteProducts } from "@/hooks/use-merch-routes";
-import { useBrands, useBrandPdvs } from "@/hooks/use-merchandising";
+import { useBrands, useBrandPdvs, usePdvBrands } from "@/hooks/use-merchandising";
 import { usePDVs } from "@/hooks/use-promotor";
 import { useEmployees } from "@/hooks/use-rh";
 import { toast } from "sonner";
@@ -509,12 +509,14 @@ function RouteFormDialog({ open, route, onClose, pdvs, employees, onSave, onDele
   const [multiBrands, setMultiBrands] = useState<{ brand_id: string; checklist_id?: string }[]>([]);
   const [pdvOpen, setPdvOpen] = useState(false);
   const { data: brands = [] } = useBrands();
+  const { data: pdvBrands = [] } = usePdvBrands(form.pdv_id);
   
   // For single-brand backward compat, use first brand for checklists/promoters/pdv filter
   const activeBrandId = multiBrands.length > 0 ? multiBrands[0].brand_id : form.brand_id;
   const { data: checklists = [] } = useBrandChecklists(activeBrandId);
   const { data: brandPromoters = [] } = useBrandPromoters(activeBrandId);
-  const { data: brandPdvs = [] } = useBrandPdvs(activeBrandId);
+  // const { data: brandPdvs = [] } = useBrandPdvs(activeBrandId); // No longer filtering PDVs by brand primary logic
+
   const { data: mixPreview = [] } = useRouteMixPreview(form.pdv_id, activeBrandId);
   const { data: routeProducts = [] } = useRouteProducts(route?.id);
   const addProduct = useAddRouteProduct();
@@ -630,7 +632,16 @@ function RouteFormDialog({ open, route, onClose, pdvs, employees, onSave, onDele
     : [];
 
   // Available brands not yet added
-  const availableBrands = (brands || []).filter((b: any) => b?.id && !multiBrands.some(mb => mb.brand_id === b.id));
+  const availableBrands = (brands || []).filter((b: any) => {
+    if (!b?.id) return false;
+    // If PDV is selected, only show brands linked to that PDV
+    if (form.pdv_id && pdvBrands.length > 0) {
+      const isLinkedToPdv = pdvBrands.some((pb: any) => pb.brand_id === b.id);
+      if (!isLinkedToPdv) return false;
+    }
+    // Don't show already selected brands
+    return !multiBrands.some(mb => mb.brand_id === b.id);
+  });
 
   const handleSave = () => {
     const payload = { ...form };
@@ -697,12 +708,10 @@ function RouteFormDialog({ open, route, onClose, pdvs, employees, onSave, onDele
                       <CommandEmpty>Nenhum PDV encontrado.</CommandEmpty>
                       <CommandGroup>
                         {(() => {
-                          const availablePdvs = activeBrandId 
-                            ? (pdvs || []).filter((p: any) => brandPdvs.some((bp: any) => bp.pdv_id === p.id))
-                            : (pdvs || []);
+                          const availablePdvs = (pdvs || []);
                           
-                          if (availablePdvs.length === 0 && activeBrandId) {
-                            return <div className="p-4 text-xs text-center text-muted-foreground">Nenhum PDV vinculado a esta marca.</div>;
+                          if (availablePdvs.length === 0) {
+                            return <div className="p-4 text-xs text-center text-muted-foreground">Nenhum PDV encontrado.</div>;
                           }
 
                           return availablePdvs.map((p: any) => (
@@ -738,11 +747,17 @@ function RouteFormDialog({ open, route, onClose, pdvs, employees, onSave, onDele
           {/* Multi-Brand Section */}
           <div className="space-y-2 p-3 rounded-lg border bg-muted/30">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <Package className="h-4 w-4 text-primary" />
-                Marcas {multiBrands.length > 0 && `(${multiBrands.length})`}
+              <div className="flex flex-col">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <Package className="h-4 w-4 text-primary" />
+                  Marcas {multiBrands.length > 0 && `(${multiBrands.length})`}
+                </div>
+                {!form.pdv_id && (
+                  <span className="text-[10px] text-orange-500 font-medium">Selecione um PDV primeiro</span>
+                )}
               </div>
-              {availableBrands.length > 0 && (
+
+              {availableBrands.length > 0 && form.pdv_id && (
                 <Select value="" onValueChange={(v) => {
                   if (v) setMultiBrands(prev => [...prev, { brand_id: v }]);
                 }}>
