@@ -971,7 +971,17 @@ function RouteFormDialog({ open, route, onClose, pdvs, employees, onSave, onDele
 
               {route?.id && availableToAdd.length > 0 && (
                 <div className="pt-2 border-t">
-                  <Label className="text-xs text-muted-foreground mb-1 block">Adicionar do mix ({availableToAdd.length} disponíveis)</Label>
+                  <div className="flex items-center justify-between mb-1">
+                    <Label className="text-xs text-muted-foreground">Adicionar do mix ({availableToAdd.length} disponíveis)</Label>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="h-6 text-[10px] px-2 text-primary border-primary/30 hover:bg-primary/5"
+                      onClick={handleAddAllProducts}
+                    >
+                      <CheckCircle2 className="h-3 w-3 mr-1" /> Incluir Todos
+                    </Button>
+                  </div>
                   <div className="max-h-32 overflow-y-auto space-y-1">
                     {availableToAdd.map((p: any) => (
                       <div key={p.product_id} className="flex items-center justify-between py-1 px-2 rounded-md bg-background/30 text-xs">
