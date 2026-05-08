@@ -21,6 +21,7 @@ export default function MerchMixPDV() {
   const [selectedToAdd, setSelectedToAdd] = useState<string[]>([]);
   const [selectedToRemove, setSelectedToRemove] = useState<string[]>([]);
   const [importOpen, setImportOpen] = useState(false);
+  const [pdvSearch, setPdvSearch] = useState('');
 
   const { data: allBrands = [] } = useBrands({ status: 'active' });
   const { data: brandPdvs = [] } = useBrandPdvs(selectedBrandId || undefined);
@@ -32,6 +33,15 @@ export default function MerchMixPDV() {
 
   const selectedPdv = brandPdvs.find((bp: any) => bp.pdv_id === selectedPdvId);
   const mixProductIds = new Set(mixProducts.map((m: any) => m.product_id));
+  
+  const filteredPdvs = useMemo(() => {
+    return brandPdvs.filter((bp: any) => 
+      bp.pdv_name.toLowerCase().includes(pdvSearch.toLowerCase()) ||
+      bp.city?.toLowerCase().includes(pdvSearch.toLowerCase()) ||
+      bp.state?.toLowerCase().includes(pdvSearch.toLowerCase())
+    );
+  }, [brandPdvs, pdvSearch]);
+
   const availableProducts = allBrandProducts.filter((p: any) => !mixProductIds.has(p.id) && p.name.toLowerCase().includes(productSearch.toLowerCase()));
 
   const handleAddToMix = async () => {
@@ -103,8 +113,19 @@ export default function MerchMixPDV() {
                 <CardTitle className="text-sm">PDVs da Marca</CardTitle>
               </CardHeader>
               <CardContent className="p-2">
+                <div className="px-2 pb-2">
+                  <div className="relative">
+                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+                    <Input 
+                      placeholder="Buscar PDV..." 
+                      value={pdvSearch} 
+                      onChange={e => setPdvSearch(e.target.value)} 
+                      className="pl-7 h-8 text-xs" 
+                    />
+                  </div>
+                </div>
                 <ScrollArea className="h-[400px]">
-                  {brandPdvs.map((bp: any) => (
+                  {filteredPdvs.map((bp: any) => (
                     <div
                       key={bp.id}
                       className={`flex items-center justify-between p-2 rounded-lg cursor-pointer mb-1 transition-colors ${selectedPdvId === bp.pdv_id ? 'bg-primary/10 border border-primary/30' : 'hover:bg-muted'}`}
@@ -120,9 +141,9 @@ export default function MerchMixPDV() {
                       <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
                     </div>
                   ))}
-                  {brandPdvs.length === 0 && (
+                  {filteredPdvs.length === 0 && (
                     <p className="text-sm text-muted-foreground text-center py-4">
-                      Nenhum PDV vinculado a esta marca. Vincule PDVs em Marcas.
+                      {pdvSearch ? 'Nenhum PDV encontrado' : 'Nenhum PDV vinculado a esta marca.'}
                     </p>
                   )}
                 </ScrollArea>
