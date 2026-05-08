@@ -86,39 +86,6 @@ export default function MerchMixPDV() {
                 </div>
               )}
               <div className="flex gap-2">
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" disabled={!selectedBrandId || clearMix.isPending}>
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      Limpar Mix da Marca
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Tem certeza?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        Isso irá remover permanentemente todos os produtos de todos os PDVs vinculados a esta marca.
-                        Esta ação não pode ser desfeita.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                      <AlertDialogAction
-                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                        onClick={async () => {
-                          try {
-                            const res = await clearMix.mutateAsync(selectedBrandId);
-                            toast.success(`Mix limpo com sucesso! ${res.deleted} itens removidos.`);
-                          } catch (e: any) {
-                            toast.error(e.message);
-                          }
-                        }}
-                      >
-                        Sim, apagar tudo
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
 
                 <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
                   <Upload className="h-4 w-4 mr-2" />
