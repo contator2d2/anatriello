@@ -287,6 +287,14 @@ export function useUpdatePDV() {
   });
 }
 
+export function useDeletePDV() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api<any>(`/api/promotor/rh/pdvs/${id}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['rh-pdvs'] }),
+  });
+}
+
 export function useDocumentDeliveries(filters?: { employee_id?: string; status?: string }) {
   const params = new URLSearchParams();
   if (filters?.employee_id) params.set('employee_id', filters.employee_id);
