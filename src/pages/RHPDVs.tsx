@@ -97,8 +97,16 @@ export default function RHPDVs() {
       }
       toast({ title: editId ? 'PDV atualizado!' : 'PDV criado!' });
       setShowDialog(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Tem certeza que deseja excluir este PDV? Esta ação não poderá ser desfeita.')) return;
+    try {
+      await deletePDV.mutateAsync(id);
+      toast({ title: 'PDV excluído com sucesso!' });
     } catch (err: any) {
-      toast({ title: 'Erro', description: err.message, variant: 'destructive' });
+      toast({ title: 'Erro ao excluir', description: err.message, variant: 'destructive' });
     }
   };
 
