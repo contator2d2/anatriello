@@ -29,7 +29,6 @@ export default function MerchMixPDV() {
 
   const addToMix = useAddToMix();
   const removeFromMix = useRemoveFromMix();
-  const clearMix = useClearMixByBrand();
 
   const selectedPdv = brandPdvs.find((bp: any) => bp.pdv_id === selectedPdvId);
   const mixProductIds = new Set(mixProducts.map((m: any) => m.product_id));
