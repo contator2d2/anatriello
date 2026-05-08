@@ -37,6 +37,7 @@ export default function RHPDVs() {
   const { data: employees } = useEmployees();
   const createPDV = useCreatePDV();
   const updatePDV = useUpdatePDV();
+  const deletePDV = useDeletePDV();
   const { toast } = useToast();
   const { user } = useAuth();
   const isAdmin = user?.role === 'owner' || user?.role === 'admin';
@@ -154,7 +155,14 @@ export default function RHPDVs() {
                   <TableCell>{p.radius_meters}m</TableCell>
                   <TableCell className="text-sm">{p.supervisor_name || '-'}</TableCell>
                   <TableCell>{p.active ? <Badge className="bg-green-500">Ativo</Badge> : <Badge variant="secondary">Inativo</Badge>}</TableCell>
-                  <TableCell><Button size="sm" variant="ghost" onClick={() => openEdit(p)}><Edit className="h-4 w-4" /></Button></TableCell>
+                  <TableCell>
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="ghost" onClick={() => openEdit(p)}><Edit className="h-4 w-4" /></Button>
+                      <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => handleDelete(p.id)} disabled={deletePDV.isPending}>
+                        {deletePDV.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                  </TableCell>
                 </TableRow>
               ))}
               {filtered.length === 0 && <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">Nenhum PDV cadastrado</TableCell></TableRow>}
