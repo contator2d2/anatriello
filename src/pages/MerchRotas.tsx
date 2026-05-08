@@ -747,10 +747,16 @@ function RouteFormDialog({ open, route, onClose, pdvs, employees, onSave, onDele
           {/* Multi-Brand Section */}
           <div className="space-y-2 p-3 rounded-lg border bg-muted/30">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <Package className="h-4 w-4 text-primary" />
-                Marcas {multiBrands.length > 0 && `(${multiBrands.length})`}
+              <div className="flex flex-col">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <Package className="h-4 w-4 text-primary" />
+                  Marcas {multiBrands.length > 0 && `(${multiBrands.length})`}
+                </div>
+                {!form.pdv_id && (
+                  <span className="text-[10px] text-orange-500 font-medium">Selecione um PDV primeiro</span>
+                )}
               </div>
+
               {availableBrands.length > 0 && (
                 <Select value="" onValueChange={(v) => {
                   if (v) setMultiBrands(prev => [...prev, { brand_id: v }]);
