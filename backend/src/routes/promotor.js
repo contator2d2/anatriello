@@ -938,6 +938,21 @@ router.put('/rh/pdvs/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: 'Erro' }); }
 });
 
+router.delete('/rh/pdvs/:id', async (req, res) => {
+  try {
+    // Check if pdv has dependencies before deleting (optional, but good practice)
+    // For now, let's just try to delete. If it has foreign keys, it will fail and we return error.
+    await query('DELETE FROM pdvs WHERE id = $1', [req.params.id]);
+    res.json({ success: true });
+  } catch (err) {
+    logError('promotor.pdvs.delete', err);
+    if (err.code === '23503') {
+      return res.status(400).json({ error: 'Este PDV não pode ser excluído pois possui vínculos (visitas, roteiros ou colaboradores).' });
+    }
+    res.status(500).json({ error: 'Erro ao excluir PDV' });
+  }
+});
+
 router.post('/rh/pdvs/import', authenticate, async (req, res) => {
   try {
     const orgId = await resolveOrganizationId(req);

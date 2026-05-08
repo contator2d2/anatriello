@@ -9,11 +9,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { useEmployees } from "@/hooks/use-rh";
-import { usePDVs, useCreatePDV, useUpdatePDV } from "@/hooks/use-promotor";
+import { usePDVs, useCreatePDV, useUpdatePDV, useDeletePDV } from "@/hooks/use-promotor";
 import { useGeocode } from "@/hooks/use-rh";
 import { useAuth } from "@/contexts/AuthContext";
 import { getAuthToken } from "@/lib/api";
-import { MapPin, Plus, Edit, Search, Loader2, Navigation, Upload, Download } from "lucide-react";
+import { MapPin, Plus, Edit, Search, Loader2, Navigation, Upload, Download, Trash2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { PDVImportDialog } from "@/components/promotor/PDVImportDialog";
@@ -37,6 +37,7 @@ export default function RHPDVs() {
   const { data: employees } = useEmployees();
   const createPDV = useCreatePDV();
   const updatePDV = useUpdatePDV();
+  const deletePDV = useDeletePDV();
   const { toast } = useToast();
   const { user } = useAuth();
   const isAdmin = user?.role === 'owner' || user?.role === 'admin';
@@ -102,6 +103,16 @@ export default function RHPDVs() {
     }
   };
 
+  const handleDelete = async (id: string) => {
+    if (!confirm('Tem certeza que deseja excluir este PDV? Esta ação não poderá ser desfeita.')) return;
+    try {
+      await deletePDV.mutateAsync(id);
+      toast({ title: 'PDV excluído com sucesso!' });
+    } catch (err: any) {
+      toast({ title: 'Erro ao excluir', description: err.message, variant: 'destructive' });
+    }
+  };
+
   const filtered = (pdvs || []).filter((p: any) => !search || p.name.toLowerCase().includes(search.toLowerCase()) || (p.client_name || '').toLowerCase().includes(search.toLowerCase()));
 
   return (
@@ -144,7 +155,14 @@ export default function RHPDVs() {
                   <TableCell>{p.radius_meters}m</TableCell>
                   <TableCell className="text-sm">{p.supervisor_name || '-'}</TableCell>
                   <TableCell>{p.active ? <Badge className="bg-green-500">Ativo</Badge> : <Badge variant="secondary">Inativo</Badge>}</TableCell>
-                  <TableCell><Button size="sm" variant="ghost" onClick={() => openEdit(p)}><Edit className="h-4 w-4" /></Button></TableCell>
+                  <TableCell>
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="ghost" onClick={() => openEdit(p)}><Edit className="h-4 w-4" /></Button>
+                      <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => handleDelete(p.id)} disabled={deletePDV.isPending}>
+                        {deletePDV.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                  </TableCell>
                 </TableRow>
               ))}
               {filtered.length === 0 && <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">Nenhum PDV cadastrado</TableCell></TableRow>}
