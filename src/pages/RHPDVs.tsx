@@ -13,7 +13,7 @@ import { usePDVs, useCreatePDV, useUpdatePDV, useDeletePDV } from "@/hooks/use-p
 import { useGeocode } from "@/hooks/use-rh";
 import { useAuth } from "@/contexts/AuthContext";
 import { getAuthToken } from "@/lib/api";
-import { MapPin, Plus, Edit, Search, Loader2, Navigation, Upload, Download } from "lucide-react";
+import { MapPin, Plus, Edit, Search, Loader2, Navigation, Upload, Download, Trash2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { PDVImportDialog } from "@/components/promotor/PDVImportDialog";
