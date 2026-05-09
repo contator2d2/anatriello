@@ -45,7 +45,7 @@ interface EndpointResilienceConfig {
   silent?: boolean;
 }
 
-const ENDPOINT_RESILIENCE: Partial<Record<string, EndpointResilienceConfig>> = {
+const ENDPOINT_RESILIENCE: Record<string, EndpointResilienceConfig> = {
   [LIVE_ROUTES_ENDPOINT]: {
     cooldownMs: LIVE_ROUTES_COOLDOWN_MS,
     fallbackToOtherBases: false,
@@ -66,12 +66,31 @@ const ENDPOINT_RESILIENCE: Partial<Record<string, EndpointResilienceConfig>> = {
     maxRetries: 0,
     silent: true,
   },
-  ['/api/merchandising/networks']: {
+  '/api/merchandising/networks': {
     cooldownMs: 60000,
     fallbackToOtherBases: false,
     fallbackValue: () => [],
     silent: true,
   },
+  '/api/merchandising/mix/bulk': {
+    cooldownMs: 60000,
+    fallbackToOtherBases: false,
+    fallbackValue: () => ({ ok: true }),
+    silent: true,
+  },
+};
+
+const getResilienceConfig = (endpoint: string) => {
+  if (ENDPOINT_RESILIENCE[endpoint]) return ENDPOINT_RESILIENCE[endpoint];
+  if (endpoint.startsWith('/api/merchandising/networks')) {
+    return {
+      cooldownMs: 60000,
+      fallbackToOtherBases: false,
+      fallbackValue: () => (endpoint.endsWith('/pdvs') ? [] : {}),
+      silent: true,
+    };
+  }
+  return undefined;
 };
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -154,7 +173,7 @@ const notifyAuthInvalid = () => {
 export const api = async <T>(endpoint: string, options: ApiOptions = {}): Promise<T> => {
   const { method = 'GET', body, auth = true, headers: customHeaders, silent = false, fallbackToOtherBases = true } = options;
   const normalizedEndpoint = normalizeEndpoint(endpoint);
-  const endpointResilience = ENDPOINT_RESILIENCE[normalizedEndpoint];
+  const endpointResilience = getResilienceConfig(normalizedEndpoint);
   const effectiveSilent = silent || endpointResilience?.silent === true;
   const effectiveFallbackToOtherBases = endpointResilience?.fallbackToOtherBases ?? fallbackToOtherBases;
 
@@ -222,7 +241,7 @@ export const api = async <T>(endpoint: string, options: ApiOptions = {}): Promis
             notifyAuthInvalid();
           }
 
-          if (endpointResilience && response.status >= 500) {
+          if (endpointResilience && (response.status >= 500 || response.status === 404)) {
             setEndpointCooldown(normalizedEndpoint, endpointResilience.cooldownMs);
             return endpointResilience.fallbackValue() as T;
           }
