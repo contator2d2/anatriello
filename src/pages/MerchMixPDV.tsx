@@ -213,68 +213,124 @@ export default function MerchMixPDV() {
             </Card>
 
             {/* Dual List - Mix Editor */}
-            {selectedPdvId ? (
-              <Card className="lg:col-span-3">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm">
-                    Mix de Produtos — {selectedPdv?.pdv_name}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-4">
-                    {/* Available Products */}
-                    <div className="border rounded-lg p-3">
-                      <div className="flex items-center justify-between mb-2">
-                        <p className="text-sm font-medium text-muted-foreground">Produtos Disponíveis ({availableProducts.length})</p>
+            {selectionType === 'pdv' ? (
+              selectedPdvId ? (
+                <Card className="lg:col-span-3">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm">
+                      Mix de Produtos — {selectedPdv?.pdv_name}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-4">
+                      {/* Available Products */}
+                      <div className="border rounded-lg p-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-sm font-medium text-muted-foreground">Produtos Disponíveis ({availableProducts.length})</p>
+                        </div>
+                        <div className="relative mb-2">
+                          <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+                          <Input placeholder="Buscar..." value={productSearch} onChange={e => setProductSearch(e.target.value)} className="pl-7 h-8 text-sm" />
+                        </div>
+                        <ScrollArea className="h-[300px]">
+                          {availableProducts.map((p: any) => (
+                            <div key={p.id} className="flex items-center gap-2 p-1.5 hover:bg-muted rounded text-sm cursor-pointer" onClick={() => toggleAdd(p.id)}>
+                              <Checkbox checked={selectedToAdd.includes(p.id)} />
+                              {p.image_url ? <img src={p.image_url} className="h-6 w-6 rounded object-cover" /> : <Package className="h-4 w-4 text-muted-foreground" />}
+                              <span className="truncate">{p.name}</span>
+                            </div>
+                          ))}
+                        </ScrollArea>
                       </div>
-                      <div className="relative mb-2">
-                        <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
-                        <Input placeholder="Buscar..." value={productSearch} onChange={e => setProductSearch(e.target.value)} className="pl-7 h-8 text-sm" />
+
+                      {/* Action Buttons */}
+                      <div className="flex md:flex-col items-center justify-center gap-2">
+                        <Button size="sm" variant="outline" disabled={selectedToAdd.length === 0} onClick={handleAddToMix}>
+                          <ArrowRight className="h-4 w-4" />
+                        </Button>
+                        <Button size="sm" variant="outline" disabled={selectedToRemove.length === 0} onClick={handleRemoveFromMix}>
+                          <ArrowLeft className="h-4 w-4" />
+                        </Button>
                       </div>
-                      <ScrollArea className="h-[300px]">
-                        {availableProducts.map((p: any) => (
-                          <div key={p.id} className="flex items-center gap-2 p-1.5 hover:bg-muted rounded text-sm cursor-pointer" onClick={() => toggleAdd(p.id)}>
-                            <Checkbox checked={selectedToAdd.includes(p.id)} />
-                            {p.image_url ? <img src={p.image_url} className="h-6 w-6 rounded object-cover" /> : <Package className="h-4 w-4 text-muted-foreground" />}
-                            <span className="truncate">{p.name}</span>
-                          </div>
-                        ))}
-                      </ScrollArea>
-                    </div>
 
-                    {/* Action Buttons */}
-                    <div className="flex md:flex-col items-center justify-center gap-2">
-                      <Button size="sm" variant="outline" disabled={selectedToAdd.length === 0} onClick={handleAddToMix}>
-                        <ArrowRight className="h-4 w-4" />
-                      </Button>
-                      <Button size="sm" variant="outline" disabled={selectedToRemove.length === 0} onClick={handleRemoveFromMix}>
-                        <ArrowLeft className="h-4 w-4" />
-                      </Button>
+                      {/* Mix Products */}
+                      <div className="border rounded-lg p-3 border-primary/30 bg-primary/5">
+                        <p className="text-sm font-medium mb-2">Mix Atual ({mixProducts.length})</p>
+                        <ScrollArea className="h-[332px]">
+                          {mixProducts.map((m: any) => (
+                            <div key={m.id} className="flex items-center gap-2 p-1.5 hover:bg-muted rounded text-sm cursor-pointer" onClick={() => toggleRemove(m.product_id)}>
+                              <Checkbox checked={selectedToRemove.includes(m.product_id)} />
+                              {m.image_url ? <img src={m.image_url} className="h-6 w-6 rounded object-cover" /> : <Package className="h-4 w-4 text-muted-foreground" />}
+                              <span className="truncate flex-1">{m.product_name}</span>
+                              {m.mandatory && <Badge variant="outline" className="text-[10px] px-1">Obrig.</Badge>}
+                              <Badge variant="secondary" className="text-[10px] px-1">{m.priority}</Badge>
+                            </div>
+                          ))}
+                          {mixProducts.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">Nenhum produto no mix</p>}
+                        </ScrollArea>
+                      </div>
                     </div>
-
-                    {/* Mix Products */}
-                    <div className="border rounded-lg p-3 border-primary/30 bg-primary/5">
-                      <p className="text-sm font-medium mb-2">Mix Atual ({mixProducts.length})</p>
-                      <ScrollArea className="h-[332px]">
-                        {mixProducts.map((m: any) => (
-                          <div key={m.id} className="flex items-center gap-2 p-1.5 hover:bg-muted rounded text-sm cursor-pointer" onClick={() => toggleRemove(m.product_id)}>
-                            <Checkbox checked={selectedToRemove.includes(m.product_id)} />
-                            {m.image_url ? <img src={m.image_url} className="h-6 w-6 rounded object-cover" /> : <Package className="h-4 w-4 text-muted-foreground" />}
-                            <span className="truncate flex-1">{m.product_name}</span>
-                            {m.mandatory && <Badge variant="outline" className="text-[10px] px-1">Obrig.</Badge>}
-                            <Badge variant="secondary" className="text-[10px] px-1">{m.priority}</Badge>
-                          </div>
-                        ))}
-                        {mixProducts.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">Nenhum produto no mix</p>}
-                      </ScrollArea>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              ) : (
+                <Card className="lg:col-span-3 flex items-center justify-center min-h-[400px]">
+                  <p className="text-muted-foreground">Selecione um PDV para gerenciar o mix</p>
+                </Card>
+              )
             ) : (
-              <Card className="lg:col-span-3 flex items-center justify-center min-h-[400px]">
-                <p className="text-muted-foreground">Selecione um PDV para gerenciar o mix</p>
-              </Card>
+              selectedNetworkId ? (
+                <Card className="lg:col-span-3">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm">
+                      Mix de Produtos por Rede — {selectedNetwork?.name}
+                    </CardTitle>
+                    <p className="text-xs text-muted-foreground">Ao salvar, os produtos serão vinculados a todos os PDVs desta rede ({networkPdvs.length} PDVs).</p>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-4">
+                      {/* Available Products */}
+                      <div className="border rounded-lg p-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-sm font-medium text-muted-foreground">Produtos Disponíveis</p>
+                        </div>
+                        <div className="relative mb-2">
+                          <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+                          <Input placeholder="Buscar..." value={productSearch} onChange={e => setProductSearch(e.target.value)} className="pl-7 h-8 text-sm" />
+                        </div>
+                        <ScrollArea className="h-[300px]">
+                          {allBrandProducts.filter((p: any) => p.name.toLowerCase().includes(productSearch.toLowerCase())).map((p: any) => (
+                            <div key={p.id} className="flex items-center gap-2 p-1.5 hover:bg-muted rounded text-sm cursor-pointer" onClick={() => toggleAdd(p.id)}>
+                              <Checkbox checked={selectedToAdd.includes(p.id)} />
+                              {p.image_url ? <img src={p.image_url} className="h-6 w-6 rounded object-cover" /> : <Package className="h-4 w-4 text-muted-foreground" />}
+                              <span className="truncate">{p.name}</span>
+                            </div>
+                          ))}
+                        </ScrollArea>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="flex md:flex-col items-center justify-center gap-2">
+                        <Button size="sm" variant="default" disabled={selectedToAdd.length === 0} onClick={handleAddToMix} className="flex items-center gap-2">
+                          <ArrowRight className="h-4 w-4" /> Salvar na Rede
+                        </Button>
+                      </div>
+
+                      <div className="flex items-center justify-center p-8 bg-muted/20 rounded-lg border border-dashed text-center">
+                        <div className="space-y-2">
+                          <LayoutGrid className="h-10 w-10 mx-auto text-muted-foreground/50" />
+                          <p className="text-sm text-muted-foreground">
+                            Selecione os produtos e clique em "Salvar na Rede" para atualizar todos os {networkPdvs.length} PDVs.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : (
+                <Card className="lg:col-span-3 flex items-center justify-center min-h-[400px]">
+                  <p className="text-muted-foreground">Selecione uma Rede para gerenciar o mix em massa</p>
+                </Card>
+              )
             )}
           </div>
         )}
