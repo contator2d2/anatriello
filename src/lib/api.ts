@@ -241,7 +241,7 @@ export const api = async <T>(endpoint: string, options: ApiOptions = {}): Promis
             notifyAuthInvalid();
           }
 
-          if (endpointResilience && (response.status >= 500 || response.status === 404)) {
+          if (endpointResilience && (response.status >= 500 || (method === 'GET' && response.status === 404))) {
             setEndpointCooldown(normalizedEndpoint, endpointResilience.cooldownMs);
             return endpointResilience.fallbackValue() as T;
           }
