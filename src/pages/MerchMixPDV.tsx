@@ -126,43 +126,89 @@ export default function MerchMixPDV() {
             {/* PDVs Panel - only PDVs linked to the brand */}
             <Card className="lg:col-span-1">
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm">PDVs da Marca</CardTitle>
-              </CardHeader>
-              <CardContent className="p-2">
-                <div className="px-2 pb-2">
-                  <div className="relative">
-                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
-                    <Input 
-                      placeholder="Buscar PDV..." 
-                      value={pdvSearch} 
-                      onChange={e => setPdvSearch(e.target.value)} 
-                      className="pl-7 h-8 text-xs" 
-                    />
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm">Agrupamento</CardTitle>
+                  <div className="flex bg-muted p-1 rounded-md">
+                    <Button 
+                      variant={selectionType === 'pdv' ? 'secondary' : 'ghost'} 
+                      size="xs" 
+                      className="h-6 text-[10px] px-2"
+                      onClick={() => setSelectionType('pdv')}
+                    >
+                      PDVs
+                    </Button>
+                    <Button 
+                      variant={selectionType === 'network' ? 'secondary' : 'ghost'} 
+                      size="xs" 
+                      className="h-6 text-[10px] px-2"
+                      onClick={() => setSelectionType('network')}
+                    >
+                      Redes
+                    </Button>
                   </div>
                 </div>
-                <ScrollArea className="h-[400px]">
-                  {filteredPdvs.map((bp: any) => (
-                    <div
-                      key={bp.id}
-                      className={`flex items-center justify-between p-2 rounded-lg cursor-pointer mb-1 transition-colors ${selectedPdvId === bp.pdv_id ? 'bg-primary/10 border border-primary/30' : 'hover:bg-muted'}`}
-                      onClick={() => setSelectedPdvId(bp.pdv_id)}
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <Store className="h-4 w-4 text-muted-foreground shrink-0" />
-                        <div className="min-w-0">
-                          <span className="text-sm font-medium truncate block">{bp.pdv_name}</span>
-                          <span className="text-[10px] text-muted-foreground">{[bp.city, bp.state].filter(Boolean).join(' - ')}</span>
-                        </div>
+              </CardHeader>
+              <CardContent className="p-2">
+                {selectionType === 'pdv' ? (
+                  <>
+                    <div className="px-2 pb-2">
+                      <div className="relative">
+                        <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+                        <Input 
+                          placeholder="Buscar PDV..." 
+                          value={pdvSearch} 
+                          onChange={e => setPdvSearch(e.target.value)} 
+                          className="pl-7 h-8 text-xs" 
+                        />
                       </div>
-                      <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
                     </div>
-                  ))}
-                  {filteredPdvs.length === 0 && (
-                    <p className="text-sm text-muted-foreground text-center py-4">
-                      {pdvSearch ? 'Nenhum PDV encontrado' : 'Nenhum PDV vinculado a esta marca.'}
-                    </p>
-                  )}
-                </ScrollArea>
+                    <ScrollArea className="h-[400px]">
+                      {filteredPdvs.map((bp: any) => (
+                        <div
+                          key={bp.id}
+                          className={`flex items-center justify-between p-2 rounded-lg cursor-pointer mb-1 transition-colors ${selectedPdvId === bp.pdv_id ? 'bg-primary/10 border border-primary/30' : 'hover:bg-muted'}`}
+                          onClick={() => setSelectedPdvId(bp.pdv_id)}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <Store className="h-4 w-4 text-muted-foreground shrink-0" />
+                            <div className="min-w-0">
+                              <span className="text-sm font-medium truncate block">{bp.pdv_name}</span>
+                              <span className="text-[10px] text-muted-foreground">{[bp.city, bp.state].filter(Boolean).join(' - ')}</span>
+                            </div>
+                          </div>
+                          <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                        </div>
+                      ))}
+                      {filteredPdvs.length === 0 && (
+                        <p className="text-sm text-muted-foreground text-center py-4">
+                          {pdvSearch ? 'Nenhum PDV encontrado' : 'Nenhum PDV vinculado a esta marca.'}
+                        </p>
+                      )}
+                    </ScrollArea>
+                  </>
+                ) : (
+                  <ScrollArea className="h-[400px]">
+                    {networks.map((n: any) => (
+                      <div
+                        key={n.id}
+                        className={`flex items-center justify-between p-2 rounded-lg cursor-pointer mb-1 transition-colors ${selectedNetworkId === n.id ? 'bg-primary/10 border border-primary/30' : 'hover:bg-muted'}`}
+                        onClick={() => setSelectedNetworkId(n.id)}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <LayoutGrid className="h-4 w-4 text-muted-foreground shrink-0" />
+                          <div className="min-w-0">
+                            <span className="text-sm font-medium truncate block">{n.name}</span>
+                            <span className="text-[10px] text-muted-foreground">{n.pdv_count || 0} PDV(s)</span>
+                          </div>
+                        </div>
+                        <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                      </div>
+                    ))}
+                    {networks.length === 0 && (
+                      <p className="text-sm text-muted-foreground text-center py-4">Nenhuma rede cadastrada</p>
+                    )}
+                  </ScrollArea>
+                )}
               </CardContent>
             </Card>
 
