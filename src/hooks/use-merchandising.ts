@@ -301,3 +301,66 @@ export function usePdvReport(pdvId?: string) {
     enabled: !!pdvId,
   });
 }
+
+// ===== NETWORKS (REDES) =====
+export function useNetworks() {
+  return useQuery({
+    queryKey: ['merch-networks'],
+    queryFn: () => api<any[]>('/api/merchandising/networks'),
+  });
+}
+
+export function useCreateNetwork() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: any) => api<any>('/api/merchandising/networks', { method: 'POST', body: data }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['merch-networks'] }),
+  });
+}
+
+export function useUpdateNetwork() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }: any) => api<any>(`/api/merchandising/networks/${id}`, { method: 'PUT', body: data }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['merch-networks'] }),
+  });
+}
+
+export function useDeleteNetwork() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api<any>(`/api/merchandising/networks/${id}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['merch-networks'] }),
+  });
+}
+
+export function useNetworkPdvs(networkId?: string) {
+  return useQuery({
+    queryKey: ['merch-network-pdvs', networkId],
+    queryFn: () => api<any[]>(`/api/merchandising/networks/${networkId}/pdvs`),
+    enabled: !!networkId,
+  });
+}
+
+export function useUpdateNetworkPdvs() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, pdv_ids }: { id: string; pdv_ids: string[] }) => 
+      api<any>(`/api/merchandising/networks/${id}/pdvs`, { method: 'POST', body: { pdv_ids } }),
+    onSuccess: (_, variables) => {
+      qc.invalidateQueries({ queryKey: ['merch-networks'] });
+      qc.invalidateQueries({ queryKey: ['merch-network-pdvs', variables.id] });
+    },
+  });
+}
+
+export function useAddToMixBulk() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { network_id?: string; pdv_ids?: string[]; brand_id: string; product_ids: string[]; mandatory?: boolean; priority?: string }) =>
+      api<any>('/api/merchandising/mix/bulk', { method: 'POST', body: data }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['merch-mix'] });
+    },
+  });
+}
