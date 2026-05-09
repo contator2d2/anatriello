@@ -307,6 +307,7 @@ export function useNetworks() {
   return useQuery({
     queryKey: ['merch-networks'],
     queryFn: () => api<any[]>('/api/merchandising/networks'),
+    retry: false, // Don't retry if endpoint doesn't exist yet
   });
 }
 
@@ -339,6 +340,7 @@ export function useNetworkPdvs(networkId?: string) {
     queryKey: ['merch-network-pdvs', networkId],
     queryFn: () => api<any[]>(`/api/merchandising/networks/${networkId}/pdvs`),
     enabled: !!networkId,
+    retry: false,
   });
 }
 
@@ -364,3 +366,29 @@ export function useAddToMixBulk() {
     },
   });
 }
+
+// ===== MOCK API FALLBACKS FOR LOCAL DEVELOPMENT OR MISSING ENDPOINTS =====
+const useMockNetworks = () => {
+  return useQuery({
+    queryKey: ['merch-networks-mock'],
+    queryFn: () => {
+      const stored = localStorage.getItem('mock_merch_networks');
+      return stored ? JSON.parse(stored) : [];
+    }
+  });
+};
+
+const useMockCreateNetwork = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: any) => {
+      const stored = localStorage.getItem('mock_merch_networks');
+      const networks = stored ? JSON.parse(stored) : [];
+      const newNetwork = { ...data, id: Math.random().toString(36).substr(2, 9) };
+      networks.push(newNetwork);
+      localStorage.setItem('mock_merch_networks', JSON.stringify(networks));
+      return newNetwork;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['merch-networks-mock'] })
+  });
+};

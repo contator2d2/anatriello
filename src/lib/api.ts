@@ -66,6 +66,12 @@ const ENDPOINT_RESILIENCE: Partial<Record<string, EndpointResilienceConfig>> = {
     maxRetries: 0,
     silent: true,
   },
+  ['/api/merchandising/networks']: {
+    cooldownMs: 60000,
+    fallbackToOtherBases: false,
+    fallbackValue: () => [],
+    silent: true,
+  },
 };
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
