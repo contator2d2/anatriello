@@ -17,6 +17,7 @@ import {
   GitBranch,
   Kanban,
   LayoutDashboard,
+  LayoutGrid,
   LogOut,
   Map,
   Menu,
