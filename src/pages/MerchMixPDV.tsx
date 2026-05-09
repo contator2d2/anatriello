@@ -54,8 +54,17 @@ export default function MerchMixPDV() {
   const handleAddToMix = async () => {
     if (selectedToAdd.length === 0) return;
     try {
-      await addToMix.mutateAsync({ pdv_id: selectedPdvId, brand_id: selectedBrandId, product_ids: selectedToAdd });
-      toast.success(`${selectedToAdd.length} produto(s) adicionado(s)`);
+      if (selectionType === 'network' && selectedNetworkId) {
+        await addToMixBulk.mutateAsync({ 
+          network_id: selectedNetworkId, 
+          brand_id: selectedBrandId, 
+          product_ids: selectedToAdd 
+        });
+        toast.success(`${selectedToAdd.length} produto(s) adicionado(s) à rede ${selectedNetwork?.name}`);
+      } else {
+        await addToMix.mutateAsync({ pdv_id: selectedPdvId, brand_id: selectedBrandId, product_ids: selectedToAdd });
+        toast.success(`${selectedToAdd.length} produto(s) adicionado(s)`);
+      }
       setSelectedToAdd([]);
     } catch (e: any) { toast.error(e.message); }
   };
