@@ -31,9 +31,14 @@ export default function MerchMixPDV() {
   const { data: mixProducts = [] } = useMix(selectedPdvId || undefined, selectedBrandId || undefined);
 
   const addToMix = useAddToMix();
+  const addToMixBulk = useAddToMixBulk();
   const removeFromMix = useRemoveFromMix();
 
+  const { data: networks = [] } = useNetworks();
+  const { data: networkPdvs = [] } = useNetworkPdvs(selectedNetworkId || undefined);
+
   const selectedPdv = brandPdvs.find((bp: any) => bp.pdv_id === selectedPdvId);
+  const selectedNetwork = networks.find((n: any) => n.id === selectedNetworkId);
   const mixProductIds = new Set(mixProducts.map((m: any) => m.product_id));
   
   const filteredPdvs = useMemo(() => {
