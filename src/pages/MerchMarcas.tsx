@@ -172,6 +172,18 @@ export default function MerchMarcas() {
   return (
     <MainLayout>
       <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold flex items-center gap-2">
+            <Building2 className="h-6 w-6 text-primary" />
+            Gestão de Marcas
+          </h1>
+          <Button variant="outline" size="sm" asChild>
+            <Link to="/merch/dashboard" className="flex items-center gap-2">
+              <LayoutDashboard className="h-4 w-4" /> Dashboard
+            </Link>
+          </Button>
+        </div>
+
         <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
           <div className="flex gap-2 flex-1 w-full sm:w-auto">
             <div className="relative flex-1 max-w-sm">
