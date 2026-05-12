@@ -163,6 +163,14 @@ export function useUpdateBrandChecklist() {
   });
 }
 
+export function useDeleteBrandChecklist() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api<any>(`/api/merch/brand-checklists/${id}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['brand-checklists'] }),
+  });
+}
+
 // Damages (admin)
 export function useMerchDamages(filters?: { brand_id?: string; pdv_id?: string; product_id?: string; status?: string }) {
   const params = new URLSearchParams();
