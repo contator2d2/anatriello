@@ -173,7 +173,10 @@ export default function MerchMixPDV() {
                 </div>
               )}
               <div className="flex gap-2">
-
+                <Button variant="outline" size="sm" onClick={handleExportAll} disabled={isExporting}>
+                  <Download className="h-4 w-4 mr-2" />
+                  {isExporting ? 'Exportando...' : 'Exportar Tudo'}
+                </Button>
                 <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
                   <Upload className="h-4 w-4 mr-2" />
                   Importar Mix
