@@ -113,6 +113,7 @@ export interface CRMDeal {
   last_opened_at: string;
   custom_fields?: Record<string, any>;
   source?: string;
+  automation_active?: boolean;
   created_at: string;
 }
 
