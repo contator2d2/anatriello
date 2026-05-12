@@ -10,9 +10,11 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useBrands, useProducts, usePdvBrands, useAddPdvBrand, useRemovePdvBrand, useBrandPdvs, useMix, useAddToMix, useRemoveFromMix, useNetworks, useNetworkPdvs, useAddToMixBulk } from "@/hooks/use-merchandising";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { Search, Plus, Store, Building2, Package, ArrowRight, ArrowLeft, ChevronRight, Upload, LayoutGrid, Download } from "lucide-react";
+import { Search, Plus, Store, Building2, Package, ArrowRight, ArrowLeft, ChevronRight, Upload, LayoutGrid, Download, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { MixImportDialog } from "@/components/merchandising/MixImportDialog";
+import { Progress } from "@/components/ui/progress";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 export default function MerchMixPDV() {
   const [selectedBrandId, setSelectedBrandId] = useState<string>('');
@@ -25,6 +27,8 @@ export default function MerchMixPDV() {
   const [importOpen, setImportOpen] = useState(false);
   const [pdvSearch, setPdvSearch] = useState('');
   const [isExporting, setIsExporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState(0);
+  const [exportStatus, setExportStatus] = useState('');
   const queryClient = useQueryClient();
 
   const { data: allBrands = [] } = useBrands({ status: 'active' });
@@ -86,20 +90,25 @@ export default function MerchMixPDV() {
   const handleExportAll = async () => {
     try {
       setIsExporting(true);
+      setExportProgress(0);
+      setExportStatus('Iniciando...');
       
       // 1. Fetch all brands first
       const brands = allBrands.length > 0 ? allBrands : await api<any[]>('/api/merchandising/brands');
       
       // 2. Fetch all products to have names/brands
+      setExportStatus('Carregando produtos...');
       const allProducts = await api<any[]>('/api/merchandising/products');
       
       // 3. Since bulk endpoints might be missing or erroring, we fetch mix per brand
-      // This is safer than calling /all which seems to be interpreted as a UUID by the backend
       const fullMix: any[] = [];
       
-      toast.info("Iniciando exportação de todas as marcas...");
-      
+      let processedBrands = 0;
       for (const brand of brands) {
+        processedBrands++;
+        setExportStatus(`Processando marca: ${brand.name} (${processedBrands}/${brands.length})`);
+        setExportProgress(Math.round((processedBrands / brands.length) * 100));
+        
         try {
           // Get all PDVs for this brand
           const brandPdvs = await api<any[]>(`/api/merchandising/brand-pdvs/${brand.id}`);
@@ -122,6 +131,8 @@ export default function MerchMixPDV() {
           console.warn(`Could not fetch PDVs for brand ${brand.id}`);
         }
       }
+      
+      setExportStatus('Gerando arquivo...');
 
       if (fullMix.length === 0) {
         toast.error("Nenhum dado de mix encontrado para exportar");
@@ -427,6 +438,25 @@ export default function MerchMixPDV() {
           </Card>
         )}
       </div>
+      
+      <Dialog open={isExporting} onOpenChange={() => {}}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Exportando Mix de Produtos</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">{exportStatus}</span>
+              <span className="font-medium">{exportProgress}%</span>
+            </div>
+            <Progress value={exportProgress} className="h-2" />
+            <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Por favor, aguarde a conclusão do processo.
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </MainLayout>
   );
 }
