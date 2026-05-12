@@ -166,7 +166,7 @@ export function useUpdateBrandChecklist() {
 export function useDeleteBrandChecklist() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => api<any>(`/api/merch/brand-checklists/${id}`, { method: 'DELETE' }),
+    mutationFn: (id: string) => api<any>(`/api/merchandising/brand-checklists/${id}`, { method: 'DELETE' }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['brand-checklists'] }),
   });
 }
