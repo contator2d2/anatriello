@@ -10,7 +10,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useBrands, useProducts, usePdvBrands, useAddPdvBrand, useRemovePdvBrand, useBrandPdvs, useMix, useAddToMix, useRemoveFromMix, useNetworks, useNetworkPdvs, useAddToMixBulk, useClearMixByBrand } from "@/hooks/use-merchandising";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { Search, Plus, Store, Building2, Package, ArrowRight, ArrowLeft, ChevronRight, Upload, LayoutGrid, Download, Loader2 } from "lucide-react";
+import { Search, Plus, Store, Building2, Package, ArrowRight, ArrowLeft, ChevronRight, Upload, LayoutGrid, Download, Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { MixImportDialog } from "@/components/merchandising/MixImportDialog";
 import { Progress } from "@/components/ui/progress";
