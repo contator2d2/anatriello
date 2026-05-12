@@ -195,6 +195,7 @@ const App = () => (
             <Route path="/" element={<SmartRedirect />} />
             <Route path="/landing" element={<LandingPage />} />
             <Route path="/dashboard" element={<ProtectedRoute><Index /></ProtectedRoute>} />
+            <Route path="/merch/dashboard" element={<ProtectedRoute><MerchDashboard /></ProtectedRoute>} />
             <Route path="/conexao" element={<ProtectedRoute><Conexao /></ProtectedRoute>} />
             <Route path="/contatos" element={<ProtectedRoute><Contatos /></ProtectedRoute>} />
             <Route path="/mensagens" element={<ProtectedRoute><Mensagens /></ProtectedRoute>} />
