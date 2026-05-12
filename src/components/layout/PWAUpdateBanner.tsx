@@ -16,7 +16,7 @@ const isPreviewHost =
   window.location.hostname.includes("id-preview--") ||
   window.location.hostname.includes("lovableproject.com");
 
-const shouldWatchForUpdates = !isInIframe && !isPreviewHost;
+const shouldWatchForUpdates = !isInIframe;
 
 export function PWAUpdateBanner() {
   const [showPopup, setShowPopup] = useState(false);
@@ -72,10 +72,10 @@ export function PWAUpdateBanner() {
           setShowPopup(true);
         }
 
-        // Check for updates every 30 seconds
+        // Check for updates every 15 seconds
         interval = setInterval(() => {
           reg.update().catch(() => {});
-        }, 30 * 1000);
+        }, 15 * 1000);
       } catch (err) {
         console.error("[PWA] Error setting up update listener:", err);
       }
