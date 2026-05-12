@@ -10,10 +10,10 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useBrandChecklists, useCreateBrandChecklist, useUpdateBrandChecklist } from "@/hooks/use-merch-routes";
+import { useBrandChecklists, useCreateBrandChecklist, useUpdateBrandChecklist, useDeleteBrandChecklist } from "@/hooks/use-merch-routes";
 import { useBrands } from "@/hooks/use-merchandising";
 import { toast } from "sonner";
-import { Plus, Edit, ClipboardList, Camera, Package, CalendarDays, Archive, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Plus, Edit, ClipboardList, Camera, Package, CalendarDays, Archive, AlertTriangle, CheckCircle2, Trash2 } from "lucide-react";
 
 const FREQUENCIES = [
   { value: 'every_visit', label: 'Toda visita' },
@@ -29,6 +29,7 @@ export default function MerchChecklists() {
   const { data: checklists = [], isLoading } = useBrandChecklists(selectedBrand || undefined);
   const createChecklist = useCreateBrandChecklist();
   const updateChecklist = useUpdateBrandChecklist();
+  const deleteChecklist = useDeleteBrandChecklist();
   const [showEditor, setShowEditor] = useState(false);
   const [editing, setEditing] = useState<any>(null);
   const [form, setForm] = useState<any>({});
@@ -62,6 +63,15 @@ export default function MerchChecklists() {
         toast.success('Checklist criado');
       }
       setShowEditor(false);
+    } catch (err: any) { toast.error(err.message); }
+  };
+
+  const handleDelete = async (id: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (!window.confirm('Tem certeza que deseja excluir este checklist?')) return;
+    try {
+      await deleteChecklist.mutateAsync(id);
+      toast.success('Checklist excluído');
     } catch (err: any) { toast.error(err.message); }
   };
 
@@ -99,9 +109,15 @@ export default function MerchChecklists() {
                 <CardHeader className="pb-2">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-sm">{c.name}</CardTitle>
-                    <Badge variant={c.active !== false ? 'default' : 'secondary'} className="text-[10px]">
-                      {c.active !== false ? 'Ativo' : 'Inativo'}
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" 
+                        onClick={(e) => handleDelete(c.id, e)}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                      <Badge variant={c.active !== false ? 'default' : 'secondary'} className="text-[10px]">
+                        {c.active !== false ? 'Ativo' : 'Inativo'}
+                      </Badge>
+                    </div>
                   </div>
                   {c.brand_name && <p className="text-xs text-muted-foreground">{c.brand_name}</p>}
                 </CardHeader>
