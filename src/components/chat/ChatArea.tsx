@@ -967,6 +967,25 @@ export function ChatArea({
 
       {/* AI Agent Banner */}
       {!conversation.is_group && <AIAgentBanner conversationId={conversation.id} isGroup={conversation.is_group} onSessionChange={(s) => setAiAgentActive(!!(s && !s.human_takeover))} />}
+      
+      {/* Lead Automation Banner */}
+      {isAutomationActive && (
+        <div className="bg-purple-50 dark:bg-purple-950/20 border-b border-purple-100 dark:border-purple-900/30 px-4 py-2 flex items-center justify-between animate-in fade-in slide-in-from-top duration-300">
+          <div className="flex items-center gap-2 text-purple-700 dark:text-purple-400 text-sm font-medium">
+            <div className="relative">
+              <Bot className="h-4 w-4" />
+              <span className="absolute -top-1 -right-1 flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-purple-500"></span>
+              </span>
+            </div>
+            <span>Automação ativa: Aguardando resposta do lead</span>
+          </div>
+          <Badge variant="outline" className="border-purple-200 text-purple-600 bg-purple-50/50">
+            Automático
+          </Badge>
+        </div>
+      )}
 
       {/* Mobile Quick Actions */}
       {isMobile && (
