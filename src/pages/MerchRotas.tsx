@@ -554,13 +554,21 @@ function RouteFormDialog({ open, route, onClose, pdvs, employees, onSave, onDele
               </SelectContent>
             </Select>
           ) : (
-            <span className="text-[10px] text-muted-foreground">Sem checklists</span>
+            <span className="text-[10px] text-muted-foreground">Opcional</span>
           )}
         </div>
-        <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive"
-          onClick={() => setMultiBrands(prev => prev.filter(b => b.brand_id !== brandId))}>
-          <X className="h-3 w-3" />
-        </Button>
+        <div className="flex flex-col gap-1">
+          <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive"
+            onClick={() => setMultiBrands(prev => prev.filter(b => b.brand_id !== brandId))}>
+            <X className="h-3 w-3" />
+          </Button>
+          {cls.length > 0 && checklistId && (
+            <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground"
+              onClick={() => onChange('')}>
+              <X className="h-2 w-2" />
+            </Button>
+          )}
+        </div>
       </div>
     );
   };
@@ -902,7 +910,20 @@ function RouteFormDialog({ open, route, onClose, pdvs, employees, onSave, onDele
             <div>
               <Label className="text-xs">Checklist</Label>
               <Select value={multiBrands[0]?.checklist_id || ''} onValueChange={v => setMultiBrands(prev => prev.map((b, i) => i === 0 ? { ...b, checklist_id: v } : b))}>
-                <SelectTrigger><SelectValue placeholder="Selecionar checklist" /></SelectTrigger>
+                <SelectTrigger className="flex items-center">
+                  <SelectValue placeholder="Sem checklist (opcional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Sem checklist (apenas instrução)</SelectItem>
+                  {checklists.filter((c: any) => c?.id).map((c: any) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              {multiBrands[0]?.checklist_id && (
+                <Button variant="ghost" size="sm" className="h-6 px-2 text-[10px] text-muted-foreground mt-1"
+                  onClick={() => setMultiBrands(prev => prev.map((b, i) => i === 0 ? { ...b, checklist_id: undefined } : b))}>
+                  Limpar checklist
+                </Button>
+              )}
                 <SelectContent>
                   {checklists.filter((c: any) => c?.id).map((c: any) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                 </SelectContent>
