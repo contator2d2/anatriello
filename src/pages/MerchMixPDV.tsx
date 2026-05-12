@@ -90,20 +90,25 @@ export default function MerchMixPDV() {
   const handleExportAll = async () => {
     try {
       setIsExporting(true);
+      setExportProgress(0);
+      setExportStatus('Iniciando...');
       
       // 1. Fetch all brands first
       const brands = allBrands.length > 0 ? allBrands : await api<any[]>('/api/merchandising/brands');
       
       // 2. Fetch all products to have names/brands
+      setExportStatus('Carregando produtos...');
       const allProducts = await api<any[]>('/api/merchandising/products');
       
       // 3. Since bulk endpoints might be missing or erroring, we fetch mix per brand
-      // This is safer than calling /all which seems to be interpreted as a UUID by the backend
       const fullMix: any[] = [];
       
-      toast.info("Iniciando exportação de todas as marcas...");
-      
+      let processedBrands = 0;
       for (const brand of brands) {
+        processedBrands++;
+        setExportStatus(`Processando marca: ${brand.name} (${processedBrands}/${brands.length})`);
+        setExportProgress(Math.round((processedBrands / brands.length) * 100));
+        
         try {
           // Get all PDVs for this brand
           const brandPdvs = await api<any[]>(`/api/merchandising/brand-pdvs/${brand.id}`);
@@ -126,6 +131,8 @@ export default function MerchMixPDV() {
           console.warn(`Could not fetch PDVs for brand ${brand.id}`);
         }
       }
+      
+      setExportStatus('Gerando arquivo...');
 
       if (fullMix.length === 0) {
         toast.error("Nenhum dado de mix encontrado para exportar");
