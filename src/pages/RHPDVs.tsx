@@ -150,7 +150,14 @@ export default function RHPDVs() {
     <MainLayout>
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-bold flex items-center gap-2"><MapPin className="h-5 w-5" /> Cadastro de PDVs</h1>
+          <div className="flex items-center gap-4">
+            <h1 className="text-xl font-bold flex items-center gap-2"><MapPin className="h-5 w-5" /> Cadastro de PDVs</h1>
+            <Button variant="outline" size="sm" asChild>
+              <Link to="/merch/dashboard" className="flex items-center gap-2">
+                <LayoutDashboard className="h-4 w-4" /> Dashboard
+              </Link>
+            </Button>
+          </div>
           <div className="flex gap-2">
             {selectedIds.size > 0 && (
               <Button variant="destructive" onClick={handleBulkDelete} disabled={deletePDV.isPending}>
