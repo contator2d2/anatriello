@@ -218,8 +218,15 @@ export default function MerchProdutos() {
           </div>
           <div className="flex gap-2">
             {selectedIds.size > 0 && (
-              <Button variant="destructive" onClick={handleBulkDelete}>
-                <Trash2 className="h-4 w-4 mr-2" />Excluir {selectedIds.size}
+              <Button 
+                variant="destructive" 
+                onClick={() => {
+                  if (confirm(`Excluir ${selectedIds.size} produto(s) selecionado(s)? Esta ação também removerá estes produtos de todos os Mix de PDVs.`)) {
+                    handleBulkDelete();
+                  }
+                }}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />Excluir Selecionados ({selectedIds.size})
               </Button>
             )}
             <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleImportFile} />

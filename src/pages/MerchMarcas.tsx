@@ -189,8 +189,15 @@ export default function MerchMarcas() {
           </div>
           <div className="flex gap-2">
             {selectedIds.size > 0 && (
-              <Button variant="destructive" onClick={handleBulkDelete}>
-                <Trash2 className="h-4 w-4 mr-2" />Excluir {selectedIds.size}
+              <Button 
+                variant="destructive" 
+                onClick={() => {
+                  if (confirm(`Excluir ${selectedIds.size} marca(s) selecionada(s)? Esta ação também excluirá os produtos e mix vinculados a estas marcas.`)) {
+                    handleBulkDelete();
+                  }
+                }}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />Excluir Selecionados ({selectedIds.size})
               </Button>
             )}
             {isAdmin && (

@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { useBrands, useProducts, usePdvBrands, useAddPdvBrand, useRemovePdvBrand, useBrandPdvs, useMix, useAddToMix, useRemoveFromMix, useNetworks, useNetworkPdvs, useAddToMixBulk } from "@/hooks/use-merchandising";
+import { useBrands, useProducts, usePdvBrands, useAddPdvBrand, useRemovePdvBrand, useBrandPdvs, useMix, useAddToMix, useRemoveFromMix, useNetworks, useNetworkPdvs, useAddToMixBulk, useClearMixByBrand } from "@/hooks/use-merchandising";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { Search, Plus, Store, Building2, Package, ArrowRight, ArrowLeft, ChevronRight, Upload, LayoutGrid, Download, Loader2 } from "lucide-react";
@@ -39,6 +39,7 @@ export default function MerchMixPDV() {
   const addToMix = useAddToMix();
   const addToMixBulk = useAddToMixBulk();
   const removeFromMix = useRemoveFromMix();
+  const clearMixByBrand = useClearMixByBrand();
 
   const { data: networks = [] } = useNetworks();
   const { data: networkPdvs = [] } = useNetworkPdvs(selectedNetworkId || undefined);
@@ -82,6 +83,18 @@ export default function MerchMixPDV() {
       toast.success(`${selectedToRemove.length} produto(s) removido(s)`);
       setSelectedToRemove([]);
     } catch (e: any) { toast.error(e.message); }
+  };
+
+  const handleClearMix = async () => {
+    if (!selectedBrandId) return;
+    if (!confirm('Deseja realmente apagar TODO o mix de produtos para esta marca em TODOS os PDVs? Esta ação é irreversível.')) return;
+    
+    try {
+      await clearMixByBrand.mutateAsync(selectedBrandId);
+      toast.success('Mix da marca limpo com sucesso');
+    } catch (e: any) {
+      toast.error(e.message);
+    }
   };
 
   const toggleAdd = (id: string) => setSelectedToAdd(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
@@ -201,6 +214,12 @@ export default function MerchMixPDV() {
                 </div>
               )}
               <div className="flex gap-2">
+                {selectedBrandId && (
+                  <Button variant="destructive" size="sm" onClick={handleClearMix} disabled={clearMixByBrand.isPending}>
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Limpar Mix Marca
+                  </Button>
+                )}
                 <Button variant="outline" size="sm" onClick={handleExportAll} disabled={isExporting}>
                   <Download className="h-4 w-4 mr-2" />
                   {isExporting ? 'Exportando...' : 'Exportar Tudo'}

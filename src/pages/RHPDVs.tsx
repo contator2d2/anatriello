@@ -33,6 +33,7 @@ export default function RHPDVs() {
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState(EMPTY_PDV);
   const [search, setSearch] = useState("");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const { data: pdvs, isLoading } = usePDVs();
   const { data: employees } = useEmployees();
   const createPDV = useCreatePDV();
@@ -115,12 +116,45 @@ export default function RHPDVs() {
 
   const filtered = (pdvs || []).filter((p: any) => !search || p.name.toLowerCase().includes(search.toLowerCase()) || (p.client_name || '').toLowerCase().includes(search.toLowerCase()));
 
+  const handleBulkDelete = async () => {
+    if (!selectedIds.size) return;
+    if (!confirm(`Excluir ${selectedIds.size} PDV(s) selecionado(s)? Esta ação também removerá os vínculos de marcas e mix destes PDVs.`)) return;
+    
+    let ok = 0, fail = 0;
+    for (const id of selectedIds) {
+      try { 
+        await deletePDV.mutateAsync(id); 
+        ok++; 
+      } catch { 
+        fail++; 
+      }
+    }
+    setSelectedIds(new Set());
+    toast({ title: 'Exclusão em massa concluída', description: `${ok} excluído(s)${fail ? `, ${fail} erro(s)` : ''}` });
+  };
+
+  const toggleAll = () => {
+    if (selectedIds.size === filtered.length) setSelectedIds(new Set());
+    else setSelectedIds(new Set(filtered.map((p: any) => p.id)));
+  };
+
+  const toggleOne = (id: string) => {
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    setSelectedIds(next);
+  };
+
   return (
     <MainLayout>
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-bold flex items-center gap-2"><MapPin className="h-5 w-5" /> Cadastro de PDVs</h1>
           <div className="flex gap-2">
+            {selectedIds.size > 0 && (
+              <Button variant="destructive" onClick={handleBulkDelete} disabled={deletePDV.isPending}>
+                <Trash2 className="h-4 w-4 mr-2" /> Excluir Selecionados ({selectedIds.size})
+              </Button>
+            )}
             {isAdmin && (
               <>
                 <Button variant="outline" onClick={handleExport}><Download className="h-4 w-4 mr-2" /> Exportar</Button>
@@ -137,6 +171,12 @@ export default function RHPDVs() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10">
+                  <Checkbox 
+                    checked={filtered.length > 0 && selectedIds.size === filtered.length} 
+                    onCheckedChange={toggleAll} 
+                  />
+                </TableHead>
                 <TableHead>Nome</TableHead>
                 <TableHead>Cliente</TableHead>
                 <TableHead>Cidade/UF</TableHead>
@@ -148,7 +188,13 @@ export default function RHPDVs() {
             </TableHeader>
             <TableBody>
               {filtered.map((p: any) => (
-                <TableRow key={p.id}>
+                <TableRow key={p.id} className={selectedIds.has(p.id) ? 'bg-primary/5' : ''}>
+                  <TableCell>
+                    <Checkbox 
+                      checked={selectedIds.has(p.id)} 
+                      onCheckedChange={() => toggleOne(p.id)} 
+                    />
+                  </TableCell>
                   <TableCell className="font-medium">{p.name}</TableCell>
                   <TableCell>{p.client_name || '-'}</TableCell>
                   <TableCell>{p.city ? `${p.city}/${p.state}` : '-'}</TableCell>
