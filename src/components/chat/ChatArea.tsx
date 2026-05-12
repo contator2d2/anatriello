@@ -436,6 +436,9 @@ export function ChatArea({
     );
   };
 
+  // Automation Indicator (Lead)
+  const isAutomationActive = (conversation as any)?.automation_active;
+
   // Send message
   const handleSend = async () => {
     if (!messageText.trim() || sending) return;
