@@ -143,7 +143,7 @@ export function useBrandChecklists(brandId?: string) {
   const qs = brandId ? `?brand_id=${brandId}` : '';
   return useQuery({
     queryKey: ['brand-checklists', brandId],
-    queryFn: () => api<any[]>(`/api/merchandising/brand-checklists${qs}`),
+    queryFn: () => api<any[]>(`/api/merch/brand-checklists${qs}`),
   });
 }
 
