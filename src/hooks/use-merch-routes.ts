@@ -143,14 +143,14 @@ export function useBrandChecklists(brandId?: string) {
   const qs = brandId ? `?brand_id=${brandId}` : '';
   return useQuery({
     queryKey: ['brand-checklists', brandId],
-    queryFn: () => api<any[]>(`/api/merch/brand-checklists${qs}`),
+    queryFn: () => api<any[]>(`/api/merchandising/brand-checklists${qs}`),
   });
 }
 
 export function useCreateBrandChecklist() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: any) => api<any>('/api/merch/brand-checklists', { method: 'POST', body: data }),
+    mutationFn: (data: any) => api<any>('/api/merchandising/brand-checklists', { method: 'POST', body: data }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['brand-checklists'] }),
   });
 }
@@ -158,7 +158,7 @@ export function useCreateBrandChecklist() {
 export function useUpdateBrandChecklist() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, ...data }: any) => api<any>(`/api/merch/brand-checklists/${id}`, { method: 'PUT', body: data }),
+    mutationFn: ({ id, ...data }: any) => api<any>(`/api/merchandising/brand-checklists/${id}`, { method: 'PUT', body: data }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['brand-checklists'] }),
   });
 }
@@ -166,7 +166,7 @@ export function useUpdateBrandChecklist() {
 export function useDeleteBrandChecklist() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => api<any>(`/api/merch/brand-checklists/${id}`, { method: 'DELETE' }),
+    mutationFn: (id: string) => api<any>(`/api/merchandising/brand-checklists/${id}`, { method: 'DELETE' }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['brand-checklists'] }),
   });
 }
