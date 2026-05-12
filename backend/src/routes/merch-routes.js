@@ -701,6 +701,20 @@ router.put('/brand-checklists/:id', authenticate, async (req, res) => {
   } catch (err) { logError('checklists.update', err); res.status(500).json({ error: 'Erro' }); }
 });
 
+router.delete('/brand-checklists/:id', authenticate, async (req, res) => {
+  try {
+    const orgRes = await query('SELECT organization_id FROM organization_members WHERE user_id=$1 LIMIT 1', [req.userId]);
+    const orgId = orgRes.rows[0].organization_id;
+    
+    // Safety check: ensure it belongs to org
+    const check = await query('SELECT id FROM brand_checklists WHERE id=$1 AND organization_id=$2', [req.params.id, orgId]);
+    if (!check.rows.length) return res.status(404).json({ error: 'Não encontrado' });
+
+    await query('DELETE FROM brand_checklists WHERE id=$1', [req.params.id]);
+    res.json({ ok: true });
+  } catch (err) { logError('checklists.delete', err); res.status(500).json({ error: 'Erro' }); }
+});
+
 // ===== DAMAGES (admin) =====
 router.get('/damages', authenticate, async (req, res) => {
   try {
