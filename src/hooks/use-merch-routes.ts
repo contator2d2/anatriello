@@ -158,7 +158,7 @@ export function useCreateBrandChecklist() {
 export function useUpdateBrandChecklist() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, ...data }: any) => api<any>(`/api/merch/brand-checklists/${id}`, { method: 'PUT', body: data }),
+    mutationFn: ({ id, ...data }: any) => api<any>(`/api/merchandising/brand-checklists/${id}`, { method: 'PUT', body: data }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['brand-checklists'] }),
   });
 }
