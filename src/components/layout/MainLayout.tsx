@@ -5,6 +5,7 @@ import { MessageNotifications } from "./MessageNotifications";
 import { CRMAlerts } from "./CRMAlerts";
 import { ConnectionStatusIndicator } from "./ConnectionStatusIndicator";
 import { GroupSecretaryPopup } from "./GroupSecretaryPopup";
+import { PWAUpdateBanner } from "./PWAUpdateBanner";
 
 interface MainLayoutProps {
   children: ReactNode;
