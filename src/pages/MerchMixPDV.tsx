@@ -8,9 +8,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useBrands, useProducts, usePdvBrands, useAddPdvBrand, useRemovePdvBrand, useBrandPdvs, useMix, useAddToMix, useRemoveFromMix, useNetworks, useNetworkPdvs, useAddToMixBulk } from "@/hooks/use-merchandising";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { Search, Plus, Store, Building2, Package, ArrowRight, ArrowLeft, ChevronRight, Upload, LayoutGrid } from "lucide-react";
+import { Search, Plus, Store, Building2, Package, ArrowRight, ArrowLeft, ChevronRight, Upload, LayoutGrid, Download } from "lucide-react";
 import { toast } from "sonner";
 import { MixImportDialog } from "@/components/merchandising/MixImportDialog";
 
@@ -24,6 +24,8 @@ export default function MerchMixPDV() {
   const [selectedToRemove, setSelectedToRemove] = useState<string[]>([]);
   const [importOpen, setImportOpen] = useState(false);
   const [pdvSearch, setPdvSearch] = useState('');
+  const [isExporting, setIsExporting] = useState(false);
+  const queryClient = useQueryClient();
 
   const { data: allBrands = [] } = useBrands({ status: 'active' });
   const { data: brandPdvs = [] } = useBrandPdvs(selectedBrandId || undefined);
@@ -81,6 +83,67 @@ export default function MerchMixPDV() {
   const toggleAdd = (id: string) => setSelectedToAdd(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
   const toggleRemove = (id: string) => setSelectedToRemove(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
 
+  const handleExportAll = async () => {
+    try {
+      setIsExporting(true);
+      
+      // 1. Fetch all PDVs
+      const allPdvs = await api<any[]>('/api/merchandising/pdv-brands/all');
+      
+      // 2. Fetch all products to have names/brands
+      const allProducts = await api<any[]>('/api/merchandising/products');
+      
+      // 3. Fetch full mix data
+      const fullMix = await api<any[]>('/api/merchandising/mix/all');
+      
+      if (!fullMix || fullMix.length === 0) {
+        toast.error("Nenhum dado de mix encontrado para exportar");
+        return;
+      }
+
+      // Map IDs to names for better readability in CSV
+      const productMap = new Map(allProducts.map(p => [p.id, p]));
+      
+      const csvData = fullMix.map(item => {
+        const product = productMap.get(item.product_id);
+        const brand = allBrands.find(b => b.id === item.brand_id);
+        
+        return {
+          'PDV ID': item.pdv_id,
+          'PDV': item.pdv_name || '',
+          'Marca': brand?.name || item.brand_id,
+          'Produto': product?.name || item.product_name || '',
+          'SKU': product?.sku || '',
+          'Obrigatório': item.mandatory ? 'Sim' : 'Não',
+          'Prioridade': item.priority || 'Normal'
+        };
+      });
+
+      // Simple CSV generation
+      const headers = Object.keys(csvData[0]);
+      const csvRows = [
+        headers.join(','),
+        ...csvData.map(row => headers.map(header => `"${(row as any)[header]}"`).join(','))
+      ];
+      const csvString = csvRows.join('\n');
+      
+      const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.setAttribute('download', `mix_completo_${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      toast.success("Exportação concluída com sucesso!");
+    } catch (error: any) {
+      console.error('Export error:', error);
+      toast.error("Erro ao exportar dados: " + (error.message || "Verifique as rotas do servidor"));
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <MainLayout>
       <div className="space-y-4">
@@ -110,7 +173,10 @@ export default function MerchMixPDV() {
                 </div>
               )}
               <div className="flex gap-2">
-
+                <Button variant="outline" size="sm" onClick={handleExportAll} disabled={isExporting}>
+                  <Download className="h-4 w-4 mr-2" />
+                  {isExporting ? 'Exportando...' : 'Exportar Tudo'}
+                </Button>
                 <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
                   <Upload className="h-4 w-4 mr-2" />
                   Importar Mix
