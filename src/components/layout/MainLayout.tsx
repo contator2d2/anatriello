@@ -32,6 +32,7 @@ export function MainLayout({ children }: MainLayoutProps) {
         <div className="p-2 xl:p-3 2xl:p-4 w-full min-w-0 overflow-x-hidden" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>{children}</div>
       </main>
       <GroupSecretaryPopup />
+      <PWAUpdateBanner />
     </div>
   );
 }
