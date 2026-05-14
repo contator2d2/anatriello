@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAgencyAuth } from '@/contexts/AgencyAuthContext';
 import { Button } from '@/components/ui/button';
@@ -16,23 +16,26 @@ export default function AgencyLogin() {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  if (isAuthenticated) {
-    navigate('/agencia/dashboard', { replace: true });
-    return null;
-  }
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/agencia/dashboard', { replace: true });
+    }
+  }, [isAuthenticated, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
       await login(email, password);
-      navigate('/agencia/dashboard', { replace: true });
+      // O useEffect lidará com o redirecionamento
     } catch (err: any) {
       toast({ title: 'Erro no login', description: err?.message || 'Credenciais inválidas', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
   };
+
+  if (isAuthenticated) return null;
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
