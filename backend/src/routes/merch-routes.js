@@ -149,7 +149,7 @@ router.post('/routes', authenticate, async (req, res) => {
          visit_date, scheduled_time, window_start, window_end, estimated_duration_min, priority, visit_type,
          recurrence, notes, created_by)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
-        [orgId, promoter_id, supervisor_id, pdv_id, isMultiBrand ? null : primaryBrandId, isMultiBrand ? null : effectiveChecklistId, d, scheduled_time,
+        [orgId, promoter_id, supervisor_id, pdv_id, isMultiBrand ? null : (primaryBrandId || null), isMultiBrand ? null : (effectiveChecklistId || null), d, scheduled_time,
          window_start, window_end, estimated_duration_min || 60, priority || 'normal', visit_type || 'regular',
          recurrence, notes, req.userId]
       );
@@ -432,7 +432,7 @@ router.post('/routes/:id/duplicate', authenticate, async (req, res) => {
       `INSERT INTO merch_routes (organization_id, promoter_id, supervisor_id, pdv_id, brand_id, checklist_id,
        visit_date, scheduled_time, window_start, window_end, estimated_duration_min, priority, visit_type, notes, created_by)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
-      [orgId, o.promoter_id, o.supervisor_id, o.pdv_id, o.brand_id, o.checklist_id,
+      [orgId, o.promoter_id, o.supervisor_id, o.pdv_id, o.brand_id || null, o.checklist_id || null,
        newDate, o.scheduled_time, o.window_start, o.window_end, o.estimated_duration_min,
        o.priority, o.visit_type, o.notes, req.userId]
     );
@@ -2467,7 +2467,7 @@ router.post('/ai/approve', authenticate, async (req, res) => {
         `INSERT INTO merch_routes (organization_id, promoter_id, pdv_id, brand_id, checklist_id,
          visit_date, scheduled_time, estimated_duration_min, priority, visit_type, notes, created_by)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'normal','regular',$9,$10) RETURNING *`,
-        [orgId, s.promoter_id, s.pdv_id, s.brand_id, effectiveChecklistId,
+        [orgId, s.promoter_id, s.pdv_id, s.brand_id || null, effectiveChecklistId || null,
          s.visit_date, s.scheduled_time, s.estimated_duration_min || 60,
          `[IA] ${s.reason || ''}`, req.userId]
       );
