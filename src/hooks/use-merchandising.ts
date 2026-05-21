@@ -384,7 +384,7 @@ export function useDeleteNetwork() {
   return useMutation({
     mutationFn: async (id: string) => {
       try {
-        return await api<any>(`/api/merch/networks/${id}`, { method: 'DELETE' });
+        return await api<any>(`/api/merchandising/networks/${id}`, { method: 'DELETE' });
       } catch (e: any) {
         const is404 = e.status === 404 || (e.message && e.message.includes('404'));
         if (is404 || id.startsWith('mock-')) {
