@@ -206,9 +206,13 @@ function CategoryPreparation({ category, catId, categoryName, routeId, pdvName, 
 
             {/* Submit button */}
             {photos.length > 0 && (
-              <Button className="w-full" onClick={handleUploadPhoto} disabled={isSending}>
+              <Button className="w-full" onClick={handleUploadPhoto} disabled={isSending || photos.length < min}>
                 <ImagePlus className="h-4 w-4 mr-2" />
-                {isSending ? 'Enviando...' : `Registrar ${photos.length} foto(s) e liberar produtos`}
+                {isSending
+                  ? 'Enviando...'
+                  : photos.length < min
+                    ? `Faltam ${min - photos.length} foto(s) para liberar`
+                    : `Registrar ${photos.length} foto(s) e liberar produtos`}
               </Button>
             )}
           </div>
