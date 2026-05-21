@@ -310,8 +310,8 @@ export function useNetworks() {
       try {
         return await api<any[]>('/api/merch/networks');
       } catch (e: any) {
-        const is404 = e.status === 404 || (e.message && e.message.includes('404'));
-        if (is404) {
+        // Only fallback to mock if it's really a 404
+        if (e.status === 404) {
           const stored = localStorage.getItem('mock_merch_networks');
           return stored ? JSON.parse(stored) : [];
         }
@@ -319,8 +319,7 @@ export function useNetworks() {
       }
     },
     retry: (failureCount, error: any) => {
-      const is404 = error?.status === 404 || (error?.message && error.message.includes('404'));
-      if (is404) return false;
+      if (error?.status === 404) return false;
       return failureCount < 3;
     },
   });
