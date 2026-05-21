@@ -78,9 +78,14 @@ router.post('/routes', async (req, res) => {
             recurrence_type, recurrence_interval, recurrence_until, recurrence_weekdays,
             brands: multiBrands } = req.body;
 
-    // Determine if multi-brand
-    const isMultiBrand = Array.isArray(multiBrands) && multiBrands.length > 0;
+    // Determine if truly multi-brand. The frontend also sends `brands` for a
+    // single selected brand, but old databases still require merch_routes.brand_id.
+    const isMultiBrand = Array.isArray(multiBrands) && multiBrands.length > 1;
     const primaryBrandId = isMultiBrand ? multiBrands[0].brand_id : brand_id;
+
+    if (isMultiBrand) {
+      await ensureRouteBrandsTables();
+    }
 
     // Resolve effective checklist for this brand when not explicitly passed
     let effectiveChecklistId = checklist_id || null;
@@ -151,7 +156,7 @@ router.post('/routes', async (req, res) => {
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
         [orgId, promoter_id, supervisor_id, pdv_id, isMultiBrand ? null : (primaryBrandId || null), isMultiBrand ? null : (effectiveChecklistId || null), d, scheduled_time,
          window_start, window_end, estimated_duration_min || 60, priority || 'normal', visit_type || 'regular',
-         recurrence, notes, req.userId]
+          recurrence, notes || null, req.userId]
       );
 
       const routeId = result.rows[0].id;
@@ -1322,6 +1327,7 @@ async function ensureRouteBrandsTables() {
     )`);
     await query(`ALTER TABLE route_product_executions ADD COLUMN IF NOT EXISTS route_brand_id UUID`);
     await query(`ALTER TABLE route_photos ADD COLUMN IF NOT EXISTS route_brand_id UUID`);
+    await query(`ALTER TABLE merch_routes ALTER COLUMN brand_id DROP NOT NULL`);
     try { await query(`ALTER TABLE merch_execution_categories ADD COLUMN IF NOT EXISTS route_brand_id UUID`); } catch {}
   } catch (e) { logWarn('ensureRouteBrandsTables.failed', { error: e?.message }); }
 }
