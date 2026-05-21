@@ -321,25 +321,26 @@ function ExtraPointPhotoGate({ catId, categoryName, routeId, pdvName, brandName,
 }
 
 // ===== Category After Photo Gate (required to close/complete category) =====
-function CategoryAfterPhotoGate({ catId, categoryName, routeId, pdvName, brandName, promotorName, qualityConfig, onCompleted }: {
-  catId: string; categoryName: string; routeId: string; pdvName: string; brandName: string; promotorName?: string; qualityConfig?: PhotoQualityConfig; onCompleted: () => void;
+function CategoryAfterPhotoGate({ catId, categoryName, routeId, pdvName, brandName, promotorName, qualityConfig, minPhotos, onCompleted }: {
+  catId: string; categoryName: string; routeId: string; pdvName: string; brandName: string; promotorName?: string; qualityConfig?: PhotoQualityConfig; minPhotos: number; onCompleted: () => void;
 }) {
   const setCategoryAfterPhoto = usePromotorCategoryAfterPhoto();
   const [photos, setPhotos] = useState<string[]>([]);
   const [isSending, setIsSending] = useState(false);
+  const min = Math.max(1, minPhotos || 1);
 
   const handleUpload = async () => {
-    if (photos.length === 0) return toast.error('É necessário tirar pelo menos 1 foto (DEPOIS).');
+    if (photos.length < min) return toast.error(`É necessário enviar pelo menos ${min} foto(s) DEPOIS.`);
     setIsSending(true);
     try {
       const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
         navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000 })
       ).catch(() => null);
       setCategoryAfterPhoto.mutate({
-        routeId, catId, photo_url: photos[0],
+        routeId, catId, photo_url: photos[0], photos,
         latitude: pos?.coords.latitude, longitude: pos?.coords.longitude,
       }, {
-        onSuccess: () => { toast.success('Foto DEPOIS registrada! Categoria concluída.'); setPhotos([]); onCompleted(); },
+        onSuccess: () => { toast.success(`${photos.length} foto(s) DEPOIS registrada(s)! Categoria concluída.`); setPhotos([]); onCompleted(); },
         onError: (err: any) => { toast.error(err.message); setIsSending(false); },
       });
     } catch { setIsSending(false); }
