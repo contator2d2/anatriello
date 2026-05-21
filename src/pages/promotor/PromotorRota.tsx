@@ -777,14 +777,15 @@ export default function PromotorRota() {
             {Object.entries(groupedExecs).map(([category, { catId, execs, isExtraGroup }]) => {
               const catStatus = categoryStatusMap[catId];
               // For extra groups: need photo but NOT point type
+              const requireCategoryPhotos = route?.require_category_photos !== false;
               const extraPhotoKey = `extra_${catId}`;
               const hasExtraPhoto = extraGroupPhotos[extraPhotoKey];
-              const isLocked = isExtraGroup ? !hasExtraPhoto : !catStatus?.products_unlocked;
+              const isLocked = requireCategoryPhotos ? (isExtraGroup ? !hasExtraPhoto : !catStatus?.products_unlocked) : false;
               const doneCount = execs.filter((e: any) => e.status === 'completed').length;
               const allProductsDone = doneCount === execs.length && execs.length > 0;
               const hasAfterPhoto = !!catStatus?.category_after_photo || !!catStatus?.completed;
               // Show after photo gate when all products done but no after photo yet
-              const needsAfterPhoto = allProductsDone && !isLocked && !hasAfterPhoto;
+              const needsAfterPhoto = requireCategoryPhotos && allProductsDone && !isLocked && !hasAfterPhoto;
 
               return (
                 <div key={category}>

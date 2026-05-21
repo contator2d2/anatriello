@@ -1419,7 +1419,7 @@ router.get('/promotor/routes/:id', promotorAuth, async (req, res) => {
        p.latitude as pdv_lat, p.longitude as pdv_lng, p.radius_meters as pdv_radius,
        b.name as brand_name, bc.name as checklist_name,
        bc.require_checkin_photo, bc.require_checkout_photo, bc.require_stock_count,
-       bc.require_validity_check, bc.require_extra_point
+       bc.require_validity_check, bc.require_extra_point, bc.require_category_photos
        FROM merch_routes r
        LEFT JOIN pdvs p ON p.id = r.pdv_id
        LEFT JOIN merch_brands b ON b.id = r.brand_id
@@ -1462,14 +1462,16 @@ router.get('/promotor/routes/:id', promotorAuth, async (req, res) => {
     // Auto-create category entries for categories that have products but no entry yet
     const existingCatIds = new Set(categoryStatuses.map(c => c.category_id));
     const categoriesInRoute = [...new Set(executions.rows.filter(e => e.category_id).map(e => e.category_id))];
+    const requireCategoryPhotos = route.rows[0].require_category_photos !== false;
+
     for (const catId of categoriesInRoute) {
       if (!existingCatIds.has(catId)) {
         const catName = executions.rows.find(e => e.category_id === catId)?.category_name || 'Sem nome';
         try {
           const ins = await query(
-            `INSERT INTO merch_execution_categories (route_id, category_id, category_name, performed_by)
-             VALUES ($1,$2,$3,$4) ON CONFLICT (route_id, category_id) DO NOTHING RETURNING *`,
-            [req.params.id, catId, catName, req.employeeId]
+            `INSERT INTO merch_execution_categories (route_id, category_id, category_name, performed_by, products_unlocked)
+             VALUES ($1,$2,$3,$4,$5) ON CONFLICT (route_id, category_id) DO NOTHING RETURNING *`,
+            [req.params.id, catId, catName, req.employeeId, !requireCategoryPhotos]
           );
           if (ins.rows[0]) categoryStatuses.push(ins.rows[0]);
         } catch (e) { if (e.code !== '42P01') logError('promotor.auto_create_cat', e); }
