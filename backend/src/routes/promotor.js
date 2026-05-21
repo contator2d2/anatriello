@@ -8,6 +8,13 @@ import { logInfo, logError } from '../logger.js';
 
 const router = express.Router();
 
+// Public helper to resolve orgId from user_id (needed by some admin endpoints)
+async function resolveOrganizationId(req) {
+  if (req.orgId) return req.orgId;
+  const orgRes = await query('SELECT organization_id FROM organization_members WHERE user_id=$1 LIMIT 1', [req.userId]);
+  return orgRes.rows[0]?.organization_id;
+}
+
 const BR_GEOCODE_USER_AGENT = 'Ayratech/1.0 (suporte@ayratech.app.br)';
 
 function splitAddressAndNumber(address = '') {
@@ -578,7 +585,7 @@ router.get('/overtime-requests', authenticatePromotor, async (req, res) => {
 // =============================================
 // RH/SUPERVISOR: LISTAR SOLICITAÇÕES DE HORA EXTRA
 // =============================================
-router.get('/rh/overtime-requests', authenticate, async (req, res) => {
+router.get('/rh/overtime-requests', async (req, res) => {
   try {
     const orgId = await resolveOrganizationId(req);
     if (!orgId) return res.json([]);
