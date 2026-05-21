@@ -339,9 +339,22 @@ export function useCreateNetwork() {
   return useMutation({
     mutationFn: async (data: any) => {
       try {
-        return await api<any>('/api/merchandising/networks', { method: 'POST', body: data });
+        const res = await api<any>('/api/merchandising/networks', { method: 'POST', body: data });
+        
+        // Sempre salva no mock também para garantir que apareça na lista de contingência
+        const stored = localStorage.getItem('mock_merch_networks');
+        const networks = stored ? JSON.parse(stored) : [];
+        const newNetwork = { 
+          ...data, 
+          id: res?.id || `net-${Math.random().toString(36).substr(2, 9)}`,
+          pdv_ids: [] 
+        };
+        networks.push(newNetwork);
+        localStorage.setItem('mock_merch_networks', JSON.stringify(networks));
+        
+        return res;
       } catch (e: any) {
-        if (e.status === 404) {
+        if (e.status === 404 || e.status >= 500) {
           const stored = localStorage.getItem('mock_merch_networks');
           const networks = stored ? JSON.parse(stored) : [];
           const newNetwork = { 
