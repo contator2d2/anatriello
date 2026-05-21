@@ -9,7 +9,8 @@ import { logInfo, logError } from '../logger.js';
 const router = express.Router();
 router.use((req, res, next) => {
   // Skip auth for promotor app routes that use their own middleware
-  const isPromotorRoute = req.path.startsWith('/home') || 
+  const isPromotorRoute = req.path.startsWith('/login') ||
+                          req.path.startsWith('/home') || 
                           req.path.startsWith('/punch') || 
                           req.path.startsWith('/overtime-request') ||
                           req.path.startsWith('/location-update') ||
