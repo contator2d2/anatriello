@@ -155,7 +155,7 @@ export function usePromotorSetPointType() {
 export function usePromotorCategoryPhoto() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ routeId, catId, ...data }: { routeId: string; catId: string; photo_url: string; latitude?: number; longitude?: number }) =>
+    mutationFn: ({ routeId, catId, ...data }: { routeId: string; catId: string; photo_url: string; photos?: string[]; latitude?: number; longitude?: number }) =>
       promotorApi<any>(`/api/merch/promotor/routes/${routeId}/categories/${catId}/photo`, { method: 'POST', body: data }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['promotor-route'] }),
   });
@@ -164,7 +164,7 @@ export function usePromotorCategoryPhoto() {
 export function usePromotorCategoryAfterPhoto() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ routeId, catId, ...data }: { routeId: string; catId: string; photo_url: string; latitude?: number; longitude?: number }) =>
+    mutationFn: ({ routeId, catId, ...data }: { routeId: string; catId: string; photo_url: string; photos?: string[]; latitude?: number; longitude?: number }) =>
       promotorApi<any>(`/api/merch/promotor/routes/${routeId}/categories/${catId}/after-photo`, { method: 'POST', body: data }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['promotor-route'] }),
   });

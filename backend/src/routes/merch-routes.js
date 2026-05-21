@@ -642,6 +642,8 @@ router.get('/brand-checklists', authenticate, async (req, res) => {
       updated_at TIMESTAMPTZ DEFAULT NOW()
     )`);
     await query(`ALTER TABLE brand_checklists ADD COLUMN IF NOT EXISTS require_category_photos BOOLEAN DEFAULT true`).catch(() => {});
+    await query(`ALTER TABLE brand_checklists ADD COLUMN IF NOT EXISTS min_category_photos_before INT DEFAULT 1`).catch(() => {});
+    await query(`ALTER TABLE brand_checklists ADD COLUMN IF NOT EXISTS min_category_photos_after INT DEFAULT 1`).catch(() => {});
 
     let sql = 'SELECT bc.*, b.name as brand_name FROM brand_checklists bc LEFT JOIN merch_brands b ON b.id=bc.brand_id WHERE bc.organization_id=$1';
     const params = [orgId];
@@ -656,7 +658,9 @@ router.post('/brand-checklists', authenticate, async (req, res) => {
     const orgRes = await query('SELECT organization_id FROM organization_members WHERE user_id=$1 LIMIT 1', [req.userId]);
     const orgId = orgRes.rows[0].organization_id;
     const { brand_id, name, description, require_checkin_photo, require_checkout_photo, require_stock_count,
-            require_validity_check, require_extra_point, stock_count_frequency, validity_check_frequency } = req.body;
+            require_validity_check, require_extra_point, require_category_photos,
+            min_category_photos_before, min_category_photos_after,
+            stock_count_frequency, validity_check_frequency } = req.body;
 
     // Ensure table exists
     await query(`CREATE TABLE IF NOT EXISTS brand_checklists (
@@ -678,14 +682,19 @@ router.post('/brand-checklists', authenticate, async (req, res) => {
       updated_at TIMESTAMPTZ DEFAULT NOW()
     )`);
     await query(`ALTER TABLE brand_checklists ADD COLUMN IF NOT EXISTS require_category_photos BOOLEAN DEFAULT true`).catch(() => {});
+    await query(`ALTER TABLE brand_checklists ADD COLUMN IF NOT EXISTS min_category_photos_before INT DEFAULT 1`).catch(() => {});
+    await query(`ALTER TABLE brand_checklists ADD COLUMN IF NOT EXISTS min_category_photos_after INT DEFAULT 1`).catch(() => {});
 
     const result = await query(
       `INSERT INTO brand_checklists (organization_id, brand_id, name, description, require_checkin_photo,
        require_checkout_photo, require_stock_count, require_validity_check, require_extra_point, require_category_photos,
+       min_category_photos_before, min_category_photos_after,
        stock_count_frequency, validity_check_frequency)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
       [orgId, brand_id, name, description, require_checkin_photo ?? true, require_checkout_photo ?? false,
        require_stock_count ?? false, require_validity_check ?? false, require_extra_point ?? false, require_category_photos ?? true,
+       Math.max(1, parseInt(min_category_photos_before, 10) || 1),
+       Math.max(1, parseInt(min_category_photos_after, 10) || 1),
        stock_count_frequency || 'every_visit', validity_check_frequency || 'every_visit']
     );
     res.json(result.rows[0]);
@@ -695,19 +704,30 @@ router.post('/brand-checklists', authenticate, async (req, res) => {
 router.put('/brand-checklists/:id', authenticate, async (req, res) => {
   try {
     await query(`ALTER TABLE brand_checklists ADD COLUMN IF NOT EXISTS require_category_photos BOOLEAN DEFAULT true`).catch(() => {});
+    await query(`ALTER TABLE brand_checklists ADD COLUMN IF NOT EXISTS min_category_photos_before INT DEFAULT 1`).catch(() => {});
+    await query(`ALTER TABLE brand_checklists ADD COLUMN IF NOT EXISTS min_category_photos_after INT DEFAULT 1`).catch(() => {});
     const { name, description, require_checkin_photo, require_checkout_photo, require_stock_count,
             require_validity_check, require_extra_point, require_category_photos,
+            min_category_photos_before, min_category_photos_after,
             stock_count_frequency, validity_check_frequency, active } = req.body;
+    const minBefore = (min_category_photos_before === undefined || min_category_photos_before === null)
+      ? null : Math.max(1, parseInt(min_category_photos_before, 10) || 1);
+    const minAfter = (min_category_photos_after === undefined || min_category_photos_after === null)
+      ? null : Math.max(1, parseInt(min_category_photos_after, 10) || 1);
     const result = await query(
       `UPDATE brand_checklists SET name=COALESCE($2,name), description=COALESCE($3,description),
        require_checkin_photo=COALESCE($4,require_checkin_photo), require_checkout_photo=COALESCE($5,require_checkout_photo),
        require_stock_count=COALESCE($6,require_stock_count), require_validity_check=COALESCE($7,require_validity_check),
        require_extra_point=COALESCE($8,require_extra_point), stock_count_frequency=COALESCE($9,stock_count_frequency),
        validity_check_frequency=COALESCE($10,validity_check_frequency), active=COALESCE($11,active),
-       require_category_photos=COALESCE($12,require_category_photos), updated_at=NOW()
+       require_category_photos=COALESCE($12,require_category_photos),
+       min_category_photos_before=COALESCE($13,min_category_photos_before),
+       min_category_photos_after=COALESCE($14,min_category_photos_after),
+       updated_at=NOW()
        WHERE id=$1 RETURNING *`,
       [req.params.id, name, description, require_checkin_photo, require_checkout_photo, require_stock_count,
-       require_validity_check, require_extra_point, stock_count_frequency, validity_check_frequency, active, require_category_photos]
+       require_validity_check, require_extra_point, stock_count_frequency, validity_check_frequency, active,
+       require_category_photos, minBefore, minAfter]
     );
     res.json(result.rows[0]);
   } catch (err) { logError('checklists.update', err); res.status(500).json({ error: 'Erro' }); }
@@ -1424,7 +1444,8 @@ router.get('/promotor/routes/:id', promotorAuth, async (req, res) => {
        p.latitude as pdv_lat, p.longitude as pdv_lng, p.radius_meters as pdv_radius,
        b.name as brand_name, bc.name as checklist_name,
        bc.require_checkin_photo, bc.require_checkout_photo, bc.require_stock_count,
-       bc.require_validity_check, bc.require_extra_point, bc.require_category_photos
+       bc.require_validity_check, bc.require_extra_point, bc.require_category_photos,
+       bc.min_category_photos_before, bc.min_category_photos_after
        FROM merch_routes r
        LEFT JOIN pdvs p ON p.id = r.pdv_id
        LEFT JOIN merch_brands b ON b.id = r.brand_id
@@ -1756,8 +1777,9 @@ router.post('/promotor/routes/:routeId/categories/:catId/point-type', promotorAu
 // Promotor: Upload category before photo
 router.post('/promotor/routes/:routeId/categories/:catId/photo', promotorAuth, async (req, res) => {
   try {
-    const { photo_url, latitude, longitude } = req.body;
-    if (!photo_url) return res.status(400).json({ error: 'Foto obrigatória' });
+    const { photo_url, photos, latitude, longitude } = req.body;
+    const photoList = Array.isArray(photos) && photos.length ? photos : (photo_url ? [photo_url] : []);
+    if (!photoList.length) return res.status(400).json({ error: 'Foto obrigatória' });
 
     // Check point_type was set first
     const cat = await query(
@@ -1767,49 +1789,73 @@ router.post('/promotor/routes/:routeId/categories/:catId/photo', promotorAuth, a
     if (!cat.rows.length) return res.status(404).json({ error: 'Categoria não encontrada' });
     if (!cat.rows[0].point_type) return res.status(400).json({ error: 'Selecione o tipo de ponto antes de tirar a foto' });
 
+    // Lookup minimum required from checklist
+    let minBefore = 1;
+    try {
+      const minRes = await query(
+        `SELECT bc.min_category_photos_before FROM merch_routes r
+         LEFT JOIN brand_checklists bc ON bc.id = r.checklist_id WHERE r.id=$1`,
+        [req.params.routeId]
+      );
+      if (minRes.rows[0]?.min_category_photos_before) minBefore = Math.max(1, parseInt(minRes.rows[0].min_category_photos_before, 10));
+    } catch {}
+
+    // Count previously uploaded before photos for this category
+    const prevCount = (await query(
+      `SELECT COUNT(*)::int as n FROM route_photos WHERE route_id=$1 AND category_id=$2 AND photo_type='category_before'`,
+      [req.params.routeId, req.params.catId]
+    )).rows[0]?.n || 0;
+    const totalAfterUpload = prevCount + photoList.length;
+    const unlocks = totalAfterUpload >= minBefore;
+
+    // Update primary photo column with the first photo of this batch (if not set yet)
+    const primaryPhoto = cat.rows[0].category_before_photo || photoList[0];
     const result = await query(
-      `UPDATE merch_execution_categories SET category_before_photo=$3, category_photo_at=NOW(),
-       category_photo_latitude=$4, category_photo_longitude=$5, products_unlocked=true, unlocked_at=NOW(),
+      `UPDATE merch_execution_categories SET category_before_photo=$3, category_photo_at=COALESCE(category_photo_at,NOW()),
+       category_photo_latitude=COALESCE(category_photo_latitude,$4), category_photo_longitude=COALESCE(category_photo_longitude,$5),
+       products_unlocked=CASE WHEN $7::boolean THEN true ELSE products_unlocked END,
+       unlocked_at=CASE WHEN $7::boolean AND unlocked_at IS NULL THEN NOW() ELSE unlocked_at END,
        performed_by=$6, updated_at=NOW()
        WHERE route_id=$1 AND category_id=$2 RETURNING *`,
-      [req.params.routeId, req.params.catId, photo_url, latitude, longitude, req.employeeId]
+      [req.params.routeId, req.params.catId, primaryPhoto, latitude, longitude, req.employeeId, unlocks]
     );
 
-    // Also save to route_photos
-    await query(
-      `INSERT INTO route_photos (route_id, photo_type, category_id, photo_url, latitude, longitude, upload_source, uploaded_by)
-       VALUES ($1,'category_before',$2,$3,$4,$5,'app',$6)`,
-      [req.params.routeId, req.params.catId, photo_url, latitude, longitude, req.employeeId]
-    );
-
-    // Save to live_photo_books for the book view
-    try {
-      const routeInfo = await query('SELECT organization_id, brand_id, pdv_id, promoter_id FROM merch_routes WHERE id=$1', [req.params.routeId]);
-      if (routeInfo.rows.length) {
-        const r = routeInfo.rows[0];
-        await query(
-          `INSERT INTO live_photo_books (organization_id, brand_id, pdv_id, route_id, category_id, photo_type, photo_url, promoter_id, captured_at, upload_source)
-           VALUES ($1,$2,$3,$4,$5,'before',$6,$7,NOW(),'app')`,
-          [r.organization_id, r.brand_id, r.pdv_id, req.params.routeId, req.params.catId, photo_url, r.promoter_id]
-        );
-      }
-    } catch (e) { /* ignore if live_photo_books missing columns */ }
+    // Persist every photo
+    for (const pUrl of photoList) {
+      await query(
+        `INSERT INTO route_photos (route_id, photo_type, category_id, photo_url, latitude, longitude, upload_source, uploaded_by)
+         VALUES ($1,'category_before',$2,$3,$4,$5,'app',$6)`,
+        [req.params.routeId, req.params.catId, pUrl, latitude, longitude, req.employeeId]
+      );
+      try {
+        const routeInfo = await query('SELECT organization_id, brand_id, pdv_id, promoter_id FROM merch_routes WHERE id=$1', [req.params.routeId]);
+        if (routeInfo.rows.length) {
+          const r = routeInfo.rows[0];
+          await query(
+            `INSERT INTO live_photo_books (organization_id, brand_id, pdv_id, route_id, category_id, photo_type, photo_url, promoter_id, captured_at, upload_source)
+             VALUES ($1,$2,$3,$4,$5,'before',$6,$7,NOW(),'app')`,
+            [r.organization_id, r.brand_id, r.pdv_id, req.params.routeId, req.params.catId, pUrl, r.promoter_id]
+          );
+        }
+      } catch {}
+    }
 
     await query(
       `INSERT INTO route_execution_logs (route_id, action, details, performed_by, source)
        VALUES ($1,'category_photo',$2,$3,'app')`,
-      [req.params.routeId, JSON.stringify({ category_id: req.params.catId, photo_url }), req.employeeId]
+      [req.params.routeId, JSON.stringify({ category_id: req.params.catId, count: photoList.length, total: totalAfterUpload, min: minBefore, unlocked: unlocks }), req.employeeId]
     );
 
-    res.json(result.rows[0]);
+    res.json({ ...result.rows[0], total_before_photos: totalAfterUpload, min_before: minBefore, unlocked: unlocks });
   } catch (err) { logError('promotor.cat_photo', err); res.status(500).json({ error: 'Erro' }); }
 });
 
 // Promotor: Upload category AFTER photo (to complete/close category)
 router.post('/promotor/routes/:routeId/categories/:catId/after-photo', promotorAuth, async (req, res) => {
   try {
-    const { photo_url, latitude, longitude } = req.body;
-    if (!photo_url) return res.status(400).json({ error: 'Foto obrigatória' });
+    const { photo_url, photos, latitude, longitude } = req.body;
+    const photoList = Array.isArray(photos) && photos.length ? photos : (photo_url ? [photo_url] : []);
+    if (!photoList.length) return res.status(400).json({ error: 'Foto obrigatória' });
 
     const cat = await query(
       `SELECT * FROM merch_execution_categories WHERE route_id=$1 AND category_id=$2`,
@@ -1818,40 +1864,62 @@ router.post('/promotor/routes/:routeId/categories/:catId/after-photo', promotorA
     if (!cat.rows.length) return res.status(404).json({ error: 'Categoria não encontrada' });
     if (!cat.rows[0].products_unlocked) return res.status(400).json({ error: 'Produtos ainda não foram liberados (foto do ANTES necessária)' });
 
-    const result = await query(
-      `UPDATE merch_execution_categories SET category_after_photo=$3, category_after_photo_at=NOW(),
-       category_after_photo_latitude=$4, category_after_photo_longitude=$5,
-       completed=true, completed_at=NOW(), performed_by=$6, updated_at=NOW()
-       WHERE route_id=$1 AND category_id=$2 RETURNING *`,
-      [req.params.routeId, req.params.catId, photo_url, latitude, longitude, req.employeeId]
-    );
-
-    await query(
-      `INSERT INTO route_photos (route_id, photo_type, category_id, photo_url, latitude, longitude, upload_source, uploaded_by)
-       VALUES ($1,'category_after',$2,$3,$4,$5,'app',$6)`,
-      [req.params.routeId, req.params.catId, photo_url, latitude, longitude, req.employeeId]
-    );
-
-    // Save to live_photo_books for the book view
+    let minAfter = 1;
     try {
-      const routeInfo = await query('SELECT organization_id, brand_id, pdv_id, promoter_id FROM merch_routes WHERE id=$1', [req.params.routeId]);
-      if (routeInfo.rows.length) {
-        const r = routeInfo.rows[0];
-        await query(
-          `INSERT INTO live_photo_books (organization_id, brand_id, pdv_id, route_id, category_id, photo_type, photo_url, promoter_id, captured_at, upload_source)
-           VALUES ($1,$2,$3,$4,$5,'after',$6,$7,NOW(),'app')`,
-          [r.organization_id, r.brand_id, r.pdv_id, req.params.routeId, req.params.catId, photo_url, r.promoter_id]
-        );
-      }
-    } catch (e) { /* ignore if live_photo_books missing columns */ }
+      const minRes = await query(
+        `SELECT bc.min_category_photos_after FROM merch_routes r
+         LEFT JOIN brand_checklists bc ON bc.id = r.checklist_id WHERE r.id=$1`,
+        [req.params.routeId]
+      );
+      if (minRes.rows[0]?.min_category_photos_after) minAfter = Math.max(1, parseInt(minRes.rows[0].min_category_photos_after, 10));
+    } catch {}
+
+    const prevCount = (await query(
+      `SELECT COUNT(*)::int as n FROM route_photos WHERE route_id=$1 AND category_id=$2 AND photo_type='category_after'`,
+      [req.params.routeId, req.params.catId]
+    )).rows[0]?.n || 0;
+    const totalAfterUpload = prevCount + photoList.length;
+    const completes = totalAfterUpload >= minAfter;
+
+    const primaryPhoto = cat.rows[0].category_after_photo || photoList[0];
+    const result = await query(
+      `UPDATE merch_execution_categories SET category_after_photo=$3,
+       category_after_photo_at=COALESCE(category_after_photo_at,NOW()),
+       category_after_photo_latitude=COALESCE(category_after_photo_latitude,$4),
+       category_after_photo_longitude=COALESCE(category_after_photo_longitude,$5),
+       completed=CASE WHEN $7::boolean THEN true ELSE completed END,
+       completed_at=CASE WHEN $7::boolean AND completed_at IS NULL THEN NOW() ELSE completed_at END,
+       performed_by=$6, updated_at=NOW()
+       WHERE route_id=$1 AND category_id=$2 RETURNING *`,
+      [req.params.routeId, req.params.catId, primaryPhoto, latitude, longitude, req.employeeId, completes]
+    );
+
+    for (const pUrl of photoList) {
+      await query(
+        `INSERT INTO route_photos (route_id, photo_type, category_id, photo_url, latitude, longitude, upload_source, uploaded_by)
+         VALUES ($1,'category_after',$2,$3,$4,$5,'app',$6)`,
+        [req.params.routeId, req.params.catId, pUrl, latitude, longitude, req.employeeId]
+      );
+      try {
+        const routeInfo = await query('SELECT organization_id, brand_id, pdv_id, promoter_id FROM merch_routes WHERE id=$1', [req.params.routeId]);
+        if (routeInfo.rows.length) {
+          const r = routeInfo.rows[0];
+          await query(
+            `INSERT INTO live_photo_books (organization_id, brand_id, pdv_id, route_id, category_id, photo_type, photo_url, promoter_id, captured_at, upload_source)
+             VALUES ($1,$2,$3,$4,$5,'after',$6,$7,NOW(),'app')`,
+            [r.organization_id, r.brand_id, r.pdv_id, req.params.routeId, req.params.catId, pUrl, r.promoter_id]
+          );
+        }
+      } catch {}
+    }
 
     await query(
       `INSERT INTO route_execution_logs (route_id, action, details, performed_by, source)
        VALUES ($1,'category_after_photo',$2,$3,'app')`,
-      [req.params.routeId, JSON.stringify({ category_id: req.params.catId, photo_url }), req.employeeId]
+      [req.params.routeId, JSON.stringify({ category_id: req.params.catId, count: photoList.length, total: totalAfterUpload, min: minAfter, completed: completes }), req.employeeId]
     );
 
-    res.json(result.rows[0]);
+    res.json({ ...result.rows[0], total_after_photos: totalAfterUpload, min_after: minAfter, completed: completes });
   } catch (err) { logError('promotor.cat_after_photo', err); res.status(500).json({ error: 'Erro' }); }
 });
 

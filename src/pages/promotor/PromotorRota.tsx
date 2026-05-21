@@ -53,8 +53,8 @@ const usePromotorPdvCheckout = () => {
 };
 
 // ===== Category Preparation Component =====
-function CategoryPreparation({ category, catId, categoryName, routeId, pdvName, brandName, promotorName, qualityConfig, onUnlocked }: {
-  category: any; catId: string; categoryName: string; routeId: string; pdvName: string; brandName: string; promotorName?: string; qualityConfig?: PhotoQualityConfig; onUnlocked: () => void;
+function CategoryPreparation({ category, catId, categoryName, routeId, pdvName, brandName, promotorName, qualityConfig, minPhotos, onUnlocked }: {
+  category: any; catId: string; categoryName: string; routeId: string; pdvName: string; brandName: string; promotorName?: string; qualityConfig?: PhotoQualityConfig; minPhotos: number; onUnlocked: () => void;
 }) {
   const setPointType = usePromotorSetPointType();
   const setCategoryPhoto = usePromotorCategoryPhoto();
@@ -66,6 +66,7 @@ function CategoryPreparation({ category, catId, categoryName, routeId, pdvName, 
   const hasPhoto = !!category?.category_before_photo;
   const isUnlocked = !!category?.products_unlocked;
   const photoCount = photos.length + (hasPhoto ? 1 : 0);
+  const min = Math.max(1, minPhotos || 1);
 
   const handleSetPointType = (type: string) => {
     setPointType.mutate({ routeId, catId, point_type: type }, {
@@ -75,16 +76,15 @@ function CategoryPreparation({ category, catId, categoryName, routeId, pdvName, 
   };
 
   const handleUploadPhoto = async () => {
-    if (photos.length === 0) return toast.error('É necessário tirar pelo menos 1 foto da categoria.');
+    if (photos.length < min) return toast.error(`É necessário enviar pelo menos ${min} foto(s) ANTES.`);
     setIsSending(true);
     try {
       const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
         navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000 })
       ).catch(() => null);
 
-      // Send the first photo as the main category photo (unlocks products)
       setCategoryPhoto.mutate({
-        routeId, catId, photo_url: photos[0],
+        routeId, catId, photo_url: photos[0], photos,
         latitude: pos?.coords.latitude, longitude: pos?.coords.longitude,
       }, {
         onSuccess: () => {
@@ -175,7 +175,7 @@ function CategoryPreparation({ category, catId, categoryName, routeId, pdvName, 
             <Label className="text-xs font-semibold flex items-center gap-1">
               <Camera className="h-3.5 w-3.5" /> Foto obrigatória da categoria (ANTES da execução)
             </Label>
-            <p className="text-[10px] text-muted-foreground">Mínimo 1 foto. Você pode tirar mais fotos adicionais.</p>
+            <p className="text-[10px] text-muted-foreground">Mínimo {min} foto(s). Você pode tirar fotos adicionais.</p>
 
             {/* Captured photos grid */}
             {photos.length > 0 && (
@@ -206,9 +206,13 @@ function CategoryPreparation({ category, catId, categoryName, routeId, pdvName, 
 
             {/* Submit button */}
             {photos.length > 0 && (
-              <Button className="w-full" onClick={handleUploadPhoto} disabled={isSending}>
+              <Button className="w-full" onClick={handleUploadPhoto} disabled={isSending || photos.length < min}>
                 <ImagePlus className="h-4 w-4 mr-2" />
-                {isSending ? 'Enviando...' : `Registrar ${photos.length} foto(s) e liberar produtos`}
+                {isSending
+                  ? 'Enviando...'
+                  : photos.length < min
+                    ? `Faltam ${min - photos.length} foto(s) para liberar`
+                    : `Registrar ${photos.length} foto(s) e liberar produtos`}
               </Button>
             )}
           </div>
@@ -321,25 +325,26 @@ function ExtraPointPhotoGate({ catId, categoryName, routeId, pdvName, brandName,
 }
 
 // ===== Category After Photo Gate (required to close/complete category) =====
-function CategoryAfterPhotoGate({ catId, categoryName, routeId, pdvName, brandName, promotorName, qualityConfig, onCompleted }: {
-  catId: string; categoryName: string; routeId: string; pdvName: string; brandName: string; promotorName?: string; qualityConfig?: PhotoQualityConfig; onCompleted: () => void;
+function CategoryAfterPhotoGate({ catId, categoryName, routeId, pdvName, brandName, promotorName, qualityConfig, minPhotos, onCompleted }: {
+  catId: string; categoryName: string; routeId: string; pdvName: string; brandName: string; promotorName?: string; qualityConfig?: PhotoQualityConfig; minPhotos: number; onCompleted: () => void;
 }) {
   const setCategoryAfterPhoto = usePromotorCategoryAfterPhoto();
   const [photos, setPhotos] = useState<string[]>([]);
   const [isSending, setIsSending] = useState(false);
+  const min = Math.max(1, minPhotos || 1);
 
   const handleUpload = async () => {
-    if (photos.length === 0) return toast.error('É necessário tirar pelo menos 1 foto (DEPOIS).');
+    if (photos.length < min) return toast.error(`É necessário enviar pelo menos ${min} foto(s) DEPOIS.`);
     setIsSending(true);
     try {
       const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
         navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000 })
       ).catch(() => null);
       setCategoryAfterPhoto.mutate({
-        routeId, catId, photo_url: photos[0],
+        routeId, catId, photo_url: photos[0], photos,
         latitude: pos?.coords.latitude, longitude: pos?.coords.longitude,
       }, {
-        onSuccess: () => { toast.success('Foto DEPOIS registrada! Categoria concluída.'); setPhotos([]); onCompleted(); },
+        onSuccess: () => { toast.success(`${photos.length} foto(s) DEPOIS registrada(s)! Categoria concluída.`); setPhotos([]); onCompleted(); },
         onError: (err: any) => { toast.error(err.message); setIsSending(false); },
       });
     } catch { setIsSending(false); }
@@ -357,7 +362,7 @@ function CategoryAfterPhotoGate({ catId, categoryName, routeId, pdvName, brandNa
         </div>
 
         <p className="text-[10px] text-muted-foreground">
-          Tire a foto da categoria <b>DEPOIS</b> da execução para concluir esta categoria.
+          Tire pelo menos <b>{min}</b> foto(s) da categoria <b>DEPOIS</b> da execução para concluir.
         </p>
 
         {photos.length > 0 && (
@@ -381,8 +386,13 @@ function CategoryAfterPhotoGate({ catId, categoryName, routeId, pdvName, brandNa
         />
 
         {photos.length > 0 && (
-          <Button className="w-full" onClick={handleUpload} disabled={isSending || setCategoryAfterPhoto.isPending}>
-            <CheckCircle2 className="h-4 w-4 mr-2" /> {isSending ? 'Enviando...' : 'Registrar e Concluir Categoria'}
+          <Button className="w-full" onClick={handleUpload} disabled={isSending || setCategoryAfterPhoto.isPending || photos.length < min}>
+            <CheckCircle2 className="h-4 w-4 mr-2" />
+            {isSending
+              ? 'Enviando...'
+              : photos.length < min
+                ? `Faltam ${min - photos.length} foto(s) DEPOIS`
+                : `Registrar ${photos.length} foto(s) e concluir categoria`}
           </Button>
         )}
 
@@ -800,6 +810,7 @@ export default function PromotorRota() {
                       brandName={currentBrand?.brand_name || route.brand_name}
                       promotorName={route.promotor_name}
                       qualityConfig={photoQualityConfig}
+                      minPhotos={Math.max(1, parseInt((route as any)?.min_category_photos_before, 10) || 1)}
                       onUnlocked={() => refetch()}
                     />
                   )}
@@ -877,6 +888,7 @@ export default function PromotorRota() {
                       brandName={currentBrand?.brand_name || route.brand_name}
                       promotorName={route.promotor_name}
                       qualityConfig={photoQualityConfig}
+                      minPhotos={Math.max(1, parseInt((route as any)?.min_category_photos_after, 10) || 1)}
                       onCompleted={() => refetch()}
                     />
                   )}
