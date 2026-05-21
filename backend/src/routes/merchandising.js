@@ -122,6 +122,24 @@ async function ensureMerchandisingInfra() {
       updated_at TIMESTAMPTZ DEFAULT NOW(),
       UNIQUE(pdv_id, brand_id, product_id)
     )`,
+    `CREATE TABLE IF NOT EXISTS merch_redes (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id UUID NOT NULL,
+      name VARCHAR(255) NOT NULL,
+      description TEXT,
+      status VARCHAR(20) DEFAULT 'active',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(organization_id, name)
+    )`,
+    `CREATE TABLE IF NOT EXISTS merch_rede_pdvs (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id UUID NOT NULL,
+      rede_id UUID NOT NULL REFERENCES merch_redes(id) ON DELETE CASCADE,
+      pdv_id UUID NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(rede_id, pdv_id)
+    )`,
     `CREATE INDEX IF NOT EXISTS idx_merch_brands_org ON merch_brands(organization_id)`,
     `CREATE INDEX IF NOT EXISTS idx_merch_brands_code ON merch_brands(organization_id, internal_code)`,
     `CREATE INDEX IF NOT EXISTS idx_merch_products_brand ON merch_products(brand_id)`,
@@ -130,6 +148,9 @@ async function ensureMerchandisingInfra() {
     `CREATE INDEX IF NOT EXISTS idx_merch_pdv_brands_brand ON merch_pdv_brands(brand_id)`,
     `CREATE INDEX IF NOT EXISTS idx_merch_pdv_bp_pdv ON merch_pdv_brand_products(pdv_id)`,
     `CREATE INDEX IF NOT EXISTS idx_merch_pdv_bp_brand ON merch_pdv_brand_products(brand_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_merch_redes_org ON merch_redes(organization_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_merch_rede_pdvs_rede ON merch_rede_pdvs(rede_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_merch_rede_pdvs_pdv ON merch_rede_pdvs(pdv_id)`,
     `DO $$ BEGIN ALTER TABLE merch_brands ADD COLUMN IF NOT EXISTS internal_code VARCHAR(100); EXCEPTION WHEN others THEN NULL; END $$`,
     `DO $$ BEGIN ALTER TABLE merch_brands ADD COLUMN IF NOT EXISTS street VARCHAR(255); EXCEPTION WHEN others THEN NULL; END $$`,
     `DO $$ BEGIN ALTER TABLE merch_brands ADD COLUMN IF NOT EXISTS number VARCHAR(50); EXCEPTION WHEN others THEN NULL; END $$`,
@@ -528,6 +549,110 @@ router.delete('/products/:id', async (req, res) => {
     await query('DELETE FROM merch_products WHERE id=$1 AND organization_id=$2', [req.params.id, req.orgId]);
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ==================== REDES / PDVs ====================
+router.get('/networks', async (req, res) => {
+  try {
+    await ensureMerchandisingInfra();
+    const r = await query(
+      `SELECT r.*, COALESCE(COUNT(rp.pdv_id), 0)::int AS pdv_count
+       FROM merch_redes r
+       LEFT JOIN merch_rede_pdvs rp ON rp.rede_id = r.id AND rp.organization_id = r.organization_id
+       WHERE r.organization_id = $1
+       GROUP BY r.id
+       ORDER BY r.name`,
+      [req.orgId]
+    );
+    res.json(r.rows);
+  } catch (e) { logError('merch.networks.list', e); res.status(500).json({ error: e.message }); }
+});
+
+router.post('/networks', async (req, res) => {
+  try {
+    await ensureMerchandisingInfra();
+    const { name, description, status } = req.body || {};
+    if (!String(name || '').trim()) return res.status(400).json({ error: 'Nome é obrigatório' });
+    const r = await query(
+      `INSERT INTO merch_redes (organization_id, name, description, status)
+       VALUES ($1,$2,$3,$4)
+       ON CONFLICT (organization_id, name)
+       DO UPDATE SET description = EXCLUDED.description, status = EXCLUDED.status, updated_at = NOW()
+       RETURNING *`,
+      [req.orgId, String(name).trim(), description || null, status || 'active']
+    );
+    res.json(r.rows[0]);
+  } catch (e) { logError('merch.networks.create', e); res.status(500).json({ error: e.message }); }
+});
+
+router.put('/networks/:id', async (req, res) => {
+  try {
+    await ensureMerchandisingInfra();
+    const { name, description, status } = req.body || {};
+    const r = await query(
+      `UPDATE merch_redes
+       SET name=$1, description=$2, status=$3, updated_at=NOW()
+       WHERE id=$4 AND organization_id=$5
+       RETURNING *`,
+      [String(name || '').trim(), description || null, status || 'active', req.params.id, req.orgId]
+    );
+    if (!r.rows[0]) return res.status(404).json({ error: 'Rede não encontrada' });
+    res.json(r.rows[0]);
+  } catch (e) { logError('merch.networks.update', e); res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/networks/:id', async (req, res) => {
+  try {
+    await ensureMerchandisingInfra();
+    await query('DELETE FROM merch_redes WHERE id=$1 AND organization_id=$2', [req.params.id, req.orgId]);
+    res.json({ ok: true });
+  } catch (e) { logError('merch.networks.delete', e); res.status(500).json({ error: e.message }); }
+});
+
+router.get('/networks/:id/pdvs', async (req, res) => {
+  try {
+    await ensureMerchandisingInfra();
+    const r = await query(
+      `SELECT p.id, p.name, p.client_name, p.address, p.city, p.state
+       FROM merch_rede_pdvs rp
+       JOIN pdvs p ON p.id = rp.pdv_id
+       WHERE rp.rede_id=$1 AND rp.organization_id=$2
+       ORDER BY p.name`,
+      [req.params.id, req.orgId]
+    );
+    res.json(r.rows);
+  } catch (e) { logError('merch.networks.pdvs', e); res.status(500).json({ error: e.message }); }
+});
+
+router.post('/networks/:id/pdvs', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await ensureMerchandisingInfra();
+    const pdvIds = Array.isArray(req.body?.pdv_ids) ? req.body.pdv_ids.filter(Boolean) : [];
+    await client.query('BEGIN');
+    const network = await client.query('SELECT id FROM merch_redes WHERE id=$1 AND organization_id=$2', [req.params.id, req.orgId]);
+    if (!network.rows[0]) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Rede não encontrada' });
+    }
+    await client.query('DELETE FROM merch_rede_pdvs WHERE rede_id=$1 AND organization_id=$2', [req.params.id, req.orgId]);
+    for (const pdvId of pdvIds) {
+      await client.query(
+        `INSERT INTO merch_rede_pdvs (organization_id, rede_id, pdv_id)
+         SELECT $1, $2, p.id FROM pdvs p WHERE p.id=$3 AND p.organization_id=$1
+         ON CONFLICT (rede_id, pdv_id) DO NOTHING`,
+        [req.orgId, req.params.id, pdvId]
+      );
+    }
+    await client.query('COMMIT');
+    res.json({ ok: true, id: req.params.id, pdv_ids: pdvIds });
+  } catch (e) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    logError('merch.networks.update_pdvs', e);
+    res.status(500).json({ error: e.message });
+  } finally {
+    client.release();
+  }
 });
 
 router.post('/products/bulk-delete', async (req, res) => {

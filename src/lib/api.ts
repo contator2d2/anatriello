@@ -10,11 +10,9 @@ const normalizeEndpoint = (endpoint: string) => {
 const getBaseCandidates = (endpoint: string) => {
   const sameOriginBase = '';
   const supportsSameOrigin = endpoint.startsWith('/api/') || endpoint.startsWith('/uploads/');
-  const shouldPreferSameOrigin = isBrowser && !isLocalhost && supportsSameOrigin;
-
-  const ordered = shouldPreferSameOrigin
-    ? [sameOriginBase, ENV_API_URL]
-    : [ENV_API_URL, sameOriginBase];
+  const ordered = ENV_API_URL
+    ? [ENV_API_URL, supportsSameOrigin ? sameOriginBase : undefined]
+    : [sameOriginBase];
 
   return [...new Set(ordered.filter((base) => base !== undefined && base !== null))];
 };
@@ -66,12 +64,6 @@ const ENDPOINT_RESILIENCE: Record<string, EndpointResilienceConfig> = {
     maxRetries: 0,
     silent: true,
   },
-  '/api/merchandising/networks': {
-    cooldownMs: 60000,
-    fallbackToOtherBases: false,
-    fallbackValue: () => [],
-    silent: false,
-  },
   '/api/merchandising/mix/bulk': {
     cooldownMs: 60000,
     fallbackToOtherBases: false,
@@ -82,14 +74,6 @@ const ENDPOINT_RESILIENCE: Record<string, EndpointResilienceConfig> = {
 
 const getResilienceConfig = (endpoint: string) => {
   if (ENDPOINT_RESILIENCE[endpoint]) return ENDPOINT_RESILIENCE[endpoint];
-  if (endpoint.startsWith('/api/merchandising/networks')) {
-    return {
-      cooldownMs: 60000,
-      fallbackToOtherBases: false,
-      fallbackValue: () => (endpoint.endsWith('/pdvs') ? [] : {}),
-      silent: false,
-    };
-  }
   return undefined;
 };
 
