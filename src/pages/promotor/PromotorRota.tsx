@@ -175,7 +175,7 @@ function CategoryPreparation({ category, catId, categoryName, routeId, pdvName, 
             <Label className="text-xs font-semibold flex items-center gap-1">
               <Camera className="h-3.5 w-3.5" /> Foto obrigatória da categoria (ANTES da execução)
             </Label>
-            <p className="text-[10px] text-muted-foreground">Mínimo 1 foto. Você pode tirar mais fotos adicionais.</p>
+            <p className="text-[10px] text-muted-foreground">Mínimo {min} foto(s). Você pode tirar fotos adicionais.</p>
 
             {/* Captured photos grid */}
             {photos.length > 0 && (
