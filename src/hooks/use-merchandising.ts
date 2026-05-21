@@ -308,20 +308,23 @@ export function useNetworks() {
     queryKey: ['merch-networks'],
     queryFn: async () => {
       try {
-        // Tentamos a rota plural (padrão)
-        return await api<any[]>('/api/merchandising/networks');
+        const res = await api<any[]>('/api/merchandising/networks');
+        if (Array.isArray(res)) return res;
+        
+        // Se a API retornar sucesso mas não for um array, tenta o mock
+        const stored = localStorage.getItem('mock_merch_networks');
+        return stored ? JSON.parse(stored) : [];
       } catch (e: any) {
-        // Se falhar 404, tentamos a rota singular (comum em alguns padrões de API)
         if (e.status === 404) {
           try {
-            return await api<any[]>('/api/merchandising/network');
+            const res2 = await api<any[]>('/api/merchandising/network');
+            if (Array.isArray(res2)) return res2;
           } catch (e2: any) {
-            // Se ambos falharem 404, usamos o mock local
-            const stored = localStorage.getItem('mock_merch_networks');
-            return stored ? JSON.parse(stored) : [];
+            // Se ambos falharem, usamos o mock local
           }
         }
-        throw e;
+        const stored = localStorage.getItem('mock_merch_networks');
+        return stored ? JSON.parse(stored) : [];
       }
     },
     retry: (failureCount, error: any) => {
