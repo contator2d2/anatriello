@@ -66,7 +66,7 @@ const ENDPOINT_RESILIENCE: Record<string, EndpointResilienceConfig> = {
     maxRetries: 0,
     silent: true,
   },
-  '/api/merch/networks': {
+  '/api/merchandising/networks': {
     cooldownMs: 60000,
     fallbackToOtherBases: false,
     fallbackValue: () => [],
@@ -82,7 +82,7 @@ const ENDPOINT_RESILIENCE: Record<string, EndpointResilienceConfig> = {
 
 const getResilienceConfig = (endpoint: string) => {
   if (ENDPOINT_RESILIENCE[endpoint]) return ENDPOINT_RESILIENCE[endpoint];
-  if (endpoint.startsWith('/api/merch/networks')) {
+  if (endpoint.startsWith('/api/merchandising/networks')) {
     return {
       cooldownMs: 60000,
       fallbackToOtherBases: false,

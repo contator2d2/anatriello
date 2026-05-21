@@ -308,12 +308,18 @@ export function useNetworks() {
     queryKey: ['merch-networks'],
     queryFn: async () => {
       try {
-        return await api<any[]>('/api/merch/networks');
+        // Tentamos a rota plural (padrão)
+        return await api<any[]>('/api/merchandising/networks');
       } catch (e: any) {
-        // Only fallback to mock if it's really a 404
+        // Se falhar 404, tentamos a rota singular (comum em alguns padrões de API)
         if (e.status === 404) {
-          const stored = localStorage.getItem('mock_merch_networks');
-          return stored ? JSON.parse(stored) : [];
+          try {
+            return await api<any[]>('/api/merchandising/network');
+          } catch (e2: any) {
+            // Se ambos falharem 404, usamos o mock local
+            const stored = localStorage.getItem('mock_merch_networks');
+            return stored ? JSON.parse(stored) : [];
+          }
         }
         throw e;
       }
@@ -330,7 +336,7 @@ export function useCreateNetwork() {
   return useMutation({
     mutationFn: async (data: any) => {
       try {
-        return await api<any>('/api/merch/networks', { method: 'POST', body: data });
+        return await api<any>('/api/merchandising/networks', { method: 'POST', body: data });
       } catch (e: any) {
         if (e.status === 404) {
           const stored = localStorage.getItem('mock_merch_networks');
@@ -356,7 +362,7 @@ export function useUpdateNetwork() {
   return useMutation({
     mutationFn: async ({ id, ...data }: any) => {
       try {
-        return await api<any>(`/api/merch/networks/${id}`, { method: 'PUT', body: data });
+        return await api<any>(`/api/merchandising/networks/${id}`, { method: 'PUT', body: data });
       } catch (e: any) {
         const is404 = e.status === 404 || (e.message && e.message.includes('404'));
         if (is404 || id.startsWith('mock-')) {
@@ -378,7 +384,7 @@ export function useDeleteNetwork() {
   return useMutation({
     mutationFn: async (id: string) => {
       try {
-        return await api<any>(`/api/merch/networks/${id}`, { method: 'DELETE' });
+        return await api<any>(`/api/merchandising/networks/${id}`, { method: 'DELETE' });
       } catch (e: any) {
         const is404 = e.status === 404 || (e.message && e.message.includes('404'));
         if (is404 || id.startsWith('mock-')) {
@@ -400,7 +406,7 @@ export function useNetworkPdvs(networkId?: string) {
     queryKey: ['merch-network-pdvs', networkId],
     queryFn: async () => {
       try {
-        return await api<any[]>(`/api/merch/networks/${networkId}/pdvs`);
+        return await api<any[]>(`/api/merchandising/networks/${networkId}/pdvs`);
       } catch (e: any) {
         const is404 = e.status === 404 || (e.message && e.message.includes('404'));
         if (is404 || networkId?.startsWith('mock-')) {
@@ -422,7 +428,7 @@ export function useUpdateNetworkPdvs() {
   return useMutation({
     mutationFn: async ({ id, pdv_ids }: { id: string; pdv_ids: string[] }) => {
       try {
-        return await api<any>(`/api/merch/networks/${id}/pdvs`, { method: 'POST', body: { pdv_ids } });
+        return await api<any>(`/api/merchandising/networks/${id}/pdvs`, { method: 'POST', body: { pdv_ids } });
       } catch (e: any) {
         const is404 = e.status === 404 || (e.message && e.message.includes('404'));
         if (is404 || id.startsWith('mock-')) {
