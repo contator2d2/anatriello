@@ -4,6 +4,7 @@ import { authenticate } from '../middleware/auth.js';
 import { logInfo, logError } from '../logger.js';
 
 const router = express.Router();
+router.use(authenticate);
 
 async function getOrgId(userId) {
   const r = await query('SELECT organization_id FROM organization_members WHERE user_id=$1 LIMIT 1', [userId]);
@@ -76,7 +77,7 @@ async function tableExists(tableName) {
 }
 
 // ===== Dashboard KPIs (real-time from existing tables) =====
-router.get('/dashboard', authenticate, async (req, res) => {
+router.get('/dashboard', async (req, res) => {
   try {
     await ensureTables();
     const orgId = await getOrgId(req.userId);
@@ -220,7 +221,7 @@ router.get('/dashboard', authenticate, async (req, res) => {
 });
 
 // ===== Report by PDV =====
-router.get('/report/pdv', authenticate, async (req, res) => {
+router.get('/report/pdv', async (req, res) => {
   try {
     const orgId = await getOrgId(req.userId);
     if (!orgId) return res.status(403).json({ error: 'Sem organização' });
@@ -270,7 +271,7 @@ router.get('/report/pdv', authenticate, async (req, res) => {
 });
 
 // ===== Report by Brand =====
-router.get('/report/brand', authenticate, async (req, res) => {
+router.get('/report/brand', async (req, res) => {
   try {
     const orgId = await getOrgId(req.userId);
     if (!orgId) return res.status(403).json({ error: 'Sem organização' });
@@ -316,7 +317,7 @@ router.get('/report/brand', authenticate, async (req, res) => {
 });
 
 // ===== Report by Promoter =====
-router.get('/report/promoter', authenticate, async (req, res) => {
+router.get('/report/promoter', async (req, res) => {
   try {
     const orgId = await getOrgId(req.userId);
     if (!orgId) return res.status(403).json({ error: 'Sem organização' });
