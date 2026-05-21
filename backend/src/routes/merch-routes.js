@@ -4,11 +4,12 @@ import { authenticate } from '../middleware/auth.js';
 import { logInfo, logError, logWarn } from '../logger.js';
 
 const router = express.Router();
+router.use(authenticate);
 
 // ===== ADMIN ROUTES =====
 
 // List routes with filters
-router.get('/routes', authenticate, async (req, res) => {
+router.get('/routes', async (req, res) => {
   try {
     const orgRes = await query('SELECT organization_id FROM organization_members WHERE user_id=$1 LIMIT 1', [req.userId]);
     if (!orgRes.rows.length) return res.status(403).json({ error: 'Sem organização' });
@@ -197,7 +198,7 @@ router.post('/routes', authenticate, async (req, res) => {
 });
 
 // Update route (supports scope: 'single' | 'future')
-router.put('/routes/:id', authenticate, async (req, res) => {
+router.put('/routes/:id', async (req, res) => {
   try {
     const orgRes = await query('SELECT organization_id FROM organization_members WHERE user_id=$1 LIMIT 1', [req.userId]);
     if (!orgRes.rows.length) return res.status(403).json({ error: 'Sem organização' });
@@ -292,7 +293,7 @@ router.put('/routes/:id', authenticate, async (req, res) => {
 });
 
 // Delete route (supports scope: 'single' | 'future')
-router.delete('/routes/:id', authenticate, async (req, res) => {
+router.delete('/routes/:id', async (req, res) => {
   try {
     const orgRes = await query('SELECT organization_id FROM organization_members WHERE user_id=$1 LIMIT 1', [req.userId]);
     if (!orgRes.rows.length) return res.status(403).json({ error: 'Sem organização' });
