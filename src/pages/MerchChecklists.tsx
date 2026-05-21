@@ -208,6 +208,35 @@ export default function MerchChecklists() {
                   <Switch checked={!!form[r.key]} onCheckedChange={v => setForm({ ...form, [r.key]: v })} />
                 </div>
               ))}
+
+              {form.require_category_photos && (
+                <div className="p-3 rounded-lg border bg-muted/30 space-y-3">
+                  <Label className="text-xs font-semibold flex items-center gap-1">
+                    <Camera className="h-3.5 w-3.5" /> Quantidade mínima de fotos da categoria
+                  </Label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label className="text-[11px] text-muted-foreground">Mínimo ANTES</Label>
+                      <Input
+                        type="number" min={1} max={20}
+                        value={form.min_category_photos_before ?? 1}
+                        onChange={e => setForm({ ...form, min_category_photos_before: Math.max(1, parseInt(e.target.value, 10) || 1) })}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-[11px] text-muted-foreground">Mínimo DEPOIS</Label>
+                      <Input
+                        type="number" min={1} max={20}
+                        value={form.min_category_photos_after ?? 1}
+                        onChange={e => setForm({ ...form, min_category_photos_after: Math.max(1, parseInt(e.target.value, 10) || 1) })}
+                      />
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">
+                    O promotor só conseguirá liberar os produtos / concluir a categoria após enviar o mínimo configurado.
+                  </p>
+                </div>
+              )}
             </TabsContent>
 
             <TabsContent value="frequency" className="space-y-3 mt-3">
