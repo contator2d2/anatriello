@@ -151,6 +151,19 @@ async function ensureMerchandisingInfra() {
     `CREATE INDEX IF NOT EXISTS idx_merch_redes_org ON merch_redes(organization_id)`,
     `CREATE INDEX IF NOT EXISTS idx_merch_rede_pdvs_rede ON merch_rede_pdvs(rede_id)`,
     `CREATE INDEX IF NOT EXISTS idx_merch_rede_pdvs_pdv ON merch_rede_pdvs(pdv_id)`,
+    `DO $$ BEGIN ALTER TABLE merch_redes ADD COLUMN IF NOT EXISTS description TEXT; EXCEPTION WHEN others THEN NULL; END $$`,
+    `DO $$ BEGIN ALTER TABLE merch_redes ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'active'; EXCEPTION WHEN others THEN NULL; END $$`,
+    `DO $$ BEGIN ALTER TABLE merch_redes ADD COLUMN IF NOT EXISTS organization_id UUID; EXCEPTION WHEN others THEN NULL; END $$`,
+    `DO $$ BEGIN ALTER TABLE merch_redes ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW(); EXCEPTION WHEN others THEN NULL; END $$`,
+    `DO $$ BEGIN ALTER TABLE merch_rede_pdvs ADD COLUMN IF NOT EXISTS organization_id UUID; EXCEPTION WHEN others THEN NULL; END $$`,
+    `DO $$ BEGIN
+       IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'merch_redes_org_name_unique') THEN
+         BEGIN
+           ALTER TABLE merch_redes ADD CONSTRAINT merch_redes_org_name_unique UNIQUE (organization_id, name);
+         EXCEPTION WHEN others THEN NULL;
+         END;
+       END IF;
+     END $$`,
     `DO $$ BEGIN ALTER TABLE merch_brands ADD COLUMN IF NOT EXISTS internal_code VARCHAR(100); EXCEPTION WHEN others THEN NULL; END $$`,
     `DO $$ BEGIN ALTER TABLE merch_brands ADD COLUMN IF NOT EXISTS street VARCHAR(255); EXCEPTION WHEN others THEN NULL; END $$`,
     `DO $$ BEGIN ALTER TABLE merch_brands ADD COLUMN IF NOT EXISTS number VARCHAR(50); EXCEPTION WHEN others THEN NULL; END $$`,
