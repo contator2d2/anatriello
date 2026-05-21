@@ -53,8 +53,8 @@ const usePromotorPdvCheckout = () => {
 };
 
 // ===== Category Preparation Component =====
-function CategoryPreparation({ category, catId, categoryName, routeId, pdvName, brandName, promotorName, qualityConfig, onUnlocked }: {
-  category: any; catId: string; categoryName: string; routeId: string; pdvName: string; brandName: string; promotorName?: string; qualityConfig?: PhotoQualityConfig; onUnlocked: () => void;
+function CategoryPreparation({ category, catId, categoryName, routeId, pdvName, brandName, promotorName, qualityConfig, minPhotos, onUnlocked }: {
+  category: any; catId: string; categoryName: string; routeId: string; pdvName: string; brandName: string; promotorName?: string; qualityConfig?: PhotoQualityConfig; minPhotos: number; onUnlocked: () => void;
 }) {
   const setPointType = usePromotorSetPointType();
   const setCategoryPhoto = usePromotorCategoryPhoto();
@@ -66,6 +66,7 @@ function CategoryPreparation({ category, catId, categoryName, routeId, pdvName, 
   const hasPhoto = !!category?.category_before_photo;
   const isUnlocked = !!category?.products_unlocked;
   const photoCount = photos.length + (hasPhoto ? 1 : 0);
+  const min = Math.max(1, minPhotos || 1);
 
   const handleSetPointType = (type: string) => {
     setPointType.mutate({ routeId, catId, point_type: type }, {
@@ -75,16 +76,15 @@ function CategoryPreparation({ category, catId, categoryName, routeId, pdvName, 
   };
 
   const handleUploadPhoto = async () => {
-    if (photos.length === 0) return toast.error('É necessário tirar pelo menos 1 foto da categoria.');
+    if (photos.length < min) return toast.error(`É necessário enviar pelo menos ${min} foto(s) ANTES.`);
     setIsSending(true);
     try {
       const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
         navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000 })
       ).catch(() => null);
 
-      // Send the first photo as the main category photo (unlocks products)
       setCategoryPhoto.mutate({
-        routeId, catId, photo_url: photos[0],
+        routeId, catId, photo_url: photos[0], photos,
         latitude: pos?.coords.latitude, longitude: pos?.coords.longitude,
       }, {
         onSuccess: () => {
