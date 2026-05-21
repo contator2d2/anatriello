@@ -331,7 +331,7 @@ export function useCreateNetwork() {
   return useMutation({
     mutationFn: async (data: any) => {
       try {
-        return await api<any>('/api/merchandising/networks', { method: 'POST', body: data });
+        return await api<any>('/api/merch/networks', { method: 'POST', body: data });
       } catch (e: any) {
         const is404 = e.status === 404 || (e.message && e.message.includes('404'));
         if (is404) {
