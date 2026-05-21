@@ -82,7 +82,7 @@ const ENDPOINT_RESILIENCE: Record<string, EndpointResilienceConfig> = {
 
 const getResilienceConfig = (endpoint: string) => {
   if (ENDPOINT_RESILIENCE[endpoint]) return ENDPOINT_RESILIENCE[endpoint];
-  if (endpoint.startsWith('/api/merch/networks')) {
+  if (endpoint.startsWith('/api/merchandising/networks')) {
     return {
       cooldownMs: 60000,
       fallbackToOtherBases: false,
