@@ -362,7 +362,7 @@ function CategoryAfterPhotoGate({ catId, categoryName, routeId, pdvName, brandNa
         </div>
 
         <p className="text-[10px] text-muted-foreground">
-          Tire a foto da categoria <b>DEPOIS</b> da execução para concluir esta categoria.
+          Tire pelo menos <b>{min}</b> foto(s) da categoria <b>DEPOIS</b> da execução para concluir.
         </p>
 
         {photos.length > 0 && (
@@ -386,8 +386,13 @@ function CategoryAfterPhotoGate({ catId, categoryName, routeId, pdvName, brandNa
         />
 
         {photos.length > 0 && (
-          <Button className="w-full" onClick={handleUpload} disabled={isSending || setCategoryAfterPhoto.isPending}>
-            <CheckCircle2 className="h-4 w-4 mr-2" /> {isSending ? 'Enviando...' : 'Registrar e Concluir Categoria'}
+          <Button className="w-full" onClick={handleUpload} disabled={isSending || setCategoryAfterPhoto.isPending || photos.length < min}>
+            <CheckCircle2 className="h-4 w-4 mr-2" />
+            {isSending
+              ? 'Enviando...'
+              : photos.length < min
+                ? `Faltam ${min - photos.length} foto(s) DEPOIS`
+                : `Registrar ${photos.length} foto(s) e concluir categoria`}
           </Button>
         )}
 
