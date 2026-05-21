@@ -52,6 +52,7 @@ import merchRoutesRoutes from './routes/merch-routes.js';
 import accessControlRoutes from './routes/access-control.js';
 import priceResearchRoutes from './routes/price-research.js';
 import merchAnalyticsRoutes from './routes/merch-analytics.js';
+import merchChecklistsRoutes from './routes/merch-checklists.js';
 import { initDatabase } from './init-db.js';
 import { executeNotifications } from './scheduler.js';
 import { executeCampaignMessages } from './campaign-scheduler.js';
@@ -434,6 +435,7 @@ app.use('/api/merch', merchRoutesRoutes);
 app.use('/api/access-control', accessControlRoutes);
 app.use('/api/price-research', priceResearchRoutes);
 app.use('/api/merch-analytics', merchAnalyticsRoutes);
+app.use('/api/merch/brand-checklists', merchChecklistsRoutes);
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
