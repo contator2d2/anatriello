@@ -406,7 +406,7 @@ export function useNetworkPdvs(networkId?: string) {
     queryKey: ['merch-network-pdvs', networkId],
     queryFn: async () => {
       try {
-        return await api<any[]>(`/api/merch/networks/${networkId}/pdvs`);
+        return await api<any[]>(`/api/merchandising/networks/${networkId}/pdvs`);
       } catch (e: any) {
         const is404 = e.status === 404 || (e.message && e.message.includes('404'));
         if (is404 || networkId?.startsWith('mock-')) {
