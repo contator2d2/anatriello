@@ -67,7 +67,7 @@ router.get('/routes', async (req, res) => {
 });
 
 // Create route (with recurrence support)
-router.post('/routes', authenticate, async (req, res) => {
+router.post('/routes', async (req, res) => {
   try {
     const orgRes = await query('SELECT organization_id FROM organization_members WHERE user_id=$1 LIMIT 1', [req.userId]);
     if (!orgRes.rows.length) return res.status(403).json({ error: 'Sem organização' });
@@ -319,7 +319,7 @@ router.delete('/routes/:id', async (req, res) => {
 });
 
 // Get mix preview for a PDV+Brand (what products would be added)
-router.get('/routes/mix-preview', authenticate, async (req, res) => {
+router.get('/routes/mix-preview', async (req, res) => {
   try {
     const { pdv_id, brand_id } = req.query;
     if (!pdv_id || !brand_id) return res.json([]);
@@ -343,7 +343,7 @@ router.get('/routes/mix-preview', authenticate, async (req, res) => {
 });
 
 // Get route products (executions)
-router.get('/routes/:id/products', authenticate, async (req, res) => {
+router.get('/routes/:id/products', async (req, res) => {
   try {
     const result = await query(
       `SELECT rpe.*, p.name as product_name, p.sku, p.barcode, p.image_url,
@@ -362,7 +362,7 @@ router.get('/routes/:id/products', authenticate, async (req, res) => {
 });
 
 // Add product to route
-router.post('/routes/:id/products', authenticate, async (req, res) => {
+router.post('/routes/:id/products', async (req, res) => {
   try {
     const { product_id, category_id } = req.body;
     const result = await query(
@@ -383,7 +383,7 @@ router.delete('/routes/:id/products/:productId', authenticate, async (req, res) 
 });
 
 // Sync route products from mix (re-hydrate)
-router.post('/routes/:id/sync-products', authenticate, async (req, res) => {
+router.post('/routes/:id/sync-products', async (req, res) => {
   try {
     const route = await query('SELECT pdv_id, brand_id FROM merch_routes WHERE id=$1', [req.params.id]);
     if (!route.rows.length) return res.status(404).json({ error: 'Rota não encontrada' });
@@ -419,7 +419,7 @@ router.post('/routes/:id/sync-products', authenticate, async (req, res) => {
 });
 
 // Duplicate route
-router.post('/routes/:id/duplicate', authenticate, async (req, res) => {
+router.post('/routes/:id/duplicate', async (req, res) => {
   try {
     const orgRes = await query('SELECT organization_id FROM organization_members WHERE user_id=$1 LIMIT 1', [req.userId]);
     const orgId = orgRes.rows[0].organization_id;
@@ -510,7 +510,7 @@ router.get('/routes/:id', authenticate, async (req, res) => {
 });
 
 // Route execution timeline (real-time panel)
-router.get('/routes/live', authenticate, async (req, res) => {
+router.get('/routes/live', async (req, res) => {
   try {
     const orgRes = await query('SELECT organization_id FROM organization_members WHERE user_id=$1 LIMIT 1', [req.userId]);
     if (!orgRes.rows.length) return res.json([]);
@@ -2225,7 +2225,7 @@ router.get('/promoters-team', authenticate, async (req, res) => {
 // ===== AI ROUTE OPTIMIZATION =====
 
 // Get optimization context data
-router.get('/ai/optimization-context', authenticate, async (req, res) => {
+router.get('/ai/optimization-context', async (req, res) => {
   try {
     const orgRes = await query('SELECT organization_id FROM organization_members WHERE user_id=$1 LIMIT 1', [req.userId]);
     if (!orgRes.rows.length) return res.status(403).json({ error: 'Sem organização' });
@@ -2308,7 +2308,7 @@ router.get('/ai/optimization-context', authenticate, async (req, res) => {
 });
 
 // Generate AI route suggestions
-router.post('/ai/optimize', authenticate, async (req, res) => {
+router.post('/ai/optimize', async (req, res) => {
   try {
     const orgRes = await query('SELECT organization_id FROM organization_members WHERE user_id=$1 LIMIT 1', [req.userId]);
     if (!orgRes.rows.length) return res.status(403).json({ error: 'Sem organização' });
@@ -2440,7 +2440,7 @@ Gere as sugestões de rota otimizadas.`;
 });
 
 // Approve AI suggestions (bulk create routes)
-router.post('/ai/approve', authenticate, async (req, res) => {
+router.post('/ai/approve', async (req, res) => {
   try {
     const orgRes = await query('SELECT organization_id FROM organization_members WHERE user_id=$1 LIMIT 1', [req.userId]);
     if (!orgRes.rows.length) return res.status(403).json({ error: 'Sem organização' });
