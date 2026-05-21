@@ -156,7 +156,7 @@ router.post('/routes', async (req, res) => {
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
         [orgId, promoter_id, supervisor_id, pdv_id, isMultiBrand ? null : (primaryBrandId || null), isMultiBrand ? null : (effectiveChecklistId || null), d, scheduled_time,
          window_start, window_end, estimated_duration_min || 60, priority || 'normal', visit_type || 'regular',
-         recurrence, notes, req.userId]
+          recurrence, notes || null, req.userId]
       );
 
       const routeId = result.rows[0].id;
