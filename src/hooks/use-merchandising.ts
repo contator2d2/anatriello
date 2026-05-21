@@ -308,7 +308,7 @@ export function useNetworks() {
     queryKey: ['merch-networks'],
     queryFn: async () => {
       try {
-        return await api<any[]>('/api/merchandising/networks');
+        return await api<any[]>('/api/merch/networks');
       } catch (e: any) {
         const is404 = e.status === 404 || (e.message && e.message.includes('404'));
         if (is404) {
