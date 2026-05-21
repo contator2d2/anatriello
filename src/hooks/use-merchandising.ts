@@ -362,7 +362,7 @@ export function useUpdateNetwork() {
   return useMutation({
     mutationFn: async ({ id, ...data }: any) => {
       try {
-        return await api<any>(`/api/merch/networks/${id}`, { method: 'PUT', body: data });
+        return await api<any>(`/api/merchandising/networks/${id}`, { method: 'PUT', body: data });
       } catch (e: any) {
         const is404 = e.status === 404 || (e.message && e.message.includes('404'));
         if (is404 || id.startsWith('mock-')) {
