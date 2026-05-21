@@ -332,8 +332,7 @@ export function useCreateNetwork() {
       try {
         return await api<any>('/api/merch/networks', { method: 'POST', body: data });
       } catch (e: any) {
-        const is404 = e.status === 404 || (e.message && e.message.includes('404'));
-        if (is404) {
+        if (e.status === 404) {
           const stored = localStorage.getItem('mock_merch_networks');
           const networks = stored ? JSON.parse(stored) : [];
           const newNetwork = { 
