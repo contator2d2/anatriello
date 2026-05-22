@@ -466,9 +466,8 @@ export default function PromotorRota() {
   // Multi-brand support
   const isMultiBrand = route?.is_multi_brand && route?.route_brands?.length > 1;
   const routeBrands = route?.route_brands || [];
-  const currentBrand = isMultiBrand
-    ? routeBrands.find((rb: any) => rb.brand_id === activeBrandId)
-    : null;
+  const currentBrand = useMemo(() => routeBrands.find((rb: any) => rb.brand_id === activeBrandId), [routeBrands, activeBrandId]);
+
 
   // Auto-select first brand for non-multi-brand routes
   useEffect(() => {
@@ -490,6 +489,13 @@ export default function PromotorRota() {
     });
     return map;
   }, [route?.category_statuses, isMultiBrand, activeBrandId, routeBrands]);
+
+  const requireStockCount = useMemo(() => (isMultiBrand ? currentBrand?.require_stock_count : route?.require_stock_count) ?? false, [isMultiBrand, currentBrand, route]);
+  const requireValidityCheck = useMemo(() => (isMultiBrand ? currentBrand?.require_validity_check : route?.require_validity_check) ?? false, [isMultiBrand, currentBrand, route]);
+  const canQuickCheck = !requireStockCount && !requireValidityCheck;
+
+
+
 
   // Filter executions by active brand
   const filteredExecs = useMemo(() => {
@@ -798,6 +804,7 @@ export default function PromotorRota() {
               const needsAfterPhoto = requireCategoryPhotos && allProductsDone && !isLocked && !hasAfterPhoto;
 
               return (
+
                 <div key={category}>
                   {/* Category preparation for normal groups */}
                   {isLocked && !isExtraGroup && (
@@ -861,17 +868,44 @@ export default function PromotorRota() {
                             <div className="flex-1 min-w-0">
                               <div className="text-sm font-medium truncate">{exec.product_name}</div>
                               {exec.exposure_point !== 'natural' && <Badge variant="secondary" className="text-[9px] mt-0.5">{exec.exposure_point}</Badge>}
-                              {(exec.qty_store > 0 || exec.qty_stock > 0) && (
+                              {requireStockCount && (exec.qty_store > 0 || exec.qty_stock > 0) && (
                                 <div className="text-[10px] text-muted-foreground mt-0.5">
                                   Loja: {exec.qty_store} | Estoque: {exec.qty_stock} | Total: {exec.qty_total}
                                 </div>
                               )}
+
                             </div>
-                            <div className="flex items-center gap-1">
+                            <div className="flex items-center gap-1.5">
                               {exec.has_rupture && <AlertTriangle className="h-3.5 w-3.5 text-red-500" />}
                               {exec.has_damage && <Archive className="h-3.5 w-3.5 text-orange-500" />}
+                              
+                              {canQuickCheck && exec.status !== 'completed' && (
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50 rounded-full"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    updateExec.mutate({
+                                      id: exec.id,
+                                      status: 'completed',
+                                      checked: true,
+                                      qty_store: 0,
+                                      qty_stock: 0
+                                    }, {
+                                      onSuccess: () => toast.success('Produto concluído!'),
+                                      onError: (err: any) => toast.error(err.message)
+                                    });
+                                  }}
+                                  disabled={updateExec.isPending}
+                                >
+                                  <Check className="h-5 w-5" />
+                                </Button>
+                              )}
+                              
                               <ChevronRight className="h-4 w-4 text-muted-foreground" />
                             </div>
+
                           </div>
                         </CardContent>
                       </Card>
@@ -934,9 +968,11 @@ export default function PromotorRota() {
                         : 'Tire a foto DEPOIS de todas as categorias para concluir a rota.'}
                     </p>
                   )}
-                </>
-              );
-            })()}
+                    </>
+                  );
+                })()}
+
+
 
             {/* Extra Point button */}
             <Button variant="outline" className="w-full h-10 border-dashed border-orange-400/50 text-orange-600 hover:bg-orange-50"
@@ -995,28 +1031,32 @@ export default function PromotorRota() {
               </div>
 
               {/* Counting */}
-              <div className="space-y-2">
-                <Label className="text-xs font-semibold flex items-center gap-1">
-                  <Store className="h-3.5 w-3.5" /> Contagem
-                </Label>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <Label className="text-[10px] text-muted-foreground">Qtd Loja</Label>
-                    <Input type="number" min="0" placeholder="0"
-                      value={actionForm.qty_store ?? selectedExec?.qty_store ?? 0}
-                      onChange={e => setActionForm({ ...actionForm, qty_store: parseInt(e.target.value) || 0 })} />
+              {requireStockCount && (
+
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold flex items-center gap-1">
+                    <Store className="h-3.5 w-3.5" /> Contagem
+                  </Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <Label className="text-[10px] text-muted-foreground">Qtd Loja</Label>
+                      <Input type="number" min="0" placeholder="0"
+                        value={actionForm.qty_store ?? selectedExec?.qty_store ?? 0}
+                        onChange={e => setActionForm({ ...actionForm, qty_store: parseInt(e.target.value) || 0 })} />
+                    </div>
+                    <div>
+                      <Label className="text-[10px] text-muted-foreground">Qtd Estoque</Label>
+                      <Input type="number" min="0" placeholder="0"
+                        value={actionForm.qty_stock ?? selectedExec?.qty_stock ?? 0}
+                        onChange={e => setActionForm({ ...actionForm, qty_stock: parseInt(e.target.value) || 0 })} />
+                    </div>
                   </div>
-                  <div>
-                    <Label className="text-[10px] text-muted-foreground">Qtd Estoque</Label>
-                    <Input type="number" min="0" placeholder="0"
-                      value={actionForm.qty_stock ?? selectedExec?.qty_stock ?? 0}
-                      onChange={e => setActionForm({ ...actionForm, qty_stock: parseInt(e.target.value) || 0 })} />
+                  <div className="text-[10px] text-muted-foreground text-right">
+                    Total: {(actionForm.qty_store ?? selectedExec?.qty_store ?? 0) + (actionForm.qty_stock ?? selectedExec?.qty_stock ?? 0)}
                   </div>
                 </div>
-                <div className="text-[10px] text-muted-foreground text-right">
-                  Total: {(actionForm.qty_store ?? selectedExec?.qty_store ?? 0) + (actionForm.qty_stock ?? selectedExec?.qty_stock ?? 0)}
-                </div>
-              </div>
+              )}
+
 
               {/* Observation */}
               <div>
@@ -1031,11 +1071,11 @@ export default function PromotorRota() {
                 <Label className="text-xs font-semibold">Registrar ocorrência</Label>
                 <div className="grid grid-cols-2 gap-2">
                   {[
-                    { key: 'validity', label: 'Validade', icon: CalendarIcon, color: 'text-blue-600' },
-                    { key: 'rupture', label: 'Ruptura', icon: AlertTriangle, color: 'text-red-600' },
-                    { key: 'damage', label: 'Avaria', icon: Archive, color: 'text-orange-600' },
-                    { key: 'discard', label: 'Descarte', icon: Trash2, color: 'text-purple-600' },
-                  ].map(a => (
+                    { key: 'validity', label: 'Validade', icon: CalendarIcon, color: 'text-blue-600', show: requireValidityCheck },
+                    { key: 'rupture', label: 'Ruptura', icon: AlertTriangle, color: 'text-red-600', show: true },
+                    { key: 'damage', label: 'Avaria', icon: Archive, color: 'text-orange-600', show: true },
+                    { key: 'discard', label: 'Descarte', icon: Trash2, color: 'text-purple-600', show: true },
+                  ].filter(a => a.show).map(a => (
                     <Button key={a.key} variant="outline" className="h-12 flex-col gap-0.5 text-[10px]"
                       onClick={() => setActiveAction(a.key as ActionType)}>
                       <a.icon className={`h-4 w-4 ${a.color}`} />
@@ -1044,6 +1084,7 @@ export default function PromotorRota() {
                   ))}
                 </div>
               </div>
+
             </div>
             <DialogFooter className="flex gap-2">
               <Button variant="outline" size="sm" onClick={() => setSelectedExec(null)}>Fechar</Button>

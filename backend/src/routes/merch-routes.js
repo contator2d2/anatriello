@@ -1467,6 +1467,24 @@ router.get('/promotor/routes/:id', promotorAuth, async (req, res) => {
 
     const photos = await query('SELECT * FROM route_photos WHERE route_id=$1 ORDER BY captured_at', [req.params.id]);
 
+    // Load route brands (multi-brand support)
+    let routeBrands = [];
+    try {
+      const rbRes = await query(
+        `SELECT rb.*, b.name as brand_name, bc.name as checklist_name,
+         bc.require_checkin_photo, bc.require_checkout_photo, bc.require_stock_count,
+         bc.require_validity_check, bc.require_extra_point, bc.require_category_photos,
+         bc.min_category_photos_before, bc.min_category_photos_after,
+         (SELECT COUNT(*) FROM route_product_executions rpe WHERE rpe.route_brand_id = rb.id) as total_products,
+         (SELECT COUNT(*) FROM route_product_executions rpe WHERE rpe.route_brand_id = rb.id AND rpe.status = 'completed') as completed_products
+         FROM route_brands rb
+         LEFT JOIN merch_brands b ON b.id = rb.brand_id
+         LEFT JOIN brand_checklists bc ON bc.id = rb.checklist_id
+         WHERE rb.route_id = $1 ORDER BY rb.sort_order`, [req.params.id]);
+      routeBrands = rbRes.rows;
+    } catch (e) { logWarn('promotor.route_detail.route_brands_failed', e); }
+
+
     // Check postponed items
     const postponed = await query(
       `SELECT rsp.*, pr.name as product_name, pc.name as category_name
@@ -1510,6 +1528,8 @@ router.get('/promotor/routes/:id', promotorAuth, async (req, res) => {
       photos: photos.rows,
       postponed_items: postponed.rows,
       category_statuses: categoryStatuses,
+      route_brands: routeBrands,
+      is_multi_brand: routeBrands.length > 0,
     });
   } catch (err) { logError('promotor.route_detail', err); res.status(500).json({ error: 'Erro' }); }
 });
