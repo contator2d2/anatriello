@@ -791,12 +791,7 @@ export default function PromotorRota() {
         {/* Active route: categories with step-by-step flow */}
         {isActive && (!isMultiBrand || activeBrandId) && (
           <div className="space-y-4">
-            {(() => {
-              const requireStockCount = isMultiBrand ? currentBrand?.require_stock_count : route?.require_stock_count;
-              const requireValidityCheck = isMultiBrand ? currentBrand?.require_validity_check : route?.require_validity_check;
-              const canQuickCheck = requireStockCount === false && requireValidityCheck === false;
-
-              return Object.entries(groupedExecs).map(([category, { catId, execs, isExtraGroup }]) => {
+            {Object.entries(groupedExecs).map(([category, { catId, execs, isExtraGroup }]) => {
               const catStatus = categoryStatusMap[catId];
               // For extra groups: need photo but NOT point type
               const requireCategoryPhotos = route?.require_category_photos !== false;
@@ -810,6 +805,7 @@ export default function PromotorRota() {
               const needsAfterPhoto = requireCategoryPhotos && allProductsDone && !isLocked && !hasAfterPhoto;
 
               return (
+
                 <div key={category}>
                   {/* Category preparation for normal groups */}
                   {isLocked && !isExtraGroup && (
