@@ -873,11 +873,37 @@ export default function PromotorRota() {
                                 </div>
                               )}
                             </div>
-                            <div className="flex items-center gap-1">
+                            <div className="flex items-center gap-1.5">
                               {exec.has_rupture && <AlertTriangle className="h-3.5 w-3.5 text-red-500" />}
                               {exec.has_damage && <Archive className="h-3.5 w-3.5 text-orange-500" />}
+                              
+                              {canQuickCheck && exec.status !== 'completed' && (
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50 rounded-full"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    updateExec.mutate({
+                                      id: exec.id,
+                                      status: 'completed',
+                                      checked: true,
+                                      qty_store: 0,
+                                      qty_stock: 0
+                                    }, {
+                                      onSuccess: () => toast.success('Produto concluído!'),
+                                      onError: (err: any) => toast.error(err.message)
+                                    });
+                                  }}
+                                  disabled={updateExec.isPending}
+                                >
+                                  <Check className="h-5 w-5" />
+                                </Button>
+                              )}
+                              
                               <ChevronRight className="h-4 w-4 text-muted-foreground" />
                             </div>
+
                           </div>
                         </CardContent>
                       </Card>
