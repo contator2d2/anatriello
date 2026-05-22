@@ -1528,6 +1528,8 @@ router.get('/promotor/routes/:id', promotorAuth, async (req, res) => {
       photos: photos.rows,
       postponed_items: postponed.rows,
       category_statuses: categoryStatuses,
+      route_brands: routeBrands,
+      is_multi_brand: routeBrands.length > 0,
     });
   } catch (err) { logError('promotor.route_detail', err); res.status(500).json({ error: 'Erro' }); }
 });
