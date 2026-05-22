@@ -466,9 +466,8 @@ export default function PromotorRota() {
   // Multi-brand support
   const isMultiBrand = route?.is_multi_brand && route?.route_brands?.length > 1;
   const routeBrands = route?.route_brands || [];
-  const currentBrand = isMultiBrand
-    ? routeBrands.find((rb: any) => rb.brand_id === activeBrandId)
-    : null;
+  const currentBrand = useMemo(() => routeBrands.find((rb: any) => rb.brand_id === activeBrandId), [routeBrands, activeBrandId]);
+
 
   // Auto-select first brand for non-multi-brand routes
   useEffect(() => {
