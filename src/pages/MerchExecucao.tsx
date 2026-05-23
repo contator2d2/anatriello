@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
-import { useLiveRoutes, useMerchDamages, useReturnRequests } from "@/hooks/use-merch-routes";
+import { useLiveRoutes, useMerchDamages, useReturnRequests, useMerchRouteDetail } from "@/hooks/use-merch-routes";
 import { MapPin, Clock, User, Camera, AlertTriangle, CheckCircle2, Activity, Package, Eye, Store, ChevronRight, Calendar, Filter } from "lucide-react";
 import { format, subDays, startOfWeek, startOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -155,7 +155,7 @@ export default function MerchExecucao() {
                 </h3>
                 {inProgress.map((r: any) => (
                   <Card key={r.id} className="border-orange-500/30 cursor-pointer hover:border-orange-500/60 transition-colors"
-                    onClick={() => setViewRoute(r)}>
+                    onClick={() => setViewRouteId(r.id)}>
                     <CardContent className="p-3">
                       <div className="flex items-center justify-between mb-2">
                         <div>
@@ -212,7 +212,7 @@ export default function MerchExecucao() {
                 <h3 className="text-sm font-semibold text-green-600">✅ Concluídas Hoje ({completed.length})</h3>
                 {completed.map((r: any) => (
                   <Card key={r.id} className="border-green-500/20 cursor-pointer hover:border-green-500/40 transition-colors"
-                    onClick={() => setViewRoute(r)}>
+                    onClick={() => setViewRouteId(r.id)}>
                     <CardContent className="p-3 flex items-center justify-between">
                       <div>
                         <div className="font-semibold text-sm">{r.pdv_name}</div>
@@ -235,7 +235,7 @@ export default function MerchExecucao() {
                 <h3 className="text-sm font-semibold text-blue-600">📅 Aguardando ({scheduled.length})</h3>
                 {scheduled.map((r: any) => (
                   <Card key={r.id} className="cursor-pointer hover:border-primary/30 transition-colors"
-                    onClick={() => setViewRoute(r)}>
+                    onClick={() => setViewRouteId(r.id)}>
                     <CardContent className="p-3 flex items-center justify-between">
                       <div>
                         <div className="font-semibold text-sm">{r.pdv_name}</div>
@@ -309,8 +309,8 @@ export default function MerchExecucao() {
         </Tabs>
 
         {/* Route Detail Dialog */}
-        <Dialog open={!!viewRoute} onOpenChange={() => setViewRoute(null)}>
-          <DialogContent className="max-w-md">
+        <Dialog open={!!viewRouteId} onOpenChange={(open) => !open && setViewRouteId(null)}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Store className="h-5 w-5 text-primary" />
