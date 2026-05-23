@@ -445,8 +445,94 @@ export default function MerchExecucao() {
                   </Card>
                 )}
 
+                {/* Photos Section */}
+                {viewRoute.photos && viewRoute.photos.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
+                      <Camera className="h-4 w-4" /> Fotos da Execução ({viewRoute.photos.length})
+                    </div>
+                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                      {viewRoute.photos.map((photo: any) => (
+                        <div key={photo.id} className="relative aspect-square rounded-md overflow-hidden bg-muted border group">
+                          <img src={photo.photo_url} alt="Execução" className="w-full h-full object-cover cursor-pointer transition-transform group-hover:scale-110" 
+                            onClick={() => window.open(photo.photo_url, '_blank')} />
+                          {photo.category_name && (
+                            <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-[8px] text-white p-1 truncate">
+                              {photo.category_name}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Damages & Ruptures */}
+                {(viewRoute.damages?.length > 0 || viewRoute.ruptures?.length > 0) && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {viewRoute.damages?.length > 0 && (
+                      <div className="space-y-2">
+                        <div className="text-xs font-semibold text-red-600 flex items-center gap-1">
+                          <AlertTriangle className="h-4 w-4" /> Avarias ({viewRoute.damages.length})
+                        </div>
+                        <div className="space-y-1">
+                          {viewRoute.damages.map((d: any) => (
+                            <div key={d.id} className="text-[10px] bg-red-50 p-1.5 rounded border border-red-100">
+                              <span className="font-bold">{d.product_name}</span>: {d.qty_total} un.
+                              {d.reason && <div className="text-muted-foreground italic mt-0.5">{d.reason}</div>}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {viewRoute.ruptures?.length > 0 && (
+                      <div className="space-y-2">
+                        <div className="text-xs font-semibold text-orange-600 flex items-center gap-1">
+                          <Package className="h-4 w-4" /> Rupturas ({viewRoute.ruptures.length})
+                        </div>
+                        <div className="space-y-1">
+                          {viewRoute.ruptures.map((r: any) => (
+                            <div key={r.id} className="text-[10px] bg-orange-50 p-1.5 rounded border border-orange-100">
+                              <span className="font-bold">{r.product_name}</span>
+                              {r.reason && <div className="text-muted-foreground italic mt-0.5">{r.reason}</div>}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Logs / Timeline */}
+                {viewRoute.logs && viewRoute.logs.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
+                      <Activity className="h-4 w-4" /> Histórico da Rota
+                    </div>
+                    <div className="space-y-1.5 border-l-2 border-muted ml-2 pl-3 py-1">
+                      {viewRoute.logs.slice(-5).map((log: any) => (
+                        <div key={log.id} className="relative">
+                          <div className="absolute -left-[17px] top-1.5 w-2 h-2 rounded-full bg-primary" />
+                          <div className="text-[10px]">
+                            <span className="font-medium text-muted-foreground">{new Date(log.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+                            <span className="ml-2">{log.action_description || log.action_type}</span>
+                          </div>
+                        </div>
+                      ))}
+                      {viewRoute.logs.length > 5 && (
+                        <div className="text-[9px] text-primary cursor-pointer hover:underline">Ver todo o histórico (+{viewRoute.logs.length - 5})</div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {viewRoute.notes && (
-                  <div className="text-xs text-muted-foreground bg-muted/30 p-2 rounded-md">{viewRoute.notes}</div>
+                  <div className="space-y-1">
+                    <div className="text-xs font-semibold text-muted-foreground uppercase">Observações</div>
+                    <div className="text-xs text-muted-foreground bg-muted/30 p-2 rounded-md border italic">
+                      "{viewRoute.notes}"
+                    </div>
+                  </div>
                 )}
               </div>
             )}
