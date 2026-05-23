@@ -54,20 +54,55 @@ export default function RHDocumentos() {
   const { toast } = useToast();
 
   // Send Document form
-  const [sendForm, setSendForm] = useState({ title: '', description: '', employee_id: '', file_url: '', requires_confirmation: true, requires_signature: false, document_type_id: '' });
+  const [sendForm, setSendForm] = useState({ title: '', description: '', employee_ids: [] as string[], sendToAll: false, file_url: '', requires_confirmation: true, requires_signature: false, document_type_id: '' });
+  const [empSearch, setEmpSearch] = useState('');
 
   // Send Notice form
   const [noticeForm, setNoticeForm] = useState({ title: '', message: '', employee_ids: [] as string[], type: 'info', sendToAll: false });
 
   const activeEmployees = (employees || []).filter((e: any) => e.status === 'ativo');
 
+  const DEFAULT_DOC_TYPES = [
+    { id: '__atestado', name: 'Atestado Médico' },
+    { id: '__contrato', name: 'Contrato' },
+    { id: '__holerite', name: 'Holerite' },
+    { id: '__comprovante', name: 'Comprovante' },
+    { id: '__aviso', name: 'Aviso / Comunicado' },
+    { id: '__outro', name: 'Outro' },
+  ];
+  const availableDocTypes = (docTypes && docTypes.length > 0) ? docTypes : DEFAULT_DOC_TYPES;
+
+  const filteredEmployeesForSend = activeEmployees.filter((e: any) =>
+    !empSearch || e.full_name?.toLowerCase().includes(empSearch.toLowerCase())
+  );
+
+  const toggleSendEmployee = (id: string) => {
+    setSendForm(f => ({
+      ...f,
+      employee_ids: f.employee_ids.includes(id) ? f.employee_ids.filter(x => x !== id) : [...f.employee_ids, id]
+    }));
+  };
+
   const handleSend = async () => {
-    if (!sendForm.title || !sendForm.employee_id) { toast({ title: 'Preencha título e selecione colaborador', variant: 'destructive' }); return; }
+    const ids = sendForm.sendToAll ? activeEmployees.map((e: any) => e.id) : sendForm.employee_ids;
+    if (!sendForm.title || ids.length === 0) { toast({ title: 'Preencha título e selecione ao menos um colaborador', variant: 'destructive' }); return; }
     try {
-      await sendDelivery.mutateAsync(sendForm);
-      toast({ title: 'Documento enviado!' });
+      const payload: any = {
+        title: sendForm.title,
+        description: sendForm.description,
+        file_url: sendForm.file_url,
+        requires_confirmation: sendForm.requires_confirmation,
+        requires_signature: sendForm.requires_signature,
+        employee_ids: ids,
+      };
+      if (sendForm.document_type_id && !sendForm.document_type_id.startsWith('__')) {
+        payload.document_type_id = sendForm.document_type_id;
+      }
+      await sendDelivery.mutateAsync(payload);
+      toast({ title: `Documento enviado para ${ids.length} colaborador(es)!` });
       setShowSendDialog(false);
-      setSendForm({ title: '', description: '', employee_id: '', file_url: '', requires_confirmation: true, requires_signature: false, document_type_id: '' });
+      setSendForm({ title: '', description: '', employee_ids: [], sendToAll: false, file_url: '', requires_confirmation: true, requires_signature: false, document_type_id: '' });
+      setEmpSearch('');
     } catch (err: any) {
       toast({ title: 'Erro', description: err.message, variant: 'destructive' });
     }
