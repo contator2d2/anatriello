@@ -439,6 +439,7 @@ export default function PromotorRota() {
   const [pdvCheckoutPhoto, setPdvCheckoutPhoto] = useState('');
   const [checkinPhotoUrl, setCheckinPhotoUrl] = useState('');
   const [routeCompletionResult, setRouteCompletionResult] = useState<any>(null);
+  const [currentTime, setCurrentTime] = useState(new Date());
   const [showExtraPointDialog, setShowExtraPointDialog] = useState<{ catId: string; categoryName: string } | null>(null);
   const [selectedExtraProducts, setSelectedExtraProducts] = useState<string[]>([]);
   const [showExtraPointCategoryPicker, setShowExtraPointCategoryPicker] = useState(false);
@@ -469,12 +470,19 @@ export default function PromotorRota() {
   const currentBrand = useMemo(() => routeBrands.find((rb: any) => rb.brand_id === activeBrandId), [routeBrands, activeBrandId]);
 
 
-  // Auto-select first brand for non-multi-brand routes
   useEffect(() => {
     if (route && !isMultiBrand && !activeBrandId) {
       setActiveBrandId(route.brand_id);
     }
   }, [route, isMultiBrand, activeBrandId]);
+
+  // Timer to keep current time updated for min duration check
+  useEffect(() => {
+    if (route?.status === 'in_progress') {
+      const timer = setInterval(() => setCurrentTime(new Date()), 10000);
+      return () => clearInterval(timer);
+    }
+  }, [route?.status]);
 
   // Build category status map - filter by active brand if multi-brand
   const categoryStatusMap = useMemo(() => {
@@ -963,7 +971,13 @@ export default function PromotorRota() {
                 return catDone && !catStatus?.category_after_photo && !catStatus?.completed;
               }) : [];
               const allCategoriesCompleted = categoriesMissingAfterPhoto.length === 0;
-              const allDone = allProductsDone && allCategoriesCompleted;
+              
+              const minDuration = parseInt(route?.min_duration_minutes || "0", 10);
+              const checkinAt = route?.checkin_at ? new Date(route.checkin_at) : null;
+              const elapsedMinutes = checkinAt ? Math.floor((currentTime.getTime() - checkinAt.getTime()) / 60000) : 0;
+              const hasMinDurationMet = minDuration === 0 || elapsedMinutes >= minDuration;
+              
+              const allDone = allProductsDone && allCategoriesCompleted && hasMinDurationMet;
               
               return (
                 <>
@@ -976,16 +990,29 @@ export default function PromotorRota() {
                       toast.error(`${categoriesMissingAfterPhoto.length} categoria(s) ainda precisam da foto DEPOIS para serem concluídas.`);
                       return;
                     }
+                    if (!hasMinDurationMet) {
+                      toast.error(`Tempo mínimo de permanência não atingido. Faltam ${minDuration - elapsedMinutes} minuto(s).`);
+                      return;
+                    }
                     setShowCompleteRoute(true);
                   }} disabled={checkout.isPending} variant={allDone ? 'default' : 'secondary'}>
                     <Check className="h-5 w-5 mr-2" /> Concluir Rota ({completedExecs}/{totalExecs})
                   </Button>
                   {!allDone && (
-                    <p className="text-[10px] text-center text-destructive">
-                      ⚠️ {!allProductsDone 
-                        ? 'Todos os produtos devem estar executados (100%) para concluir a rota.'
-                        : 'Tire a foto DEPOIS de todas as categorias para concluir a rota.'}
-                    </p>
+                    <div className="space-y-1">
+                      <p className="text-[10px] text-center text-destructive">
+                        ⚠️ {!allProductsDone 
+                          ? 'Todos os produtos devem estar executados (100%) para concluir a rota.'
+                          : !allCategoriesCompleted 
+                            ? 'Tire a foto DEPOIS de todas as categorias para concluir a rota.'
+                            : `Tempo mínimo: faltam ${minDuration - elapsedMinutes} min.`}
+                      </p>
+                      {allProductsDone && allCategoriesCompleted && !hasMinDurationMet && (
+                        <p className="text-[10px] text-center text-muted-foreground flex items-center justify-center gap-1">
+                          <Clock className="h-3 w-3" /> Tempo mínimo de permanência: {minDuration} min
+                        </p>
+                      )}
+                    </div>
                   )}
                     </>
                   );
