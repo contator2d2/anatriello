@@ -32,6 +32,7 @@ const STATUS_COLORS: Record<string, string> = {
 const STATUS_LABELS: Record<string, string> = {
   scheduled: 'Agendada', confirmed: 'Confirmada', in_progress: 'Em Andamento',
   completed: 'Concluída', not_done: 'Não Realizada', cancelled: 'Cancelada',
+  awaiting_checkout: 'Aguardando Checkout',
 };
 
 export default function PromotorHome() {
