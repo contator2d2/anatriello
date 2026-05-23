@@ -89,10 +89,13 @@ interface LiveMapComponentProps {
 }
 
 
-function LiveMapComponent({ employees, pdvs, regions, showPDVs, showPromoters, showSupervisors, showRegions, searchTerm }: LiveMapComponentProps) {
+function LiveMapComponent({ employees, pdvs, regions, showPDVs, showPromoters, showSupervisors, showRegions, searchTerm, showHeatmap }: LiveMapComponentProps) {
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const layersRef = useRef<L.LayerGroup>(L.layerGroup());
+  const clusterRef = useRef<any>(null);
+  const heatLayerRef = useRef<any>(null);
+
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
