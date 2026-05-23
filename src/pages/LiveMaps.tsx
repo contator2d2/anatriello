@@ -493,9 +493,70 @@ export default function LiveMaps() {
                   );
                 })}
               </div>
-            </CardContent>
+                </CardContent>
+              </TabsContent>
+
+              <TabsContent value="monitor" className="flex-1 flex flex-col min-h-0 m-0">
+                <CardHeader className="p-3 pb-2 shrink-0 border-b">
+                  <CardTitle className="text-xs flex items-center justify-between">
+                    <span className="flex items-center gap-1.5"><Activity className="h-3.5 w-3.5 text-primary" /> Atividade Agora</span>
+                    <Badge variant="outline" className="text-[10px] h-4">{monitoringStats.activeCount} em campo</Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-0 flex-1 overflow-y-auto">
+                  <div className="p-3 space-y-4">
+                    {/* Por Marca */}
+                    <div>
+                      <h4 className="text-[10px] font-bold uppercase text-muted-foreground mb-2 flex items-center gap-1">
+                        <Building2 className="h-3 w-3" /> Por Marca
+                      </h4>
+                      <div className="space-y-1">
+                        {monitoringStats.byBrand.map(([brand, count]) => (
+                          <div key={brand} className="flex items-center justify-between text-xs p-1.5 hover:bg-muted/50 rounded transition-colors group">
+                            <span className="truncate font-medium">{brand}</span>
+                            <Badge variant="secondary" className="text-[10px] px-1.5 h-4 group-hover:bg-primary group-hover:text-primary-foreground transition-colors">{count}</Badge>
+                          </div>
+                        ))}
+                        {monitoringStats.byBrand.length === 0 && <p className="text-[10px] text-muted-foreground italic p-2 text-center">Nenhuma rota em execução agora</p>}
+                      </div>
+                    </div>
+
+                    {/* Por Rede */}
+                    <div>
+                      <h4 className="text-[10px] font-bold uppercase text-muted-foreground mb-2 flex items-center gap-1">
+                        <Store className="h-3 w-3" /> Por Rede
+                      </h4>
+                      <div className="space-y-1">
+                        {monitoringStats.byNetwork.map(([network, count]) => (
+                          <div key={network} className="flex items-center justify-between text-xs p-1.5 hover:bg-muted/50 rounded transition-colors group">
+                            <span className="truncate">{network}</span>
+                            <Badge variant="secondary" className="text-[10px] px-1.5 h-4 group-hover:bg-primary group-hover:text-primary-foreground transition-colors">{count}</Badge>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Por PDV */}
+                    <div>
+                      <h4 className="text-[10px] font-bold uppercase text-muted-foreground mb-2 flex items-center gap-1">
+                        <MapPin className="h-3 w-3" /> PDVs Ativos
+                      </h4>
+                      <div className="space-y-1">
+                        {monitoringStats.byPDV.map(([pdv, count]) => (
+                          <div key={pdv} className="flex items-center justify-between text-xs p-1.5 hover:bg-muted/50 rounded transition-colors group">
+                            <span className="truncate">{pdv}</span>
+                            <Badge variant="secondary" className="text-[10px] px-1.5 h-4 group-hover:bg-primary group-hover:text-primary-foreground transition-colors">{count}</Badge>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </TabsContent>
+            </Tabs>
           </Card>
         </div>
+
 
         {/* Legend */}
         <div className="flex flex-wrap gap-4 items-center text-[10px] text-muted-foreground shrink-0">
