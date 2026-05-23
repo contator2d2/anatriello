@@ -439,6 +439,7 @@ export default function PromotorRota() {
   const [pdvCheckoutPhoto, setPdvCheckoutPhoto] = useState('');
   const [checkinPhotoUrl, setCheckinPhotoUrl] = useState('');
   const [routeCompletionResult, setRouteCompletionResult] = useState<any>(null);
+  const [currentTime, setCurrentTime] = useState(new Date());
   const [showExtraPointDialog, setShowExtraPointDialog] = useState<{ catId: string; categoryName: string } | null>(null);
   const [selectedExtraProducts, setSelectedExtraProducts] = useState<string[]>([]);
   const [showExtraPointCategoryPicker, setShowExtraPointCategoryPicker] = useState(false);
