@@ -1487,7 +1487,7 @@ router.get('/promotor/routes/:id', promotorAuth, async (req, res) => {
     let routeBrands = [];
     try {
       const rbRes = await query(
-        `SELECT rb.*, b.name as brand_name, 
+        `SELECT DISTINCT ON (rb.id) rb.*, b.name as brand_name, 
          COALESCE(bc.name, bc2.name) as checklist_name,
          COALESCE(bc.require_checkin_photo, bc2.require_checkin_photo, true) as require_checkin_photo,
          COALESCE(bc.require_checkout_photo, bc2.require_checkout_photo, false) as require_checkout_photo,
@@ -1503,8 +1503,10 @@ router.get('/promotor/routes/:id', promotorAuth, async (req, res) => {
          LEFT JOIN merch_brands b ON b.id = rb.brand_id
          LEFT JOIN brand_checklists bc ON bc.id = rb.checklist_id
          LEFT JOIN brand_checklists bc2 ON bc2.brand_id = rb.brand_id AND bc2.active = true
-         WHERE rb.route_id = $1 ORDER BY rb.sort_order`, [req.params.id]);
+         WHERE rb.route_id = $1 ORDER BY rb.id, bc2.created_at DESC`, [req.params.id]);
       routeBrands = rbRes.rows;
+      // Re-sort by original sort_order if needed, or just keep rb.id ordering
+      routeBrands.sort((a, b) => a.sort_order - b.sort_order);
     } catch (e) { logWarn('promotor.route_detail.route_brands_failed', e); }
 
 
