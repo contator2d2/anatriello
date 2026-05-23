@@ -349,7 +349,12 @@ export default function LiveMaps() {
           <Button variant={showRegions ? 'default' : 'outline'} size="sm" onClick={() => setShowRegions(!showRegions)} className="gap-1.5 text-xs h-7">
             <Navigation className="h-3 w-3" /> Regiões ({regions.length})
           </Button>
+          <div className="flex-1" />
+          <Button variant={showHeatmap ? 'default' : 'outline'} size="sm" onClick={() => setShowHeatmap(!showHeatmap)} className="gap-1.5 text-xs h-7 border-orange-200 text-orange-700 hover:bg-orange-50">
+            <Activity className="h-3 w-3" /> Mapa de Calor
+          </Button>
         </div>
+
 
         {/* Map + Sidebar */}
         <div className="flex-1 flex gap-3 min-h-0">
