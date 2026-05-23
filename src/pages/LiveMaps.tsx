@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useLiveRoutes } from "@/hooks/use-merch-routes";
@@ -298,6 +299,34 @@ export default function LiveMaps() {
     );
   }, [employees, searchTerm]);
 
+  const monitoringStats = useMemo(() => {
+    const activeRoutes = liveRoutes.filter((r: any) => r.status === 'in_progress');
+    
+    const byBrand: Record<string, number> = {};
+    const byNetwork: Record<string, number> = {};
+    const byPDV: Record<string, number> = {};
+    
+    activeRoutes.forEach((r: any) => {
+      if (r.brand_name) {
+        byBrand[r.brand_name] = (byBrand[r.brand_name] || 0) + 1;
+      }
+      
+      const network = r.pdv_client || r.pdv_name?.split(' - ')[0] || 'Outros';
+      byNetwork[network] = (byNetwork[network] || 0) + 1;
+      
+      if (r.pdv_name) {
+        byPDV[r.pdv_name] = (byPDV[r.pdv_name] || 0) + 1;
+      }
+    });
+    
+    return {
+      byBrand: Object.entries(byBrand).sort((a, b) => b[1] - a[1]),
+      byNetwork: Object.entries(byNetwork).sort((a, b) => b[1] - a[1]),
+      byPDV: Object.entries(byPDV).sort((a, b) => b[1] - a[1]),
+      activeCount: activeRoutes.length
+    };
+  }, [liveRoutes]);
+
   return (
     <MainLayout>
       <div className="flex flex-col h-[calc(100vh-6rem)] gap-3">
@@ -379,14 +408,23 @@ export default function LiveMaps() {
             </CardContent>
           </Card>
 
-          {/* Employee List Sidebar */}
-          <Card className="w-72 hidden lg:flex flex-col overflow-hidden shrink-0">
-            <CardHeader className="p-3 pb-2 shrink-0">
-              <CardTitle className="text-xs flex items-center gap-1.5">
-                <Users className="h-3.5 w-3.5" /> Equipe ({filteredEmployeeList.length})
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-0 flex-1 overflow-y-auto">
+          <Card className="w-80 hidden lg:flex flex-col overflow-hidden shrink-0">
+            <Tabs defaultValue="team" className="flex flex-col h-full">
+              <div className="px-3 pt-3 shrink-0">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="team" className="text-xs">Equipe</TabsTrigger>
+                  <TabsTrigger value="monitor" className="text-xs">Tempo Real</TabsTrigger>
+                </TabsList>
+              </div>
+
+              <TabsContent value="team" className="flex-1 flex flex-col min-h-0 m-0">
+                <CardHeader className="p-3 pb-2 shrink-0">
+                  <CardTitle className="text-xs flex items-center gap-1.5">
+                    <Users className="h-3.5 w-3.5" /> Equipe ({filteredEmployeeList.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-0 flex-1 overflow-y-auto">
+
               <div className="divide-y">
                 {filteredEmployeeList.map((e: any) => {
                   const isOnline = e.live_status === 'online';
@@ -455,9 +493,70 @@ export default function LiveMaps() {
                   );
                 })}
               </div>
-            </CardContent>
+                </CardContent>
+              </TabsContent>
+
+              <TabsContent value="monitor" className="flex-1 flex flex-col min-h-0 m-0">
+                <CardHeader className="p-3 pb-2 shrink-0 border-b">
+                  <CardTitle className="text-xs flex items-center justify-between">
+                    <span className="flex items-center gap-1.5"><Activity className="h-3.5 w-3.5 text-primary" /> Atividade Agora</span>
+                    <Badge variant="outline" className="text-[10px] h-4">{monitoringStats.activeCount} em campo</Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-0 flex-1 overflow-y-auto">
+                  <div className="p-3 space-y-4">
+                    {/* Por Marca */}
+                    <div>
+                      <h4 className="text-[10px] font-bold uppercase text-muted-foreground mb-2 flex items-center gap-1">
+                        <Building2 className="h-3 w-3" /> Por Marca
+                      </h4>
+                      <div className="space-y-1">
+                        {monitoringStats.byBrand.map(([brand, count]) => (
+                          <div key={brand} className="flex items-center justify-between text-xs p-1.5 hover:bg-muted/50 rounded transition-colors group">
+                            <span className="truncate font-medium">{brand}</span>
+                            <Badge variant="secondary" className="text-[10px] px-1.5 h-4 group-hover:bg-primary group-hover:text-primary-foreground transition-colors">{count}</Badge>
+                          </div>
+                        ))}
+                        {monitoringStats.byBrand.length === 0 && <p className="text-[10px] text-muted-foreground italic p-2 text-center">Nenhuma rota em execução agora</p>}
+                      </div>
+                    </div>
+
+                    {/* Por Rede */}
+                    <div>
+                      <h4 className="text-[10px] font-bold uppercase text-muted-foreground mb-2 flex items-center gap-1">
+                        <Store className="h-3 w-3" /> Por Rede
+                      </h4>
+                      <div className="space-y-1">
+                        {monitoringStats.byNetwork.map(([network, count]) => (
+                          <div key={network} className="flex items-center justify-between text-xs p-1.5 hover:bg-muted/50 rounded transition-colors group">
+                            <span className="truncate">{network}</span>
+                            <Badge variant="secondary" className="text-[10px] px-1.5 h-4 group-hover:bg-primary group-hover:text-primary-foreground transition-colors">{count}</Badge>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Por PDV */}
+                    <div>
+                      <h4 className="text-[10px] font-bold uppercase text-muted-foreground mb-2 flex items-center gap-1">
+                        <MapPin className="h-3 w-3" /> PDVs Ativos
+                      </h4>
+                      <div className="space-y-1">
+                        {monitoringStats.byPDV.map(([pdv, count]) => (
+                          <div key={pdv} className="flex items-center justify-between text-xs p-1.5 hover:bg-muted/50 rounded transition-colors group">
+                            <span className="truncate">{pdv}</span>
+                            <Badge variant="secondary" className="text-[10px] px-1.5 h-4 group-hover:bg-primary group-hover:text-primary-foreground transition-colors">{count}</Badge>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </TabsContent>
+            </Tabs>
           </Card>
         </div>
+
 
         {/* Legend */}
         <div className="flex flex-wrap gap-4 items-center text-[10px] text-muted-foreground shrink-0">

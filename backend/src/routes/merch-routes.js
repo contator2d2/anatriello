@@ -581,7 +581,7 @@ router.get('/routes/live', async (req, res) => {
       : `'[]'::json`;
 
     const result = await query(
-      `SELECT r.*, e.full_name as promoter_name, p.name as pdv_name, p.city as pdv_city, b.name as brand_name,
+      `SELECT r.*, e.full_name as promoter_name, p.name as pdv_name, p.city as pdv_city, p.client_name as pdv_client, b.name as brand_name,
               COALESCE(bc.name,'') as checklist_name,
               r.checkin_at, r.checkout_at, r.completed_at, COALESCE(r.progress_pct, 0) as progress_pct,
               r.${checkinPhotoColumn} as checkin_photo,
