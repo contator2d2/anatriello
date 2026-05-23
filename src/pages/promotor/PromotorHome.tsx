@@ -52,6 +52,9 @@ export default function PromotorHome() {
   const [pdvCheckoutPhoto, setPdvCheckoutPhoto] = useState('');
   const [pdvCheckoutNotes, setPdvCheckoutNotes] = useState('');
   const [pdvCheckoutLoading, setPdvCheckoutLoading] = useState(false);
+  const [showPdvCheckin, setShowPdvCheckin] = useState(false);
+  const [pdvCheckinPhoto, setPdvCheckinPhoto] = useState('');
+  const [pdvCheckinLoading, setPdvCheckinLoading] = useState(false);
   const [actionPdv, setActionPdv] = useState<{ pdv_id: string; pdv_name: string } | null>(null);
   const [showFaceVerify, setShowFaceVerify] = useState(false);
 
@@ -102,6 +105,47 @@ export default function PromotorHome() {
       return allCompleted && !hasCheckout;
     });
   }, [todayRoutes, pdvVisits]);
+
+  // PDV Check-in handler
+  const handlePdvCheckin = useCallback(async (pdvId: string) => {
+    if (!pdvCheckinPhoto) {
+      toast({ title: 'Foto obrigatória', description: 'Tire uma foto da fachada da loja para o check-in.', variant: 'destructive' });
+      return;
+    }
+    setPdvCheckinLoading(true);
+    try {
+      const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
+        navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000 })
+      );
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      const token = localStorage.getItem('promotor_token');
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const url = `${(import.meta.env.VITE_API_URL || '').replace(/\/$/, '')}/api/merch/promotor/pdv-checkin`;
+      const response = await fetch(url, {
+        method: 'POST', headers,
+        body: JSON.stringify({
+          pdv_id: pdvId,
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
+          photo_url: pdvCheckinPhoto,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result?.error || 'Erro');
+      toast({ title: 'Check-in da loja realizado!' });
+      setShowPdvCheckin(false);
+      setPdvCheckinPhoto('');
+      // Find the first route for this PDV and navigate to it
+      const pdvRoute = todayRoutes.find((r: any) => r.pdv_id === pdvId && r.status !== 'completed');
+      if (pdvRoute) {
+        navigate(`/promotor/rota/${pdvRoute.id}`);
+      }
+    } catch (err: any) {
+      toast({ title: 'Erro no check-in', description: err.message, variant: 'destructive' });
+    } finally {
+      setPdvCheckinLoading(false);
+    }
+  }, [pdvCheckinPhoto, todayRoutes, navigate, toast]);
 
   const handlePdvCheckout = useCallback(async (pdvId: string) => {
     setPdvCheckoutLoading(true);
@@ -333,7 +377,15 @@ export default function PromotorHome() {
             {/* Next route */}
             {!activeRoute && nextRoute && (
               <Card className="border-primary/30 bg-primary/5 cursor-pointer active:scale-[0.98]"
-                onClick={() => navigate(`/promotor/rota/${nextRoute.id}`)}>
+                onClick={() => {
+                  const hasCheckin = pdvVisits.some((v: any) => v.pdv_id === nextRoute.pdv_id && v.checkin_at);
+                  if (!hasCheckin) {
+                    setActionPdv({ pdv_id: nextRoute.pdv_id, pdv_name: nextRoute.pdv_name });
+                    setShowPdvCheckin(true);
+                  } else {
+                    navigate(`/promotor/rota/${nextRoute.id}`);
+                  }
+                }}>
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between mb-2">
                     <Badge className="bg-blue-500/20 text-blue-700 text-[10px]">📍 PRÓXIMA ROTA</Badge>
@@ -347,7 +399,11 @@ export default function PromotorHome() {
                     <span className="flex items-center gap-1"><Package className="h-3 w-3" />{nextRoute.product_count || 0} itens</span>
                   </div>
                   <Button className="w-full mt-3" size="sm" variant="outline">
-                    <MapPin className="h-4 w-4 mr-2" /> Fazer Check-in
+                    {pdvVisits.some((v: any) => v.pdv_id === nextRoute.pdv_id && v.checkin_at) ? (
+                      <><PlayCircle className="h-4 w-4 mr-2" /> Iniciar Rota</>
+                    ) : (
+                      <><MapPin className="h-4 w-4 mr-2" /> Fazer Check-in na Loja</>
+                    )}
                   </Button>
                 </CardContent>
               </Card>
@@ -636,6 +692,51 @@ export default function PromotorHome() {
               {overtimeReq.isPending ? 'Enviando...' : 'Enviar Solicitação'}
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* PDV Check-in Dialog */}
+      <Dialog open={showPdvCheckin} onOpenChange={(open) => { if (!open) { setShowPdvCheckin(false); setActionPdv(null); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Store className="h-5 w-5 text-primary" /> Check-in da Loja
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Card className="border-primary/30 bg-primary/5">
+              <CardContent className="p-3">
+                <p className="text-sm font-medium">{actionPdv?.pdv_name}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Tire uma foto da fachada da loja para iniciar seu trabalho neste PDV.
+                </p>
+              </CardContent>
+            </Card>
+
+            <div className="space-y-2">
+              <Label className="text-xs">Foto da Fachada (obrigatória)</Label>
+              {pdvCheckinPhoto ? (
+                <div className="space-y-2">
+                  <img src={pdvCheckinPhoto} alt="Check-in" className="w-full rounded-lg border max-h-48 object-cover" />
+                  <Button variant="outline" size="sm" onClick={() => setPdvCheckinPhoto('')}>Tirar outra foto</Button>
+                </div>
+              ) : (
+                <CameraCapture
+                  onCapture={setPdvCheckinPhoto}
+                  watermark={{ pdvName: actionPdv?.pdv_name || '', brandName: '', photoType: 'Check-in PDV' }}
+                  customTokenGetter={() => localStorage.getItem('promotor_token')}
+                  buttonLabel="Tirar foto da fachada da loja"
+                />
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setShowPdvCheckin(false); setActionPdv(null); }}>Cancelar</Button>
+            <Button onClick={() => actionPdv && handlePdvCheckin(actionPdv.pdv_id)} disabled={pdvCheckinLoading || !pdvCheckinPhoto}>
+              {pdvCheckinLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Confirmar Check-in
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
