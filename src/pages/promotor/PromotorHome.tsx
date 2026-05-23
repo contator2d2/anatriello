@@ -27,11 +27,13 @@ const STATUS_COLORS: Record<string, string> = {
   completed: 'bg-green-500/20 text-green-700',
   not_done: 'bg-red-500/20 text-red-700',
   cancelled: 'bg-muted text-muted-foreground',
+  awaiting_checkout: 'bg-yellow-500/20 text-yellow-700',
 };
 
 const STATUS_LABELS: Record<string, string> = {
   scheduled: 'Agendada', confirmed: 'Confirmada', in_progress: 'Em Andamento',
   completed: 'Concluída', not_done: 'Não Realizada', cancelled: 'Cancelada',
+  awaiting_checkout: 'Aguardando Checkout',
 };
 
 export default function PromotorHome() {
@@ -355,24 +357,30 @@ export default function PromotorHome() {
             <div>
               <h3 className="text-sm font-semibold mb-2">Rotas do Dia</h3>
               <div className="space-y-2">
-                {todayRoutes.map((r: any) => (
-                  <Card key={r.id}
-                    className={`cursor-pointer active:scale-[0.98] transition-all ${
-                      r.id === activeRoute?.id ? 'border-orange-400/50' :
-                      r.status === 'completed' ? 'opacity-60' : 'hover:border-primary/30'
-                    }`}
-                    onClick={() => {
-                      if (r.status !== 'cancelled' && r.status !== 'not_done') {
-                        navigate(`/promotor/rota/${r.id}`);
-                      }
-                    }}>
+                {todayRoutes.map((r: any) => {
+                  // Determine if the route should show as "Awaiting Checkout"
+                  const isAwaitingCheckout = r.status === 'completed' && pdvVisits && !pdvVisits.some((v: any) => v.pdv_id === r.pdv_id && v.checkout_at);
+                  const displayStatus = isAwaitingCheckout ? 'awaiting_checkout' : r.status;
+                  
+                  return (
+                    <Card key={r.id}
+                      className={`cursor-pointer active:scale-[0.98] transition-all ${
+                        r.id === activeRoute?.id ? 'border-orange-400/50' :
+                        r.status === 'completed' && !isAwaitingCheckout ? 'opacity-60' : 'hover:border-primary/30'
+                      }`}
+                      onClick={() => {
+                        if (r.status !== 'cancelled' && r.status !== 'not_done') {
+                          navigate(`/promotor/rota/${r.id}`);
+                        }
+                      }}>
+
                     <CardContent className="p-3">
                       <div className="flex items-center justify-between">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
                             <span className="text-sm font-medium truncate">{r.pdv_name}</span>
-                            <Badge className={`${STATUS_COLORS[r.status] || 'bg-muted'} text-[9px]`}>
-                              {STATUS_LABELS[r.status] || r.status}
+                            <Badge className={`${STATUS_COLORS[displayStatus] || 'bg-muted'} text-[9px]`}>
+                              {STATUS_LABELS[displayStatus] || displayStatus}
                             </Badge>
                           </div>
                           <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
@@ -385,7 +393,7 @@ export default function PromotorHome() {
                       </div>
                     </CardContent>
                   </Card>
-                ))}
+                ); })}
               </div>
             </div>
           </>

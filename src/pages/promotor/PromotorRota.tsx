@@ -1024,6 +1024,11 @@ export default function PromotorRota() {
               {route.checkin_at && `Check-in: ${new Date(route.checkin_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`}
               {route.checkout_at && ` • Checkout: ${new Date(route.checkout_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`}
             </p>
+            {(!route.checkout_at) && (
+              <Button className="w-full mt-4 bg-yellow-600 hover:bg-yellow-700" onClick={() => setShowPdvCheckout(true)}>
+                <Store className="h-4 w-4 mr-2" /> Fazer Checkout da Loja
+              </Button>
+            )}
             <Button variant="outline" size="sm" className="mt-3" onClick={() => navigate('/promotor/home')}>
               Voltar para Início
             </Button>
