@@ -109,7 +109,6 @@ const getNavSections = (hasConnections: boolean): NavSection[] => [
       { name: "Empresas", href: "/crm/empresas", icon: Building2, pageKey: 'crm_empresas' },
       { name: "Projetos", href: "/projetos", icon: FolderKanban, pageKey: 'projetos', moduleKey: 'projects' },
       { name: "Mapa CRM", href: "/mapa", icon: Map, pageKey: 'mapa' },
-      { name: "Live Maps", href: "/live-maps", icon: Radio, pageKey: 'live_maps' },
       { name: "Agenda", href: "/crm/agenda", icon: CalendarDays, pageKey: 'crm_agenda' },
       { name: "Tarefas", href: "/tarefas", icon: ClipboardList, pageKey: 'crm_tarefas' },
       { name: "Relatórios", href: "/crm/relatorios", icon: BarChart3, pageKey: 'crm_relatorios' },
