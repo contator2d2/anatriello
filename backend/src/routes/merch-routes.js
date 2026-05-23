@@ -16,9 +16,22 @@ router.get('/routes', async (req, res) => {
     const orgId = orgRes.rows[0].organization_id;
 
     const { promoter_id, brand_id, pdv_id, status, date_from, date_to, supervisor_id } = req.query;
+    
+    // Safety check for photos table
+    let checkinCol = 'checkin_photo_url';
+    let checkoutCol = 'checkout_photo_url';
+    try {
+      const colCheck = await query(`SELECT column_name FROM information_schema.columns WHERE table_name='merch_routes' AND column_name='checkin_photo'`);
+      if (colCheck.rows.length) checkinCol = 'checkin_photo';
+      const colCheck2 = await query(`SELECT column_name FROM information_schema.columns WHERE table_name='merch_routes' AND column_name='checkout_photo'`);
+      if (colCheck2.rows.length) checkoutCol = 'checkout_photo';
+    } catch {}
+
     let sql = `SELECT r.*, e.full_name as promoter_name, p.name as pdv_name, p.city as pdv_city, b.name as brand_name,
                sv.full_name as supervisor_name, bc.name as checklist_name,
-               r.checkin_at, r.checkout_at, r.completed_at, r.progress_pct,
+               r.checkin_at, r.checkout_at, r.completed_at, COALESCE(r.progress_pct, 0) as progress_pct,
+               r.${checkinCol} as checkin_photo,
+               r.${checkoutCol} as checkout_photo,
                (SELECT COUNT(*) FROM route_product_executions rpe WHERE rpe.route_id = r.id) as total_products,
                (SELECT COUNT(*) FROM route_product_executions rpe WHERE rpe.route_id = r.id AND rpe.status = 'completed') as completed_products
                FROM merch_routes r
@@ -36,35 +49,27 @@ router.get('/routes', async (req, res) => {
     if (pdv_id) { sql += ` AND r.pdv_id = $${idx++}`; params.push(pdv_id); }
     if (status) { sql += ` AND r.status = $${idx++}`; params.push(status); }
     if (supervisor_id) { sql += ` AND r.supervisor_id = $${idx++}`; params.push(supervisor_id); }
-    if (date_from) { sql += ` AND r.visit_date >= $${idx++}`; params.push(date_from); }
-    if (date_to) { sql += ` AND r.visit_date <= $${idx++}`; params.push(date_to); }
+    
+    if (date_from && date_to) {
+      sql += ` AND r.visit_date BETWEEN $${idx++} AND $${idx++}`;
+      params.push(date_from, date_to);
+    } else if (date_from) {
+      sql += ` AND r.visit_date >= $${idx++}`;
+      params.push(date_from);
+    } else if (date_to) {
+      sql += ` AND r.visit_date <= $${idx++}`;
+      params.push(date_to);
+    }
 
-    sql += ' ORDER BY r.visit_date, r.scheduled_time';
+    sql += ' ORDER BY r.visit_date DESC, r.scheduled_time';
     const result = await query(sql, params);
-
-    // Enrich multi-brand routes
-    const rows = result.rows;
-    try {
-      const mbIds = rows.filter(r => !r.brand_id).map(r => r.id);
-      if (mbIds.length > 0) {
-        const rbRes = await query(
-          `SELECT rb.route_id, rb.brand_id, rb.status, rb.progress_pct, b.name as brand_name
-           FROM route_brands rb LEFT JOIN merch_brands b ON b.id = rb.brand_id
-           WHERE rb.route_id = ANY($1) ORDER BY rb.sort_order`, [mbIds]);
-        const rbMap = {};
-        for (const rb of rbRes.rows) { if (!rbMap[rb.route_id]) rbMap[rb.route_id] = []; rbMap[rb.route_id].push(rb); }
-        for (const r of rows) { if (rbMap[r.id]) { r.route_brands = rbMap[r.id]; r.is_multi_brand = true; r.brand_name = rbMap[r.id].map(b => b.brand_name).join(', '); } }
-      }
-    } catch {}
-
-    res.json(rows);
+    res.json(result.rows);
   } catch (err) {
     logError('routes.list', err);
-    // If table doesn't exist yet, return empty
-    if (err.code === '42P01') return res.json([]);
-    res.status(500).json({ error: 'Erro ao listar rotas' });
+    res.status(500).json({ error: err.message || 'Erro ao listar rotas' });
   }
 });
+
 
 // Create route (with recurrence support)
 router.post('/routes', async (req, res) => {
