@@ -695,6 +695,51 @@ export default function PromotorHome() {
         </DialogContent>
       </Dialog>
 
+      {/* PDV Check-in Dialog */}
+      <Dialog open={showPdvCheckin} onOpenChange={(open) => { if (!open) { setShowPdvCheckin(false); setActionPdv(null); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Store className="h-5 w-5 text-primary" /> Check-in da Loja
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Card className="border-primary/30 bg-primary/5">
+              <CardContent className="p-3">
+                <p className="text-sm font-medium">{actionPdv?.pdv_name}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Tire uma foto da fachada da loja para iniciar seu trabalho neste PDV.
+                </p>
+              </CardContent>
+            </Card>
+
+            <div className="space-y-2">
+              <Label className="text-xs">Foto da Fachada (obrigatória)</Label>
+              {pdvCheckinPhoto ? (
+                <div className="space-y-2">
+                  <img src={pdvCheckinPhoto} alt="Check-in" className="w-full rounded-lg border max-h-48 object-cover" />
+                  <Button variant="outline" size="sm" onClick={() => setPdvCheckinPhoto('')}>Tirar outra foto</Button>
+                </div>
+              ) : (
+                <CameraCapture
+                  onCapture={setPdvCheckinPhoto}
+                  watermark={{ pdvName: actionPdv?.pdv_name || '', brandName: '', photoType: 'Check-in PDV' }}
+                  customTokenGetter={() => localStorage.getItem('promotor_token')}
+                  buttonLabel="Tirar foto da fachada da loja"
+                />
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setShowPdvCheckin(false); setActionPdv(null); }}>Cancelar</Button>
+            <Button onClick={() => actionPdv && handlePdvCheckin(actionPdv.pdv_id)} disabled={pdvCheckinLoading || !pdvCheckinPhoto}>
+              {pdvCheckinLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Confirmar Check-in
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* PDV Checkout Dialog */}
       <Dialog open={showPdvCheckout} onOpenChange={(open) => { if (!open) { setShowPdvCheckout(false); setActionPdv(null); } }}>
         <DialogContent className="max-w-sm">
