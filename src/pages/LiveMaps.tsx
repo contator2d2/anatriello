@@ -264,7 +264,9 @@ export default function LiveMaps() {
   const [showPromoters, setShowPromoters] = useState(true);
   const [showSupervisors, setShowSupervisors] = useState(true);
   const [showRegions, setShowRegions] = useState(true);
+  const [showHeatmap, setShowHeatmap] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+
   const [selectedEmployee, setSelectedEmployee] = useState<any>(null);
 
   // Build a map of promoter_id -> their routes
