@@ -52,6 +52,9 @@ export default function PromotorHome() {
   const [pdvCheckoutPhoto, setPdvCheckoutPhoto] = useState('');
   const [pdvCheckoutNotes, setPdvCheckoutNotes] = useState('');
   const [pdvCheckoutLoading, setPdvCheckoutLoading] = useState(false);
+  const [showPdvCheckin, setShowPdvCheckin] = useState(false);
+  const [pdvCheckinPhoto, setPdvCheckinPhoto] = useState('');
+  const [pdvCheckinLoading, setPdvCheckinLoading] = useState(false);
   const [actionPdv, setActionPdv] = useState<{ pdv_id: string; pdv_name: string } | null>(null);
   const [showFaceVerify, setShowFaceVerify] = useState(false);
 
