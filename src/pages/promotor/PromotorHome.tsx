@@ -377,7 +377,15 @@ export default function PromotorHome() {
             {/* Next route */}
             {!activeRoute && nextRoute && (
               <Card className="border-primary/30 bg-primary/5 cursor-pointer active:scale-[0.98]"
-                onClick={() => navigate(`/promotor/rota/${nextRoute.id}`)}>
+                onClick={() => {
+                  const hasCheckin = pdvVisits.some((v: any) => v.pdv_id === nextRoute.pdv_id && v.checkin_at);
+                  if (!hasCheckin) {
+                    setActionPdv({ pdv_id: nextRoute.pdv_id, pdv_name: nextRoute.pdv_name });
+                    setShowPdvCheckin(true);
+                  } else {
+                    navigate(`/promotor/rota/${nextRoute.id}`);
+                  }
+                }}>
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between mb-2">
                     <Badge className="bg-blue-500/20 text-blue-700 text-[10px]">📍 PRÓXIMA ROTA</Badge>
@@ -391,7 +399,11 @@ export default function PromotorHome() {
                     <span className="flex items-center gap-1"><Package className="h-3 w-3" />{nextRoute.product_count || 0} itens</span>
                   </div>
                   <Button className="w-full mt-3" size="sm" variant="outline">
-                    <MapPin className="h-4 w-4 mr-2" /> Fazer Check-in
+                    {pdvVisits.some((v: any) => v.pdv_id === nextRoute.pdv_id && v.checkin_at) ? (
+                      <><PlayCircle className="h-4 w-4 mr-2" /> Iniciar Rota</>
+                    ) : (
+                      <><MapPin className="h-4 w-4 mr-2" /> Fazer Check-in na Loja</>
+                    )}
                   </Button>
                 </CardContent>
               </Card>
