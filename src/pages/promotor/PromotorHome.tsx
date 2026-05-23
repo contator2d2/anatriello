@@ -393,7 +393,7 @@ export default function PromotorHome() {
                       </div>
                     </CardContent>
                   </Card>
-                ))}
+                ); })}
               </div>
             </div>
           </>
