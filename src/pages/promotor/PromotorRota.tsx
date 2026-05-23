@@ -1052,8 +1052,8 @@ export default function PromotorRota() {
               {route.checkout_at && ` • Checkout: ${new Date(route.checkout_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`}
             </p>
             {(!route.checkout_at) && (
-              <Button className="w-full mt-4 bg-yellow-600 hover:bg-yellow-700" onClick={() => setShowPdvCheckout(true)}>
-                <Store className="h-4 w-4 mr-2" /> Fazer Checkout da Loja
+              <Button className="w-full mt-4 bg-yellow-500 hover:bg-yellow-600 text-yellow-950 font-bold" onClick={() => setShowPdvCheckout(true)}>
+                <Store className="h-4 w-4 mr-2" /> Fazer Checkout da Loja (Pendente)
               </Button>
             )}
             <Button variant="outline" size="sm" className="mt-3" onClick={() => navigate('/promotor/home')}>

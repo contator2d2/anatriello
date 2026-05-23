@@ -165,6 +165,8 @@ export default function PromotorHome() {
           longitude: pos.coords.longitude,
           photo_url: pdvCheckoutPhoto || undefined,
           notes: pdvCheckoutNotes || undefined,
+          // If no photo was taken, mark as awaiting_photo
+          status_override: !pdvCheckoutPhoto ? 'awaiting_photo' : undefined
         }),
       });
       const result = await response.json();
