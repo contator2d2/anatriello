@@ -589,14 +589,16 @@ router.get('/routes/live', async (req, res) => {
        LEFT JOIN brand_checklists bc ON bc.id = r.checklist_id
        WHERE r.organization_id=$1
          AND r.visit_date BETWEEN COALESCE($2::date, CURRENT_DATE) AND COALESCE($3::date, CURRENT_DATE)
-       ORDER BY r.visit_date DESC, 
+       ORDER BY 
+         r.visit_date DESC, 
          CASE r.status 
            WHEN 'in_progress' THEN 0 
            WHEN 'completed' THEN 1
            WHEN 'scheduled' THEN 2 
            WHEN 'confirmed' THEN 3 
            ELSE 4 
-         END, r.scheduled_time`,
+         END, 
+         r.scheduled_time`,
       [orgId, req.query.date_from || null, req.query.date_to || null]
     );
 
