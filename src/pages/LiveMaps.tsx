@@ -408,14 +408,23 @@ export default function LiveMaps() {
             </CardContent>
           </Card>
 
-          {/* Employee List Sidebar */}
-          <Card className="w-72 hidden lg:flex flex-col overflow-hidden shrink-0">
-            <CardHeader className="p-3 pb-2 shrink-0">
-              <CardTitle className="text-xs flex items-center gap-1.5">
-                <Users className="h-3.5 w-3.5" /> Equipe ({filteredEmployeeList.length})
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-0 flex-1 overflow-y-auto">
+          <Card className="w-80 hidden lg:flex flex-col overflow-hidden shrink-0">
+            <Tabs defaultValue="team" className="flex flex-col h-full">
+              <div className="px-3 pt-3 shrink-0">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="team" className="text-xs">Equipe</TabsTrigger>
+                  <TabsTrigger value="monitor" className="text-xs">Tempo Real</TabsTrigger>
+                </TabsList>
+              </div>
+
+              <TabsContent value="team" className="flex-1 flex flex-col min-h-0 m-0">
+                <CardHeader className="p-3 pb-2 shrink-0">
+                  <CardTitle className="text-xs flex items-center gap-1.5">
+                    <Users className="h-3.5 w-3.5" /> Equipe ({filteredEmployeeList.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-0 flex-1 overflow-y-auto">
+
               <div className="divide-y">
                 {filteredEmployeeList.map((e: any) => {
                   const isOnline = e.live_status === 'online';
