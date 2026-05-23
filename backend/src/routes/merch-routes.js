@@ -715,19 +715,27 @@ router.put('/brand-checklists/:id', authenticate, async (req, res) => {
     const minAfter = (min_category_photos_after === undefined || min_category_photos_after === null)
       ? null : Math.max(1, parseInt(min_category_photos_after, 10) || 1);
     const result = await query(
-      `UPDATE brand_checklists SET name=COALESCE($2,name), description=COALESCE($3,description),
-       require_checkin_photo=COALESCE($4,require_checkin_photo), require_checkout_photo=COALESCE($5,require_checkout_photo),
-       require_stock_count=COALESCE($6,require_stock_count), require_validity_check=COALESCE($7,require_validity_check),
-       require_extra_point=COALESCE($8,require_extra_point), stock_count_frequency=COALESCE($9,stock_count_frequency),
-       validity_check_frequency=COALESCE($10,validity_check_frequency), active=COALESCE($11,active),
-       require_category_photos=COALESCE($12,require_category_photos),
+      `UPDATE brand_checklists SET 
+       name=COALESCE($2,name), 
+       description=COALESCE($3,description),
+       require_checkin_photo=$4, 
+       require_checkout_photo=$5,
+       require_stock_count=$6, 
+       require_validity_check=$7,
+       require_extra_point=$8, 
+       stock_count_frequency=COALESCE($9,stock_count_frequency),
+       validity_check_frequency=COALESCE($10,validity_check_frequency), 
+       active=COALESCE($11,active),
+       require_category_photos=$12,
        min_category_photos_before=COALESCE($13,min_category_photos_before),
        min_category_photos_after=COALESCE($14,min_category_photos_after),
        updated_at=NOW()
        WHERE id=$1 RETURNING *`,
-      [req.params.id, name, description, require_checkin_photo, require_checkout_photo, require_stock_count,
-       require_validity_check, require_extra_point, stock_count_frequency, validity_check_frequency, active,
-       require_category_photos, minBefore, minAfter]
+      [req.params.id, name, description, 
+       require_checkin_photo ?? true, require_checkout_photo ?? false, 
+       require_stock_count ?? false, require_validity_check ?? false,
+       require_extra_point ?? false, stock_count_frequency, validity_check_frequency, active,
+       require_category_photos ?? true, minBefore, minAfter]
     );
     res.json(result.rows[0]);
   } catch (err) { logError('checklists.update', err); res.status(500).json({ error: 'Erro' }); }
