@@ -445,6 +445,30 @@ export default function MerchExecucao() {
                   </Card>
                 )}
 
+                {/* Check-in/out Photos */}
+                {(viewRoute.checkin_photo || viewRoute.checkout_photo) && (
+                  <div className="grid grid-cols-2 gap-3">
+                    {viewRoute.checkin_photo && (
+                      <div className="space-y-1">
+                        <div className="text-[10px] font-semibold text-muted-foreground uppercase">Foto Check-in</div>
+                        <div className="aspect-video rounded-md overflow-hidden bg-muted border">
+                          <img src={viewRoute.checkin_photo} alt="Check-in" className="w-full h-full object-cover cursor-pointer" 
+                            onClick={() => window.open(viewRoute.checkin_photo, '_blank')} />
+                        </div>
+                      </div>
+                    )}
+                    {viewRoute.checkout_photo && (
+                      <div className="space-y-1">
+                        <div className="text-[10px] font-semibold text-muted-foreground uppercase">Foto Check-out</div>
+                        <div className="aspect-video rounded-md overflow-hidden bg-muted border">
+                          <img src={viewRoute.checkout_photo} alt="Check-out" className="w-full h-full object-cover cursor-pointer" 
+                            onClick={() => window.open(viewRoute.checkout_photo, '_blank')} />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Photos Section */}
                 {viewRoute.photos && viewRoute.photos.length > 0 && (
                   <div className="space-y-2">
