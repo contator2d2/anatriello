@@ -379,8 +379,8 @@ export default function PromotorHome() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
                             <span className="text-sm font-medium truncate">{r.pdv_name}</span>
-                            <Badge className={`${STATUS_COLORS[r.status] || 'bg-muted'} text-[9px]`}>
-                              {STATUS_LABELS[r.status] || r.status}
+                            <Badge className={`${STATUS_COLORS[displayStatus] || 'bg-muted'} text-[9px]`}>
+                              {STATUS_LABELS[displayStatus] || displayStatus}
                             </Badge>
                           </div>
                           <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
