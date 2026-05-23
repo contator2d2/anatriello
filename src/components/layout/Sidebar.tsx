@@ -147,6 +147,7 @@ const getNavSections = (hasConnections: boolean): NavSection[] => [
       { name: "Equipe", href: "/merch/equipe", icon: Users, pageKey: 'merch_equipe' },
       { name: "Rotas & Agenda", href: "/merch/rotas", icon: MapPin, pageKey: 'merch_rotas' },
       { name: "Checklists", href: "/merch/checklists", icon: ClipboardList, pageKey: 'merch_checklists' },
+      { name: "Live Maps", href: "/live-maps", icon: Radio, pageKey: 'live_maps' },
       { name: "Execução Campo", href: "/merch/execucao", icon: Radio, pageKey: 'merch_execucao' },
       { name: "Book de Fotos", href: "/merch/book-fotos", icon: Camera, pageKey: 'merch_book_fotos' },
       { name: "Auditoria", href: "/merch/auditoria", icon: Shield, pageKey: 'merch_auditoria' },
