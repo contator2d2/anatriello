@@ -1442,15 +1442,23 @@ router.get('/promotor/routes/:id', promotorAuth, async (req, res) => {
     const route = await query(
       `SELECT r.*, p.name as pdv_name, p.address as pdv_address, p.city as pdv_city,
        p.latitude as pdv_lat, p.longitude as pdv_lng, p.radius_meters as pdv_radius,
-       b.name as brand_name, bc.name as checklist_name,
-       bc.require_checkin_photo, bc.require_checkout_photo, bc.require_stock_count,
-       bc.require_validity_check, bc.require_extra_point, bc.require_category_photos,
-       bc.min_category_photos_before, bc.min_category_photos_after
+       b.name as brand_name, 
+       COALESCE(bc.name, bc2.name) as checklist_name,
+       COALESCE(bc.require_checkin_photo, bc2.require_checkin_photo, true) as require_checkin_photo,
+       COALESCE(bc.require_checkout_photo, bc2.require_checkout_photo, false) as require_checkout_photo,
+       COALESCE(bc.require_stock_count, bc2.require_stock_count, false) as require_stock_count,
+       COALESCE(bc.require_validity_check, bc2.require_validity_check, false) as require_validity_check,
+       COALESCE(bc.require_extra_point, bc2.require_extra_point, false) as require_extra_point,
+       COALESCE(bc.require_category_photos, bc2.require_category_photos, true) as require_category_photos,
+       COALESCE(bc.min_category_photos_before, bc2.min_category_photos_before, 1) as min_category_photos_before,
+       COALESCE(bc.min_category_photos_after, bc2.min_category_photos_after, 1) as min_category_photos_after
        FROM merch_routes r
        LEFT JOIN pdvs p ON p.id = r.pdv_id
        LEFT JOIN merch_brands b ON b.id = r.brand_id
        LEFT JOIN brand_checklists bc ON bc.id = r.checklist_id
-       WHERE r.id=$1 AND r.promoter_id=$2`, [req.params.id, req.employeeId]
+       LEFT JOIN brand_checklists bc2 ON bc2.brand_id = r.brand_id AND bc2.active = true
+       WHERE r.id=$1 AND r.promoter_id=$2
+       ORDER BY bc2.created_at DESC LIMIT 1`, [req.params.id, req.employeeId]
     );
     if (!route.rows.length) return res.status(404).json({ error: 'Rota não encontrada' });
 
