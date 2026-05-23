@@ -524,8 +524,8 @@ router.get('/routes/live', async (req, res) => {
     let hasExecCategories = false;
     let hasProductExecs = false;
     let brandTable = 'brands';
-    let checkinPhotoColumn = 'checkin_photo_url';
-    let checkoutPhotoColumn = 'checkout_photo_url';
+    let checkinPhotoColumn = 'checkin_photo';
+    let checkoutPhotoColumn = 'checkout_photo';
     try {
       await query(`SELECT 1 FROM merch_execution_categories LIMIT 0`);
       hasExecCategories = true;
@@ -539,13 +539,21 @@ router.get('/routes/live', async (req, res) => {
       brandTable = 'merch_brands';
     } catch {}
     try {
-      await query(`SELECT checkin_photo FROM merch_routes LIMIT 0`);
-      checkinPhotoColumn = 'checkin_photo';
-    } catch {}
-    try {
-      await query(`SELECT checkout_photo FROM merch_routes LIMIT 0`);
-      checkoutPhotoColumn = 'checkout_photo';
-    } catch {}
+      // Check for checkin_photo_url first, then checkin_photo
+      const checkinColRes = await query(`
+        SELECT column_name FROM information_schema.columns 
+        WHERE table_name='merch_routes' AND column_name IN ('checkin_photo_url', 'checkin_photo')
+        ORDER BY column_name='checkin_photo_url' DESC LIMIT 1
+      `);
+      if (checkinColRes.rows.length) checkinPhotoColumn = checkinColRes.rows[0].column_name;
+
+      const checkoutColRes = await query(`
+        SELECT column_name FROM information_schema.columns 
+        WHERE table_name='merch_routes' AND column_name IN ('checkout_photo_url', 'checkout_photo')
+        ORDER BY column_name='checkout_photo_url' DESC LIMIT 1
+      `);
+      if (checkoutColRes.rows.length) checkoutPhotoColumn = checkoutColRes.rows[0].column_name;
+    } catch (e) { logWarn('live_routes.column_check_failed', e); }
 
     const productCountSql = hasProductExecs
       ? `(SELECT COUNT(*) FROM route_product_executions rpe WHERE rpe.route_id = r.id)`
