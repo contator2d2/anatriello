@@ -1273,7 +1273,9 @@ export default function PromotorRota() {
         {/* Complete Route Dialog */}
         <Dialog open={showCompleteRoute} onOpenChange={setShowCompleteRoute}>
           <DialogContent className="max-w-sm">
-            <DialogHeader><DialogTitle>Concluir Rota</DialogTitle></DialogHeader>
+            <DialogHeader>
+              <DialogTitle>Concluir Rota</DialogTitle>
+            </DialogHeader>
             <p className="text-xs text-muted-foreground">
               Ao concluir esta rota, o checklist de <b>{currentBrand?.brand_name || route.brand_name}</b> será finalizado.
               Se houver mais rotas neste PDV, o checkout da loja será feito depois.
