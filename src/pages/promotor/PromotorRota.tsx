@@ -559,18 +559,31 @@ export default function PromotorRota() {
     setFaceVerifyAction(null);
     try {
       logger.info('[handleCheckin] Iniciando check-in da rota', { routeId: id, pdvName: route?.pdv_name });
-      const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
+      
+      const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+        if (!navigator.geolocation) {
+          reject(new Error('GPS não suportado pelo seu navegador.'));
+          return;
+        }
         navigator.geolocation.getCurrentPosition(resolve, reject, { 
           enableHighAccuracy: true, 
           timeout: 10000,
           maximumAge: 0
-        })
-      ).catch(err => {
+        });
+      }).catch(err => {
         logger.error('[handleCheckin] Erro de GPS no check-in', { err, routeId: id });
-        throw new Error('Não foi possível obter sua localização. Verifique se o GPS está ativado.');
+        if (err.code === 1) throw new Error('Permissão de GPS negada. Por favor, autorize o acesso à localização.');
+        if (err.code === 2) throw new Error('Posição indisponível. Verifique se o GPS está ativado.');
+        if (err.code === 3) throw new Error('Tempo limite do GPS esgotado. Tente novamente em um local mais aberto.');
+        throw new Error('Erro ao obter localização: ' + (err.message || 'GPS indisponível.'));
       });
 
-      logger.info('[handleCheckin] Localização obtida', { routeId: id, coords: pos.coords });
+      logger.info('[handleCheckin] Localização obtida para check-in', { 
+        routeId: id, 
+        lat: pos.coords.latitude, 
+        lng: pos.coords.longitude,
+        accuracy: pos.coords.accuracy 
+      });
 
       checkin.mutate({
         id,
@@ -579,14 +592,21 @@ export default function PromotorRota() {
         device: navigator.userAgent || 'Unknown Device',
         photo_url: checkinPhotoUrl || undefined,
         facial_verified: isFacialActiveCheckin || undefined,
+        // Garante que o ID da rota seja enviado no corpo se necessário, embora usePromotorCheckin use na URL
+        routeId: id,
       }, {
         onSuccess: () => {
           logger.info('[handleCheckin] Check-in realizado com sucesso', { routeId: id });
           toast.success('Check-in realizado!');
+          refetch(); // Força atualização dos dados da rota
         },
         onError: (err: any) => {
-          logger.error('[handleCheckin] Erro na API de check-in', { err, routeId: id });
-          toast.error('Erro no servidor: ' + (err.message || 'Erro desconhecido'));
+          logger.error('[handleCheckin] Erro na API de check-in', { 
+            error: err.message, 
+            status: err.status,
+            routeId: id 
+          });
+          toast.error('Erro no servidor ao fazer check-in: ' + (err.message || 'Erro desconhecido'));
         },
       });
     } catch (err: any) {
