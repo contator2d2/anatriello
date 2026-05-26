@@ -1647,6 +1647,30 @@ router.get('/promotor/routes/:id', promotorAuth, async (req, res) => {
       routeBrands.sort((a, b) => a.sort_order - b.sort_order);
     } catch (e) { logWarn('promotor.route_detail.route_brands_failed', e); }
 
+    // Safety net: hydrate products for any route_brand that has zero linked products
+    try {
+      let needsRefetch = false;
+      for (const rb of routeBrands) {
+        if (Number(rb.total_products) === 0 && route.pdv_id && rb.brand_id) {
+          const added = await hydrateRouteBrandProducts(req.params.id, rb.id, route.pdv_id, rb.brand_id);
+          if (added > 0) needsRefetch = true;
+        }
+      }
+      if (needsRefetch) {
+        const re = await query(
+          `SELECT rpe.*, (COALESCE(rpe.qty_store,0) + COALESCE(rpe.qty_stock,0)) as qty_total,
+           pr.name as product_name, pr.sku, pr.barcode, pr.image_url,
+           pc.name as category_name, ps.name as subcategory_name
+           FROM route_product_executions rpe
+           JOIN merch_products pr ON pr.id = rpe.product_id
+           LEFT JOIN merch_categories pc ON pc.id = rpe.category_id
+           LEFT JOIN merch_subcategories ps ON ps.id = pr.subcategory_id
+           WHERE rpe.route_id=$1 ORDER BY pc.name, ps.name, pr.name`, [req.params.id]
+        );
+        executions.rows = re.rows;
+      }
+    } catch (e) { logWarn('promotor.route_detail.hydrate_missing', e); }
+
 
     // Check postponed items
     const postponed = await query(
