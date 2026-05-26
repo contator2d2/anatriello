@@ -311,7 +311,7 @@ function ExtraPointPhotoGate({ catId, categoryName, routeId, pdvName, brandName,
           <CameraCapture
             onCapture={(url: string) => setPhotos(prev => [...prev, url])}
             watermark={{ pdvName, brandName, photoType: 'Ponto Extra' }}
-            customTokenGetter={() => localStorage.getItem('promotor_token')}
+            customTokenGetter={() => localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}
             buttonLabel={photos.length > 0 ? 'Tirar mais uma foto' : 'Tirar foto do ponto extra'}
             qualityConfig={qualityConfig}
           />
