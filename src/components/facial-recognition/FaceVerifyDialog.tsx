@@ -270,7 +270,7 @@ export const FaceVerifyDialog = ({ open, onOpenChange, storedDescriptor, storedP
                     <p className="font-bold text-destructive">Identidade Não Confirmada</p>
                   </div>
                 )}
-                <p className="text-sm mt-1">Similaridade: <strong>{score?.toFixed(1)}%</strong> (mínimo: {threshold}%)</p>
+                <p className="text-sm mt-1">Similaridade: <strong>{(score || 0).toFixed(1)}%</strong> (mínimo: {threshold}%)</p>
                 <Progress value={score || 0} className="mt-2" />
               </div>
             </div>

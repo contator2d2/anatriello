@@ -126,8 +126,8 @@ function applyWatermark(
   const w = canvas.width;
   const h = canvas.height;
   const now = new Date();
-  const dateStr = now.toLocaleDateString("pt-BR");
-  const timeStr = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  const dateStr = `${now.getDate().toString().padStart(2, '0')}/${(now.getMonth() + 1).toString().padStart(2, '0')}/${now.getFullYear()}`;
+  const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
 
   const lines: string[] = [];
   if (watermark.pdvName) lines.push(`PDV: ${watermark.pdvName}`);

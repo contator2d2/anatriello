@@ -114,15 +114,31 @@ export default function PromotorHome() {
     }
     setPdvCheckinLoading(true);
     try {
+      console.log('[handlePdvCheckin] Starting checkin for PDV:', pdvId);
+      
       const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
-        navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000 })
-      );
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        navigator.geolocation.getCurrentPosition(resolve, reject, { 
+          enableHighAccuracy: true, 
+          timeout: 10000,
+          maximumAge: 0
+        })
+      ).catch(err => {
+        console.error('[handlePdvCheckin] GPS Error:', err);
+        throw new Error('Não foi possível obter sua localização. Verifique se o GPS está ativado.');
+      });
+
       const token = localStorage.getItem('promotor_token');
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-      const url = `${(import.meta.env.VITE_API_URL || '').replace(/\/$/, '')}/api/merch/promotor/pdv-checkin`;
+      const baseUrl = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+      const url = `${baseUrl}/api/merch/promotor/pdv-checkin`;
+      
+      console.log('[handlePdvCheckin] Calling API:', url);
+
       const response = await fetch(url, {
-        method: 'POST', headers,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({
           pdv_id: pdvId,
           latitude: pos.coords.latitude,
@@ -130,18 +146,32 @@ export default function PromotorHome() {
           photo_url: pdvCheckinPhoto,
         }),
       });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result?.error || 'Erro');
+
+      let result;
+      try {
+        result = await response.json();
+      } catch (e) {
+        console.error('[handlePdvCheckin] JSON Parse Error:', e);
+        throw new Error(`Erro na resposta do servidor (${response.status})`);
+      }
+
+      if (!response.ok) throw new Error(result?.error || 'Erro ao realizar check-in');
+
       toast({ title: 'Check-in da loja realizado!' });
       setShowPdvCheckin(false);
       setPdvCheckinPhoto('');
-      // Find the first route for this PDV and navigate to it
+      
       const pdvRoute = todayRoutes.find((r: any) => r.pdv_id === pdvId && r.status !== 'completed');
-      if (pdvRoute) {
+      if (pdvRoute?.id) {
         navigate(`/promotor/rota/${pdvRoute.id}`);
       }
     } catch (err: any) {
-      toast({ title: 'Erro no check-in', description: err.message, variant: 'destructive' });
+      console.error('[handlePdvCheckin] Fatal Error:', err);
+      toast({ 
+        title: 'Erro no check-in', 
+        description: err.message || 'Erro desconhecido', 
+        variant: 'destructive' 
+      });
     } finally {
       setPdvCheckinLoading(false);
     }
@@ -193,9 +223,15 @@ export default function PromotorHome() {
   useEffect(() => {
     if (!navigator.geolocation) { setGpsStatus('off'); return; }
     navigator.geolocation.getCurrentPosition(
-      (pos) => { setCurrentPos({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy }); setGpsStatus('active'); },
-      (err) => { setGpsStatus(err.code === 1 ? 'denied' : 'off'); },
-      { enableHighAccuracy: true, timeout: 10000 }
+      (pos) => { 
+        setCurrentPos({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy }); 
+        setGpsStatus('active'); 
+      },
+      (err) => { 
+        console.warn('[GPS] Background check failed:', err);
+        setGpsStatus(err.code === 1 ? 'denied' : 'off'); 
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   }, []);
 
