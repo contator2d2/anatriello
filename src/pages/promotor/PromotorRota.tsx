@@ -851,16 +851,30 @@ export default function PromotorRota() {
           <div className="space-y-4">
             {Object.entries(groupedExecs).map(([category, { catId, execs, isExtraGroup }]) => {
               const catStatus = categoryStatusMap[catId];
-              // For extra groups: need photo but NOT point type
-              const requireCategoryPhotos = route?.require_category_photos !== false;
+              // Use checklist settings if available
+              const photoMode = (route as any)?.category_photo_mode || 'both';
+              const requireCategoryPhotos = (route as any)?.require_category_photos !== false;
+              
               const extraPhotoKey = `extra_${catId}`;
               const hasExtraPhoto = extraGroupPhotos[extraPhotoKey];
-              const isLocked = requireCategoryPhotos ? (isExtraGroup ? !hasExtraPhoto : !catStatus?.products_unlocked) : false;
+              
+              // Unlocked depends on photoMode:
+              // if 'after', products_unlocked comes from point-type selection
+              // if 'before' or 'both', products_unlocked comes from before-photo upload
+              const isLocked = requireCategoryPhotos 
+                ? (isExtraGroup ? !hasExtraPhoto : !catStatus?.products_unlocked) 
+                : false;
+                
               const doneCount = execs.filter((e: any) => e.status === 'completed').length;
               const allProductsDone = doneCount === execs.length && execs.length > 0;
               const hasAfterPhoto = !!catStatus?.category_after_photo || !!catStatus?.completed;
-              // Show after photo gate when all products done but no after photo yet
-              const needsAfterPhoto = requireCategoryPhotos && allProductsDone && !isLocked && !hasAfterPhoto;
+              
+              // Show after photo gate when all products done AND mode is 'both' or 'after'
+              const needsAfterPhoto = requireCategoryPhotos && 
+                allProductsDone && 
+                !isLocked && 
+                !hasAfterPhoto && 
+                (photoMode === 'both' || photoMode === 'after');
 
               return (
 
