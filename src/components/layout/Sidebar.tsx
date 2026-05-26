@@ -132,6 +132,7 @@ const getNavSections = (hasConnections: boolean): NavSection[] => [
       { name: "Acessos App", href: "/rh/acessos", icon: Shield, pageKey: 'rh_acessos', moduleKey: 'rh' },
       { name: "Biometria Facial", href: "/rh/biometria", icon: ScanFace, pageKey: 'rh_biometria', moduleKey: 'rh' },
       { name: "Rastreamento", href: "/rh/rastreamento", icon: Navigation, pageKey: 'rh_rastreamento', moduleKey: 'rh' },
+      { name: "Logs & Erros", href: "/rh/logs", icon: Code, pageKey: 'rh_logs', moduleKey: 'rh' },
     ],
   },
   {
