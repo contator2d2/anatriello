@@ -38,8 +38,22 @@ export function useUpload(customTokenGetter?: () => string | null) {
       const formData = new FormData();
       formData.append('file', file);
 
-      const token = (customTokenGetter ? customTokenGetter() : null) || getAuthToken();
-      console.log('[useUpload] Auth token present:', !!token);
+      const token =
+        (customTokenGetter ? customTokenGetter() : null) ||
+        getAuthToken() ||
+        localStorage.getItem('promotor_token') ||
+        localStorage.getItem('agency_auth_token') ||
+        localStorage.getItem('supermarket_auth_token');
+      console.log('[useUpload] Auth token present:', !!token, {
+        hasPromotor: !!localStorage.getItem('promotor_token'),
+        hasAuth: !!localStorage.getItem('auth_token'),
+      });
+      if (!token) {
+        setIsUploading(false);
+        const msg = 'Sessão expirada. Faça login novamente para enviar a foto.';
+        console.error('[useUpload] NO TOKEN available in localStorage');
+        return reject(new Error(msg));
+      }
       
       const xhr = new XMLHttpRequest();
 
