@@ -66,17 +66,17 @@ export function useUpload(customTokenGetter?: () => string | null) {
             }
             console.log('[useUpload] Success, URL:', fileUrl);
             resolve(fileUrl);
-          } catch (e) {
-            console.error('[useUpload] Parse error:', e);
+          } catch (e: any) {
+            logger.error('[useUpload] Erro ao processar resposta JSON', { error: e.message });
             reject(new Error('Erro ao processar resposta'));
           }
         } else {
           try {
             const error = JSON.parse(xhr.responseText);
-            console.error('[useUpload] Server error:', error);
+            logger.warn('[useUpload] Servidor retornou erro no upload', { error, status: xhr.status });
             reject(new Error(error.error || 'Erro ao fazer upload'));
           } catch {
-            console.error('[useUpload] Non-JSON error response');
+            logger.error('[useUpload] Resposta de erro não-JSON', { status: xhr.status, text: xhr.responseText.substring(0, 200) });
             reject(new Error(`Erro ao fazer upload (${xhr.status})`));
           }
         }
@@ -85,7 +85,7 @@ export function useUpload(customTokenGetter?: () => string | null) {
       xhr.addEventListener('error', (e) => {
         setIsUploading(false);
         setProgress(0);
-        console.error('[useUpload] Network error:', e);
+        logger.error('[useUpload] Erro de rede/conexão no upload', { event: e });
         reject(new Error('Erro de conexão'));
       });
 
