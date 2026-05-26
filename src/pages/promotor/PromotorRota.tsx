@@ -592,8 +592,6 @@ export default function PromotorRota() {
         device: navigator.userAgent || 'Unknown Device',
         photo_url: checkinPhotoUrl || undefined,
         facial_verified: isFacialActiveCheckin || undefined,
-        // Garante que o ID da rota seja enviado no corpo se necessário, embora usePromotorCheckin use na URL
-        routeId: id,
       }, {
         onSuccess: () => {
           logger.info('[handleCheckin] Check-in realizado com sucesso', { routeId: id });
@@ -1116,9 +1114,11 @@ export default function PromotorRota() {
         <Dialog open={!!selectedExec && !activeAction} onOpenChange={() => setSelectedExec(null)}>
           <DialogContent className="max-w-sm max-h-[85vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle className="text-sm flex items-center gap-2">
-                {EXEC_STATUS_ICON[selectedExec?.status] || EXEC_STATUS_ICON.pending}
-                {selectedExec?.product_name}
+              <DialogTitle>
+                <div className="text-sm flex items-center gap-2">
+                  {EXEC_STATUS_ICON[selectedExec?.status] || EXEC_STATUS_ICON.pending}
+                  {selectedExec?.product_name}
+                </div>
               </DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
@@ -1213,9 +1213,11 @@ export default function PromotorRota() {
         <Dialog open={!!activeAction} onOpenChange={() => setActiveAction(null)}>
           <DialogContent className="max-w-sm">
             <DialogHeader>
-              <DialogTitle className="text-sm">
-                {activeAction === 'validity' ? 'Registrar Validade' : activeAction === 'rupture' ? 'Registrar Ruptura' : activeAction === 'damage' ? 'Registrar Avaria' : 'Registrar Descarte'}
-                {selectedExec && <span className="block text-xs font-normal text-muted-foreground mt-1">{selectedExec.product_name}</span>}
+              <DialogTitle>
+                <span className="text-sm">
+                  {activeAction === 'validity' ? 'Registrar Validade' : activeAction === 'rupture' ? 'Registrar Ruptura' : activeAction === 'damage' ? 'Registrar Avaria' : 'Registrar Descarte'}
+                  {selectedExec && <span className="block text-xs font-normal text-muted-foreground mt-1">{selectedExec.product_name}</span>}
+                </span>
               </DialogTitle>
             </DialogHeader>
             <div className="space-y-3">
@@ -1275,7 +1277,9 @@ export default function PromotorRota() {
         {/* Complete Route Dialog */}
         <Dialog open={showCompleteRoute} onOpenChange={setShowCompleteRoute}>
           <DialogContent className="max-w-sm">
-            <DialogHeader><DialogTitle>Concluir Rota</DialogTitle></DialogHeader>
+            <DialogHeader>
+              <DialogTitle>Concluir Rota</DialogTitle>
+            </DialogHeader>
             <p className="text-xs text-muted-foreground">
               Ao concluir esta rota, o checklist de <b>{currentBrand?.brand_name || route.brand_name}</b> será finalizado.
               Se houver mais rotas neste PDV, o checkout da loja será feito depois.
