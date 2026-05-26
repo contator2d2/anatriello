@@ -42,6 +42,13 @@ export function useUpdateEmployee() {
   });
 }
 
+export function useFacialAlerts() {
+  return useQuery({
+    queryKey: ['rh-facial-alerts'],
+    queryFn: () => api<any[]>('/api/rh/facial-recognition/disabled-alerts'),
+  });
+}
+
 export function useDeleteEmployee() {
   const qc = useQueryClient();
   return useMutation({
