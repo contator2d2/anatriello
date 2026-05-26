@@ -65,6 +65,7 @@ export const FacialRecognitionConfigPanel = () => {
     mutationFn: (data: FacialConfig) => api("/api/rh/facial-recognition/config", { method: "PUT", body: data }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["rh-facial-config"] });
+      qc.invalidateQueries({ queryKey: ["promotor-facial-config"] });
       toast({ title: "Configuração salva com sucesso" });
       setForm(null);
     },
