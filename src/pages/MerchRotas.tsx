@@ -83,12 +83,30 @@ export default function MerchRotas() {
   };
 
   const handleSaveIntent = (data: any) => {
+    // Garantir que as marcas estejam no payload
+    const finalData = {
+      ...data,
+      brands: data.brands || []
+    };
+    
+    console.log("Saving route data:", finalData);
+    
     if (selectedRoute?.id && hasFutureSiblings(selectedRoute)) {
-      setScopeDialog({ action: 'edit', data });
+      setScopeDialog({ action: 'edit', data: finalData });
     } else if (selectedRoute?.id) {
-      updateRoute.mutate({ id: selectedRoute.id, ...data }, { onSuccess: () => { toast.success('Rota atualizada'); setSelectedRoute(null); } });
+      updateRoute.mutate({ id: selectedRoute.id, ...finalData }, { 
+        onSuccess: () => { 
+          toast.success('Rota atualizada'); 
+          setSelectedRoute(null); 
+        } 
+      });
     } else {
-      createRoute.mutate(data, { onSuccess: () => { toast.success('Rota criada'); setShowCreate(false); } });
+      createRoute.mutate(finalData, { 
+        onSuccess: () => { 
+          toast.success('Rota criada'); 
+          setShowCreate(false); 
+        } 
+      });
     }
   };
 
@@ -675,15 +693,19 @@ function RouteFormDialog({ open, route, onClose, pdvs, employees, onSave, onDele
 
     const payload = { 
       ...form,
-      brands: multiBrands // Always send the array of brands
+      brands: multiBrands.map(mb => ({
+        brand_id: mb.brand_id,
+        checklist_id: mb.checklist_id || null
+      }))
     };
     
-    // Fallback for older API versions that expect a single brand/checklist
+    // Garantir compatibilidade com APIs legadas que podem esperar brand_id na raiz
     if (multiBrands.length > 0) {
       payload.brand_id = multiBrands[0].brand_id;
-      payload.checklist_id = multiBrands[0].checklist_id;
+      payload.checklist_id = multiBrands[0].checklist_id || null;
     }
 
+    console.log("Saving payload from form:", payload);
     onSave(payload);
   };
 
