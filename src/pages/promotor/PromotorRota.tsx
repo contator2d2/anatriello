@@ -406,7 +406,7 @@ function CategoryAfterPhotoGate({ catId, categoryName, routeId, pdvName, brandNa
 export default function PromotorRota() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { data: route, isLoading, refetch } = usePromotorRouteDetail(id);
+  const { data: route, isLoading, refetch, error: routeError } = usePromotorRouteDetail(id);
   const checkin = usePromotorCheckin();
   const checkout = usePromotorCheckout();
   const updateExec = usePromotorUpdateExecution();
