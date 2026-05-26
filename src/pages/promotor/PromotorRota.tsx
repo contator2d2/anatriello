@@ -453,7 +453,7 @@ export default function PromotorRota() {
   const [faceVerifyAction, setFaceVerifyAction] = useState<'checkin' | 'checkout' | 'pdv_checkout' | null>(null);
 
   // Facial config
-  const promotorToken = localStorage.getItem('promotor_token');
+  const promotorToken = localStorage.getItem('promotor_token') || localStorage.getItem('auth_token');
   const { data: facialConfig } = useQuery({
     queryKey: ['promotor-facial-config'],
     queryFn: async () => {

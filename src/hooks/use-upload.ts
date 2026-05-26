@@ -42,16 +42,20 @@ export function useUpload(customTokenGetter?: () => string | null) {
         (customTokenGetter ? customTokenGetter() : null) ||
         getAuthToken() ||
         localStorage.getItem('promotor_token') ||
+        localStorage.getItem('auth_token') ||
         localStorage.getItem('agency_auth_token') ||
         localStorage.getItem('supermarket_auth_token');
-      console.log('[useUpload] Auth token present:', !!token, {
+
+      console.log('[useUpload] Auth check:', {
+        hasToken: !!token,
         hasPromotor: !!localStorage.getItem('promotor_token'),
         hasAuth: !!localStorage.getItem('auth_token'),
       });
+
       if (!token) {
         setIsUploading(false);
-        const msg = 'Sessão expirada. Faça login novamente para enviar a foto.';
-        console.error('[useUpload] NO TOKEN available in localStorage');
+        const msg = 'Sessão expirada ou token não encontrado. Por favor, saia e entre novamente no aplicativo.';
+        console.error('[useUpload] No valid token found in storage.');
         return reject(new Error(msg));
       }
       
