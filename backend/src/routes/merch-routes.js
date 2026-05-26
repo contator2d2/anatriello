@@ -254,6 +254,54 @@ router.put('/routes/:id', async (req, res) => {
     // Remove internal field
     delete req.body._scope;
 
+    // Multi-brand sync (replace route_brands when brands array is provided)
+    const brandsPayload = Array.isArray(req.body.brands) ? req.body.brands : null;
+    delete req.body.brands;
+    if (brandsPayload) {
+      try {
+        await query(`CREATE TABLE IF NOT EXISTS route_brands (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          route_id UUID NOT NULL,
+          brand_id UUID NOT NULL,
+          checklist_id UUID,
+          status VARCHAR(30) DEFAULT 'pending',
+          progress_pct NUMERIC(5,2) DEFAULT 0,
+          started_at TIMESTAMPTZ,
+          completed_at TIMESTAMPTZ,
+          sort_order INTEGER DEFAULT 0,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW(),
+          UNIQUE(route_id, brand_id)
+        )`);
+        await query('DELETE FROM route_brands WHERE route_id=$1', [req.params.id]);
+        for (let i = 0; i < brandsPayload.length; i++) {
+          const mb = brandsPayload[i];
+          if (!mb?.brand_id) continue;
+          let mbChecklistId = mb.checklist_id || null;
+          if (!mbChecklistId) {
+            try {
+              const cr = await query(`SELECT id FROM brand_checklists WHERE organization_id=$1 AND brand_id=$2 AND active=true ORDER BY created_at DESC LIMIT 1`, [orgId, mb.brand_id]);
+              mbChecklistId = cr.rows[0]?.id || null;
+            } catch {}
+          }
+          await query(
+            `INSERT INTO route_brands (route_id, brand_id, checklist_id, sort_order) VALUES ($1,$2,$3,$4)
+             ON CONFLICT (route_id, brand_id) DO UPDATE SET checklist_id=EXCLUDED.checklist_id, sort_order=EXCLUDED.sort_order`,
+            [req.params.id, mb.brand_id, mbChecklistId, i]
+          );
+        }
+        // If multi-brand, null root brand/checklist; if single, keep as scalar
+        if (brandsPayload.length > 1) {
+          req.body.brand_id = null;
+          req.body.checklist_id = null;
+        } else if (brandsPayload.length === 1) {
+          req.body.brand_id = brandsPayload[0].brand_id;
+          if (brandsPayload[0].checklist_id !== undefined) req.body.checklist_id = brandsPayload[0].checklist_id;
+        }
+        logInfo('routes.brands_synced', { route_id: req.params.id, count: brandsPayload.length });
+      } catch (e) { logError('routes.brands_sync', e); }
+    }
+
     const fields = ['promoter_id','supervisor_id','pdv_id','brand_id','checklist_id','visit_date','scheduled_time',
                     'window_start','window_end','estimated_duration_min','priority','visit_type','notes','status'];
 
@@ -273,8 +321,12 @@ router.put('/routes/:id', async (req, res) => {
       }
     }
 
-    if (!updates.length) return res.json(old);
+    if (!updates.length) {
+      // Still return route with refreshed brands list
+      return res.json(old);
+    }
     updates.push(`updated_at=NOW()`);
+
 
     // Apply to single or future sibling routes
     if (scope === 'future') {
