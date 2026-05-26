@@ -105,10 +105,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     const handleUnauthorized = () => {
+      // Only clear the main app token. Scoped tokens (promotor/agency/supermarket)
+      // are managed by their own contexts and must NOT be cleared here, otherwise
+      // a 401 on a main-app endpoint would log the promotor out mid-flow.
       clearAuthToken();
-      localStorage.removeItem('agency_auth_token');
-      localStorage.removeItem('supermarket_auth_token');
-      localStorage.removeItem('promotor_token');
       sessionStorage.removeItem('user_org_id');
       setUser(null);
       setIsLoading(false);
