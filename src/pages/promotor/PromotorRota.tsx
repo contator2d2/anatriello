@@ -207,7 +207,7 @@ function CategoryPreparation({ category, catId, categoryName, routeId, pdvName, 
             <CameraCapture
               onCapture={handleAddPhoto}
               watermark={{ pdvName, brandName, promotorName, photoType: `Categoria (antes) ${photos.length + 1}` }}
-              customTokenGetter={() => localStorage.getItem('promotor_token')}
+              customTokenGetter={() => localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}
               buttonLabel={photos.length === 0 ? 'Tirar foto da categoria' : 'Tirar foto adicional'}
               qualityConfig={qualityConfig}
             />
