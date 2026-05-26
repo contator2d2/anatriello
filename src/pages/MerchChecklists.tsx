@@ -40,6 +40,7 @@ export default function MerchChecklists() {
       brand_id: selectedBrand, name: '', description: '',
       require_checkin_photo: true, require_checkout_photo: false,
       require_category_photos: true,
+      category_photo_mode: 'both', // 'before', 'after', or 'both'
       min_category_photos_before: 1,
       min_category_photos_after: 1,
       require_stock_count: false, require_validity_check: false,
