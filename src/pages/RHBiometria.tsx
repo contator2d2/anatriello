@@ -172,12 +172,19 @@ const RHBiometria = () => {
                     className="flex items-center justify-between p-3 rounded-lg border border-border hover:bg-accent/30 transition-colors"
                   >
                     <div className="flex items-center gap-3 flex-1 min-w-0">
-                      <Avatar className="h-10 w-10">
-                        <AvatarImage src={emp.face_photo_url || emp.photo_url} />
-                        <AvatarFallback className="text-xs">
-                          {emp.full_name?.substring(0, 2).toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
+                      <div className="relative">
+                        <Avatar className="h-10 w-10">
+                          <AvatarImage src={emp.face_photo_url || emp.photo_url} />
+                          <AvatarFallback className="text-xs">
+                            {emp.full_name?.substring(0, 2).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        {!emp.facial_verification_enabled && (
+                          <div className="absolute -bottom-1 -right-1 bg-amber-500 rounded-full border-2 border-background p-0.5" title="Verificação facial desativada">
+                            <ShieldX className="h-2.5 w-2.5 text-white" />
+                          </div>
+                        )}
+                      </div>
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium truncate">{emp.full_name}</p>
                         <p className="text-xs text-muted-foreground truncate">
