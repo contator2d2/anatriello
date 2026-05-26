@@ -764,7 +764,7 @@ function RouteFormDialog({ open, route, onClose, pdvs, employees, onSave, onDele
           </div>
 
           {/* Multi-Brand Section */}
-          <div className="space-y-2 p-3 rounded-lg border bg-muted/30">
+          <div className="space-y-3 p-3 rounded-lg border bg-muted/30">
             <div className="flex items-center justify-between">
               <div className="flex flex-col">
                 <div className="flex items-center gap-2 text-sm font-medium">
@@ -776,11 +776,14 @@ function RouteFormDialog({ open, route, onClose, pdvs, employees, onSave, onDele
                 )}
               </div>
 
-              {form.pdv_id && (
+              {form.pdv_id && !configuringBrandId && (
                 <Select value="" onValueChange={(v) => {
-                  if (v) setMultiBrands(prev => [...prev, { brand_id: v }]);
+                  if (v) {
+                    setMultiBrands(prev => [...prev, { brand_id: v }]);
+                    setConfiguringBrandId(v);
+                  }
                 }}>
-                  <SelectTrigger className="w-48 h-8 text-xs">
+                  <SelectTrigger className="w-48 h-8 text-xs bg-background">
                     <SelectValue placeholder="+ Adicionar marca" />
                   </SelectTrigger>
                   <SelectContent>
@@ -795,26 +798,71 @@ function RouteFormDialog({ open, route, onClose, pdvs, employees, onSave, onDele
             </div>
 
             {multiBrands.length === 0 && (
-              <div className="text-xs text-muted-foreground text-center py-3 bg-background/50 rounded-md">
+              <div className="text-xs text-muted-foreground text-center py-3 bg-background/50 rounded-md border border-dashed">
                 Selecione pelo menos uma marca para a rota
               </div>
             )}
 
-            <div className="space-y-1.5">
-              {multiBrands.map((mb) => (
-                <BrandChecklistSelector
-                  key={mb.brand_id}
-                  brandId={mb.brand_id}
-                  checklistId={mb.checklist_id}
-                  onChange={(v) => setMultiBrands(prev => prev.map(b => b.brand_id === mb.brand_id ? { ...b, checklist_id: v } : b))}
-                />
-              ))}
-            </div>
+            {multiBrands.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {multiBrands.map((mb) => {
+                  const brand = brands.find((b: any) => b.id === mb.brand_id);
+                  const isConfiguring = configuringBrandId === mb.brand_id;
+                  return (
+                    <div 
+                      key={mb.brand_id}
+                      onClick={() => setConfiguringBrandId(mb.brand_id)}
+                      className={cn(
+                        "flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs cursor-pointer transition-all",
+                        isConfiguring 
+                          ? "bg-primary text-primary-foreground border-primary shadow-sm" 
+                          : "bg-background hover:bg-muted border-border"
+                      )}
+                    >
+                      <span className="font-medium">{brand?.name || mb.brand_id}</span>
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setMultiBrands(prev => prev.filter(b => b.brand_id !== mb.brand_id));
+                          if (configuringBrandId === mb.brand_id) setConfiguringBrandId(null);
+                        }}
+                        className={cn("p-0.5 rounded-full hover:bg-black/10", isConfiguring ? "text-primary-foreground" : "text-muted-foreground")}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
 
-            {isMultiBrand && (
+            {configuringBrandId && (
+              <div className="p-3 rounded-md border bg-background space-y-3 animate-in fade-in slide-in-from-top-1">
+                <div className="flex items-center justify-between border-b pb-2">
+                  <div className="text-xs font-semibold flex items-center gap-2">
+                    <Sparkles className="h-3 w-3 text-primary" />
+                    Configurando: {brands.find((b: any) => b.id === configuringBrandId)?.name}
+                  </div>
+                  <Button variant="ghost" size="sm" className="h-7 px-2 text-[10px] text-primary" onClick={() => setConfiguringBrandId(null)}>
+                    <CheckCircle2 className="h-3 w-3 mr-1" /> Concluir Ajustes
+                  </Button>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">Checklist da Marca</Label>
+                  <BrandChecklistSelector
+                    brandId={configuringBrandId}
+                    checklistId={multiBrands.find(b => b.brand_id === configuringBrandId)?.checklist_id}
+                    onChange={(v) => setMultiBrands(prev => prev.map(b => b.brand_id === configuringBrandId ? { ...b, checklist_id: v } : b))}
+                  />
+                </div>
+              </div>
+            )}
+
+            {isMultiBrand && !configuringBrandId && (
               <p className="text-[10px] text-muted-foreground flex items-center gap-1">
                 <Info className="h-3 w-3" />
-                O promotor fará check-in único e poderá alternar entre as marcas durante a visita.
+                Clique em uma marca acima para ajustar seu checklist e mix de produtos.
               </p>
             )}
           </div>
