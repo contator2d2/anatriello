@@ -1,4 +1,12 @@
-import { supabase } from "@/integrations/supabase/client";
+import { createClient } from '@supabase/supabase-js';
+
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+// Create a local client for logging to avoid circular dependencies or early initialization issues
+const logClient = (SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY) 
+  ? createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY)
+  : null;
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'fatal';
 
