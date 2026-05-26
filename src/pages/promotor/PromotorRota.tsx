@@ -463,7 +463,10 @@ export default function PromotorRota() {
     retry: false,
     staleTime: 300000,
   });
-  const isFacialActiveCheckin = facialConfig?.enabled && facialConfig?.use_for_checkin && facialConfig?.has_enrollment;
+  const isFacialActiveCheckin = facialConfig?.enabled && 
+    facialConfig?.use_for_checkin && 
+    facialConfig?.has_enrollment && 
+    facialConfig?.verification_enabled !== false;
 
   // Multi-brand support
   const isMultiBrand = route?.is_multi_brand && route?.route_brands?.length > 1;
