@@ -989,46 +989,58 @@ function RouteFormDialog({ open, route, onClose, pdvs, employees, onSave, onDele
 
           {/* Product Mix Section */}
           {form.pdv_id && multiBrands.length > 0 && (
-            <div className="space-y-2 p-3 rounded-lg border bg-muted/30">
+            <div className={cn(
+              "space-y-2 p-3 rounded-lg border transition-all",
+              configuringBrandId ? "border-primary/50 bg-primary/5 shadow-inner" : "bg-muted/30"
+            )}>
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-sm font-medium">
-                  <Package className="h-4 w-4 text-primary" />
-                  Produtos ({displayProducts.length})
+                <div className="flex flex-col">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <Package className="h-4 w-4 text-primary" />
+                    Mix de Produtos ({displayProducts.length})
+                  </div>
+                  {activeBrandId && (
+                    <span className="text-[10px] text-muted-foreground font-medium">
+                      Exibindo produtos da marca: {brands.find((b: any) => b.id === activeBrandId)?.name}
+                    </span>
+                  )}
                 </div>
-                {route?.id && (
-                  <Button variant="outline" size="sm" onClick={handleSyncProducts} disabled={syncProducts.isPending}
-                    className="h-7 text-xs">
-                    <RefreshCw className={`h-3 w-3 mr-1 ${syncProducts.isPending ? 'animate-spin' : ''}`} />
-                    Sincronizar do Mix
-                  </Button>
-                )}
+                <div className="flex gap-2">
+                  {route?.id && (
+                    <Button variant="outline" size="sm" onClick={handleSyncProducts} disabled={syncProducts.isPending}
+                      className="h-7 text-xs">
+                      <RefreshCw className={`h-3 w-3 mr-1 ${syncProducts.isPending ? 'animate-spin' : ''}`} />
+                      Sincronizar
+                    </Button>
+                  )}
+                </div>
               </div>
 
               {displayProducts.length === 0 ? (
-                <div className="text-xs text-muted-foreground text-center py-3 bg-background/50 rounded-md">
+                <div className="text-xs text-muted-foreground text-center py-3 bg-background/50 rounded-md border border-dashed">
                   {!route?.id
-                    ? 'Nenhum produto no mix deste PDV/Marca. Configure o mix primeiro em Mix por PDV.'
-                    : 'Nenhum produto vinculado. Clique em "Sincronizar do Mix" ou adicione manualmente.'}
+                    ? `Nenhum produto no mix para ${brands.find((b: any) => b.id === activeBrandId)?.name || 'esta marca'}.`
+                    : 'Nenhum produto vinculado.'}
                 </div>
               ) : (
-                <div className="max-h-48 overflow-y-auto space-y-1">
+                <div className="max-h-48 overflow-y-auto space-y-1 pr-1">
                   {displayProducts.map((p: any) => (
-                    <div key={p.product_id || p.id} className="flex items-center justify-between py-1.5 px-2 rounded-md bg-background/50 text-xs">
+                    <div key={p.product_id || p.id} className="flex items-center justify-between py-1.5 px-2 rounded-md bg-background/50 text-xs border border-border/50">
                       <div className="flex-1 min-w-0">
                         <div className="font-medium truncate">{p.product_name}</div>
-                        <div className="text-muted-foreground flex items-center gap-2">
+                        <div className="text-[10px] text-muted-foreground flex items-center gap-2">
                           {p.category_name && <span>{p.category_name}</span>}
                           {p.sku && <span>SKU: {p.sku}</span>}
-                          {p.mandatory && <Badge variant="secondary" className="text-[9px] h-4">Obrigatório</Badge>}
+                          {p.mandatory && <Badge variant="secondary" className="text-[8px] h-3.5 px-1 bg-orange-100 text-orange-700 border-orange-200">Obrigatório</Badge>}
                           {p.status && p.status !== 'pending' && (
-                            <Badge variant={p.status === 'completed' ? 'default' : 'secondary'} className="text-[9px] h-4">
+                            <Badge variant={p.status === 'completed' ? 'default' : 'secondary'} className="text-[8px] h-3.5 px-1">
                               {p.status === 'completed' ? 'Executado' : p.status}
                             </Badge>
                           )}
                         </div>
                       </div>
                       {route?.id && (!p.status || p.status === 'pending') && (
-                        <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive hover:text-destructive"
+                        <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive hover:text-destructive hover:bg-destructive/10"
                           onClick={() => handleRemoveProduct(p.product_id)}>
                           <X className="h-3 w-3" />
                         </Button>
