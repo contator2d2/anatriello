@@ -614,6 +614,12 @@ function RouteFormDialog({ open, route, onClose, pdvs, employees, onSave, onDele
             brand_id: rb.brand_id, 
             checklist_id: rb.checklist_id 
           })));
+        } else if (route.brands && Array.isArray(route.brands)) {
+          // Fallback if data comes in "brands" instead of "route_brands"
+          setMultiBrands(route.brands.map((rb: any) => ({
+            brand_id: rb.brand_id || rb.id,
+            checklist_id: rb.checklist_id
+          })));
         } else if (route.brand_id) {
           setMultiBrands([{ 
             brand_id: route.brand_id, 
