@@ -441,6 +441,30 @@ export default function RHDashboard() {
               </Card>
             </div>
 
+            {/* Facial Alerts */}
+            {facialAlerts.length > 0 && (
+              <Card className="border-amber-500/50 bg-amber-500/5">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm flex items-center gap-2 text-amber-700">
+                    <ScanFace className="h-4 w-4" /> Colaboradores com Facial Desativada
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {facialAlerts.map((a: any) => (
+                      <div key={a.id} className="flex items-center justify-between p-2 rounded bg-white dark:bg-background border border-amber-200">
+                        <div>
+                          <p className="text-sm font-medium">{a.full_name}</p>
+                          <p className="text-[10px] text-muted-foreground">{a.position || "—"} • Desativado em {a.updated_at ? format(new Date(a.updated_at), "dd/MM") : "—"}</p>
+                        </div>
+                        <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50">Manual</Badge>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Active Vacations */}
             {activeVacations.length > 0 && (
               <Card>
