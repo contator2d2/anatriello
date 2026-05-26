@@ -547,22 +547,40 @@ export default function PromotorRota() {
     }
     setFaceVerifyAction(null);
     try {
+      console.log('[handleCheckin] Starting checkin for route:', id);
       const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
-        navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000 })
-      );
+        navigator.geolocation.getCurrentPosition(resolve, reject, { 
+          enableHighAccuracy: true, 
+          timeout: 10000,
+          maximumAge: 0
+        })
+      ).catch(err => {
+        console.error('[handleCheckin] GPS Error:', err);
+        throw new Error('Não foi possível obter sua localização. Verifique se o GPS está ativado.');
+      });
+
+      console.log('[handleCheckin] Location obtained:', pos.coords.latitude, pos.coords.longitude);
+
       checkin.mutate({
         id,
         latitude: pos.coords.latitude,
         longitude: pos.coords.longitude,
-        device: navigator.userAgent,
+        device: navigator.userAgent || 'Unknown Device',
         photo_url: checkinPhotoUrl || undefined,
         facial_verified: isFacialActiveCheckin || undefined,
       }, {
-        onSuccess: () => toast.success('Check-in realizado!'),
-        onError: (err: any) => toast.error(err.message),
+        onSuccess: () => {
+          console.log('[handleCheckin] Success');
+          toast.success('Check-in realizado!');
+        },
+        onError: (err: any) => {
+          console.error('[handleCheckin] API Error:', err);
+          toast.error('Erro no servidor: ' + (err.message || 'Erro desconhecido'));
+        },
       });
-    } catch {
-      toast.error('Não foi possível obter localização');
+    } catch (err: any) {
+      console.error('[handleCheckin] Error:', err);
+      toast.error(err.message || 'Não foi possível realizar o check-in');
     }
   }, [id, checkin, route?.require_checkin_photo, checkinPhotoUrl, isFacialActiveCheckin, faceVerifyAction]);
 
