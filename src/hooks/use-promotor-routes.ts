@@ -1,19 +1,13 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
+import { api } from '@/lib/api';
+
 // Promotor API helper (uses promotor_token)
 const promotorApi = async <T>(endpoint: string, options: any = {}): Promise<T> => {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  const token = localStorage.getItem('promotor_token');
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-  const url = `${(import.meta.env.VITE_API_URL || '').replace(/\/$/, '')}${endpoint}`;
-  const response = await fetch(url, {
-    method: options.method || 'GET',
-    headers,
-    body: options.body ? JSON.stringify(options.body) : undefined,
+  return api<T>(endpoint, {
+    ...options,
+    auth: true,
   });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data?.error || `${response.status}`);
-  return data as T;
 };
 
 // ===== PROMOTOR ROUTE HOOKS =====

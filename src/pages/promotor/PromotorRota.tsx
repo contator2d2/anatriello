@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { PromotorLayout } from "./PromotorLayout";
 import { Card, CardContent } from "@/components/ui/card";
+import { api } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,19 +39,8 @@ type ActionType = 'validity' | 'rupture' | 'damage' | 'discard' | null;
 
 // PDV checkout hook
 const usePromotorPdvCheckout = () => {
-  const promotorApi = async (endpoint: string, options: any = {}) => {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    const token = localStorage.getItem('promotor_token');
-    if (token) headers['Authorization'] = `Bearer ${token}`;
-    const url = `${(import.meta.env.VITE_API_URL || '').replace(/\/$/, '')}${endpoint}`;
-    const response = await fetch(url, { method: options.method || 'GET', headers, body: options.body ? JSON.stringify(options.body) : undefined });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data?.error || 'Erro');
-    return data;
-  };
-  return {
-    checkout: (data: any) => promotorApi('/api/merch/promotor/pdv-checkout', { method: 'POST', body: data }),
-  };
+  const checkout = (data: any) => api('/api/merch/promotor/pdv-checkout', { method: 'POST', body: data });
+  return { checkout };
 };
 
 // ===== Category Preparation Component =====
@@ -431,10 +421,7 @@ export default function PromotorRota() {
 
   // Load photo quality config
   useEffect(() => {
-    const url = `${(import.meta.env.VITE_API_URL || '').replace(/\/$/, '')}/api/merchandising/photo-quality-config`;
-    const token = localStorage.getItem('promotor_token');
-    fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
-      .then(r => { if (!r.ok) throw new Error('not ok'); return r.json(); })
+    api<any>('/api/merchandising/photo-quality-config')
       .then(d => { if (d?.config) setPhotoQualityConfig(d.config); })
       .catch(() => { /* use defaults */ });
   }, []);
@@ -460,12 +447,11 @@ export default function PromotorRota() {
   const { data: facialConfig } = useQuery({
     queryKey: ['promotor-facial-config'],
     queryFn: async () => {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (promotorToken) headers['Authorization'] = `Bearer ${promotorToken}`;
-      const url = `${(import.meta.env.VITE_API_URL || '').replace(/\/$/, '')}/api/promotor/facial-config`;
-      const res = await fetch(url, { headers });
-      if (!res.ok) return null;
-      return res.json();
+      try {
+        return await api<any>('/api/promotor/facial-config');
+      } catch (err) {
+        return null;
+      }
     },
     retry: false,
     staleTime: 300000,
