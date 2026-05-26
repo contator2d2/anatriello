@@ -156,26 +156,6 @@ const notifyAuthInvalid = () => {
 
 export const api = async <T>(endpoint: string, options: ApiOptions = {}): Promise<T> => {
   const { method = 'GET', body, auth = true, headers: customHeaders, silent = false, fallbackToOtherBases = true } = options;
-  
-  // LOG ALL ATTEMPTS TO CENTRAL DE LOGS (except for app-logs itself to avoid loops)
-  if (endpoint !== '/api/app-logs' && method !== 'GET') {
-    const employeeRaw = localStorage.getItem('promotor_employee');
-    const employee = employeeRaw ? JSON.parse(employeeRaw) : null;
-    
-    // Non-blocking log attempt
-    fetch((import.meta.env.VITE_API_URL || '').replace(/\/$/, '') + '/api/app-logs', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        level: 'info',
-        message: `[API Request] ${method} ${endpoint}`,
-        context: { method, endpoint, body: body ? (typeof body === 'object' ? JSON.stringify(body).substring(0, 500) : body) : null },
-        user_email: employee?.email || 'unknown',
-        page_url: window.location.href,
-        device_info: { userAgent: navigator.userAgent }
-      })
-    }).catch(() => {});
-  }
 
   const normalizedEndpoint = normalizeEndpoint(endpoint);
   const endpointResilience = getResilienceConfig(normalizedEndpoint);
@@ -271,6 +251,19 @@ export const api = async <T>(endpoint: string, options: ApiOptions = {}): Promis
             });
           }
 
+          // Log every server failure to Central de Logs (Supabase) — best-effort, non-blocking
+          try {
+            const { logger } = await import('@/lib/logger');
+            logger.error(`[API ${response.status}] ${method} ${normalizedEndpoint}`, {
+              url,
+              status: response.status,
+              method,
+              endpoint: normalizedEndpoint,
+              requestBody: body ? JSON.stringify(body).slice(0, 1000) : null,
+              response: typeof data === 'object' ? JSON.stringify(data).slice(0, 1000) : String(data).slice(0, 1000),
+            });
+          } catch {}
+
           // Fallback para same-origin somente em GET, evitando duplicidade em mutações
           const shouldTryNextBase = effectiveFallbackToOtherBases && method === 'GET' && baseIndex < baseCandidates.length - 1 && (
             response.status >= 500 ||
@@ -320,6 +313,15 @@ export const api = async <T>(endpoint: string, options: ApiOptions = {}): Promis
             method,
             message: error?.message || 'Erro de rede',
           });
+          try {
+            const { logger } = await import('@/lib/logger');
+            logger.error(`[API NETWORK] ${method} ${normalizedEndpoint}`, {
+              url,
+              method,
+              endpoint: normalizedEndpoint,
+              message: error?.message || 'Erro de rede',
+            }, error instanceof Error ? error : undefined);
+          } catch {}
         }
 
         const shouldTryNextBase = effectiveFallbackToOtherBases && method === 'GET' && baseIndex < baseCandidates.length - 1;
