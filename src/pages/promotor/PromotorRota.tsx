@@ -891,6 +891,7 @@ export default function PromotorRota() {
                       promotorName={route.promotor_name}
                       qualityConfig={photoQualityConfig}
                       minPhotos={Math.max(1, parseInt((route as any)?.min_category_photos_before, 10) || 1)}
+                      photoMode={(route as any)?.category_photo_mode || 'both'}
                       onUnlocked={() => refetch()}
                     />
                   )}
