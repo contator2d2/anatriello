@@ -44,8 +44,8 @@ const usePromotorPdvCheckout = () => {
 };
 
 // ===== Category Preparation Component =====
-function CategoryPreparation({ category, catId, categoryName, routeId, pdvName, brandName, promotorName, qualityConfig, minPhotos, onUnlocked }: {
-  category: any; catId: string; categoryName: string; routeId: string; pdvName: string; brandName: string; promotorName?: string; qualityConfig?: PhotoQualityConfig; minPhotos: number; onUnlocked: () => void;
+function CategoryPreparation({ category, catId, categoryName, routeId, pdvName, brandName, promotorName, qualityConfig, minPhotos, photoMode, onUnlocked }: {
+  category: any; catId: string; categoryName: string; routeId: string; pdvName: string; brandName: string; promotorName?: string; qualityConfig?: PhotoQualityConfig; minPhotos: number; photoMode?: 'before' | 'after' | 'both'; onUnlocked: () => void;
 }) {
   const setPointType = usePromotorSetPointType();
   const setCategoryPhoto = usePromotorCategoryPhoto();
