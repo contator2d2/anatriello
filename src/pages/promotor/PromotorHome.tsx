@@ -149,7 +149,9 @@ export default function PromotorHome() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token || localStorage.getItem('auth_token')}`
+          ...(localStorage.getItem('promotor_token') || localStorage.getItem('auth_token') 
+              ? { 'Authorization': `Bearer ${localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}` } 
+              : {})
         },
         body: JSON.stringify({
           latitude: pos.coords.latitude,
@@ -203,11 +205,13 @@ export default function PromotorHome() {
       const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
         navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000 })
       );
-      const token = localStorage.getItem('promotor_token') || localStorage.getItem('auth_token');
+      const token = localStorage.getItem('promotor_token') || localStorage.getItem('auth_token') || '';
       const headers: Record<string, string> = { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
+        'Content-Type': 'application/json'
       };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
       const url = `${(import.meta.env.VITE_API_URL || '').replace(/\/$/, '')}/api/merch/promotor/pdv-checkout`;
       const response = await fetch(url, {
         method: 'POST', headers,

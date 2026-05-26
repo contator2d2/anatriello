@@ -38,7 +38,7 @@ export function useUpload(customTokenGetter?: () => string | null) {
       const formData = new FormData();
       formData.append('file', file);
 
-      const token = customTokenGetter ? customTokenGetter() : getAuthToken();
+      const token = (customTokenGetter ? customTokenGetter() : null) || getAuthToken();
       console.log('[useUpload] Auth token present:', !!token);
       
       const xhr = new XMLHttpRequest();
