@@ -1558,7 +1558,7 @@ router.get('/promotor/agenda', promotorAuth, async (req, res) => {
 // Promotor: Route detail with products
 router.get('/promotor/routes/:id', promotorAuth, async (req, res) => {
   try {
-    const route = await query(
+    const routeRes = await query(
       `SELECT r.*, p.name as pdv_name, p.address as pdv_address, p.city as pdv_city,
        p.latitude as pdv_lat, p.longitude as pdv_lng, p.radius_meters as pdv_radius,
        b.name as brand_name, 
@@ -1576,10 +1576,29 @@ router.get('/promotor/routes/:id', promotorAuth, async (req, res) => {
        LEFT JOIN merch_brands b ON b.id = r.brand_id
        LEFT JOIN brand_checklists bc ON bc.id = r.checklist_id
        LEFT JOIN brand_checklists bc2 ON bc2.brand_id = r.brand_id AND bc2.active = true
-       WHERE r.id=$1 AND r.promoter_id=$2
-       ORDER BY bc2.created_at DESC LIMIT 1`, [req.params.id, req.employeeId]
+       WHERE r.id=$1 AND r.promoter_id=$2`, [req.params.id, req.employeeId]
     );
-    if (!route.rows.length) return res.status(404).json({ error: 'Rota não encontrada' });
+    
+    if (!routeRes.rows.length) {
+      // If not found by ID, maybe it's multi-brand and doesn't have a direct brand_id
+      // but let's first check if the organization and promoter match
+      const basicCheck = await query('SELECT organization_id FROM merch_routes WHERE id=$1 AND promoter_id=$2', [req.params.id, req.employeeId]);
+      if (!basicCheck.rows.length) return res.status(404).json({ error: 'Rota não encontrada' });
+      
+      // If it exists but the join failed (maybe due to brand_id being null on multi-brand routes),
+      // let's do a simpler query and then enrich.
+      const simpleRoute = await query(
+        `SELECT r.*, p.name as pdv_name, p.address as pdv_address, p.city as pdv_city,
+         p.latitude as pdv_lat, p.longitude as pdv_lng, p.radius_meters as pdv_radius
+         FROM merch_routes r
+         LEFT JOIN pdvs p ON p.id = r.pdv_id
+         WHERE r.id=$1 AND r.promoter_id=$2`, [req.params.id, req.employeeId]
+      );
+      if (!simpleRoute.rows.length) return res.status(404).json({ error: 'Rota não encontrada' });
+      routeRes.rows = simpleRoute.rows;
+    }
+
+    const route = routeRes.rows[0];
 
     const executions = await query(
       `SELECT rpe.*, (COALESCE(rpe.qty_store,0) + COALESCE(rpe.qty_stock,0)) as qty_total,
@@ -1642,7 +1661,7 @@ router.get('/promotor/routes/:id', promotorAuth, async (req, res) => {
     // Auto-create category entries for categories that have products but no entry yet
     const existingCatIds = new Set(categoryStatuses.map(c => c.category_id));
     const categoriesInRoute = [...new Set(executions.rows.filter(e => e.category_id).map(e => e.category_id))];
-    const requireCategoryPhotos = route.rows[0].require_category_photos !== false;
+    const requireCategoryPhotos = route.require_category_photos !== false;
 
     for (const catId of categoriesInRoute) {
       if (!existingCatIds.has(catId)) {
@@ -1659,7 +1678,7 @@ router.get('/promotor/routes/:id', promotorAuth, async (req, res) => {
     }
 
     res.json({
-      ...route.rows[0],
+      ...route,
       executions: executions.rows,
       photos: photos.rows,
       postponed_items: postponed.rows,
@@ -1667,7 +1686,7 @@ router.get('/promotor/routes/:id', promotorAuth, async (req, res) => {
       route_brands: routeBrands,
       is_multi_brand: routeBrands.length > 0,
     });
-  } catch (err) { logError('promotor.route_detail', err); res.status(500).json({ error: 'Erro' }); }
+  } catch (err) { logError('promotor.route_detail', err); res.status(500).json({ error: 'Erro ao carregar rota' }); }
 });
 
 // Promotor: Check-in (also handles PDV visit creation)
