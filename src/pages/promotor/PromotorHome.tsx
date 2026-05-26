@@ -155,6 +155,7 @@ export default function PromotorHome() {
           latitude: pos.coords.latitude,
           longitude: pos.coords.longitude,
           photo_url: pdvCheckinPhoto,
+          all_routes_at_pdv: true // Unificar check-in para todas as rotas do PDV
         }),
       });
 
