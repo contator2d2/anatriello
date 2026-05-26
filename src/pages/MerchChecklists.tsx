@@ -211,30 +211,51 @@ export default function MerchChecklists() {
               ))}
 
               {form.require_category_photos && (
-                <div className="p-3 rounded-lg border bg-muted/30 space-y-3">
-                  <Label className="text-xs font-semibold flex items-center gap-1">
-                    <Camera className="h-3.5 w-3.5" /> Quantidade mínima de fotos da categoria
-                  </Label>
+                <div className="p-3 rounded-lg border bg-muted/30 space-y-4">
+                  <div className="space-y-2">
+                    <Label className="text-xs font-semibold flex items-center gap-1">
+                      <Camera className="h-3.5 w-3.5" /> Modo de fotos da categoria
+                    </Label>
+                    <Select value={form.category_photo_mode || 'both'} onValueChange={v => setForm({ ...form, category_photo_mode: v })}>
+                      <SelectTrigger className="bg-background">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="both">Antes e Depois</SelectItem>
+                        <SelectItem value="before">Somente Antes</SelectItem>
+                        <SelectItem value="after">Somente Depois</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
                   <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <Label className="text-[11px] text-muted-foreground">Mínimo ANTES</Label>
-                      <Input
-                        type="number" min={1} max={20}
-                        value={form.min_category_photos_before ?? 1}
-                        onChange={e => setForm({ ...form, min_category_photos_before: Math.max(1, parseInt(e.target.value, 10) || 1) })}
-                      />
-                    </div>
-                    <div>
-                      <Label className="text-[11px] text-muted-foreground">Mínimo DEPOIS</Label>
-                      <Input
-                        type="number" min={1} max={20}
-                        value={form.min_category_photos_after ?? 1}
-                        onChange={e => setForm({ ...form, min_category_photos_after: Math.max(1, parseInt(e.target.value, 10) || 1) })}
-                      />
-                    </div>
+                    {(form.category_photo_mode === 'both' || form.category_photo_mode === 'before') && (
+                      <div>
+                        <Label className="text-[11px] text-muted-foreground">Mínimo ANTES</Label>
+                        <Input
+                          type="number" min={1} max={20}
+                          value={form.min_category_photos_before ?? 1}
+                          onChange={e => setForm({ ...form, min_category_photos_before: Math.max(1, parseInt(e.target.value, 10) || 1) })}
+                        />
+                      </div>
+                    )}
+                    {(form.category_photo_mode === 'both' || form.category_photo_mode === 'after') && (
+                      <div>
+                        <Label className="text-[11px] text-muted-foreground">Mínimo DEPOIS</Label>
+                        <Input
+                          type="number" min={1} max={20}
+                          value={form.min_category_photos_after ?? 1}
+                          onChange={e => setForm({ ...form, min_category_photos_after: Math.max(1, parseInt(e.target.value, 10) || 1) })}
+                        />
+                      </div>
+                    )}
                   </div>
                   <p className="text-[10px] text-muted-foreground">
-                    O promotor só conseguirá liberar os produtos / concluir a categoria após enviar o mínimo configurado.
+                    {form.category_photo_mode === 'before' 
+                      ? 'O promotor enviará fotos apenas antes de iniciar os ajustes.' 
+                      : form.category_photo_mode === 'after' 
+                      ? 'O promotor enviará fotos apenas após concluir os ajustes.' 
+                      : 'O promotor enviará fotos do antes e do depois para comparação.'}
                   </p>
                 </div>
               )}
