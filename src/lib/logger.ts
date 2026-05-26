@@ -1,12 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
-
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-
-// Create a local client for logging to avoid circular dependencies or early initialization issues
-const logClient = (SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY) 
-  ? createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY)
-  : null;
+import { api } from "@/lib/api";
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'fatal';
 
@@ -26,13 +18,9 @@ export const logger = {
         console[consoleMethod](`[${level.toUpperCase()}] ${message}`, context);
       }
 
-      if (!logClient) return;
-
       // Get user info from localStorage if available (promotor specific)
       const employeeRaw = localStorage.getItem('promotor_employee');
       const employee = employeeRaw ? JSON.parse(employeeRaw) : null;
-      
-      const { data: { session } } = await logClient.auth.getSession();
       
       const deviceInfo = {
         userAgent: navigator.userAgent,
@@ -42,21 +30,29 @@ export const logger = {
         screen: `${window.screen.width}x${window.screen.height}`,
       };
 
-      await logClient.from('app_logs').insert({
-        level,
-        message,
-        context: {
-          ...context,
-          isOnline: navigator.onLine,
+      // Send log to our PostgreSQL API instead of Supabase
+      await api('/api/app-logs', {
+        method: 'POST',
+        body: {
+          level,
+          message,
+          context: {
+            ...context,
+            isOnline: navigator.onLine,
+          },
+          user_email: employee?.email || null,
+          page_url: window.location.href,
+          device_info: deviceInfo,
+          stack_trace: stack_trace || (level === 'error' || level === 'fatal' ? new Error().stack : undefined),
         },
-        user_id: session?.user?.id || null,
-        user_email: session?.user?.email || employee?.email || null,
-        page_url: window.location.href,
-        device_info: deviceInfo,
-        stack_trace: stack_trace || (level === 'error' || level === 'fatal' ? new Error().stack : undefined),
+        silent: true // Don't show toast for logs
+      }).catch(err => {
+        // Silent fail for logger to avoid infinite loops or blocking UI
+        console.warn('[logger] could not send to server', err);
       });
+
     } catch (err) {
-      console.error('Failed to send log to server:', err);
+      console.error('Failed to process log:', err);
     }
   },
 
