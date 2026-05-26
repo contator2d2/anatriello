@@ -63,7 +63,40 @@ router.get('/routes', async (req, res) => {
 
     sql += ' ORDER BY r.visit_date DESC, r.scheduled_time';
     const result = await query(sql, params);
-    res.json(result.rows);
+    const rows = result.rows;
+
+    // Attach route_brands for multi-brand routes
+    if (rows.length > 0) {
+      try {
+        const ids = rows.map(r => r.id);
+        const rbRes = await query(
+          `SELECT rb.route_id, rb.id, rb.brand_id, rb.checklist_id, rb.sort_order,
+                  b.name as brand_name, bc.name as checklist_name
+           FROM route_brands rb
+           LEFT JOIN merch_brands b ON b.id = rb.brand_id
+           LEFT JOIN brand_checklists bc ON bc.id = rb.checklist_id
+           WHERE rb.route_id = ANY($1::uuid[])
+           ORDER BY rb.sort_order`,
+          [ids]
+        );
+        const map = {};
+        for (const rb of rbRes.rows) {
+          (map[rb.route_id] = map[rb.route_id] || []).push(rb);
+        }
+        for (const r of rows) {
+          const list = map[r.id] || [];
+          r.route_brands = list;
+          if (list.length > 0) {
+            r.is_multi_brand = list.length > 1;
+            if (list.length > 1) {
+              r.brand_name = list.map(x => x.brand_name).filter(Boolean).join(' + ');
+            }
+          }
+        }
+      } catch (e) { logWarn('routes.list.route_brands_failed', e); }
+    }
+
+    res.json(rows);
   } catch (err) {
     logError('routes.list', err);
     res.status(500).json({ error: err.message || 'Erro ao listar rotas' });
