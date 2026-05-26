@@ -39,7 +39,7 @@ export function usePromotorRouteDetail(id?: string) {
 export function usePromotorCheckin() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, ...data }: any) => promotorApi<any>(`/api/merch/promotor/routes/${id}/check-in`, { method: 'POST', body: data }),
+    mutationFn: ({ id, ...data }: any) => promotorApi<any>(`/api/merch/promotor/pdv-checkin`, { method: 'POST', body: { ...data, route_id: id } }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['promotor-agenda'] }); qc.invalidateQueries({ queryKey: ['promotor-route'] }); },
   });
 }

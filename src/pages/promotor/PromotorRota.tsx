@@ -39,7 +39,7 @@ type ActionType = 'validity' | 'rupture' | 'damage' | 'discard' | null;
 
 // PDV checkout hook
 const usePromotorPdvCheckout = () => {
-  const checkout = (data: any) => api('/api/merch/promotor/pdv-checkout', { method: 'POST', body: data });
+  const checkout = (data: any) => api('/api/merch/promotor/pdv-checkout', { method: 'POST', body: data, auth: true });
   return { checkout };
 };
 
