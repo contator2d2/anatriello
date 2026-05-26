@@ -223,9 +223,15 @@ export default function PromotorHome() {
   useEffect(() => {
     if (!navigator.geolocation) { setGpsStatus('off'); return; }
     navigator.geolocation.getCurrentPosition(
-      (pos) => { setCurrentPos({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy }); setGpsStatus('active'); },
-      (err) => { setGpsStatus(err.code === 1 ? 'denied' : 'off'); },
-      { enableHighAccuracy: true, timeout: 10000 }
+      (pos) => { 
+        setCurrentPos({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy }); 
+        setGpsStatus('active'); 
+      },
+      (err) => { 
+        console.warn('[GPS] Background check failed:', err);
+        setGpsStatus(err.code === 1 ? 'denied' : 'off'); 
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   }, []);
 
