@@ -133,7 +133,13 @@ export default function PromotorHome() {
 
       const token = localStorage.getItem('promotor_token');
       const baseUrl = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
-      const url = `${baseUrl}/api/merch/promotor/pdv-checkin`;
+      // Endpoint correto do backend: /api/merch/promotor/routes/:id/checkin
+      // Buscamos a rota ativa do PDV para usar o id correto.
+      const activeRoute = todayRoutes.find((r: any) => r.pdv_id === pdvId && r.status !== 'completed');
+      if (!activeRoute?.id) {
+        throw new Error('Nenhuma rota ativa encontrada para este PDV.');
+      }
+      const url = `${baseUrl}/api/merch/promotor/routes/${activeRoute.id}/checkin`;
       
       logger.info('[handlePdvCheckin] Chamando API', { url, pdvId, coords: pos.coords });
 
@@ -144,7 +150,6 @@ export default function PromotorHome() {
           ...(token ? { 'Authorization': `Bearer ${token}` } : {})
         },
         body: JSON.stringify({
-          pdv_id: pdvId,
           latitude: pos.coords.latitude,
           longitude: pos.coords.longitude,
           photo_url: pdvCheckinPhoto,

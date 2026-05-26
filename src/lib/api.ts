@@ -251,6 +251,19 @@ export const api = async <T>(endpoint: string, options: ApiOptions = {}): Promis
             });
           }
 
+          // Log every server failure to Central de Logs (Supabase) — best-effort, non-blocking
+          try {
+            const { logger } = await import('@/lib/logger');
+            logger.error(`[API ${response.status}] ${method} ${normalizedEndpoint}`, {
+              url,
+              status: response.status,
+              method,
+              endpoint: normalizedEndpoint,
+              requestBody: body ? JSON.stringify(body).slice(0, 1000) : null,
+              response: typeof data === 'object' ? JSON.stringify(data).slice(0, 1000) : String(data).slice(0, 1000),
+            });
+          } catch {}
+
           // Fallback para same-origin somente em GET, evitando duplicidade em mutações
           const shouldTryNextBase = effectiveFallbackToOtherBases && method === 'GET' && baseIndex < baseCandidates.length - 1 && (
             response.status >= 500 ||
@@ -300,6 +313,15 @@ export const api = async <T>(endpoint: string, options: ApiOptions = {}): Promis
             method,
             message: error?.message || 'Erro de rede',
           });
+          try {
+            const { logger } = await import('@/lib/logger');
+            logger.error(`[API NETWORK] ${method} ${normalizedEndpoint}`, {
+              url,
+              method,
+              endpoint: normalizedEndpoint,
+              message: error?.message || 'Erro de rede',
+            }, error instanceof Error ? error : undefined);
+          } catch {}
         }
 
         const shouldTryNextBase = effectiveFallbackToOtherBases && method === 'GET' && baseIndex < baseCandidates.length - 1;
