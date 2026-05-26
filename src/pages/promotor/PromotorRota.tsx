@@ -207,7 +207,7 @@ function CategoryPreparation({ category, catId, categoryName, routeId, pdvName, 
             <CameraCapture
               onCapture={handleAddPhoto}
               watermark={{ pdvName, brandName, promotorName, photoType: `Categoria (antes) ${photos.length + 1}` }}
-              customTokenGetter={() => localStorage.getItem('promotor_token')}
+              customTokenGetter={() => localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}
               buttonLabel={photos.length === 0 ? 'Tirar foto da categoria' : 'Tirar foto adicional'}
               qualityConfig={qualityConfig}
             />
@@ -311,7 +311,7 @@ function ExtraPointPhotoGate({ catId, categoryName, routeId, pdvName, brandName,
           <CameraCapture
             onCapture={(url: string) => setPhotos(prev => [...prev, url])}
             watermark={{ pdvName, brandName, photoType: 'Ponto Extra' }}
-            customTokenGetter={() => localStorage.getItem('promotor_token')}
+            customTokenGetter={() => localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}
             buttonLabel={photos.length > 0 ? 'Tirar mais uma foto' : 'Tirar foto do ponto extra'}
             qualityConfig={qualityConfig}
           />
@@ -388,7 +388,7 @@ function CategoryAfterPhotoGate({ catId, categoryName, routeId, pdvName, brandNa
         <CameraCapture
           onCapture={(url: string) => setPhotos(prev => [...prev, url])}
           watermark={{ pdvName, brandName, promotorName, photoType: `Categoria (depois)` }}
-          customTokenGetter={() => localStorage.getItem('promotor_token')}
+          customTokenGetter={() => localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}
           buttonLabel={photos.length > 0 ? 'Tirar mais uma foto' : 'Tirar foto DEPOIS'}
           qualityConfig={qualityConfig}
         />
@@ -815,8 +815,8 @@ export default function PromotorRota() {
               ) : (
                 <CameraCapture
                   onCapture={setCheckinPhotoUrl}
-                  watermark={{ pdvName: route.pdv_name, brandName: route.brand_name, photoType: 'Check-in' }}
-                  customTokenGetter={() => localStorage.getItem('promotor_token')}
+                  watermark={{ pdvName: route.pdv_name, brandName: route.brand_name || route.route_brands?.[0]?.brand_name, photoType: 'Check-in' }}
+                  customTokenGetter={() => localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}
                   buttonLabel="Tirar foto de check-in"
                   qualityConfig={photoQualityConfig}
                 />
@@ -1345,8 +1345,8 @@ export default function PromotorRota() {
                   ) : (
                     <CameraCapture
                       onCapture={setPdvCheckoutPhoto}
-                      watermark={{ pdvName: route.pdv_name, brandName: route.brand_name, photoType: 'Checkout PDV' }}
-                      customTokenGetter={() => localStorage.getItem('promotor_token')}
+                      watermark={{ pdvName: route.pdv_name, brandName: route.brand_name || route.route_brands?.[0]?.brand_name, photoType: 'Checkout PDV' }}
+                      customTokenGetter={() => localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}
                       buttonLabel="Tirar foto de saída da loja"
                       qualityConfig={photoQualityConfig}
                     />
