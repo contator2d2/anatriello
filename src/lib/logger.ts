@@ -59,7 +59,7 @@ export const logger = {
       };
 
       // Insert directly into Supabase – bypasses the (missing) custom backend route.
-      const { error } = await supabase.from('app_logs').insert(payload);
+      const { error } = await (supabase.from as any)('app_logs').insert(payload);
       if (error) {
         // eslint-disable-next-line no-console
         console.warn('[logger] supabase insert failed', error.message);
