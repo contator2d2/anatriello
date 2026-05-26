@@ -245,7 +245,7 @@ export const api = async <T>(endpoint: string, options: ApiOptions = {}): Promis
 
         if (!response.ok) {
           if (response.status === 401 && auth) {
-            notifyAuthInvalid();
+            notifyAuthInvalid(normalizedEndpoint);
           }
 
           if (endpointResilience && (response.status >= 500 || (method === 'GET' && response.status === 404))) {
@@ -312,7 +312,7 @@ export const api = async <T>(endpoint: string, options: ApiOptions = {}): Promis
       } catch (error: any) {
         if (typeof error?.status === 'number') {
           if (error.status === 401 && auth) {
-            notifyAuthInvalid();
+            notifyAuthInvalid(normalizedEndpoint);
           }
           throw error;
         }
