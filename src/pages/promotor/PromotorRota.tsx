@@ -466,6 +466,13 @@ export default function PromotorRota() {
   const routeBrands = route?.route_brands || [];
   const currentBrand = useMemo(() => routeBrands.find((rb: any) => rb.brand_id === activeBrandId), [routeBrands, activeBrandId]);
 
+  useEffect(() => {
+    if (routeError) {
+      logger.error('Erro ao carregar rota', { routeId: id, error: routeError });
+      toast.error('Rota não encontrada ou erro ao carregar.');
+      navigate('/promotor/home');
+    }
+  }, [routeError, id, navigate]);
 
   useEffect(() => {
     if (route && !isMultiBrand && !activeBrandId) {
