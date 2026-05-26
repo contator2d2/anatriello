@@ -5,19 +5,14 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/lib/api";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { 
-  AlertCircle, 
-  Info, 
   Search, 
   RefreshCcw, 
-  ChevronDown, 
-  ChevronUp,
   Monitor,
   User,
-  Clock,
   ExternalLink,
   Smartphone
 } from "lucide-react";
@@ -52,23 +47,11 @@ export default function RHLogs() {
   const { data: logs, isLoading, refetch } = useQuery({
     queryKey: ["app-logs", levelFilter, search],
     queryFn: async () => {
-      let query = supabase
-        .from("app_logs")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .limit(200);
-
-      if (levelFilter !== "all") {
-        query = query.eq("level", levelFilter);
-      }
-
-      if (search) {
-        query = query.or(`message.ilike.%${search}%,user_email.ilike.%${search}%`);
-      }
-
-      const { data, error } = await query;
-      if (error) throw error;
-      return data;
+      const params = new URLSearchParams();
+      if (levelFilter !== "all") params.set('level', levelFilter);
+      if (search) params.set('search', search);
+      
+      return await api<any[]>(`/api/app-logs?${params.toString()}`);
     },
   });
 
@@ -143,7 +126,7 @@ export default function RHLogs() {
                 logs?.map((log) => (
                   <TableRow key={log.id} className="cursor-pointer hover:bg-muted/50" onClick={() => setSelectedLog(log)}>
                     <TableCell className="whitespace-nowrap font-mono text-xs">
-                      {format(new Date(log.created_at), "dd/MM/yyyy HH:mm:ss", { locale: ptBR })}
+                      {log.created_at ? format(new Date(log.created_at), "dd/MM/yyyy HH:mm:ss", { locale: ptBR }) : '—'}
                     </TableCell>
                     <TableCell>
                       <Badge className={`${LEVEL_COLORS[log.level]} text-white border-none text-[10px] uppercase`}>
@@ -191,7 +174,7 @@ export default function RHLogs() {
                 </div>
                 <div className="space-y-1">
                   <span className="text-muted-foreground block text-xs">Data e Hora</span>
-                  <span>{format(new Date(selectedLog.created_at), "PPP p", { locale: ptBR })}</span>
+                  <span>{selectedLog.created_at ? format(new Date(selectedLog.created_at), "PPP p", { locale: ptBR }) : '—'}</span>
                 </div>
                 <div className="space-y-1">
                   <span className="text-muted-foreground block text-xs flex items-center gap-1"><User className="h-3 w-3" /> Usuário</span>
@@ -214,7 +197,7 @@ export default function RHLogs() {
                 <div className="space-y-2">
                   <h4 className="text-sm font-semibold">Contexto</h4>
                   <pre className="p-3 bg-slate-900 text-slate-100 rounded-md text-xs overflow-x-auto">
-                    {JSON.stringify(selectedLog.context, null, 2)}
+                    {typeof selectedLog.context === 'string' ? selectedLog.context : JSON.stringify(selectedLog.context, null, 2)}
                   </pre>
                 </div>
               )}
@@ -223,7 +206,7 @@ export default function RHLogs() {
                 <div className="space-y-2">
                   <h4 className="text-sm font-semibold">Dispositivo</h4>
                   <pre className="p-3 bg-muted rounded-md text-xs overflow-x-auto">
-                    {JSON.stringify(selectedLog.device_info, null, 2)}
+                    {typeof selectedLog.device_info === 'string' ? selectedLog.device_info : JSON.stringify(selectedLog.device_info, null, 2)}
                   </pre>
                 </div>
               )}
