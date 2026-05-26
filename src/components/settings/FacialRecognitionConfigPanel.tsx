@@ -51,6 +51,14 @@ export const FacialRecognitionConfigPanel = () => {
   });
 
   const [form, setForm] = useState<FacialConfig | null>(null);
+  
+  // Update form whenever API data changes, but only if user hasn't started editing
+  useEffect(() => {
+    if (config && !form) {
+      setForm(null); // Reset form to use new config data
+    }
+  }, [config]);
+
   const currentConfig = form || config || DEFAULT_CONFIG;
 
   const saveMutation = useMutation({
