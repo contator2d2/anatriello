@@ -137,23 +137,44 @@ const getScopedAuthToken = (endpoint: string) => {
   return localStorage.getItem('auth_token');
 };
 
-const clearScopedAuthTokens = () => {
+const clearScopedAuthTokens = (endpoint?: string) => {
   if (!isBrowser) return;
+  // Only clear the token that corresponds to the failing endpoint
+  // so a 401 from the main API doesn't wipe an active promotor/agency/supermarket session.
+  if (endpoint?.startsWith('/api/access-control/agency')) {
+    localStorage.removeItem('agency_auth_token');
+    return;
+  }
+  if (endpoint?.startsWith('/api/access-control/supermarket')) {
+    localStorage.removeItem('supermarket_auth_token');
+    return;
+  }
+  if (endpoint?.startsWith('/api/promotor') || endpoint?.includes('/merch/promotor/')) {
+    localStorage.removeItem('promotor_token');
+    return;
+  }
   localStorage.removeItem('auth_token');
-  localStorage.removeItem('agency_auth_token');
-  localStorage.removeItem('supermarket_auth_token');
-  localStorage.removeItem('promotor_token');
   window.sessionStorage.removeItem('user_org_id');
 };
 
-const notifyAuthInvalid = () => {
+const notifyAuthInvalid = (endpoint?: string) => {
   if (!isBrowser) return;
   const now = Date.now();
   if (now - lastAuthEventAt < AUTH_EVENT_COOLDOWN_MS) return;
   lastAuthEventAt = now;
-  clearScopedAuthTokens();
-  window.dispatchEvent(new CustomEvent(AUTH_INVALID_EVENT));
+  clearScopedAuthTokens(endpoint);
+  // Only fire the global auth-invalid event for the main app token.
+  // Scoped sessions (promotor/agency/supermarket) handle their own redirects.
+  const isMainAuth =
+    !endpoint ||
+    (!endpoint.startsWith('/api/access-control/') &&
+      !endpoint.startsWith('/api/promotor') &&
+      !endpoint.includes('/merch/promotor/'));
+  if (isMainAuth) {
+    window.dispatchEvent(new CustomEvent(AUTH_INVALID_EVENT));
+  }
 };
+
 
 export const api = async <T>(endpoint: string, options: ApiOptions = {}): Promise<T> => {
   const { method = 'GET', body, auth = true, headers: customHeaders, silent = false, fallbackToOtherBases = true } = options;
