@@ -135,7 +135,7 @@ export function usePromotorPostpone() {
 export function usePromotorSetPointType() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ routeId, catId, point_type }: { routeId: string; catId: string; point_type: string }) => {
+    mutationFn: async ({ routeId, catId, point_type, ...data }: { routeId: string; catId: string; point_type: string; [key: string]: any }) => {
       const normalized = point_type === 'extra' ? 'EXTRA' : 'NATURAL';
       return promotorApi<any>(
         `/api/merch/promotor/routes/${routeId}/categories/${catId}/point-type`,
@@ -143,7 +143,8 @@ export function usePromotorSetPointType() {
           method: 'POST', 
           body: { 
             point_type: point_type.toLowerCase(), 
-            pointType: normalized 
+            pointType: normalized,
+            ...data
           } 
         }
       );
