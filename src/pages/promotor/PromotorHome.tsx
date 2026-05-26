@@ -149,7 +149,7 @@ export default function PromotorHome() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token || localStorage.getItem('auth_token')}`
+          'Authorization': `Bearer ${localStorage.getItem('promotor_token') || localStorage.getItem('auth_token') || ''}`
         },
         body: JSON.stringify({
           latitude: pos.coords.latitude,
