@@ -53,7 +53,7 @@ export function useUpload(customTokenGetter?: () => string | null) {
 
       xhr.addEventListener('load', () => {
         setIsUploading(false);
-        console.log('[useUpload] Response status:', xhr.status, 'body:', xhr.responseText.substring(0, 500));
+        logger.info('[useUpload] Upload concluído (status XHR)', { status: xhr.status });
         
         if (xhr.status >= 200 && xhr.status < 300) {
           try {
