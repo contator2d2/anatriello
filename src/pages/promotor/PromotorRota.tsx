@@ -178,7 +178,7 @@ function CategoryPreparation({ category, catId, categoryName, routeId, pdvName, 
         )}
 
         {/* Bloco 3: Photos (multiple) */}
-        {hasPointType && !hasPhoto && (
+        {hasPointType && !hasPhoto && photoMode !== 'after' && (
           <div className="space-y-2">
             <Label className="text-xs font-semibold flex items-center gap-1">
               <Camera className="h-3.5 w-3.5" /> Foto obrigatória da categoria (ANTES da execução)
@@ -232,7 +232,7 @@ function CategoryPreparation({ category, catId, categoryName, routeId, pdvName, 
           <span>
             {!hasPointType
               ? 'Antes de iniciar, selecione se é ponto natural ou extra.'
-              : photos.length === 0 && !hasPhoto
+              : photos.length === 0 && !hasPhoto && photoMode !== 'after'
                 ? 'É necessário tirar a foto da categoria antes de acessar os produtos.'
                 : 'Registre a(s) foto(s) para liberar os produtos.'}
           </span>
