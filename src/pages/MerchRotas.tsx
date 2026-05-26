@@ -543,66 +543,76 @@ function RouteFormDialog({ open, route, onClose, pdvs, employees, onSave, onDele
     const { data: cls = [] } = useBrandChecklists(brandId);
     const brandName = brands.find((b: any) => b.id === brandId)?.name || brandId;
     return (
-      <div className="flex items-center gap-2 p-2 rounded-md border bg-background/50">
-        <div className="flex-1 min-w-0">
-          <div className="text-xs font-medium truncate">{brandName}</div>
-          {cls.length > 0 ? (
-            <Select value={checklistId || ''} onValueChange={onChange}>
-              <SelectTrigger className="h-7 text-[10px] mt-1"><SelectValue placeholder="Checklist" /></SelectTrigger>
-              <SelectContent>
-                {cls.filter((c: any) => c?.id).map((c: any) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          ) : (
-            <span className="text-[10px] text-muted-foreground">Opcional</span>
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">Checklist da Marca</Label>
+          {cls.length === 0 && (
+            <span className="text-[10px] text-muted-foreground italic">Opcional (nenhum checklist encontrado)</span>
           )}
         </div>
-        <div className="flex flex-col gap-1">
-          <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive"
-            onClick={() => setMultiBrands(prev => prev.filter(b => b.brand_id !== brandId))}>
-            <X className="h-3 w-3" />
-          </Button>
-          {cls.length > 0 && checklistId && (
-            <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground"
-              onClick={() => onChange('')}>
-              <X className="h-2 w-2" />
-            </Button>
-          )}
-        </div>
+        
+        {cls.length > 0 ? (
+          <Select value={checklistId || '__none__'} onValueChange={(v) => onChange(v === '__none__' ? '' : v)}>
+            <SelectTrigger className="h-9 text-xs">
+              <SelectValue placeholder="Selecione o checklist" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">Sem checklist (apenas instrução)</SelectItem>
+              {cls.filter((c: any) => c?.id).map((c: any) => (
+                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : (
+          <div className="text-[10px] p-2 bg-muted/20 rounded border border-dashed text-center">
+            Nenhum checklist disponível para {brandName}
+          </div>
+        )}
       </div>
     );
   };
 
   useEffect(() => {
-    if (route) {
-      const rec = route.recurrence ? (typeof route.recurrence === 'string' ? JSON.parse(route.recurrence) : route.recurrence) : null;
-      setForm({
-        promoter_id: route.promoter_id, supervisor_id: route.supervisor_id,
-        pdv_id: route.pdv_id, brand_id: route.brand_id, checklist_id: route.checklist_id,
-        visit_date: route.visit_date?.split('T')[0], scheduled_time: route.scheduled_time?.slice(0, 5),
-        window_start: route.window_start, window_end: route.window_end,
-        estimated_duration_min: route.estimated_duration_min, priority: route.priority,
-        visit_type: route.visit_type, notes: route.notes, status: route.status,
-        recurrence_type: rec?.type || 'none',
-        recurrence_interval: rec?.interval || 1,
-        recurrence_until: rec?.until || '',
-        recurrence_weekdays: rec?.weekdays || [],
-      });
-      // Load multi-brand data
-      if (route.route_brands?.length > 0) {
-        setMultiBrands(route.route_brands.map((rb: any) => ({ brand_id: rb.brand_id, checklist_id: rb.checklist_id })));
-      } else if (route.brand_id) {
-        setMultiBrands([{ brand_id: route.brand_id, checklist_id: route.checklist_id }]);
+    if (open) {
+      if (route) {
+        console.log("Loading route for edit:", route);
+        const rec = route.recurrence ? (typeof route.recurrence === 'string' ? JSON.parse(route.recurrence) : route.recurrence) : null;
+        setForm({
+          promoter_id: route.promoter_id, supervisor_id: route.supervisor_id,
+          pdv_id: route.pdv_id, brand_id: route.brand_id, checklist_id: route.checklist_id,
+          visit_date: route.visit_date?.split('T')[0], scheduled_time: route.scheduled_time?.slice(0, 5),
+          window_start: route.window_start, window_end: route.window_end,
+          estimated_duration_min: route.estimated_duration_min, priority: route.priority,
+          visit_type: route.visit_type, notes: route.notes, status: route.status,
+          recurrence_type: rec?.type || 'none',
+          recurrence_interval: rec?.interval || 1,
+          recurrence_until: rec?.until || '',
+          recurrence_weekdays: rec?.weekdays || [],
+        });
+        
+        // Load multi-brand data with fallbacks
+        if (route.route_brands && route.route_brands.length > 0) {
+          setMultiBrands(route.route_brands.map((rb: any) => ({ 
+            brand_id: rb.brand_id, 
+            checklist_id: rb.checklist_id 
+          })));
+        } else if (route.brand_id) {
+          setMultiBrands([{ 
+            brand_id: route.brand_id, 
+            checklist_id: route.checklist_id 
+          }]);
+        } else {
+          setMultiBrands([]);
+        }
       } else {
+        setForm({
+          visit_date: format(new Date(), 'yyyy-MM-dd'), priority: 'normal', visit_type: 'regular',
+          estimated_duration_min: 60, recurrence_type: 'none', recurrence_interval: 1,
+          recurrence_weekdays: [], recurrence_until: '',
+        });
         setMultiBrands([]);
+        setConfiguringBrandId(null);
       }
-    } else {
-      setForm({
-        visit_date: format(new Date(), 'yyyy-MM-dd'), priority: 'normal', visit_type: 'regular',
-        estimated_duration_min: 60, recurrence_type: 'none', recurrence_interval: 1,
-        recurrence_weekdays: [], recurrence_until: '',
-      });
-      setMultiBrands([]);
     }
   }, [route, open]);
 
@@ -621,8 +631,6 @@ function RouteFormDialog({ open, route, onClose, pdvs, employees, onSave, onDele
 
   const handleAddAllProducts = () => {
     if (route?.id && availableToAdd.length > 0) {
-      // Add all available products one by one (or if there's a bulk action, use it)
-      // Since useAddRouteProduct seems to be single-product, we'll map them
       availableToAdd.forEach((p: any) => {
         addProduct.mutate({ routeId: route.id, product_id: p.product_id, category_id: p.category_id });
       });
@@ -650,30 +658,32 @@ function RouteFormDialog({ open, route, onClose, pdvs, employees, onSave, onDele
     ? mixPreview.filter((mp: any) => !routeProductIds.has(mp.product_id))
     : [];
 
-  // Available brands not yet added
   const availableBrands = (brands || []).filter((b: any) => {
     if (!b?.id) return false;
-    // If PDV is selected, only show brands linked to that PDV
     if (form.pdv_id && pdvBrands.length > 0) {
       const isLinkedToPdv = pdvBrands.some((pb: any) => pb.brand_id === b.id);
       if (!isLinkedToPdv) return false;
     }
-    // Don't show already selected brands
     return !multiBrands.some(mb => mb.brand_id === b.id);
   });
 
   const handleSave = () => {
-    const payload = { ...form };
-    if (multiBrands.length > 1) {
-      // Multi-brand route
-      payload.brands = multiBrands;
-      payload.brand_id = multiBrands[0].brand_id; // primary brand for backward compat
-      payload.checklist_id = multiBrands[0].checklist_id;
-    } else if (multiBrands.length === 1) {
+    if (!form.promoter_id || !form.pdv_id || multiBrands.length === 0) {
+      toast.error('Preencha os campos obrigatórios (Promotor, PDV e Marcas)');
+      return;
+    }
+
+    const payload = { 
+      ...form,
+      brands: multiBrands // Always send the array of brands
+    };
+    
+    // Fallback for older API versions that expect a single brand/checklist
+    if (multiBrands.length > 0) {
       payload.brand_id = multiBrands[0].brand_id;
       payload.checklist_id = multiBrands[0].checklist_id;
-      payload.brands = multiBrands;
     }
+
     onSave(payload);
   };
 
@@ -688,7 +698,7 @@ function RouteFormDialog({ open, route, onClose, pdvs, employees, onSave, onDele
             <Badge className="bg-primary/20 text-primary w-fit">🏷️ Multi-marca ({multiBrands.length} marcas)</Badge>
           )}
         </DialogHeader>
-        <div className="space-y-3">
+        <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label className="text-xs">Promotor *</Label>
@@ -706,16 +716,9 @@ function RouteFormDialog({ open, route, onClose, pdvs, employees, onSave, onDele
               <Label className="text-xs">PDV *</Label>
               <Popover open={pdvOpen} onOpenChange={setPdvOpen}>
                 <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    role="combobox"
-                    aria-expanded={pdvOpen}
-                    className="w-full justify-between"
-                  >
+                  <Button variant="outline" role="combobox" aria-expanded={pdvOpen} className="w-full justify-between">
                     <span className="truncate">
-                      {form.pdv_id
-                        ? pdvs.find((p: any) => p.id === form.pdv_id)?.name || "PDV"
-                        : "Selecione o PDV"}
+                      {form.pdv_id ? pdvs.find((p: any) => p.id === form.pdv_id)?.name || "PDV" : "Selecione o PDV"}
                     </span>
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
@@ -726,35 +729,15 @@ function RouteFormDialog({ open, route, onClose, pdvs, employees, onSave, onDele
                     <CommandList>
                       <CommandEmpty>Nenhum PDV encontrado.</CommandEmpty>
                       <CommandGroup>
-                        {(() => {
-                          const availablePdvs = (pdvs || []);
-                          
-                          if (availablePdvs.length === 0) {
-                            return <div className="p-4 text-xs text-center text-muted-foreground">Nenhum PDV encontrado.</div>;
-                          }
-
-                          return availablePdvs.map((p: any) => (
-                            <CommandItem
-                              key={p.id}
-                              value={p.name}
-                              onSelect={() => {
-                                setForm({ ...form, pdv_id: p.id });
-                                setPdvOpen(false);
-                              }}
-                            >
-                              <Check
-                                className={cn(
-                                  "mr-2 h-4 w-4",
-                                  form.pdv_id === p.id ? "opacity-100" : "opacity-0"
-                                )}
-                              />
-                              <div className="flex flex-col">
-                                <span>{p.name}</span>
-                                <span className="text-[10px] text-muted-foreground">{p.city} - {p.state}</span>
-                              </div>
-                            </CommandItem>
-                          ));
-                        })()}
+                        {(pdvs || []).map((p: any) => (
+                          <CommandItem key={p.id} value={p.name} onSelect={() => { setForm({ ...form, pdv_id: p.id }); setPdvOpen(false); }}>
+                            <Check className={cn("mr-2 h-4 w-4", form.pdv_id === p.id ? "opacity-100" : "opacity-0")} />
+                            <div className="flex flex-col">
+                              <span>{p.name}</span>
+                              <span className="text-[10px] text-muted-foreground">{p.city} - {p.state}</span>
+                            </div>
+                          </CommandItem>
+                        ))}
                       </CommandGroup>
                     </CommandList>
                   </Command>
@@ -763,20 +746,15 @@ function RouteFormDialog({ open, route, onClose, pdvs, employees, onSave, onDele
             </div>
           </div>
 
-          {/* Multi-Brand Section */}
           <div className="space-y-3 p-3 rounded-lg border bg-muted/30">
             <div className="flex items-center justify-between">
               <div className="flex flex-col">
                 <div className="flex items-center gap-2 text-sm font-medium">
-                  <Package className="h-4 w-4 text-primary" />
-                  Marcas {multiBrands.length > 0 && `(${multiBrands.length})`}
+                  <Package className="h-4 w-4 text-primary" /> Marcas {multiBrands.length > 0 && `(${multiBrands.length})`}
                 </div>
-                {!form.pdv_id && (
-                  <span className="text-[10px] text-orange-500 font-medium">Selecione um PDV primeiro</span>
-                )}
+                {!form.pdv_id && <span className="text-[10px] text-orange-500 font-medium">Selecione um PDV primeiro</span>}
               </div>
-
-              {form.pdv_id && !configuringBrandId && (
+              {form.pdv_id && (
                 <Select value="" onValueChange={(v) => {
                   if (v) {
                     setMultiBrands(prev => [...prev, { brand_id: v }]);
@@ -789,45 +767,25 @@ function RouteFormDialog({ open, route, onClose, pdvs, employees, onSave, onDele
                   <SelectContent>
                     {availableBrands.length > 0 ? (
                       availableBrands.map((b: any) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)
-                    ) : (
-                      <div className="p-2 text-xs text-muted-foreground text-center">Sem marcas disponíveis</div>
-                    )}
+                    ) : <div className="p-2 text-xs text-muted-foreground text-center">Sem marcas disponíveis</div>}
                   </SelectContent>
                 </Select>
               )}
             </div>
 
-            {multiBrands.length === 0 && (
-              <div className="text-xs text-muted-foreground text-center py-3 bg-background/50 rounded-md border border-dashed">
-                Selecione pelo menos uma marca para a rota
-              </div>
-            )}
-
-            {multiBrands.length > 0 && (
+            {multiBrands.length === 0 ? (
+              <div className="text-xs text-muted-foreground text-center py-3 bg-background/50 rounded-md border border-dashed">Selecione pelo menos uma marca</div>
+            ) : (
               <div className="flex flex-wrap gap-2">
                 {multiBrands.map((mb) => {
                   const brand = brands.find((b: any) => b.id === mb.brand_id);
                   const isConfiguring = configuringBrandId === mb.brand_id;
                   return (
-                    <div 
-                      key={mb.brand_id}
-                      onClick={() => setConfiguringBrandId(mb.brand_id)}
-                      className={cn(
-                        "flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs cursor-pointer transition-all",
-                        isConfiguring 
-                          ? "bg-primary text-primary-foreground border-primary shadow-sm" 
-                          : "bg-background hover:bg-muted border-border"
-                      )}
-                    >
+                    <div key={mb.brand_id} onClick={() => setConfiguringBrandId(mb.brand_id)}
+                      className={cn("flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs cursor-pointer transition-all", isConfiguring ? "bg-primary text-primary-foreground border-primary shadow-sm" : "bg-background hover:bg-muted border-border")}>
                       <span className="font-medium">{brand?.name || mb.brand_id}</span>
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setMultiBrands(prev => prev.filter(b => b.brand_id !== mb.brand_id));
-                          if (configuringBrandId === mb.brand_id) setConfiguringBrandId(null);
-                        }}
-                        className={cn("p-0.5 rounded-full hover:bg-black/10", isConfiguring ? "text-primary-foreground" : "text-muted-foreground")}
-                      >
+                      <button onClick={(e) => { e.stopPropagation(); setMultiBrands(prev => prev.filter(b => b.brand_id !== mb.brand_id)); if (configuringBrandId === mb.brand_id) setConfiguringBrandId(null); }}
+                        className={cn("p-0.5 rounded-full hover:bg-black/10", isConfiguring ? "text-primary-foreground" : "text-muted-foreground")}>
                         <X className="h-3 w-3" />
                       </button>
                     </div>
@@ -837,33 +795,42 @@ function RouteFormDialog({ open, route, onClose, pdvs, employees, onSave, onDele
             )}
 
             {configuringBrandId && (
-              <div className="p-3 rounded-md border bg-background space-y-3 animate-in fade-in slide-in-from-top-1">
+              <div className="p-3 rounded-md border bg-background space-y-4 animate-in fade-in slide-in-from-top-1 shadow-sm">
                 <div className="flex items-center justify-between border-b pb-2">
-                  <div className="text-xs font-semibold flex items-center gap-2">
-                    <Sparkles className="h-3 w-3 text-primary" />
-                    Configurando: {brands.find((b: any) => b.id === configuringBrandId)?.name}
+                  <div className="text-xs font-semibold flex items-center gap-2 text-primary">
+                    <Sparkles className="h-3 w-3" /> Configurando: {brands.find((b: any) => b.id === configuringBrandId)?.name}
                   </div>
-                  <Button variant="ghost" size="sm" className="h-7 px-2 text-[10px] text-primary" onClick={() => setConfiguringBrandId(null)}>
-                    <CheckCircle2 className="h-3 w-3 mr-1" /> Concluir Ajustes
+                  <Button variant="ghost" size="sm" className="h-7 px-2 text-[10px] text-primary hover:bg-primary/10" onClick={() => setConfiguringBrandId(null)}>
+                    <CheckCircle2 className="h-3 w-3 mr-1" /> Concluir Marca
                   </Button>
                 </div>
                 
-                <div className="space-y-2">
-                  <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">Checklist da Marca</Label>
-                  <BrandChecklistSelector
-                    brandId={configuringBrandId}
-                    checklistId={multiBrands.find(b => b.brand_id === configuringBrandId)?.checklist_id}
-                    onChange={(v) => setMultiBrands(prev => prev.map(b => b.brand_id === configuringBrandId ? { ...b, checklist_id: v } : b))}
-                  />
+                <BrandChecklistSelector
+                  brandId={configuringBrandId}
+                  checklistId={multiBrands.find(b => b.brand_id === configuringBrandId)?.checklist_id}
+                  onChange={(v) => setMultiBrands(prev => prev.map(b => b.brand_id === configuringBrandId ? { ...b, checklist_id: v } : b))}
+                />
+
+                <div className="space-y-2 border-t pt-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">Mix de Produtos</Label>
+                    <span className="text-[10px] font-mono font-medium">{displayProducts.length} itens</span>
+                  </div>
+                  
+                  {displayProducts.length === 0 ? (
+                    <div className="text-[10px] text-muted-foreground text-center py-2 bg-muted/10 rounded border border-dashed">Sem produtos no mix</div>
+                  ) : (
+                    <div className="max-h-32 overflow-y-auto space-y-1 pr-1 custom-scrollbar">
+                      {displayProducts.map((p: any) => (
+                        <div key={p.product_id || p.id} className="flex items-center justify-between py-1 px-2 rounded bg-muted/20 text-[10px] border border-border/30">
+                          <span className="truncate flex-1">{p.product_name}</span>
+                          {p.mandatory && <Badge variant="secondary" className="text-[8px] h-3 px-1 ml-1 bg-orange-100 text-orange-700">Obrigatório</Badge>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
-            )}
-
-            {isMultiBrand && !configuringBrandId && (
-              <p className="text-[10px] text-muted-foreground flex items-center gap-1">
-                <Info className="h-3 w-3" />
-                Clique em uma marca acima para ajustar seu checklist e mix de produtos.
-              </p>
             )}
           </div>
 
@@ -878,7 +845,6 @@ function RouteFormDialog({ open, route, onClose, pdvs, employees, onSave, onDele
             </div>
           </div>
 
-          {/* Recurrence */}
           {!route && (
             <div className="space-y-2 p-3 rounded-lg border bg-muted/30">
               <div className="flex items-center gap-2 text-sm font-medium">
@@ -895,41 +861,16 @@ function RouteFormDialog({ open, route, onClose, pdvs, employees, onSave, onDele
               </Select>
 
               {form.recurrence_type && form.recurrence_type !== 'none' && (
-                <>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <Label className="text-xs">Intervalo</Label>
-                      <Input type="number" min={1} value={form.recurrence_interval || 1}
-                        onChange={e => setForm({ ...form, recurrence_interval: parseInt(e.target.value) || 1 })} />
-                      <span className="text-[10px] text-muted-foreground">
-                        {form.recurrence_type === 'daily' ? 'dia(s)' : form.recurrence_type === 'weekly' ? 'semana(s)' : 'mês(es)'}
-                      </span>
-                    </div>
-                    <div>
-                      <Label className="text-xs">Até (data fim)</Label>
-                      <Input type="date" value={form.recurrence_until || ''}
-                        onChange={e => setForm({ ...form, recurrence_until: e.target.value })} />
-                    </div>
+                <div className="grid grid-cols-2 gap-3 pt-1">
+                  <div>
+                    <Label className="text-xs">Intervalo</Label>
+                    <Input type="number" min={1} value={form.recurrence_interval || 1} onChange={e => setForm({ ...form, recurrence_interval: parseInt(e.target.value) || 1 })} />
                   </div>
-
-                  {form.recurrence_type === 'weekly' && (
-                    <div>
-                      <Label className="text-xs mb-1 block">Dias da semana</Label>
-                      <div className="flex gap-1">
-                        {WEEKDAY_LABELS.map((label, i) => {
-                          const wd = i + 1;
-                          const selected = (form.recurrence_weekdays || []).includes(wd);
-                          return (
-                            <button key={wd} type="button" onClick={() => toggleWeekday(wd)}
-                              className={`w-9 h-8 text-xs rounded-md border transition-colors ${selected ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground border-border hover:bg-muted'}`}>
-                              {label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                </>
+                  <div>
+                    <Label className="text-xs">Até (data fim)</Label>
+                    <Input type="date" value={form.recurrence_until || ''} onChange={e => setForm({ ...form, recurrence_until: e.target.value })} />
+                  </div>
+                </div>
               )}
             </div>
           )}
@@ -953,150 +894,21 @@ function RouteFormDialog({ open, route, onClose, pdvs, employees, onSave, onDele
             </div>
           </div>
 
-          {/* Single-brand checklist (only when NOT multi-brand) */}
-          {!isMultiBrand && checklists.length > 0 && multiBrands.length === 1 && (
-            <div>
-              <Label className="text-xs">Checklist</Label>
-              <Select value={multiBrands[0]?.checklist_id || ''} onValueChange={v => setMultiBrands(prev => prev.map((b, i) => i === 0 ? { ...b, checklist_id: v === '__none__' ? undefined : v } : b))}>
-                <SelectTrigger className="flex items-center">
-                  <SelectValue placeholder="Sem checklist (opcional)" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">Sem checklist (apenas instrução)</SelectItem>
-                  {checklists.filter((c: any) => c?.id).map((c: any) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              {multiBrands[0]?.checklist_id && (
-                <Button variant="ghost" size="sm" className="h-6 px-2 text-[10px] text-muted-foreground mt-1"
-                  onClick={() => setMultiBrands(prev => prev.map((b, i) => i === 0 ? { ...b, checklist_id: undefined } : b))}>
-                  Limpar checklist
-                </Button>
-              )}
-            </div>
-          )}
-
-          {route && (
-            <div>
-              <Label className="text-xs">Status</Label>
-              <Select value={form.status || 'scheduled'} onValueChange={v => setForm({ ...form, status: v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {Object.entries(STATUS_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-          {/* Product Mix Section */}
-          {form.pdv_id && multiBrands.length > 0 && (
-            <div className={cn(
-              "space-y-2 p-3 rounded-lg border transition-all",
-              configuringBrandId ? "border-primary/50 bg-primary/5 shadow-inner" : "bg-muted/30"
-            )}>
-              <div className="flex items-center justify-between">
-                <div className="flex flex-col">
-                  <div className="flex items-center gap-2 text-sm font-medium">
-                    <Package className="h-4 w-4 text-primary" />
-                    Mix de Produtos ({displayProducts.length})
-                  </div>
-                  {activeBrandId && (
-                    <span className="text-[10px] text-muted-foreground font-medium">
-                      Exibindo produtos da marca: {brands.find((b: any) => b.id === activeBrandId)?.name}
-                    </span>
-                  )}
-                </div>
-                <div className="flex gap-2">
-                  {route?.id && (
-                    <Button variant="outline" size="sm" onClick={handleSyncProducts} disabled={syncProducts.isPending}
-                      className="h-7 text-xs">
-                      <RefreshCw className={`h-3 w-3 mr-1 ${syncProducts.isPending ? 'animate-spin' : ''}`} />
-                      Sincronizar
-                    </Button>
-                  )}
-                </div>
-              </div>
-
-              {displayProducts.length === 0 ? (
-                <div className="text-xs text-muted-foreground text-center py-3 bg-background/50 rounded-md border border-dashed">
-                  {!route?.id
-                    ? `Nenhum produto no mix para ${brands.find((b: any) => b.id === activeBrandId)?.name || 'esta marca'}.`
-                    : 'Nenhum produto vinculado.'}
-                </div>
-              ) : (
-                <div className="max-h-48 overflow-y-auto space-y-1 pr-1">
-                  {displayProducts.map((p: any) => (
-                    <div key={p.product_id || p.id} className="flex items-center justify-between py-1.5 px-2 rounded-md bg-background/50 text-xs border border-border/50">
-                      <div className="flex-1 min-w-0">
-                        <div className="font-medium truncate">{p.product_name}</div>
-                        <div className="text-[10px] text-muted-foreground flex items-center gap-2">
-                          {p.category_name && <span>{p.category_name}</span>}
-                          {p.sku && <span>SKU: {p.sku}</span>}
-                          {p.mandatory && <Badge variant="secondary" className="text-[8px] h-3.5 px-1 bg-orange-100 text-orange-700 border-orange-200">Obrigatório</Badge>}
-                          {p.status && p.status !== 'pending' && (
-                            <Badge variant={p.status === 'completed' ? 'default' : 'secondary'} className="text-[8px] h-3.5 px-1">
-                              {p.status === 'completed' ? 'Executado' : p.status}
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                      {route?.id && (!p.status || p.status === 'pending') && (
-                        <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive hover:text-destructive hover:bg-destructive/10"
-                          onClick={() => handleRemoveProduct(p.product_id)}>
-                          <X className="h-3 w-3" />
-                        </Button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {route?.id && availableToAdd.length > 0 && (
-                <div className="pt-2 border-t">
-                  <div className="flex items-center justify-between mb-1">
-                    <Label className="text-xs text-muted-foreground">Adicionar do mix ({availableToAdd.length} disponíveis)</Label>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      className="h-6 text-[10px] px-2 text-primary border-primary/30 hover:bg-primary/5"
-                      onClick={handleAddAllProducts}
-                    >
-                      <CheckCircle2 className="h-3 w-3 mr-1" /> Incluir Todos
-                    </Button>
-                  </div>
-                  <div className="max-h-32 overflow-y-auto space-y-1">
-                    {availableToAdd.map((p: any) => (
-                      <div key={p.product_id} className="flex items-center justify-between py-1 px-2 rounded-md bg-background/30 text-xs">
-                        <span className="truncate">{p.product_name} {p.category_name ? `(${p.category_name})` : ''}</span>
-                        <Button variant="outline" size="sm" className="h-6 text-[10px] px-2"
-                          onClick={() => handleAddMixProduct(p)}>
-                          <Plus className="h-3 w-3 mr-0.5" /> Adicionar
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
           <div>
             <Label className="text-xs">Observações</Label>
-            <Textarea value={form.notes || ''} onChange={e => setForm({ ...form, notes: e.target.value })} rows={2} />
+            <Textarea className="h-16 text-xs" value={form.notes || ''} onChange={e => setForm({ ...form, notes: e.target.value })} placeholder="Instruções para o promotor..." />
           </div>
+
+          <DialogFooter className="flex-row gap-2 pt-2 border-t mt-4">
+            <div className="flex-1">
+              {onDelete && <Button variant="destructive" size="sm" onClick={onDelete}><Trash2 className="h-4 w-4 mr-2" /> Excluir</Button>}
+            </div>
+            <Button variant="outline" size="sm" onClick={onClose}>Cancelar</Button>
+            <Button size="sm" onClick={handleSave}>Salvar Rota</Button>
+          </DialogFooter>
         </div>
-        <DialogFooter className="flex-col sm:flex-row gap-2">
-          <div className="flex gap-2">
-            {onDelete && <Button variant="destructive" size="sm" onClick={onDelete}><Trash2 className="h-4 w-4 mr-1" /> Excluir</Button>}
-            {onDuplicate && <Button variant="outline" size="sm" onClick={onDuplicate}><Copy className="h-4 w-4 mr-1" /> Duplicar</Button>}
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={onClose}>Cancelar</Button>
-            <Button onClick={handleSave} disabled={!form.promoter_id || !form.pdv_id || multiBrands.length === 0 || !form.visit_date}>
-              {form.recurrence_type && form.recurrence_type !== 'none' ? 'Criar Rotas' : 'Salvar'}
-            </Button>
-          </div>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
+
