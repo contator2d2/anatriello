@@ -14,7 +14,45 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      app_logs: {
+        Row: {
+          context: Json | null
+          created_at: string
+          device_info: Json | null
+          id: string
+          level: string
+          message: string
+          page_url: string | null
+          stack_trace: string | null
+          user_email: string | null
+          user_id: string | null
+        }
+        Insert: {
+          context?: Json | null
+          created_at?: string
+          device_info?: Json | null
+          id?: string
+          level: string
+          message: string
+          page_url?: string | null
+          stack_trace?: string | null
+          user_email?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          context?: Json | null
+          created_at?: string
+          device_info?: Json | null
+          id?: string
+          level?: string
+          message?: string
+          page_url?: string | null
+          stack_trace?: string | null
+          user_email?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
