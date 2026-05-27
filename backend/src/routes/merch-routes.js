@@ -1984,7 +1984,7 @@ router.post('/promotor/routes/:routeId/categories/:catId/point-type', promotorAu
          performed_by = EXCLUDED.performed_by,
          updated_at = NOW()
        RETURNING *`,
-      [req.params.routeId, req.params.catId, categoryInRoute.rows[0].category_name, point_type, req.employeeId]
+      [req.params.routeId, catId, categoryInRoute.rows[0].category_name, point_type, req.employeeId]
     );
 
     try {
