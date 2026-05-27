@@ -93,7 +93,7 @@ function CategoryPreparation({ category, catId, routeBrandId, categoryName, rout
       ).catch(() => null);
 
       setCategoryPhoto.mutate({
-        routeId, catId, photo_url: photos[0], photos,
+        routeId, catId, route_brand_id: routeBrandId, photo_url: photos[0], photos,
         latitude: pos?.coords.latitude, longitude: pos?.coords.longitude,
       }, {
         onSuccess: () => {
