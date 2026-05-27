@@ -2106,8 +2106,8 @@ router.post('/promotor/routes/:routeId/categories/:catId/after-photo', promotorA
     } catch {}
 
     const prevCount = (await query(
-      `SELECT COUNT(*)::int as n FROM route_photos WHERE route_id=$1 AND category_id=$2 AND photo_type='category_after'`,
-      [req.params.routeId, req.params.catId]
+      `SELECT COUNT(*)::int as n FROM route_photos WHERE route_id=$1 AND category_id IS NOT DISTINCT FROM $2 AND photo_type='category_after'`,
+      [req.params.routeId, catId]
     )).rows[0]?.n || 0;
     const totalAfterUpload = prevCount + photoList.length;
     const completes = totalAfterUpload >= minAfter;
