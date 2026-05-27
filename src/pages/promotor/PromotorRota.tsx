@@ -1082,16 +1082,16 @@ export default function PromotorRota() {
                   }} disabled={checkout.isPending} variant={canCompleteRoute ? 'default' : 'secondary'}>
                     <Check className="h-5 w-5 mr-2" /> Concluir Rota ({completedExecsGlobal}/{totalExecsGlobal})
                   </Button>
-                  {!allDone && (
+                  {!canCompleteRoute && (
                     <div className="space-y-1">
                       <p className="text-[10px] text-center text-destructive">
-                        ⚠️ {!allProductsDone 
-                          ? 'Todos os produtos devem estar executados (100%) para concluir a rota.'
-                          : !allCategoriesCompleted 
-                            ? 'Tire a foto DEPOIS de todas as categorias para concluir a rota.'
+                        ⚠️ {!allProductsDoneGlobal 
+                          ? 'Todos os produtos de TODAS as marcas devem estar executados (100%) para concluir a rota.'
+                          : !allBrandsCompleted 
+                            ? 'Conclua o checklist de todas as marcas antes de finalizar a rota.'
                             : `Tempo mínimo: faltam ${minDuration - elapsedMinutes} min.`}
                       </p>
-                      {allProductsDone && allCategoriesCompleted && !hasMinDurationMet && (
+                      {allProductsDoneGlobal && allBrandsCompleted && !hasMinDurationMet && (
                         <p className="text-[10px] text-center text-muted-foreground flex items-center justify-center gap-1">
                           <Clock className="h-3 w-3" /> Tempo mínimo de permanência: {minDuration} min
                         </p>
