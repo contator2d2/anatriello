@@ -232,20 +232,20 @@ export default function MerchChecklists() {
                     {(form.category_photo_mode === 'both' || form.category_photo_mode === 'before') && (
                       <div>
                         <Label className="text-[11px] text-muted-foreground">Mínimo ANTES</Label>
-                        <Input
-                          type="number" min={1} max={20}
+                         <Input
+                          type="number" min={0} max={20}
                           value={form.min_category_photos_before ?? 1}
-                          onChange={e => setForm({ ...form, min_category_photos_before: Math.max(1, parseInt(e.target.value, 10) || 1) })}
+                          onChange={e => setForm({ ...form, min_category_photos_before: Math.max(0, parseInt(e.target.value, 10) || 0) })}
                         />
                       </div>
                     )}
                     {(form.category_photo_mode === 'both' || form.category_photo_mode === 'after') && (
                       <div>
                         <Label className="text-[11px] text-muted-foreground">Mínimo DEPOIS</Label>
-                        <Input
-                          type="number" min={1} max={20}
+                         <Input
+                          type="number" min={0} max={20}
                           value={form.min_category_photos_after ?? 1}
-                          onChange={e => setForm({ ...form, min_category_photos_after: Math.max(1, parseInt(e.target.value, 10) || 1) })}
+                          onChange={e => setForm({ ...form, min_category_photos_after: Math.max(0, parseInt(e.target.value, 10) || 0) })}
                         />
                       </div>
                     )}

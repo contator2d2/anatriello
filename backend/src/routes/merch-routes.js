@@ -761,6 +761,7 @@ router.get('/brand-checklists', authenticate, async (req, res) => {
       updated_at TIMESTAMPTZ DEFAULT NOW()
     )`);
     await query(`ALTER TABLE brand_checklists ADD COLUMN IF NOT EXISTS require_category_photos BOOLEAN DEFAULT true`).catch(() => {});
+    await query(`ALTER TABLE brand_checklists ADD COLUMN IF NOT EXISTS category_photo_mode VARCHAR(20) DEFAULT 'both'`).catch(() => {});
     await query(`ALTER TABLE brand_checklists ADD COLUMN IF NOT EXISTS min_category_photos_before INT DEFAULT 1`).catch(() => {});
     await query(`ALTER TABLE brand_checklists ADD COLUMN IF NOT EXISTS min_category_photos_after INT DEFAULT 1`).catch(() => {});
 
@@ -777,7 +778,7 @@ router.post('/brand-checklists', authenticate, async (req, res) => {
     const orgRes = await query('SELECT organization_id FROM organization_members WHERE user_id=$1 LIMIT 1', [req.userId]);
     const orgId = orgRes.rows[0].organization_id;
     const { brand_id, name, description, require_checkin_photo, require_checkout_photo, require_stock_count,
-            require_validity_check, require_extra_point, require_category_photos,
+            require_validity_check, require_extra_point, require_category_photos, category_photo_mode,
             min_category_photos_before, min_category_photos_after,
             stock_count_frequency, validity_check_frequency } = req.body;
 
@@ -794,6 +795,7 @@ router.post('/brand-checklists', authenticate, async (req, res) => {
        require_validity_check BOOLEAN DEFAULT false,
        require_extra_point BOOLEAN DEFAULT false,
        require_category_photos BOOLEAN DEFAULT true,
+       category_photo_mode VARCHAR(20) DEFAULT 'both',
        stock_count_frequency VARCHAR(20) DEFAULT 'every_visit',
       validity_check_frequency VARCHAR(20) DEFAULT 'every_visit',
       active BOOLEAN DEFAULT true,
@@ -801,19 +803,21 @@ router.post('/brand-checklists', authenticate, async (req, res) => {
       updated_at TIMESTAMPTZ DEFAULT NOW()
     )`);
     await query(`ALTER TABLE brand_checklists ADD COLUMN IF NOT EXISTS require_category_photos BOOLEAN DEFAULT true`).catch(() => {});
+    await query(`ALTER TABLE brand_checklists ADD COLUMN IF NOT EXISTS category_photo_mode VARCHAR(20) DEFAULT 'both'`).catch(() => {});
     await query(`ALTER TABLE brand_checklists ADD COLUMN IF NOT EXISTS min_category_photos_before INT DEFAULT 1`).catch(() => {});
     await query(`ALTER TABLE brand_checklists ADD COLUMN IF NOT EXISTS min_category_photos_after INT DEFAULT 1`).catch(() => {});
 
     const result = await query(
       `INSERT INTO brand_checklists (organization_id, brand_id, name, description, require_checkin_photo,
        require_checkout_photo, require_stock_count, require_validity_check, require_extra_point, require_category_photos,
-       min_category_photos_before, min_category_photos_after,
+       category_photo_mode, min_category_photos_before, min_category_photos_after,
        stock_count_frequency, validity_check_frequency)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
       [orgId, brand_id, name, description, require_checkin_photo ?? true, require_checkout_photo ?? false,
        require_stock_count ?? false, require_validity_check ?? false, require_extra_point ?? false, require_category_photos ?? true,
-       Math.max(1, parseInt(min_category_photos_before, 10) || 1),
-       Math.max(1, parseInt(min_category_photos_after, 10) || 1),
+       category_photo_mode || 'both',
+       parseInt(min_category_photos_before, 10) || 0,
+       parseInt(min_category_photos_after, 10) || 0,
        stock_count_frequency || 'every_visit', validity_check_frequency || 'every_visit']
     );
     res.json(result.rows[0]);
@@ -823,16 +827,17 @@ router.post('/brand-checklists', authenticate, async (req, res) => {
 router.put('/brand-checklists/:id', authenticate, async (req, res) => {
   try {
     await query(`ALTER TABLE brand_checklists ADD COLUMN IF NOT EXISTS require_category_photos BOOLEAN DEFAULT true`).catch(() => {});
+    await query(`ALTER TABLE brand_checklists ADD COLUMN IF NOT EXISTS category_photo_mode VARCHAR(20) DEFAULT 'both'`).catch(() => {});
     await query(`ALTER TABLE brand_checklists ADD COLUMN IF NOT EXISTS min_category_photos_before INT DEFAULT 1`).catch(() => {});
     await query(`ALTER TABLE brand_checklists ADD COLUMN IF NOT EXISTS min_category_photos_after INT DEFAULT 1`).catch(() => {});
     const { name, description, require_checkin_photo, require_checkout_photo, require_stock_count,
-            require_validity_check, require_extra_point, require_category_photos,
+            require_validity_check, require_extra_point, require_category_photos, category_photo_mode,
             min_category_photos_before, min_category_photos_after,
             stock_count_frequency, validity_check_frequency, active } = req.body;
     const minBefore = (min_category_photos_before === undefined || min_category_photos_before === null)
-      ? null : Math.max(1, parseInt(min_category_photos_before, 10) || 1);
+      ? null : Math.max(0, parseInt(min_category_photos_before, 10) || 0);
     const minAfter = (min_category_photos_after === undefined || min_category_photos_after === null)
-      ? null : Math.max(1, parseInt(min_category_photos_after, 10) || 1);
+      ? null : Math.max(0, parseInt(min_category_photos_after, 10) || 0);
     const result = await query(
       `UPDATE brand_checklists SET 
        name=COALESCE($2,name), 
@@ -848,13 +853,14 @@ router.put('/brand-checklists/:id', authenticate, async (req, res) => {
        require_category_photos=$12,
        min_category_photos_before=COALESCE($13,min_category_photos_before),
        min_category_photos_after=COALESCE($14,min_category_photos_after),
+       category_photo_mode=COALESCE($15,category_photo_mode),
        updated_at=NOW()
        WHERE id=$1 RETURNING *`,
       [req.params.id, name, description, 
        require_checkin_photo ?? true, require_checkout_photo ?? false, 
        require_stock_count ?? false, require_validity_check ?? false,
        require_extra_point ?? false, stock_count_frequency, validity_check_frequency, active,
-       require_category_photos ?? true, minBefore, minAfter]
+       require_category_photos ?? true, minBefore, minAfter, category_photo_mode]
     );
     res.json(result.rows[0]);
   } catch (err) { logError('checklists.update', err); res.status(500).json({ error: 'Erro' }); }
@@ -1595,8 +1601,10 @@ router.get('/promotor/routes/:id', promotorAuth, async (req, res) => {
        COALESCE(bc.require_validity_check, bc2.require_validity_check, false) as require_validity_check,
        COALESCE(bc.require_extra_point, bc2.require_extra_point, false) as require_extra_point,
        COALESCE(bc.require_category_photos, bc2.require_category_photos, true) as require_category_photos,
-       COALESCE(bc.min_category_photos_before, bc2.min_category_photos_before, 1) as min_category_photos_before,
-       COALESCE(bc.min_category_photos_after, bc2.min_category_photos_after, 1) as min_category_photos_after
+       COALESCE(bc.category_photo_mode, bc2.category_photo_mode, 'both') as category_photo_mode,
+        COALESCE(bc.min_category_photos_before, bc2.min_category_photos_before, 1) as min_category_photos_before,
+        COALESCE(bc.min_category_photos_after, bc2.min_category_photos_after, 1) as min_category_photos_after,
+        COALESCE(bc.category_photo_mode, bc2.category_photo_mode, 'both') as category_photo_mode
        FROM merch_routes r
        LEFT JOIN pdvs p ON p.id = r.pdv_id
        LEFT JOIN merch_brands b ON b.id = r.brand_id
@@ -1651,6 +1659,7 @@ router.get('/promotor/routes/:id', promotorAuth, async (req, res) => {
          COALESCE(bc.require_validity_check, bc2.require_validity_check, false) as require_validity_check,
          COALESCE(bc.require_extra_point, bc2.require_extra_point, false) as require_extra_point,
          COALESCE(bc.require_category_photos, bc2.require_category_photos, true) as require_category_photos,
+         COALESCE(bc.category_photo_mode, bc2.category_photo_mode, 'both') as category_photo_mode,
          COALESCE(bc.min_category_photos_before, bc2.min_category_photos_before, 1) as min_category_photos_before,
          COALESCE(bc.min_category_photos_after, bc2.min_category_photos_after, 1) as min_category_photos_after,
          (SELECT COUNT(*) FROM route_product_executions rpe WHERE rpe.route_brand_id = rb.id) as total_products,
@@ -2045,11 +2054,16 @@ router.post('/promotor/routes/:routeId/categories/:catId/photo', promotorAuth, a
     let minBefore = 1;
     try {
       const minRes = await query(
-        `SELECT bc.min_category_photos_before FROM merch_routes r
+        `SELECT bc.min_category_photos_before, bc.category_photo_mode FROM merch_routes r
          LEFT JOIN brand_checklists bc ON bc.id = r.checklist_id WHERE r.id=$1`,
         [req.params.routeId]
       );
-      if (minRes.rows[0]?.min_category_photos_before) minBefore = Math.max(1, parseInt(minRes.rows[0].min_category_photos_before, 10));
+      if (minRes.rows[0]?.min_category_photos_before !== undefined) {
+        minBefore = Math.max(0, parseInt(minRes.rows[0].min_category_photos_before, 10) || 0);
+      }
+      if (minRes.rows[0]?.category_photo_mode === 'after') {
+        minBefore = 0; // No photos required before if mode is 'after'
+      }
     } catch {}
 
     // Count previously uploaded before photos for this category
