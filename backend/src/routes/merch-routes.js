@@ -1416,7 +1416,7 @@ async function ensureExecutionCategoryTables() {
     await query(`CREATE TABLE IF NOT EXISTS merch_execution_categories (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       route_id UUID NOT NULL REFERENCES merch_routes(id) ON DELETE CASCADE,
-      category_id UUID NOT NULL REFERENCES merch_categories(id),
+      category_id UUID REFERENCES merch_categories(id),
       category_name VARCHAR(255),
       point_type VARCHAR(20),
       point_type_at TIMESTAMPTZ,
@@ -1431,8 +1431,26 @@ async function ensureExecutionCategoryTables() {
       performed_by UUID,
       created_at TIMESTAMPTZ DEFAULT NOW(),
       updated_at TIMESTAMPTZ DEFAULT NOW(),
-      UNIQUE(route_id, category_id)
+      UNIQUE NULLS NOT DISTINCT (route_id, category_id)
     )`);
+
+    // Ensure category_id is nullable if it was NOT NULL before
+    try {
+      await query(`ALTER TABLE merch_execution_categories ALTER COLUMN category_id DROP NOT NULL`);
+    } catch (e) {}
+
+    // Ensure UNIQUE NULLS NOT DISTINCT constraint exists
+    try {
+      // First drop old constraint if it exists (it was probably named UNIQUE(route_id, category_id) implicitly)
+      await query(`ALTER TABLE merch_execution_categories DROP CONSTRAINT IF EXISTS merch_execution_categories_route_id_category_id_key`);
+      await query(`ALTER TABLE merch_execution_categories ADD CONSTRAINT merch_execution_categories_route_id_category_id_key UNIQUE NULLS NOT DISTINCT (route_id, category_id)`);
+    } catch (e) {
+      // If Postgres version is older than 15, NULLS NOT DISTINCT will fail. 
+      // Fallback to regular UNIQUE which is already there, but we try to ensure it.
+      try {
+        await query(`ALTER TABLE merch_execution_categories ADD CONSTRAINT merch_execution_categories_route_id_category_id_key UNIQUE (route_id, category_id)`);
+      } catch (e2) {}
+    }
 
     await query(`ALTER TABLE merch_execution_categories ADD COLUMN IF NOT EXISTS category_name VARCHAR(255)`);
     await query(`ALTER TABLE merch_execution_categories ADD COLUMN IF NOT EXISTS point_type VARCHAR(20)`);
