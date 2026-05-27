@@ -966,7 +966,7 @@ export default function PromotorRota() {
                   </div>
 
                   {/* Products list (locked or unlocked) */}
-                  <div className={`space-y-1.5 ${isLocked ? 'opacity-40 pointer-events-none select-none' : ''}`}>
+                  <div className={`space-y-1.5 ${effectivelyLocked ? 'opacity-40 pointer-events-none select-none' : ''}`}>
                     {execs.map((exec: any) => (
                       <Card key={exec.id} className={`transition-colors hover:border-primary/40 ${exec.status === 'completed' ? 'border-green-500/30 bg-green-500/5' : ''}`}>
                         <CardContent className="p-3">
