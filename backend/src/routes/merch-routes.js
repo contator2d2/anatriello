@@ -1760,7 +1760,12 @@ router.get('/promotor/routes/:id', promotorAuth, async (req, res) => {
         try {
           const ins = await query(
             `INSERT INTO merch_execution_categories (route_id, category_id, route_brand_id, category_name, performed_by, products_unlocked)
-             VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (route_id, category_id, COALESCE(route_brand_id, '00000000-0000-0000-0000-000000000000'::uuid)) DO NOTHING RETURNING *`,
+             SELECT $1,$2::uuid,$3::uuid,$4,$5,$6
+             WHERE NOT EXISTS (
+               SELECT 1 FROM merch_execution_categories
+               WHERE route_id=$1 AND category_id IS NOT DISTINCT FROM $2::uuid AND route_brand_id IS NOT DISTINCT FROM $3::uuid
+             )
+             RETURNING *`,
             [req.params.id, data.catId, data.brandId, data.catName, req.employeeId, !brandRequirePhotos]
           );
           if (ins.rows[0]) categoryStatuses.push(ins.rows[0]);
@@ -2034,18 +2039,28 @@ router.post('/promotor/routes/:routeId/categories/:catId/point-type', promotorAu
     }
 
     const result = await query(
-      `INSERT INTO merch_execution_categories (
-         route_id, category_id, route_brand_id, category_name, point_type, point_type_at, performed_by, products_unlocked, updated_at
-       ) VALUES ($1,$2,$3,$4,$5,NOW(),$6,$7,NOW())
-       ON CONFLICT (route_id, category_id, COALESCE(route_brand_id, '00000000-0000-0000-0000-000000000000'::uuid))
-       DO UPDATE SET
-         category_name = EXCLUDED.category_name,
-         point_type = EXCLUDED.point_type,
-         point_type_at = NOW(),
-         performed_by = EXCLUDED.performed_by,
-         products_unlocked = CASE WHEN EXCLUDED.products_unlocked = true THEN true ELSE merch_execution_categories.products_unlocked END,
-         updated_at = NOW()
-       RETURNING *`,
+      `WITH updated AS (
+         UPDATE merch_execution_categories
+         SET category_name = $4,
+             point_type = $5,
+             point_type_at = NOW(),
+             performed_by = $6,
+             products_unlocked = CASE WHEN $7::boolean = true THEN true ELSE products_unlocked END,
+             updated_at = NOW()
+         WHERE route_id=$1 AND category_id IS NOT DISTINCT FROM $2::uuid AND route_brand_id IS NOT DISTINCT FROM $3::uuid
+         RETURNING *
+       ), inserted AS (
+         INSERT INTO merch_execution_categories (
+           route_id, category_id, route_brand_id, category_name, point_type, point_type_at, performed_by, products_unlocked, updated_at
+         )
+         SELECT $1,$2::uuid,$3::uuid,$4,$5,NOW(),$6,$7,NOW()
+         WHERE NOT EXISTS (SELECT 1 FROM updated)
+         RETURNING *
+       )
+       SELECT * FROM updated
+       UNION ALL
+       SELECT * FROM inserted
+       LIMIT 1`,
       [req.params.routeId, catId, route_brand_id || null, categoryInRoute.rows[0].category_name, point_type, req.employeeId, products_unlocked]
     );
 
