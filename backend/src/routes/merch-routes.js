@@ -2121,15 +2121,15 @@ router.post('/promotor/routes/:routeId/categories/:catId/after-photo', promotorA
        completed=CASE WHEN $7::boolean THEN true ELSE completed END,
        completed_at=CASE WHEN $7::boolean AND completed_at IS NULL THEN NOW() ELSE completed_at END,
        performed_by=$6, updated_at=NOW()
-       WHERE route_id=$1 AND category_id=$2 RETURNING *`,
-      [req.params.routeId, req.params.catId, primaryPhoto, latitude, longitude, req.employeeId, completes]
+       WHERE route_id=$1 AND category_id IS NOT DISTINCT FROM $2 RETURNING *`,
+      [req.params.routeId, catId, primaryPhoto, latitude, longitude, req.employeeId, completes]
     );
 
     for (const pUrl of photoList) {
       await query(
         `INSERT INTO route_photos (route_id, photo_type, category_id, photo_url, latitude, longitude, upload_source, uploaded_by)
          VALUES ($1,'category_after',$2,$3,$4,$5,'app',$6)`,
-        [req.params.routeId, req.params.catId, pUrl, latitude, longitude, req.employeeId]
+        [req.params.routeId, catId, pUrl, latitude, longitude, req.employeeId]
       );
       try {
         const routeInfo = await query('SELECT organization_id, brand_id, pdv_id, promoter_id FROM merch_routes WHERE id=$1', [req.params.routeId]);
@@ -2138,7 +2138,7 @@ router.post('/promotor/routes/:routeId/categories/:catId/after-photo', promotorA
           await query(
             `INSERT INTO live_photo_books (organization_id, brand_id, pdv_id, route_id, category_id, photo_type, photo_url, promoter_id, captured_at, upload_source)
              VALUES ($1,$2,$3,$4,$5,'after',$6,$7,NOW(),'app')`,
-            [r.organization_id, r.brand_id, r.pdv_id, req.params.routeId, req.params.catId, pUrl, r.promoter_id]
+            [r.organization_id, r.brand_id, r.pdv_id, req.params.routeId, catId, pUrl, r.promoter_id]
           );
         }
       } catch {}
