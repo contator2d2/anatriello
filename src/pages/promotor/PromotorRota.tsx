@@ -675,7 +675,12 @@ export default function PromotorRota() {
 
   const handleOpenProduct = useCallback((exec: any) => {
     const catStatus = categoryStatusMap[exec.category_id];
-    const requireCategoryPhotos = route?.require_category_photos !== false;
+    const routeBrandId = exec.route_brand_id;
+    const catStatus = categoryStatusMap[`${exec.category_id}_${routeBrandId || 'null'}`] || categoryStatusMap[exec.category_id];
+    
+    // Check checklist settings for this brand
+    const rb = isMultiBrand ? routeBrands.find((b: any) => b.id === routeBrandId) : null;
+    const requireCategoryPhotos = (rb || route as any)?.require_category_photos !== false;
     
     if (requireCategoryPhotos && !catStatus?.products_unlocked) {
       toast.error('Finalize a etapa de preparação da categoria antes de executar produtos.');
@@ -1054,11 +1059,14 @@ export default function PromotorRota() {
               const completedExecsThisBrand = filteredExecs.filter((e: any) => e.status === 'completed').length;
               const brandDone = totalExecsThisBrand > 0 && completedExecsThisBrand === totalExecsThisBrand;
               
-              const requireCategoryPhotos = route?.require_category_photos !== false;
+              // No contexto de multi-marcas, precisamos garantir que as fotos de categoria da marca ATUAL foram tiradas
+              const rb = isMultiBrand ? routeBrands.find((b: any) => b.brand_id === activeBrandId) : null;
+              const requireCategoryPhotos = (rb || route as any)?.require_category_photos !== false;
               
               const categoryEntries = Object.entries(groupedExecs);
               const categoriesMissingAfterPhoto = requireCategoryPhotos ? categoryEntries.filter(([, { catId, execs }]) => {
-                const catStatus = categoryStatusMap[catId];
+                const routeBrandId = execs[0]?.route_brand_id;
+                const catStatus = categoryStatusMap[`${catId}_${routeBrandId || 'null'}`] || categoryStatusMap[catId];
                 const catDone = execs.every((e: any) => e.status === 'completed');
                 return catDone && !catStatus?.category_after_photo && !catStatus?.completed;
               }) : [];
