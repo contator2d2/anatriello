@@ -1851,10 +1851,28 @@ router.put('/promotor/executions/:id', promotorAuth, async (req, res) => {
       [req.params.id, checked, qty_store, qty_stock, exposure_point, observation, status, req.employeeId]
     );
 
-    // Update route progress
+    // Update route and brand progress
     if (result.rows.length) {
-      const routeId = result.rows[0].route_id;
+      const exec = result.rows[0];
+      const routeId = exec.route_id;
+      const brandIdInRoute = exec.route_brand_id;
+      
       try {
+        // Update Brand Progress if applicable
+        if (brandIdInRoute) {
+          const brandProgress = await query(
+            `SELECT COUNT(*)::int as total, COUNT(*) FILTER (WHERE status='completed')::int as done
+             FROM route_product_executions WHERE route_brand_id=$1`, [brandIdInRoute]
+          );
+          const brandPct = brandProgress.rows[0].total > 0 ? (brandProgress.rows[0].done / brandProgress.rows[0].total * 100) : 0;
+          const brandStatus = brandPct >= 100 ? 'completed' : brandPct > 0 ? 'in_progress' : 'pending';
+          await query(
+            'UPDATE route_brands SET progress_pct=$2, status=$3, updated_at=NOW() WHERE id=$1', 
+            [brandIdInRoute, brandPct, brandStatus]
+          );
+        }
+
+        // Update Global Route Progress
         const progress = await query(
           `SELECT COUNT(*)::int as total, COUNT(*) FILTER (WHERE status='completed')::int as done
            FROM route_product_executions WHERE route_id=$1`, [routeId]
@@ -1959,6 +1977,7 @@ router.post('/promotor/routes/:routeId/categories/:catId/point-type', promotorAu
     }
 
     const catId = req.params.catId === 'null' ? null : req.params.catId;
+    const products_unlocked = !!req.body?.products_unlocked;
 
     const categoryInRoute = await query(
       `SELECT COUNT(*)::int AS total, COALESCE(MAX(pc.name), 'Sem nome') AS category_name
@@ -1974,31 +1993,35 @@ router.post('/promotor/routes/:routeId/categories/:catId/point-type', promotorAu
 
     const result = await query(
       `INSERT INTO merch_execution_categories (
-         route_id, category_id, category_name, point_type, point_type_at, performed_by, updated_at
-       ) VALUES ($1,$2,$3,$4,NOW(),$5,NOW())
+         route_id, category_id, category_name, point_type, point_type_at, performed_by, products_unlocked, updated_at
+       ) VALUES ($1,$2,$3,$4,NOW(),$5,$6,NOW())
        ON CONFLICT (route_id, category_id)
        DO UPDATE SET
          category_name = EXCLUDED.category_name,
          point_type = EXCLUDED.point_type,
          point_type_at = NOW(),
          performed_by = EXCLUDED.performed_by,
+         products_unlocked = CASE WHEN EXCLUDED.products_unlocked = true THEN true ELSE merch_execution_categories.products_unlocked END,
          updated_at = NOW()
        RETURNING *`,
-      [req.params.routeId, catId, categoryInRoute.rows[0].category_name, point_type, req.employeeId]
+      [req.params.routeId, catId, categoryInRoute.rows[0].category_name, point_type, req.employeeId, products_unlocked]
     );
 
     try {
       await query(
         `INSERT INTO route_execution_logs (route_id, action, details, performed_by, source)
          VALUES ($1,'category_point_type',$2,$3,'app')`,
-        [req.params.routeId, JSON.stringify({ category_id: catId, point_type, received_body: req.body }), req.employeeId]
+        [req.params.routeId, JSON.stringify({ category_id: catId, point_type, products_unlocked, received_body: req.body }), req.employeeId]
       );
     } catch (logErr) {
       logWarn('promotor.cat_point_type.log_failed', { routeId: req.params.routeId, catId: req.params.catId, error: logErr?.message });
     }
 
     res.json(result.rows[0]);
-  } catch (err) { logError('promotor.cat_point_type', err, { routeId: req.params.routeId, catId: req.params.catId, body: req.body }); res.status(500).json({ error: 'Erro' }); }
+  } catch (err) {
+    logError('promotor.cat_point_type.failed', { routeId: req.params.routeId, catId: req.params.catId, error: err.message }, err);
+    res.status(500).json({ error: 'Erro ao registrar tipo de ponto: ' + err.message });
+  }
 });
 
 // Promotor: Upload category before photo

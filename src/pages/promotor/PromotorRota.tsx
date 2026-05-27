@@ -135,11 +135,15 @@ function CategoryPreparation({ category, catId, categoryName, routeId, pdvName, 
             {hasPointType ? <CheckCircle2 className="h-3 w-3" /> : <span className="font-bold">1</span>}
             Tipo de Ponto
           </div>
-          <ChevronRight className="h-3 w-3 text-muted-foreground" />
-          <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full ${(hasPhoto || photos.length > 0) ? 'bg-green-500/20 text-green-700' : hasPointType ? 'bg-yellow-500/20 text-yellow-700' : 'bg-muted text-muted-foreground'}`}>
-            {(hasPhoto || photos.length > 0) ? <CheckCircle2 className="h-3 w-3" /> : <span className="font-bold">2</span>}
-            Foto{photoCount > 1 ? `s (${photoCount})` : ''}
-          </div>
+          {photoMode !== 'after' && (
+            <>
+              <ChevronRight className="h-3 w-3 text-muted-foreground" />
+              <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full ${(hasPhoto || photos.length > 0) ? 'bg-green-500/20 text-green-700' : hasPointType ? 'bg-yellow-500/20 text-yellow-700' : 'bg-muted text-muted-foreground'}`}>
+                {(hasPhoto || photos.length > 0) ? <CheckCircle2 className="h-3 w-3" /> : <span className="font-bold">2</span>}
+                Foto{photoCount > 1 ? `s (${photoCount})` : ''}
+              </div>
+            </>
+          )}
           <ChevronRight className="h-3 w-3 text-muted-foreground" />
           <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
             <Lock className="h-3 w-3" />
@@ -232,9 +236,11 @@ function CategoryPreparation({ category, catId, categoryName, routeId, pdvName, 
           <span>
             {!hasPointType
               ? 'Antes de iniciar, selecione se é ponto natural ou extra.'
-              : photos.length === 0 && !hasPhoto && photoMode !== 'after'
-                ? 'É necessário tirar a foto da categoria antes de acessar os produtos.'
-                : 'Registre a(s) foto(s) para liberar os produtos.'}
+              : photoMode === 'after'
+                ? 'Tipo de ponto selecionado. Liberando produtos...'
+                : photos.length === 0 && !hasPhoto
+                  ? 'É necessário tirar a foto da categoria antes de acessar os produtos.'
+                  : 'Registre a(s) foto(s) para liberar os produtos.'}
           </span>
         </div>
       </CardContent>
@@ -866,6 +872,9 @@ export default function PromotorRota() {
                 ? (isExtraGroup ? !hasExtraPhoto : !catStatus?.products_unlocked) 
                 : false;
                 
+              // Se o modo for "Só Depois" e já tiver selecionado o tipo de ponto, liberamos os produtos mesmo se o backend ainda não marcou products_unlocked
+              const effectivelyLocked = isLocked && !(photoMode === 'after' && catStatus?.point_type);
+                
               const doneCount = execs.filter((e: any) => e.status === 'completed').length;
               const allProductsDone = doneCount === execs.length && execs.length > 0;
               const hasAfterPhoto = !!catStatus?.category_after_photo || !!catStatus?.completed;
@@ -881,7 +890,7 @@ export default function PromotorRota() {
 
                 <div key={category}>
                   {/* Category preparation for normal groups */}
-                  {isLocked && !isExtraGroup && (
+                  {effectivelyLocked && !isExtraGroup && (
                     <CategoryPreparation
                       category={catStatus}
                       catId={catId}
@@ -914,7 +923,7 @@ export default function PromotorRota() {
                   {/* Category header */}
                   <div className="flex items-center justify-between mb-2 mt-3">
                     <div className="flex items-center gap-2">
-                      {hasAfterPhoto ? <CheckCircle2 className="h-4 w-4 text-green-600" /> : isExtraGroup ? <Target className="h-4 w-4 text-orange-600" /> : (requireCategoryPhotos && isLocked) ? <Lock className="h-4 w-4 text-muted-foreground" /> : <Unlock className="h-4 w-4 text-green-600" />}
+                      {hasAfterPhoto ? <CheckCircle2 className="h-4 w-4 text-green-600" /> : isExtraGroup ? <Target className="h-4 w-4 text-orange-600" /> : (requireCategoryPhotos && effectivelyLocked) ? <Lock className="h-4 w-4 text-muted-foreground" /> : <Unlock className="h-4 w-4 text-green-600" />}
                       <h3 className="text-sm font-bold">{category}</h3>
                       {hasAfterPhoto && (
                         <Badge variant="secondary" className="text-[9px] bg-green-100 text-green-700">✅ Concluída</Badge>
@@ -963,7 +972,7 @@ export default function PromotorRota() {
                   </div>
 
                   {/* Products list (locked or unlocked) */}
-                  <div className={`space-y-1.5 ${isLocked ? 'opacity-40 pointer-events-none select-none' : ''}`}>
+                  <div className={`space-y-1.5 ${effectivelyLocked ? 'opacity-40 pointer-events-none select-none' : ''}`}>
                     {execs.map((exec: any) => (
                       <Card key={exec.id} className={`transition-colors hover:border-primary/40 ${exec.status === 'completed' ? 'border-green-500/30 bg-green-500/5' : ''}`}>
                         <CardContent className="p-3">
@@ -1026,9 +1035,22 @@ export default function PromotorRota() {
 
             {/* Complete Route button */}
             {(() => {
-              const totalExecs = filteredExecs.length;
-              const completedExecs = filteredExecs.filter((e: any) => e.status === 'completed').length;
-              const allProductsDone = totalExecs > 0 && completedExecs === totalExecs;
+              // Para rotas multi-marcas, a conclusão global deve checar TODOS os produtos de TODAS as marcas
+              const allExecutions = route?.executions || [];
+              const totalExecsGlobal = allExecutions.length;
+              const completedExecsGlobal = allExecutions.filter((e: any) => e.status === 'completed').length;
+              const allProductsDoneGlobal = totalExecsGlobal > 0 && completedExecsGlobal === totalExecsGlobal;
+              
+              // Também checamos se todas as marcas estão concluídas (para garantir que fotos obrigatórias foram tiradas)
+              const allBrandsCompleted = isMultiBrand 
+                ? routeBrands.every((rb: any) => rb.status === 'completed' || rb.progress_pct >= 100)
+                : true;
+
+              // Para o feedback visual no botão da marca atual
+              const totalExecsThisBrand = filteredExecs.length;
+              const completedExecsThisBrand = filteredExecs.filter((e: any) => e.status === 'completed').length;
+              const brandDone = totalExecsThisBrand > 0 && completedExecsThisBrand === totalExecsThisBrand;
+              
               const requireCategoryPhotos = route?.require_category_photos !== false;
               
               const categoryEntries = Object.entries(groupedExecs);
@@ -1037,24 +1059,25 @@ export default function PromotorRota() {
                 const catDone = execs.every((e: any) => e.status === 'completed');
                 return catDone && !catStatus?.category_after_photo && !catStatus?.completed;
               }) : [];
-              const allCategoriesCompleted = categoriesMissingAfterPhoto.length === 0;
+              const currentBrandCategoriesCompleted = categoriesMissingAfterPhoto.length === 0;
               
               const minDuration = parseInt(route?.min_duration_minutes || "0", 10);
               const checkinAt = route?.checkin_at ? new Date(route.checkin_at) : null;
               const elapsedMinutes = checkinAt ? Math.floor((currentTime.getTime() - checkinAt.getTime()) / 60000) : 0;
               const hasMinDurationMet = minDuration === 0 || elapsedMinutes >= minDuration;
               
-              const allDone = allProductsDone && allCategoriesCompleted && hasMinDurationMet;
+              // A rota só pode ser concluída se TODOS os produtos de TODAS as marcas estiverem prontos
+              const canCompleteRoute = allProductsDoneGlobal && allBrandsCompleted && hasMinDurationMet;
               
               return (
                 <>
                   <Button className="w-full h-12" onClick={() => {
-                    if (!allProductsDone) {
-                      toast.error(`Ainda faltam ${totalExecs - completedExecs} produto(s) para concluir. Todos devem estar 100% executados.`);
+                    if (!allProductsDoneGlobal) {
+                      toast.error(`Ainda faltam ${totalExecsGlobal - completedExecsGlobal} produto(s) no total para concluir a rota.`);
                       return;
                     }
-                    if (!allCategoriesCompleted) {
-                      toast.error(`${categoriesMissingAfterPhoto.length} categoria(s) ainda precisam da foto DEPOIS para serem concluídas.`);
+                    if (!allBrandsCompleted) {
+                      toast.error(`Existem marcas que ainda não foram totalmente concluídas.`);
                       return;
                     }
                     if (!hasMinDurationMet) {
@@ -1062,19 +1085,19 @@ export default function PromotorRota() {
                       return;
                     }
                     setShowCompleteRoute(true);
-                  }} disabled={checkout.isPending} variant={allDone ? 'default' : 'secondary'}>
-                    <Check className="h-5 w-5 mr-2" /> Concluir Rota ({completedExecs}/{totalExecs})
+                  }} disabled={checkout.isPending} variant={canCompleteRoute ? 'default' : 'secondary'}>
+                    <Check className="h-5 w-5 mr-2" /> Concluir Rota ({completedExecsGlobal}/{totalExecsGlobal})
                   </Button>
-                  {!allDone && (
+                  {!canCompleteRoute && (
                     <div className="space-y-1">
                       <p className="text-[10px] text-center text-destructive">
-                        ⚠️ {!allProductsDone 
-                          ? 'Todos os produtos devem estar executados (100%) para concluir a rota.'
-                          : !allCategoriesCompleted 
-                            ? 'Tire a foto DEPOIS de todas as categorias para concluir a rota.'
+                        ⚠️ {!allProductsDoneGlobal 
+                          ? 'Todos os produtos de TODAS as marcas devem estar executados (100%) para concluir a rota.'
+                          : !allBrandsCompleted 
+                            ? 'Conclua o checklist de todas as marcas antes de finalizar a rota.'
                             : `Tempo mínimo: faltam ${minDuration - elapsedMinutes} min.`}
                       </p>
-                      {allProductsDone && allCategoriesCompleted && !hasMinDurationMet && (
+                      {allProductsDoneGlobal && allBrandsCompleted && !hasMinDurationMet && (
                         <p className="text-[10px] text-center text-muted-foreground flex items-center justify-center gap-1">
                           <Clock className="h-3 w-3" /> Tempo mínimo de permanência: {minDuration} min
                         </p>
