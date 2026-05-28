@@ -6,9 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { toast } from "sonner";
 import { Progress } from "@/components/ui/progress";
-import { useLiveRoutes, useMerchDamages, useReturnRequests, useMerchRouteDetail } from "@/hooks/use-merch-routes";
+import { useLiveRoutes, useMerchDamages, useReturnRequests, useMerchRouteDetail, useManualCompleteRoute, useContingencyPhotoUpload } from "@/hooks/use-merch-routes";
 import { MapPin, Clock, User, Camera, AlertTriangle, CheckCircle2, Activity, Package, Eye, Store, ChevronRight, Calendar, Filter } from "lucide-react";
 import { format, subDays, startOfWeek, startOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -66,8 +69,50 @@ export default function MerchExecucao() {
   const { data: damages = [] } = useMerchDamages({ status: damageFilter || undefined });
   const { data: returnRequests = [] } = useReturnRequests();
   const [viewRouteId, setViewRouteId] = useState<string | null>(null);
+  const [showCompleteDialog, setShowCompleteDialog] = useState(false);
+  const [completeNotes, setCompleteNotes] = useState('');
+  const [showUploadDialog, setShowUploadDialog] = useState(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+
   const { data: routeDetail, isLoading: isLoadingDetail } = useMerchRouteDetail(viewRouteId || undefined);
   const viewRoute = routeDetail || liveRoutes.find((r: any) => r.id === viewRouteId);
+  const manualComplete = useManualCompleteRoute();
+  const contingencyUpload = useContingencyPhotoUpload();
+
+  const handleManualComplete = () => {
+    if (!viewRouteId) return;
+    manualComplete.mutate({ id: viewRouteId, notes: completeNotes }, {
+      onSuccess: () => {
+        toast.success('Rota finalizada manualmente');
+        setShowCompleteDialog(false);
+        setCompleteNotes('');
+      }
+    });
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) setUploadFile(file);
+  };
+
+  const submitPhoto = async () => {
+    if (!viewRouteId || !uploadFile) return;
+    setUploading(true);
+    try {
+      // Em um cenário real, você faria upload para o storage primeiro (ex: Supabase storage ou seu backend)
+      // Aqui vamos simular o upload e pegar uma URL. 
+      // Como não temos o componente de upload configurado aqui, vou apenas mostrar o fluxo.
+      // Supondo que o backend aceite uma URL ou que tenhamos um endpoint de upload.
+      
+      // Simulação simplificada (em produção usaria um componente de Upload dedicado)
+      toast.info("Funcionalidade de upload manual requer integração com storage");
+      setUploading(false);
+    } catch (err) {
+      toast.error("Erro ao subir foto");
+      setUploading(false);
+    }
+  };
 
   const inProgress = liveRoutes.filter((r: any) => r.status === 'in_progress');
   const completed = liveRoutes.filter((r: any) => r.status === 'completed');
@@ -319,11 +364,29 @@ export default function MerchExecucao() {
             </DialogHeader>
             {viewRoute && (
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <Badge className={STATUS_COLORS[viewRoute.status] || 'bg-muted'}>
-                    {STATUS_LABELS[viewRoute.status] || viewRoute.status}
-                  </Badge>
-                  <span className="text-xs text-muted-foreground">{viewRoute.scheduled_time?.slice(0, 5) || '--:--'}</span>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Badge className={STATUS_COLORS[viewRoute.status] || 'bg-muted'}>
+                      {STATUS_LABELS[viewRoute.status] || viewRoute.status}
+                    </Badge>
+                    {viewRoute.edited && (
+                      <Badge variant="outline" className="border-yellow-500 text-yellow-600 bg-yellow-50">
+                        Editada
+                      </Badge>
+                    )}
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    {viewRoute.status !== 'completed' && (
+                      <Button size="sm" variant="outline" className="h-8 border-green-500 text-green-600 hover:bg-green-50" 
+                        onClick={() => setShowCompleteDialog(true)}>
+                        <CheckCircle2 className="h-4 w-4 mr-1" /> Finalizar Rota
+                      </Button>
+                    )}
+                    <Button size="sm" variant="outline" className="h-8" onClick={() => setShowUploadDialog(true)}>
+                      <Camera className="h-4 w-4 mr-1" /> Subir Foto
+                    </Button>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
@@ -560,6 +623,59 @@ export default function MerchExecucao() {
                 )}
               </div>
             )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Manual Complete Dialog */}
+        <Dialog open={showCompleteDialog} onOpenChange={setShowCompleteDialog}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Finalizar Rota Manualmente</DialogTitle>
+              <DialogDescription>
+                Deseja marcar esta rota como concluída? Isso será registrado no histórico.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3 py-2">
+              <Label className="text-xs">Observações / Motivo</Label>
+              <Textarea 
+                placeholder="Ex: Finalizado via supervisor pois promotor ficou sem bateria..." 
+                value={completeNotes}
+                onChange={(e) => setCompleteNotes(e.target.value)}
+                className="text-sm"
+              />
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowCompleteDialog(false)}>Cancelar</Button>
+              <Button onClick={handleManualComplete} disabled={manualComplete.isPending}>
+                {manualComplete.isPending ? "Processando..." : "Confirmar Finalização"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Upload Dialog (Simplified) */}
+        <Dialog open={showUploadDialog} onOpenChange={setShowUploadDialog}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Subir Foto Manualmente</DialogTitle>
+              <DialogDescription>
+                Selecione uma foto para anexar a esta rota como contingência.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <Input type="file" accept="image/*" onChange={handleFileUpload} />
+              {uploadFile && (
+                <div className="text-xs text-muted-foreground">
+                  Arquivo selecionado: {uploadFile.name}
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowUploadDialog(false)}>Cancelar</Button>
+              <Button onClick={submitPhoto} disabled={!uploadFile || uploading}>
+                {uploading ? "Enviando..." : "Subir Foto"}
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>

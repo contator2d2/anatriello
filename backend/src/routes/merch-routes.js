@@ -394,6 +394,60 @@ router.put('/routes/:id', async (req, res) => {
   } catch (err) { logError('routes.update', err); res.status(500).json({ error: 'Erro ao atualizar rota' }); }
 });
 
+// Admin/Supervisor: Manually complete a route
+router.post('/routes/:id/complete', async (req, res) => {
+  try {
+    const orgRes = await query('SELECT organization_id FROM organization_members WHERE user_id=$1 LIMIT 1', [req.userId]);
+    if (!orgRes.rows.length) return res.status(403).json({ error: 'Sem organização' });
+    const orgId = orgRes.rows[0].organization_id;
+
+    const { notes } = req.body;
+
+    const route = await query('SELECT * FROM merch_routes WHERE id=$1 AND organization_id=$2', [req.params.id, orgId]);
+    if (!route.rows.length) return res.status(404).json({ error: 'Rota não encontrada' });
+    const old = route.rows[0];
+
+    // Update the route status to completed
+    const result = await query(
+      `UPDATE merch_routes 
+       SET status='completed', 
+           completed_at=NOW(), 
+           checkout_at=COALESCE(checkout_at, NOW()),
+           progress_pct=100,
+           completion_notes=COALESCE($3, completion_notes),
+           updated_at=NOW() 
+       WHERE id=$1 AND organization_id=$2 RETURNING *`,
+      [req.params.id, orgId, notes]
+    );
+
+    // Audit log
+    await query(
+      `INSERT INTO route_edit_audit_logs (route_id, field_changed, old_value, new_value, edited_by, editor_role, source, reason, route_was_completed)
+       VALUES ($1,'status',$2,'completed',$3,'supervisor','web',$4,$5)`,
+      [req.params.id, old.status, req.userId, notes || 'Finalização manual pelo supervisor', old.status === 'completed']
+    );
+
+    // Execution author
+    await query(
+      `INSERT INTO execution_authors (route_id, action, performed_by, performer_role, source, details)
+       VALUES ($1,'route_manually_completed',$2,'supervisor','web',$3)`,
+      [req.params.id, req.userId, JSON.stringify({ notes, old_status: old.status })]
+    );
+
+    // Add to execution logs
+    await query(
+      `INSERT INTO route_execution_logs (route_id, action, details, performed_by, source)
+       VALUES ($1,'route_completed',$2,$3,'web_admin')`,
+      [req.params.id, JSON.stringify({ manual: true, notes }), req.userId]
+    );
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    logError('routes.manual_complete', err);
+    res.status(500).json({ error: 'Erro ao finalizar rota manualmente' });
+  }
+});
+
 // Delete route (supports scope: 'single' | 'future')
 router.delete('/routes/:id', async (req, res) => {
   try {

@@ -111,6 +111,19 @@ export function useDuplicateMerchRoute() {
   });
 }
 
+export function useManualCompleteRoute() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, notes }: { id: string; notes?: string }) =>
+      api<any>(`/api/merch/routes/${id}/complete`, { method: 'POST', body: { notes } }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['merch-routes'] });
+      qc.invalidateQueries({ queryKey: ['merch-route'] });
+      qc.invalidateQueries({ queryKey: ['merch-routes-live'] });
+    },
+  });
+}
+
 export function useLiveRoutes(filters?: { date_from?: string; date_to?: string }) {
   const params = new URLSearchParams();
   if (filters?.date_from) params.set('date_from', filters.date_from);
