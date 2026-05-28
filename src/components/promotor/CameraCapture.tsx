@@ -1,9 +1,10 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { Camera, RotateCcw, Check, X, Loader2, AlertTriangle } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Camera, RotateCcw, Check, X, Loader2, AlertTriangle, Upload } from "lucide-react";
 import { useUpload } from "@/hooks/use-upload";
 import { toast } from "sonner";
+import { Input } from "@/components/ui/input";
 
 interface WatermarkData {
   pdvName?: string;
@@ -22,6 +23,7 @@ interface CameraCaptureProps {
   buttonClassName?: string;
   disabled?: boolean;
   qualityConfig?: PhotoQualityConfig;
+  allowManualUpload?: boolean;
 }
 
 export interface PhotoQualityConfig {
@@ -197,8 +199,10 @@ export function CameraCapture({
   buttonClassName,
   disabled,
   qualityConfig,
+  allowManualUpload = true,
 }: CameraCaptureProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [isManualOpen, setIsManualOpen] = useState(false);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -206,6 +210,7 @@ export function CameraCapture({
   const [facingMode, setFacingMode] = useState<"environment" | "user">("environment");
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { uploadFile, isUploading } = useUpload(customTokenGetter);
   const config = { ...DEFAULT_QUALITY_CONFIG, ...qualityConfig };
 
@@ -341,24 +346,122 @@ export function CameraCapture({
     }
   };
 
+  const handleManualFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast.error("Por favor, selecione um arquivo de imagem.");
+      return;
+    }
+
+    setIsProcessing(true);
+    setValidationError(null);
+
+    try {
+      // Load image into canvas for validation and watermark
+      const img = new Image();
+      img.src = URL.createObjectURL(file);
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+      });
+
+      if (!canvasRef.current) return;
+      const canvas = canvasRef.current;
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.drawImage(img, 0, 0);
+
+      // Validate quality
+      const result = analyzeImageQuality(canvas, config);
+      if (!result.valid) {
+        setValidationError(`A imagem do computador não passou na validação: ${result.message}`);
+        toast.error(result.message || "A imagem não passou nos critérios de qualidade.");
+        setIsProcessing(false);
+        return;
+      }
+
+      // If valid, show it as captured image
+      setCapturedImage(canvas.toDataURL("image/jpeg", 0.95));
+      setIsManualOpen(false);
+      setIsOpen(true); // Open the preview dialog
+    } catch (err) {
+      toast.error("Erro ao processar imagem do computador.");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const busy = isProcessing || isUploading;
 
   return (
-    <>
-      <Button
-        type="button"
-        variant="outline"
-        className={buttonClassName || "w-full h-14 flex-col gap-1 border-2 border-dashed border-primary/40 hover:border-primary hover:bg-primary/5"}
-        onClick={handleOpen}
-        disabled={disabled}
-      >
-        <Camera className="h-5 w-5 text-primary" />
-        <span className="text-xs font-medium">{buttonLabel}</span>
-      </Button>
+    <div className="flex flex-col gap-2">
+      <div className="flex gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          className={cn(
+            "flex-1 h-14 flex-col gap-1 border-2 border-dashed border-primary/40 hover:border-primary hover:bg-primary/5",
+            buttonClassName
+          )}
+          onClick={handleOpen}
+          disabled={disabled}
+        >
+          <Camera className="h-5 w-5 text-primary" />
+          <span className="text-xs font-medium">{buttonLabel}</span>
+        </Button>
 
-      <Dialog open={isOpen} onOpenChange={(open) => { if (!open) handleClose(); }}>
-        <DialogContent className="max-w-md p-0 overflow-hidden bg-black">
-          <canvas ref={canvasRef} className="hidden" />
+        {allowManualUpload && (
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="w-14 h-14 border-2 border-dashed border-muted-foreground/40 hover:border-primary hover:bg-primary/5"
+            onClick={() => setIsManualOpen(true)}
+            disabled={disabled}
+          >
+            <Upload className="h-5 w-5 text-muted-foreground" />
+          </Button>
+        )}
+      </div>
+
+      {/* Hidden canvas for processing */}
+      <canvas ref={canvasRef} className="hidden" />
+
+      {/* Manual Upload Dialog */}
+      <Dialog open={isManualOpen} onOpenChange={setIsManualOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Subir Foto do Computador</DialogTitle>
+            <DialogDescription>
+              A foto passará pelos mesmos critérios de validação (brilho, nitidez e resolução) da câmera.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <Input 
+              type="file" 
+              accept="image/*" 
+              onChange={handleManualFile}
+              disabled={isProcessing}
+            />
+            {validationError && (
+              <div className="p-3 bg-destructive/10 text-destructive text-xs flex items-center gap-2 rounded-md">
+                <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+                <span>{validationError}</span>
+              </div>
+            )}
+            <p className="text-[10px] text-muted-foreground italic">
+              * A marca d'água será aplicada automaticamente após a validação.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsManualOpen(false)}>Cancelar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
           {/* Live camera view */}
           {!capturedImage && (
