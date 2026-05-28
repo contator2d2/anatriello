@@ -25,6 +25,7 @@ interface BrandRecordProps {
 export function BrandRecord({ brandId, brandName, onClose, dateRange }: BrandRecordProps) {
   const [activeTab, setActiveTab] = useState("overview");
   const [pdvFilter, setPdvFilter] = useState("all");
+  const [selectedPDV, setSelectedPDV] = useState<any>(null);
   const { data, isLoading } = useMerchBrandRecord(brandId, dateRange);
 
   const filteredStockouts = useMemo(() => {
