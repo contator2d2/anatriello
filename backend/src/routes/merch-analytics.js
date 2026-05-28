@@ -350,17 +350,20 @@ router.get('/report/promoter', async (req, res) => {
 
     for (const row of rows) {
       try {
-        const ps = (await query(`
-          SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE rpe.status='completed') as executed,
-            COALESCE(SUM(rpe.damage_qty_store + rpe.damage_qty_stock),0) as damages,
-            COALESCE(SUM(rpe.stockout_qty_store + rpe.stockout_qty_stock),0) as stockouts
-          FROM route_product_executions rpe JOIN merch_routes r ON r.id = rpe.route_id
-          WHERE r.promoter_id = $1 AND r.organization_id = $2
+        const stats = (await query(`
+          SELECT 
+            (SELECT COUNT(*) FROM route_product_executions rpe JOIN merch_routes r2 ON r2.id = rpe.route_id WHERE r2.promoter_id = $1 AND r2.organization_id = $2) as executed,
+            (SELECT COALESCE(SUM(qty_store + qty_stock), 0) FROM product_damages pd JOIN merch_routes r2 ON r2.id = pd.route_id WHERE r2.promoter_id = $1 AND r2.organization_id = $2) as damages,
+            (SELECT COALESCE(SUM(qty_store + qty_stock), 0) FROM product_ruptures pr JOIN merch_routes r2 ON r2.id = pr.route_id WHERE r2.promoter_id = $1 AND r2.organization_id = $2) as stockouts
         `, [row.promoter_id, orgId])).rows[0];
-        row.products_executed = parseInt(ps?.executed) || 0;
-        row.damages = parseInt(ps?.damages) || 0;
-        row.stockouts = parseInt(ps?.stockouts) || 0;
-      } catch { row.products_executed = 0; row.damages = 0; row.stockouts = 0; }
+        
+        row.products_executed = parseInt(stats?.executed) || 0;
+        row.damages = parseInt(stats?.damages) || 0;
+        row.stockouts = parseInt(stats?.stockouts) || 0;
+      } catch (e) { 
+        logError('promoter_report_enrich', e);
+        row.products_executed = 0; row.damages = 0; row.stockouts = 0; 
+      }
 
       // Photos
       try {
