@@ -248,19 +248,22 @@ router.get('/report/pdv', async (req, res) => {
     // Enrich with product execution stats
     for (const row of rows) {
       try {
-        const pStats = (await query(`
-          SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE rpe.status='completed') as executed,
-            COALESCE(SUM(rpe.damage_qty_store + rpe.damage_qty_stock), 0) as damages,
-            COALESCE(SUM(rpe.stockout_qty_store + rpe.stockout_qty_stock), 0) as stockouts
-          FROM route_product_executions rpe
-          JOIN merch_routes r ON r.id = rpe.route_id
-          WHERE r.pdv_id = $1 AND r.organization_id = $2 ${filters.replace(/r\.pdv_id[^A]+/g, '')}
+        const stats = (await query(`
+          SELECT 
+            (SELECT COUNT(*) FROM route_product_executions rpe JOIN merch_routes r2 ON r2.id = rpe.route_id WHERE r2.pdv_id = $1 AND r2.organization_id = $2 ${filters.replace(/r\./g, 'r2.').replace(/r2\.pdv_id[^A]+/g, '')}) as total,
+            (SELECT COUNT(*) FROM route_product_executions rpe JOIN merch_routes r2 ON r2.id = rpe.route_id WHERE r2.pdv_id = $1 AND r2.organization_id = $2 AND rpe.status = 'completed' ${filters.replace(/r\./g, 'r2.').replace(/r2\.pdv_id[^A]+/g, '')}) as executed,
+            (SELECT COALESCE(SUM(qty_store + qty_stock), 0) FROM product_damages pd JOIN merch_routes r2 ON r2.id = pd.route_id WHERE r2.pdv_id = $1 AND r2.organization_id = $2 ${filters.replace(/r\./g, 'r2.').replace(/r2\.pdv_id[^A]+/g, '')}) as damages,
+            (SELECT COALESCE(SUM(qty_store + qty_stock), 0) FROM product_ruptures pr JOIN merch_routes r2 ON r2.id = pr.route_id WHERE r2.pdv_id = $1 AND r2.organization_id = $2 ${filters.replace(/r\./g, 'r2.').replace(/r2\.pdv_id[^A]+/g, '')}) as stockouts
         `, [row.pdv_id, orgId, ...(date_from ? [date_from] : []), ...(date_to ? [date_to] : [])])).rows[0];
-        row.total_products = parseInt(pStats?.total) || 0;
-        row.executed_products = parseInt(pStats?.executed) || 0;
-        row.damages = parseInt(pStats?.damages) || 0;
-        row.stockouts = parseInt(pStats?.stockouts) || 0;
-      } catch { row.total_products = 0; row.executed_products = 0; row.damages = 0; row.stockouts = 0; }
+        
+        row.total_products = parseInt(stats?.total) || 0;
+        row.executed_products = parseInt(stats?.executed) || 0;
+        row.damages = parseInt(stats?.damages) || 0;
+        row.stockouts = parseInt(stats?.stockouts) || 0;
+      } catch (e) { 
+        logError('pdv_report_enrich', e);
+        row.total_products = 0; row.executed_products = 0; row.damages = 0; row.stockouts = 0; 
+      }
       row.score = row.total_visits > 0 ? Math.round((parseInt(row.completed) / parseInt(row.total_visits)) * 100) : 0;
     }
     res.json(rows);
