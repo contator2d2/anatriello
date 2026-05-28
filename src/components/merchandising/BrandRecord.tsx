@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -6,7 +6,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   Route, Store, Package, Activity, AlertTriangle, 
   Download, FileSpreadsheet, Map as MapIcon, Calendar,
-  ChevronRight, UserCheck, CheckCircle2, Search, X, Filter
+  ChevronRight, UserCheck, CheckCircle2, Search, X, Filter,
+  Navigation, MapPin
 } from "lucide-react";
 import { useMerchBrandRecord } from "@/hooks/use-merch-analytics";
 import { format } from "date-fns";
@@ -14,6 +15,9 @@ import { ptBR } from "date-fns/locale";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+
 
 interface BrandRecordProps {
   brandId: string;
@@ -26,13 +30,59 @@ export function BrandRecord({ brandId, brandName, onClose, dateRange }: BrandRec
   const [activeTab, setActiveTab] = useState("overview");
   const [pdvFilter, setPdvFilter] = useState("all");
   const [selectedPDV, setSelectedPDV] = useState<any>(null);
+  const mapRef = useRef<HTMLDivElement>(null);
+  const leafletMapRef = useRef<L.Map | null>(null);
   const { data, isLoading } = useMerchBrandRecord(brandId, dateRange);
+
+  useEffect(() => {
+    if (activeTab === 'map' && data?.pdvs && mapRef.current && !leafletMapRef.current) {
+      const validPdvs = data.pdvs.filter((p: any) => p.latitude && p.longitude);
+      
+      if (validPdvs.length > 0) {
+        const map = L.map(mapRef.current).setView([validPdvs[0].latitude, validPdvs[0].longitude], 12);
+        
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        validPdvs.forEach((pdv: any) => {
+          const marker = L.marker([pdv.latitude, pdv.longitude])
+            .addTo(map)
+            .bindPopup(`
+              <div class="p-2 min-w-[150px]">
+                <h4 class="font-bold text-sm mb-1">${pdv.name}</h4>
+                <p class="text-xs text-muted-foreground mb-2">${pdv.address || ''}</p>
+                <div class="flex flex-col gap-1 text-[10px]">
+                  <span class="flex items-center gap-1"><strong>Visitas:</strong> ${pdv.visit_count}</span>
+                  <span class="flex items-center gap-1"><strong>Mix:</strong> ${pdv.product_count} itens</span>
+                </div>
+              </div>
+            `);
+          
+          marker.on('click', () => setSelectedPDV(pdv));
+        });
+
+        const group = new L.FeatureGroup(validPdvs.map((p: any) => L.marker([p.latitude, p.longitude])));
+        map.fitBounds(group.getBounds().pad(0.1));
+        
+        leafletMapRef.current = map;
+      }
+    }
+
+    return () => {
+      if (leafletMapRef.current) {
+        leafletMapRef.current.remove();
+        leafletMapRef.current = null;
+      }
+    };
+  }, [activeTab, data?.pdvs]);
 
   const filteredStockouts = useMemo(() => {
     if (!data?.stockouts) return [];
     if (pdvFilter === "all") return data.stockouts;
     return data.stockouts.filter((s: any) => s.pdv_name === pdvFilter);
   }, [data?.stockouts, pdvFilter]);
+
 
   if (isLoading) {
     return (
@@ -363,6 +413,83 @@ export function BrandRecord({ brandId, brandName, onClose, dateRange }: BrandRec
                       <th className="text-left p-3 font-medium">Produto</th>
                       <th className="text-left p-3 font-medium">Motivo</th>
                       <th className="text-right p-3 font-medium">Qtd</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {filteredStockouts.map((s: any) => (
+                      <tr key={s.id} className="hover:bg-muted/20 transition-colors">
+                        <td className="p-3 text-xs">{format(new Date(s.report_date), 'dd/MM')}</td>
+                        <td className="p-3 text-xs font-medium">{s.pdv_name}</td>
+                        <td className="p-3">
+                          <p className="font-medium text-xs">{s.product_name}</p>
+                          <p className="text-[10px] text-muted-foreground">{s.product_sku}</p>
+                        </td>
+                        <td className="p-3 text-xs text-muted-foreground">{s.reason}</td>
+                        <td className="p-3 text-right text-xs font-bold">{s.qty_store + s.qty_stock}</td>
+                      </tr>
+                    ))}
+                    {filteredStockouts.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="p-8 text-center text-muted-foreground text-xs italic">
+                          Nenhuma ruptura registrada no período.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </ScrollArea>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="map" className="mt-6">
+          <Card className="overflow-hidden">
+            <CardHeader className="p-4 bg-muted/30 border-b">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <MapIcon className="h-4 w-4 text-primary" />
+                    Geolocalização de PDVs
+                  </CardTitle>
+                  <CardDescription className="text-[10px]">
+                    Visualização espacial dos pontos de venda atendidos para {brandName}
+                  </CardDescription>
+                </div>
+                <Badge variant="outline" className="text-[10px]">
+                  {data?.pdvs?.filter((p: any) => p.latitude && p.longitude).length || 0} pontos mapeados
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0 relative">
+              <div 
+                ref={mapRef} 
+                className="h-[500px] w-full z-0"
+              />
+              
+              {(!data?.pdvs || data.pdvs.filter((p: any) => p.latitude && p.longitude).length === 0) && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-muted/20 backdrop-blur-[1px] z-10">
+                  <div className="bg-background/80 p-6 rounded-xl border shadow-sm text-center max-w-xs">
+                    <MapPin className="h-10 w-10 text-muted-foreground mx-auto mb-2 opacity-50" />
+                    <p className="text-sm font-medium text-muted-foreground">Sem dados de geolocalização</p>
+                    <p className="text-[10px] text-muted-foreground mt-1">
+                      Os PDVs desta marca não possuem coordenadas de latitude e longitude cadastradas.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <div className="absolute bottom-4 right-4 z-[400] bg-background/95 p-3 rounded-lg border shadow-lg max-w-[200px] text-[10px]">
+                <p className="font-bold mb-2 uppercase tracking-wider text-muted-foreground">Legenda</p>
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="w-3 h-3 rounded-full bg-blue-500" />
+                  <span>Ponto de Venda</span>
+                </div>
+                <p className="mt-2 text-muted-foreground italic">Clique no marcador para ver detalhes do PDV e acessar o mix.</p>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
                     </tr>
                   </thead>
                   <tbody className="divide-y">
