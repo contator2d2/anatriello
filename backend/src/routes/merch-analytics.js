@@ -515,9 +515,9 @@ router.get('/report/category', authenticate, async (req, res) => {
         COALESCE(SUM(rpe.stockout_qty_store + rpe.stockout_qty_stock),0) as stockouts,
         COALESCE(SUM(rpe.stock_qty_store + rpe.stock_qty_stock),0) as total_stock,
         COALESCE(SUM(rpe.expiry_qty_store + rpe.expiry_qty_stock),0) as expiries
-      FROM route_product_executions rpe
+      JOIN route_product_executions rpe
       JOIN merch_routes r ON r.id = rpe.route_id
-      JOIN products p ON p.id = rpe.product_id
+      JOIN merch_products p ON p.id = rpe.product_id
       LEFT JOIN merch_categories c ON c.id = p.category_id
       WHERE r.organization_id = $1 ${filters}
       GROUP BY c.id, c.name
