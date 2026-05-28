@@ -100,10 +100,11 @@ export function BrandRecord({ brandId, brandName, onClose, dateRange }: BrandRec
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid grid-cols-5 w-full">
+        <TabsList className="grid grid-cols-6 w-full">
           <TabsTrigger value="overview">Geral</TabsTrigger>
           <TabsTrigger value="routes">Rotas</TabsTrigger>
           <TabsTrigger value="pdvs">PDVs</TabsTrigger>
+          <TabsTrigger value="products">Produtos</TabsTrigger>
           <TabsTrigger value="stockouts">Rupturas/Avarias</TabsTrigger>
           <TabsTrigger value="map">Mapa</TabsTrigger>
         </TabsList>
