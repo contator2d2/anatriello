@@ -37,6 +37,7 @@ const CHART_COLORS = ['hsl(var(--primary))', 'hsl(var(--chart-2))', 'hsl(var(--c
 export default function MerchDashboard() {
   const [period, setPeriod] = useState('week');
   const [selectedBrand, setSelectedBrand] = useState<string>('all');
+  const [selectedBrandRecord, setSelectedBrandRecord] = useState<{ id: string, name: string } | null>(null);
   const [searchTerm, setSearchBrand] = useState('');
   const { data: brands = [] } = useBrands();
   
@@ -57,6 +58,12 @@ export default function MerchDashboard() {
   const { data: timeline = [] } = useMerchRoutesTimeline(filters);
   const { data: ranking = [] } = useMerchRankingIssues(filters);
   const { data: stockouts = [], isLoading: isLoadingStockouts } = useMerchReportStockouts(filters);
+  
+  // Marcas com atividade no período
+  const { data: brandActivity = [] } = useMerchReportBrand({
+    date_from: format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd'),
+    date_to: format(new Date(), 'yyyy-MM-dd')
+  });
 
   const exportStockoutsCSV = () => {
     if (stockouts.length === 0) {
