@@ -442,6 +442,8 @@ export default function MerchDashboard() {
             </CardContent>
           </Card>
         </div>
+          </>
+        )}
       </div>
     </MainLayout>
   );
