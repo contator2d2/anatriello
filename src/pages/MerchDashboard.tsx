@@ -14,15 +14,23 @@ import {
   LayoutDashboard, Users, Route, Store, Package, Activity, 
   TrendingUp, TrendingDown, Clock, Camera, AlertTriangle, 
   ShoppingCart, Filter, RefreshCw, Calendar, Target,
-  ChevronRight, Building2, UserCheck, CheckCircle2, Search, Download, FileSpreadsheet
+  ChevronRight, Building2, UserCheck, CheckCircle2, Search, Download, FileSpreadsheet,
+  ArrowLeft
 } from "lucide-react";
-import { useMerchDashboard, useMerchRoutesTimeline, useMerchRankingIssues, useMerchReportStockouts } from "@/hooks/use-merch-analytics";
+import { 
+  useMerchDashboard, 
+  useMerchRoutesTimeline, 
+  useMerchRankingIssues, 
+  useMerchReportStockouts,
+  useMerchReportBrand 
+} from "@/hooks/use-merch-analytics";
 import { useBrands } from "@/hooks/use-merchandising";
 import { format, startOfWeek, endOfWeek, subDays, startOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
+import { BrandRecord } from "@/components/merchandising/BrandRecord";
 
 const CHART_COLORS = ['hsl(var(--primary))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))', 'hsl(var(--chart-5))'];
 
