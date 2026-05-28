@@ -204,7 +204,11 @@ export function BrandRecord({ brandId, brandName, onClose, dateRange }: BrandRec
         <TabsContent value="pdvs" className="mt-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {data?.pdvs?.map((p: any) => (
-              <Card key={p.id} className="hover:border-primary/30 transition-colors cursor-pointer group">
+              <Card 
+                key={p.id} 
+                className="hover:border-primary/30 transition-colors cursor-pointer group"
+                onClick={() => setSelectedPDV(p)}
+              >
                 <CardHeader className="p-4 pb-2">
                   <div className="flex justify-between items-start">
                     <CardTitle className="text-sm truncate pr-2">{p.name}</CardTitle>
@@ -222,12 +226,66 @@ export function BrandRecord({ brandId, brandName, onClose, dateRange }: BrandRec
                     <span className="font-semibold">{p.last_visit ? format(new Date(p.last_visit), 'dd/MM/yyyy') : 'N/A'}</span>
                   </div>
                   <Button variant="ghost" size="sm" className="w-full h-7 text-[10px] mt-2 group-hover:text-primary">
-                    Ver detalhes do PDV <ChevronRight className="ml-1 h-3 w-3" />
+                    Ver prontuário do PDV <ChevronRight className="ml-1 h-3 w-3" />
                   </Button>
                 </CardContent>
               </Card>
             ))}
           </div>
+
+          {selectedPDV && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+              <Card className="w-full max-w-md animate-in zoom-in-95 duration-200">
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <div>
+                    <CardTitle className="text-base">{selectedPDV.name}</CardTitle>
+                    <CardDescription className="text-xs">{selectedPDV.address}</CardDescription>
+                  </div>
+                  <Button variant="ghost" size="icon" onClick={() => setSelectedPDV(null)}>
+                    <X className="h-4 w-4" />
+                  </Button>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-3 rounded-lg bg-muted/50">
+                      <p className="text-[10px] text-muted-foreground uppercase font-bold">Mix de Produtos</p>
+                      <p className="text-lg font-bold">{selectedPDV.product_count}</p>
+                    </div>
+                    <div className="p-3 rounded-lg bg-muted/50">
+                      <p className="text-[10px] text-muted-foreground uppercase font-bold">Visitas no Período</p>
+                      <p className="text-lg font-bold">{selectedPDV.visit_count}</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <UserCheck className="h-4 w-4 text-primary" />
+                      <div>
+                        <p className="text-xs font-medium">Último Promotor</p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {data?.routes?.find((r: any) => r.pdv_id === selectedPDV.id)?.promoter_name || 'Não identificado'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4 text-primary" />
+                      <div>
+                        <p className="text-xs font-medium">Próximo Agendamento</p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {data?.scheduledRoutes?.find((r: any) => r.pdv_name === selectedPDV.name)?.visit_date 
+                            ? format(new Date(data.scheduledRoutes.find((r: any) => r.pdv_name === selectedPDV.name).visit_date), 'dd/MM/yyyy')
+                            : 'Nenhum agendamento futuro'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <Button className="w-full" onClick={() => setSelectedPDV(null)}>Fechar</Button>
+                </CardContent>
+              </Card>
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="stockouts" className="mt-6 space-y-4">
