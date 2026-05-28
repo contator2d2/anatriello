@@ -143,19 +143,16 @@ router.get('/dashboard', async (req, res) => {
     try {
       const dRes = (await query(`
         SELECT 
-          COALESCE(SUM(rpe.damage_qty_store + rpe.damage_qty_stock), 0) as damages,
-          COALESCE(SUM(rpe.stockout_qty_store + rpe.stockout_qty_stock), 0) as stockouts,
-          COUNT(*) FILTER (WHERE rpe.stock_qty_store > 0 OR rpe.stock_qty_stock > 0) as stock_counts,
-          COUNT(*) FILTER (WHERE rpe.expiry_qty_store > 0 OR rpe.expiry_qty_stock > 0) as expiry_counts
-        FROM route_product_executions rpe
-        JOIN merch_routes r ON r.id = rpe.route_id
-        WHERE r.organization_id = $1 ${extraFilter}
+          (SELECT COALESCE(SUM(qty_store + qty_stock), 0) FROM product_damages pd JOIN merch_routes r2 ON r2.id = pd.route_id WHERE r2.organization_id = $1 ${extraFilter.replace(/r\./g, 'r2.')}) as damages,
+          (SELECT COALESCE(SUM(qty_store + qty_stock), 0) FROM product_ruptures pr JOIN merch_routes r2 ON r2.id = pr.route_id WHERE r2.organization_id = $1 ${extraFilter.replace(/r\./g, 'r2.')}) as stockouts,
+          (SELECT COUNT(*) FROM route_product_executions rpe JOIN merch_routes r2 ON r2.id = rpe.route_id WHERE r2.organization_id = $1 ${extraFilter.replace(/r\./g, 'r2.')} AND (rpe.qty_store > 0 OR rpe.qty_stock > 0)) as stock_counts,
+          (SELECT COUNT(*) FROM product_validity_entries pve JOIN merch_routes r2 ON r2.id = pve.route_id WHERE r2.organization_id = $1 ${extraFilter.replace(/r\./g, 'r2.')}) as expiry_counts
       `, params)).rows[0];
       damages = parseInt(dRes.damages) || 0;
       stockouts = parseInt(dRes.stockouts) || 0;
       stockCounts = parseInt(dRes.stock_counts) || 0;
       expiryCounts = parseInt(dRes.expiry_counts) || 0;
-    } catch {}
+    } catch (err) { logError('dashboard.stats_fail', err); }
 
     // Price research
     let priceCompleted = 0, pricePending = 0;
@@ -251,19 +248,22 @@ router.get('/report/pdv', async (req, res) => {
     // Enrich with product execution stats
     for (const row of rows) {
       try {
-        const pStats = (await query(`
-          SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE rpe.status='completed') as executed,
-            COALESCE(SUM(rpe.damage_qty_store + rpe.damage_qty_stock), 0) as damages,
-            COALESCE(SUM(rpe.stockout_qty_store + rpe.stockout_qty_stock), 0) as stockouts
-          FROM route_product_executions rpe
-          JOIN merch_routes r ON r.id = rpe.route_id
-          WHERE r.pdv_id = $1 AND r.organization_id = $2 ${filters.replace(/r\.pdv_id[^A]+/g, '')}
+        const stats = (await query(`
+          SELECT 
+            (SELECT COUNT(*) FROM route_product_executions rpe JOIN merch_routes r2 ON r2.id = rpe.route_id WHERE r2.pdv_id = $1 AND r2.organization_id = $2 ${filters.replace(/r\./g, 'r2.').replace(/r2\.pdv_id[^A]+/g, '')}) as total,
+            (SELECT COUNT(*) FROM route_product_executions rpe JOIN merch_routes r2 ON r2.id = rpe.route_id WHERE r2.pdv_id = $1 AND r2.organization_id = $2 AND rpe.status = 'completed' ${filters.replace(/r\./g, 'r2.').replace(/r2\.pdv_id[^A]+/g, '')}) as executed,
+            (SELECT COALESCE(SUM(qty_store + qty_stock), 0) FROM product_damages pd JOIN merch_routes r2 ON r2.id = pd.route_id WHERE r2.pdv_id = $1 AND r2.organization_id = $2 ${filters.replace(/r\./g, 'r2.').replace(/r2\.pdv_id[^A]+/g, '')}) as damages,
+            (SELECT COALESCE(SUM(qty_store + qty_stock), 0) FROM product_ruptures pr JOIN merch_routes r2 ON r2.id = pr.route_id WHERE r2.pdv_id = $1 AND r2.organization_id = $2 ${filters.replace(/r\./g, 'r2.').replace(/r2\.pdv_id[^A]+/g, '')}) as stockouts
         `, [row.pdv_id, orgId, ...(date_from ? [date_from] : []), ...(date_to ? [date_to] : [])])).rows[0];
-        row.total_products = parseInt(pStats?.total) || 0;
-        row.executed_products = parseInt(pStats?.executed) || 0;
-        row.damages = parseInt(pStats?.damages) || 0;
-        row.stockouts = parseInt(pStats?.stockouts) || 0;
-      } catch { row.total_products = 0; row.executed_products = 0; row.damages = 0; row.stockouts = 0; }
+        
+        row.total_products = parseInt(stats?.total) || 0;
+        row.executed_products = parseInt(stats?.executed) || 0;
+        row.damages = parseInt(stats?.damages) || 0;
+        row.stockouts = parseInt(stats?.stockouts) || 0;
+      } catch (e) { 
+        logError('pdv_report_enrich', e);
+        row.total_products = 0; row.executed_products = 0; row.damages = 0; row.stockouts = 0; 
+      }
       row.score = row.total_visits > 0 ? Math.round((parseInt(row.completed) / parseInt(row.total_visits)) * 100) : 0;
     }
     res.json(rows);
@@ -298,18 +298,22 @@ router.get('/report/brand', async (req, res) => {
 
     for (const row of rows) {
       try {
-        const ps = (await query(`
-          SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE rpe.status='completed') as executed,
-            COALESCE(SUM(rpe.damage_qty_store + rpe.damage_qty_stock),0) as damages,
-            COALESCE(SUM(rpe.stockout_qty_store + rpe.stockout_qty_stock),0) as stockouts
-          FROM route_product_executions rpe JOIN merch_routes r ON r.id = rpe.route_id
-          WHERE r.brand_id = $1 AND r.organization_id = $2
+        const stats = (await query(`
+          SELECT 
+            (SELECT COUNT(*) FROM route_product_executions rpe JOIN merch_routes r2 ON r2.id = rpe.route_id WHERE r2.brand_id = $1 AND r2.organization_id = $2) as total,
+            (SELECT COUNT(*) FROM route_product_executions rpe JOIN merch_routes r2 ON r2.id = rpe.route_id WHERE r2.brand_id = $1 AND r2.organization_id = $2 AND rpe.status = 'completed') as executed,
+            (SELECT COALESCE(SUM(qty_store + qty_stock), 0) FROM product_damages pd JOIN merch_routes r2 ON r2.id = pd.route_id WHERE r2.brand_id = $1 AND r2.organization_id = $2) as damages,
+            (SELECT COALESCE(SUM(qty_store + qty_stock), 0) FROM product_ruptures pr JOIN merch_routes r2 ON r2.id = pr.route_id WHERE r2.brand_id = $1 AND r2.organization_id = $2) as stockouts
         `, [row.brand_id, orgId])).rows[0];
-        row.total_products = parseInt(ps?.total) || 0;
-        row.executed_products = parseInt(ps?.executed) || 0;
-        row.damages = parseInt(ps?.damages) || 0;
-        row.stockouts = parseInt(ps?.stockouts) || 0;
-      } catch { row.total_products = 0; row.executed_products = 0; row.damages = 0; row.stockouts = 0; }
+        
+        row.total_products = parseInt(stats?.total) || 0;
+        row.executed_products = parseInt(stats?.executed) || 0;
+        row.damages = parseInt(stats?.damages) || 0;
+        row.stockouts = parseInt(stats?.stockouts) || 0;
+      } catch (e) { 
+        logError('brand_report_enrich', e);
+        row.total_products = 0; row.executed_products = 0; row.damages = 0; row.stockouts = 0; 
+      }
       row.score = parseInt(row.total_routes) > 0 ? Math.round((parseInt(row.completed) / parseInt(row.total_routes)) * 100) : 0;
     }
     res.json(rows);
@@ -346,17 +350,20 @@ router.get('/report/promoter', async (req, res) => {
 
     for (const row of rows) {
       try {
-        const ps = (await query(`
-          SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE rpe.status='completed') as executed,
-            COALESCE(SUM(rpe.damage_qty_store + rpe.damage_qty_stock),0) as damages,
-            COALESCE(SUM(rpe.stockout_qty_store + rpe.stockout_qty_stock),0) as stockouts
-          FROM route_product_executions rpe JOIN merch_routes r ON r.id = rpe.route_id
-          WHERE r.promoter_id = $1 AND r.organization_id = $2
+        const stats = (await query(`
+          SELECT 
+            (SELECT COUNT(*) FROM route_product_executions rpe JOIN merch_routes r2 ON r2.id = rpe.route_id WHERE r2.promoter_id = $1 AND r2.organization_id = $2) as executed,
+            (SELECT COALESCE(SUM(qty_store + qty_stock), 0) FROM product_damages pd JOIN merch_routes r2 ON r2.id = pd.route_id WHERE r2.promoter_id = $1 AND r2.organization_id = $2) as damages,
+            (SELECT COALESCE(SUM(qty_store + qty_stock), 0) FROM product_ruptures pr JOIN merch_routes r2 ON r2.id = pr.route_id WHERE r2.promoter_id = $1 AND r2.organization_id = $2) as stockouts
         `, [row.promoter_id, orgId])).rows[0];
-        row.products_executed = parseInt(ps?.executed) || 0;
-        row.damages = parseInt(ps?.damages) || 0;
-        row.stockouts = parseInt(ps?.stockouts) || 0;
-      } catch { row.products_executed = 0; row.damages = 0; row.stockouts = 0; }
+        
+        row.products_executed = parseInt(stats?.executed) || 0;
+        row.damages = parseInt(stats?.damages) || 0;
+        row.stockouts = parseInt(stats?.stockouts) || 0;
+      } catch (e) { 
+        logError('promoter_report_enrich', e);
+        row.products_executed = 0; row.damages = 0; row.stockouts = 0; 
+      }
 
       // Photos
       try {
@@ -396,7 +403,7 @@ router.get('/report/product', authenticate, async (req, res) => {
         COALESCE(SUM(rpe.qty_stock),0) as stock_stock
       FROM route_product_executions rpe
       JOIN merch_routes r ON r.id = rpe.route_id
-      JOIN products p ON p.id = rpe.product_id
+      JOIN merch_products p ON p.id = rpe.product_id
       WHERE r.organization_id = $1 ${routeFilters} ${productFilter}
       GROUP BY p.id, p.name, p.sku, p.image_url
       ORDER BY routes DESC, p.name ASC
@@ -422,7 +429,7 @@ router.get('/report/product', authenticate, async (req, res) => {
         }
 
         const damageRows = (await query(`
-          SELECT pd.product_id, COALESCE(SUM(pd.qty_total), 0) as damages
+          SELECT pd.product_id, COALESCE(SUM(pd.qty_store + pd.qty_stock), 0) as damages
           FROM product_damages pd
           JOIN merch_routes r ON r.id = pd.route_id
           WHERE r.organization_id = $1 ${routeFilters} ${damageFilter}
@@ -448,7 +455,7 @@ router.get('/report/product', authenticate, async (req, res) => {
         }
 
         const ruptureRows = (await query(`
-          SELECT pr.product_id, COALESCE(SUM(pr.qty_total), 0) as stockouts
+          SELECT pr.product_id, COALESCE(SUM(pr.qty_store + pr.qty_stock), 0) as stockouts
           FROM product_ruptures pr
           JOIN merch_routes r ON r.id = pr.route_id
           WHERE r.organization_id = $1 ${routeFilters} ${ruptureFilter}
@@ -474,7 +481,7 @@ router.get('/report/product', authenticate, async (req, res) => {
         }
 
         const expiryRows = (await query(`
-          SELECT pve.product_id, COALESCE(SUM(pve.qty_total), 0) as expiries
+          SELECT pve.product_id, COALESCE(SUM(pve.qty_store + pve.qty_stock), 0) as expiries
           FROM product_validity_entries pve
           JOIN merch_routes r ON r.id = pve.route_id
           WHERE r.organization_id = $1 ${routeFilters} ${expiryFilter}
@@ -511,13 +518,13 @@ router.get('/report/category', authenticate, async (req, res) => {
         COUNT(DISTINCT p.id) as total_products,
         COUNT(DISTINCT rpe.id) as total_executions,
         COUNT(*) FILTER (WHERE rpe.status='completed') as executed,
-        COALESCE(SUM(rpe.damage_qty_store + rpe.damage_qty_stock),0) as damages,
-        COALESCE(SUM(rpe.stockout_qty_store + rpe.stockout_qty_stock),0) as stockouts,
-        COALESCE(SUM(rpe.stock_qty_store + rpe.stock_qty_stock),0) as total_stock,
-        COALESCE(SUM(rpe.expiry_qty_store + rpe.expiry_qty_stock),0) as expiries
+        (SELECT COALESCE(SUM(qty_store + qty_stock), 0) FROM product_damages pd JOIN merch_routes r2 ON r2.id = pd.route_id JOIN merch_products p2 ON p2.id = pd.product_id WHERE p2.category_id = c.id AND r2.organization_id = $1 ${filters.replace(/r\./g, 'r2.')}) as damages,
+        (SELECT COALESCE(SUM(qty_store + qty_stock), 0) FROM product_ruptures pr JOIN merch_routes r2 ON r2.id = pr.route_id JOIN merch_products p2 ON p2.id = pr.product_id WHERE p2.category_id = c.id AND r2.organization_id = $1 ${filters.replace(/r\./g, 'r2.')}) as stockouts,
+        COALESCE(SUM(rpe.qty_store + rpe.qty_stock),0) as total_stock,
+        (SELECT COUNT(*) FROM product_validity_entries pve JOIN merch_routes r2 ON r2.id = pve.route_id JOIN merch_products p2 ON p2.id = pve.product_id WHERE p2.category_id = c.id AND r2.organization_id = $1 ${filters.replace(/r\./g, 'r2.')}) as expiries
       FROM route_product_executions rpe
       JOIN merch_routes r ON r.id = rpe.route_id
-      JOIN products p ON p.id = rpe.product_id
+      JOIN merch_products p ON p.id = rpe.product_id
       LEFT JOIN merch_categories c ON c.id = p.category_id
       WHERE r.organization_id = $1 ${filters}
       GROUP BY c.id, c.name
@@ -547,16 +554,15 @@ router.get('/report/stockouts', async (req, res) => {
         b.name as brand_name,
         pr.name as product_name,
         pr.sku as product_sku,
-        COALESCE(rpe.stockout_qty_store, 0) + COALESCE(rpe.stockout_qty_stock, 0) as qty,
-        rpe.stockout_reason as reason
-      FROM route_product_executions rpe
-      JOIN merch_routes r ON r.id = rpe.route_id
+        COALESCE(rup.qty_store, 0) + COALESCE(rup.qty_stock, 0) as qty,
+        rup.reason as reason
+      FROM product_ruptures rup
+      JOIN merch_routes r ON r.id = rup.route_id
       JOIN pdvs p ON p.id = r.pdv_id
       JOIN employees e ON e.id = r.promoter_id
-      JOIN merch_brands b ON b.id = r.brand_id
-      JOIN products pr ON pr.id = rpe.product_id
+      LEFT JOIN merch_brands b ON b.id = r.brand_id
+      JOIN merch_products pr ON pr.id = rup.product_id
       WHERE r.organization_id = $1 ${filters}
-      AND (rpe.stockout_qty_store > 0 OR rpe.stockout_qty_stock > 0)
       ORDER BY r.visit_date DESC, p.name ASC
       LIMIT 1000
     `, params)).rows;
@@ -633,7 +639,7 @@ router.get('/ranking/issues', authenticate, async (req, res) => {
     if (rows.length > 0 && await tableExists('product_damages')) {
       try {
         const damageRows = (await query(`
-          SELECT r.pdv_id, COALESCE(SUM(pd.qty_total), 0) as damages
+          SELECT r.pdv_id, COALESCE(SUM(pd.qty_store + pd.qty_stock), 0) as damages
           FROM product_damages pd
           JOIN merch_routes r ON r.id = pd.route_id
           WHERE r.organization_id = $1 ${filters}
@@ -652,7 +658,7 @@ router.get('/ranking/issues', authenticate, async (req, res) => {
     if (rows.length > 0 && await tableExists('product_ruptures')) {
       try {
         const ruptureRows = (await query(`
-          SELECT r.pdv_id, COALESCE(SUM(pr.qty_total), 0) as stockouts
+          SELECT r.pdv_id, COALESCE(SUM(pr.qty_store + pr.qty_stock), 0) as stockouts
           FROM product_ruptures pr
           JOIN merch_routes r ON r.id = pr.route_id
           WHERE r.organization_id = $1 ${filters}
@@ -742,9 +748,9 @@ router.get('/brand-record/:brandId', async (req, res) => {
       SELECT mp.id, mp.name, mp.sku,
              COUNT(rpe.id) as executions,
              COUNT(*) FILTER (WHERE rpe.status = 'completed') as completed,
-             COALESCE(SUM(rpe.stock_qty_store + rpe.stock_qty_stock), 0) as total_stock,
-             COALESCE(SUM(rpe.stockout_qty_store + rpe.stockout_qty_stock), 0) as total_ruptures,
-             COALESCE(SUM(rpe.damage_qty_store + rpe.damage_qty_stock), 0) as total_damages
+             (SELECT COALESCE(SUM(qty_store + qty_stock), 0) FROM route_product_executions rpe2 WHERE rpe2.product_id = mp.id AND rpe2.route_id IN (SELECT id FROM merch_routes r2 WHERE r2.brand_id = $2 AND r2.organization_id = $1 ${dateFilter.replace(/r\./g, 'r2.')})) as total_stock,
+             (SELECT COUNT(*) FROM product_ruptures pr JOIN merch_routes r2 ON r2.id = pr.route_id WHERE pr.product_id = mp.id AND r2.brand_id = $2 AND r2.organization_id = $1 ${dateFilter.replace(/r\./g, 'r2.')}) as total_ruptures,
+             (SELECT COUNT(*) FROM product_damages pd JOIN merch_routes r2 ON r2.id = pd.route_id WHERE pd.product_id = mp.id AND r2.brand_id = $2 AND r2.organization_id = $1 ${dateFilter.replace(/r\./g, 'r2.')}) as total_damages
       FROM merch_products mp
       LEFT JOIN route_product_executions rpe ON rpe.product_id = mp.id
       LEFT JOIN merch_routes r ON r.id = rpe.route_id
@@ -755,36 +761,30 @@ router.get('/brand-record/:brandId', async (req, res) => {
 
     // 6. Detailed Ruptures
     const stockouts = (await query(`
-      SELECT rpe.id, rpe.stockout_qty_store as qty_store, rpe.stockout_qty_stock as qty_stock, 
-             rpe.stockout_reason as reason, rpe.stockout_observation as observation,
-             r.visit_date as report_date,
+      SELECT pr.id, pr.qty_store, pr.qty_stock, pr.reason, pr.observation, pr.photo_url, pr.created_at as report_date,
              p.name as pdv_name, mp.name as product_name, mp.sku as product_sku,
              e.full_name as promoter_name
-      FROM route_product_executions rpe
-      JOIN merch_routes r ON r.id = rpe.route_id
+      FROM product_ruptures pr
+      JOIN merch_routes r ON r.id = pr.route_id
       JOIN pdvs p ON p.id = r.pdv_id
-      JOIN merch_products mp ON mp.id = rpe.product_id
-      JOIN employees e ON e.id = r.promoter_id
+      JOIN merch_products mp ON mp.id = pr.product_id
+      JOIN employees e ON e.id = pr.recorded_by
       WHERE r.organization_id = $1 AND r.brand_id = $2 ${dateFilter}
-      AND (rpe.stockout_qty_store > 0 OR rpe.stockout_qty_stock > 0)
-      ORDER BY r.visit_date DESC
+      ORDER BY pr.created_at DESC
     `, params)).rows;
 
     // 7. Detailed Damages
     const damages = (await query(`
-      SELECT rpe.id, rpe.damage_qty_store as qty_store, rpe.damage_qty_stock as qty_stock, 
-             rpe.damage_reason as reason, rpe.damage_observation as description,
-             r.visit_date as report_date,
+      SELECT pd.id, pd.qty_store, pd.qty_stock, pd.reason, pd.description, pd.photo_url, pd.created_at as report_date,
              p.name as pdv_name, mp.name as product_name, mp.sku as product_sku,
              e.full_name as promoter_name
-      FROM route_product_executions rpe
-      JOIN merch_routes r ON r.id = rpe.route_id
+      FROM product_damages pd
+      JOIN merch_routes r ON r.id = pd.route_id
       JOIN pdvs p ON p.id = r.pdv_id
-      JOIN merch_products mp ON mp.id = rpe.product_id
-      JOIN employees e ON e.id = r.promoter_id
+      JOIN merch_products mp ON mp.id = pd.product_id
+      JOIN employees e ON e.id = pd.promoter_id
       WHERE r.organization_id = $1 AND r.brand_id = $2 ${dateFilter}
-      AND (rpe.damage_qty_store > 0 OR rpe.damage_qty_stock > 0)
-      ORDER BY r.visit_date DESC
+      ORDER BY pd.created_at DESC
     `, params)).rows;
 
     // 8. Scheduled Future Routes
