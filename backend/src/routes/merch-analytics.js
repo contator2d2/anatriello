@@ -525,7 +525,47 @@ router.get('/report/category', authenticate, async (req, res) => {
     `, params)).rows;
     res.json(rows);
   } catch (err) { logError('merch-analytics.report.category', err); res.status(500).json({ error: 'Erro' }); }
+
+// ===== Report: Stockouts / Ruptures Details =====
+router.get('/report/stockouts', async (req, res) => {
+  try {
+    const orgId = await getOrgId(req.userId);
+    if (!orgId) return res.status(403).json({ error: 'Sem organização' });
+    
+    const params = [orgId];
+    const { filters } = buildRouteFiltersFromQuery(req.query, params, 2);
+
+    const rows = (await query(`
+      SELECT 
+        r.id as route_id,
+        r.visit_date,
+        p.name as pdv_name,
+        p.city as pdv_city,
+        e.full_name as promoter_name,
+        b.name as brand_name,
+        pr.name as product_name,
+        pr.sku as product_sku,
+        COALESCE(rpe.stockout_qty_store, 0) + COALESCE(rpe.stockout_qty_stock, 0) as qty,
+        rpe.stockout_reason as reason
+      FROM route_product_executions rpe
+      JOIN merch_routes r ON r.id = rpe.route_id
+      JOIN pdvs p ON p.id = r.pdv_id
+      JOIN employees e ON e.id = r.promoter_id
+      JOIN merch_brands b ON b.id = r.brand_id
+      JOIN products pr ON pr.id = rpe.product_id
+      WHERE r.organization_id = $1 ${filters}
+      AND (rpe.stockout_qty_store > 0 OR rpe.stockout_qty_stock > 0)
+      ORDER BY r.visit_date DESC, p.name ASC
+      LIMIT 1000
+    `, params)).rows;
+
+    res.json(rows);
+  } catch (err) {
+    logError('merch-analytics.report.stockouts', err);
+    res.status(500).json({ error: 'Erro ao gerar relatório de rupturas' });
+  }
 });
+
 
 // ===== Charts: Route completion over time =====
 router.get('/charts/routes-timeline', authenticate, async (req, res) => {

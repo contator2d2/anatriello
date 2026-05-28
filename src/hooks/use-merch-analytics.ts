@@ -97,3 +97,13 @@ export function useMerchRankingIssues(filters?: DashboardFilters) {
     refetchOnWindowFocus: false,
   });
 }
+
+
+
+export function useMerchReportStockouts(filters?: DashboardFilters) {
+  const qs = buildQS(filters);
+  return useQuery({
+    queryKey: ['merch-analytics-report-stockouts', qs],
+    queryFn: () => api<any[]>(`/api/merch-analytics/report/stockouts${qs}`),
+  });
+}

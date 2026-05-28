@@ -14,9 +14,9 @@ import {
   LayoutDashboard, Users, Route, Store, Package, Activity, 
   TrendingUp, TrendingDown, Clock, Camera, AlertTriangle, 
   ShoppingCart, Filter, RefreshCw, Calendar, Target,
-  ChevronRight, Building2, UserCheck, CheckCircle2, Search
+  ChevronRight, Building2, UserCheck, CheckCircle2, Search, Download, FileSpreadsheet
 } from "lucide-react";
-import { useMerchDashboard, useMerchRoutesTimeline, useMerchRankingIssues } from "@/hooks/use-merch-analytics";
+import { useMerchDashboard, useMerchRoutesTimeline, useMerchRankingIssues, useMerchReportStockouts } from "@/hooks/use-merch-analytics";
 import { useBrands } from "@/hooks/use-merchandising";
 import { format, startOfWeek, endOfWeek, subDays, startOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -48,6 +48,40 @@ export default function MerchDashboard() {
   const { data, isLoading, refetch } = useMerchDashboard(filters);
   const { data: timeline = [] } = useMerchRoutesTimeline(filters);
   const { data: ranking = [] } = useMerchRankingIssues(filters);
+  const { data: stockouts = [], isLoading: isLoadingStockouts } = useMerchReportStockouts(filters);
+
+  const exportStockoutsCSV = () => {
+    if (stockouts.length === 0) {
+      alert("Não há dados para exportar no período selecionado.");
+      return;
+    }
+
+    const headers = ["Data", "PDV", "Cidade", "Promotor", "Marca", "Produto", "SKU", "Qtd Ruptura", "Motivo"];
+    const csvContent = [
+      headers.join(","),
+      ...stockouts.map((s: any) => [
+        s.visit_date,
+        `"${s.pdv_name}"`,
+        `"${s.pdv_city}"`,
+        `"${s.promoter_name}"`,
+        `"${s.brand_name}"`,
+        `"${s.product_name}"`,
+        `"${s.product_sku || ''}"`,
+        s.qty,
+        `"${s.reason || ''}"`
+      ].join(","))
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `rupturas_${dateRange.from}_a_${dateRange.to}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
 
   const kpis = data?.kpis || {};
   const derived = data?.derived || {};
@@ -97,10 +131,15 @@ export default function MerchDashboard() {
                 </button>
               ))}
             </div>
+            <Button variant="outline" size="sm" onClick={exportStockoutsCSV} disabled={isLoadingStockouts} className="h-9 gap-2">
+              <Download className="h-4 w-4" />
+              <span className="hidden sm:inline">Exportar Rupturas</span>
+            </Button>
             <Button variant="outline" size="icon" onClick={() => refetch()} disabled={isLoading} className="h-9 w-9">
               <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
             </Button>
           </div>
+
         </div>
 
         {/* Main Stats */}
@@ -290,6 +329,20 @@ export default function MerchDashboard() {
                 </div>
                 <p className="text-[10px] text-muted-foreground leading-tight">Falta de produtos na gôndola ou no depósito detectada pelos promotores.</p>
               </Link>
+
+              <div className="pt-2 border-t mt-auto">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="w-full text-xs gap-2" 
+                  onClick={exportStockoutsCSV}
+                  disabled={isLoadingStockouts || stockouts.length === 0}
+                >
+                  <FileSpreadsheet className="h-3.5 w-3.5 text-green-600" />
+                  Baixar Lista de Rupturas ({stockouts.length})
+                </Button>
+              </div>
+
             </CardContent>
           </Card>
 
