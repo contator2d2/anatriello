@@ -481,7 +481,7 @@ router.get('/report/product', authenticate, async (req, res) => {
         }
 
         const expiryRows = (await query(`
-          SELECT pve.product_id, COALESCE(SUM(pve.qty_total), 0) as expiries
+          SELECT pve.product_id, COALESCE(SUM(pve.qty_store + pve.qty_stock), 0) as expiries
           FROM product_validity_entries pve
           JOIN merch_routes r ON r.id = pve.route_id
           WHERE r.organization_id = $1 ${routeFilters} ${expiryFilter}
