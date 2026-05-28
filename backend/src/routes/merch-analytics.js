@@ -554,16 +554,15 @@ router.get('/report/stockouts', async (req, res) => {
         b.name as brand_name,
         pr.name as product_name,
         pr.sku as product_sku,
-        COALESCE(rpe.stockout_qty_store, 0) + COALESCE(rpe.stockout_qty_stock, 0) as qty,
-        rpe.stockout_reason as reason
-      FROM route_product_executions rpe
-      JOIN merch_routes r ON r.id = rpe.route_id
+        COALESCE(rup.qty_store, 0) + COALESCE(rup.qty_stock, 0) as qty,
+        rup.reason as reason
+      FROM product_ruptures rup
+      JOIN merch_routes r ON r.id = rup.route_id
       JOIN pdvs p ON p.id = r.pdv_id
       JOIN employees e ON e.id = r.promoter_id
-      JOIN merch_brands b ON b.id = r.brand_id
-      JOIN merch_products pr ON pr.id = rpe.product_id
+      LEFT JOIN merch_brands b ON b.id = r.brand_id
+      JOIN merch_products pr ON pr.id = rup.product_id
       WHERE r.organization_id = $1 ${filters}
-      AND (rpe.stockout_qty_store > 0 OR rpe.stockout_qty_stock > 0)
       ORDER BY r.visit_date DESC, p.name ASC
       LIMIT 1000
     `, params)).rows;
