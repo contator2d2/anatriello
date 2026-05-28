@@ -677,6 +677,7 @@ export default function MerchExecucao() {
                     photoType: 'Contingência (Manual)'
                   }}
                   buttonLabel="Selecionar arquivo e validar"
+                  allowManualUpload={true}
                 />
               )}
             </div>
