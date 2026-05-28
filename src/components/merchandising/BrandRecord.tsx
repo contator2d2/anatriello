@@ -263,7 +263,46 @@ export function BrandRecord({ brandId, brandName, onClose, dateRange }: BrandRec
                       <UserCheck className="h-4 w-4 text-primary" />
                       <div>
                         <p className="text-xs font-medium">Último Promotor</p>
-                        <p className="text-[10px] text-muted-foreground">
+        <TabsContent value="products" className="mt-6">
+          <Card>
+            <CardContent className="p-0">
+              <ScrollArea className="h-[500px]">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50 sticky top-0">
+                    <tr>
+                      <th className="text-left p-3 font-medium">Produto</th>
+                      <th className="text-left p-3 font-medium">SKU</th>
+                      <th className="text-right p-3 font-medium">Execuções</th>
+                      <th className="text-right p-3 font-medium">Estoque Total</th>
+                      <th className="text-right p-3 font-medium">Rupturas</th>
+                      <th className="text-right p-3 font-medium">Avarias</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {data?.auditedProducts?.map((p: any) => (
+                      <tr key={p.id} className="hover:bg-muted/20 transition-colors">
+                        <td className="p-3 font-medium text-xs">{p.name}</td>
+                        <td className="p-3 text-xs text-muted-foreground">{p.sku}</td>
+                        <td className="p-3 text-right text-xs">{p.completed}/{p.executions}</td>
+                        <td className="p-3 text-right text-xs font-semibold">{p.total_stock}</td>
+                        <td className="p-3 text-right text-xs">
+                          <Badge variant={p.total_ruptures > 0 ? "outline" : "secondary"} className={p.total_ruptures > 0 ? "text-orange-600 border-orange-200" : ""}>
+                            {p.total_ruptures}
+                          </Badge>
+                        </td>
+                        <td className="p-3 text-right text-xs">
+                          <Badge variant={p.total_damages > 0 ? "destructive" : "secondary"}>
+                            {p.total_damages}
+                          </Badge>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </ScrollArea>
+            </CardContent>
+          </Card>
+        </TabsContent>
                           {data?.routes?.find((r: any) => r.pdv_id === selectedPDV.id)?.promoter_name || 'Não identificado'}
                         </p>
                       </div>
