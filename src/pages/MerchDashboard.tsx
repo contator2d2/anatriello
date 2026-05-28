@@ -1,10 +1,11 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
   LineChart, Line, PieChart, Pie, Cell 
@@ -13,18 +14,23 @@ import {
   LayoutDashboard, Users, Route, Store, Package, Activity, 
   TrendingUp, TrendingDown, Clock, Camera, AlertTriangle, 
   ShoppingCart, Filter, RefreshCw, Calendar, Target,
-  ChevronRight, Building2, UserCheck, CheckCircle2
+  ChevronRight, Building2, UserCheck, CheckCircle2, Search
 } from "lucide-react";
 import { useMerchDashboard, useMerchRoutesTimeline, useMerchRankingIssues } from "@/hooks/use-merch-analytics";
+import { useBrands } from "@/hooks/use-merchandising";
 import { format, startOfWeek, endOfWeek, subDays, startOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { Input } from "@/components/ui/input";
 
 const CHART_COLORS = ['hsl(var(--primary))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))', 'hsl(var(--chart-5))'];
 
 export default function MerchDashboard() {
   const [period, setPeriod] = useState('week');
+  const [selectedBrand, setSelectedBrand] = useState<string>('all');
+  const [searchTerm, setSearchBrand] = useState('');
+  const { data: brands = [] } = useBrands();
   
   const dateRange = useMemo(() => {
     const today = new Date();
@@ -35,8 +41,9 @@ export default function MerchDashboard() {
 
   const filters = useMemo(() => ({
     date_from: dateRange.from,
-    date_to: dateRange.to
-  }), [dateRange]);
+    date_to: dateRange.to,
+    brand_id: selectedBrand === 'all' ? undefined : selectedBrand
+  }), [dateRange, selectedBrand]);
 
   const { data, isLoading, refetch } = useMerchDashboard(filters);
   const { data: timeline = [] } = useMerchRoutesTimeline(filters);
@@ -60,7 +67,21 @@ export default function MerchDashboard() {
             <p className="text-sm text-muted-foreground">Visão consolidada da operação em campo</p>
           </div>
           
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-2 mr-2">
+              <Select value={selectedBrand} onValueChange={setSelectedBrand}>
+                <SelectTrigger className="w-[180px] h-9 bg-background">
+                  <SelectValue placeholder="Todas as Marcas" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas as Marcas</SelectItem>
+                  {brands.map((b: any) => (
+                    <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="flex bg-muted rounded-lg p-1">
               {(['today', 'week', 'month'] as const).map((p) => (
                 <button
@@ -76,7 +97,7 @@ export default function MerchDashboard() {
                 </button>
               ))}
             </div>
-            <Button variant="outline" size="icon" onClick={() => refetch()} disabled={isLoading}>
+            <Button variant="outline" size="icon" onClick={() => refetch()} disabled={isLoading} className="h-9 w-9">
               <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
             </Button>
           </div>

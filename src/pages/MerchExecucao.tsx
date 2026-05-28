@@ -580,9 +580,10 @@ export default function MerchExecucao() {
                         </div>
                         <div className="space-y-1">
                           {viewRoute.ruptures.map((r: any) => (
-                            <div key={r.id} className="text-[10px] bg-orange-50 p-1.5 rounded border border-orange-100">
-                              <span className="font-bold">{r.product_name}</span>
-                              {r.reason && <div className="text-muted-foreground italic mt-0.5">{r.reason}</div>}
+                            <div key={r.id} className="text-[10px] bg-orange-100 p-1.5 rounded border border-orange-200">
+                              <span className="font-bold text-orange-900">{r.product_name}</span>
+                              {r.reason && <div className="text-orange-800 italic mt-0.5">{r.reason}</div>}
+                              {r.observation && <div className="text-orange-700 text-[9px] mt-0.5">{r.observation}</div>}
                             </div>
                           ))}
                         </div>
