@@ -106,56 +106,96 @@ export default function MerchDashboard() {
   return (
     <MainLayout>
       <div className="space-y-6">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2">
-              <LayoutDashboard className="h-6 w-6 text-primary" />
-              Dashboard Merchandising
-            </h1>
-            <p className="text-sm text-muted-foreground">Visão consolidada da operação em campo</p>
-          </div>
-          
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-2 mr-2">
-              <Select value={selectedBrand} onValueChange={setSelectedBrand}>
-                <SelectTrigger className="w-[180px] h-9 bg-background">
-                  <SelectValue placeholder="Todas as Marcas" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas as Marcas</SelectItem>
-                  {brands.map((b: any) => (
-                    <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+        {selectedBrandRecord ? (
+          <BrandRecord 
+            brandId={selectedBrandRecord.id} 
+            brandName={selectedBrandRecord.name} 
+            onClose={() => setSelectedBrandRecord(null)}
+            dateRange={dateRange}
+          />
+        ) : (
+          <>
+            {/* Header */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <h1 className="text-2xl font-bold flex items-center gap-2">
+                  <LayoutDashboard className="h-6 w-6 text-primary" />
+                  Dashboard Merchandising
+                </h1>
+                <p className="text-sm text-muted-foreground">Visão consolidada da operação em campo</p>
+              </div>
+              
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-2 mr-2">
+                  <Select value={selectedBrand} onValueChange={setSelectedBrand}>
+                    <SelectTrigger className="w-[180px] h-9 bg-background">
+                      <SelectValue placeholder="Todas as Marcas" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todas as Marcas</SelectItem>
+                      {brands.map((b: any) => (
+                        <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex bg-muted rounded-lg p-1">
+                  {(['today', 'week', 'month'] as const).map((p) => (
+                    <button
+                      key={p}
+                      onClick={() => setPeriod(p)}
+                      className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                        period === p 
+                          ? "bg-background text-foreground shadow-sm" 
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {p === 'today' ? 'Hoje' : p === 'week' ? 'Semana' : 'Mês'}
+                    </button>
                   ))}
-                </SelectContent>
-              </Select>
+                </div>
+                <Button variant="outline" size="sm" onClick={exportStockoutsCSV} disabled={isLoadingStockouts} className="h-9 gap-2">
+                  <Download className="h-4 w-4" />
+                  <span className="hidden sm:inline">Exportar Rupturas</span>
+                </Button>
+                <Button variant="outline" size="icon" onClick={() => refetch()} disabled={isLoading} className="h-9 w-9">
+                  <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                </Button>
+              </div>
             </div>
 
-            <div className="flex bg-muted rounded-lg p-1">
-              {(['today', 'week', 'month'] as const).map((p) => (
-                <button
-                  key={p}
-                  onClick={() => setPeriod(p)}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
-                    period === p 
-                      ? "bg-background text-foreground shadow-sm" 
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {p === 'today' ? 'Hoje' : p === 'week' ? 'Semana' : 'Mês'}
-                </button>
-              ))}
-            </div>
-            <Button variant="outline" size="sm" onClick={exportStockoutsCSV} disabled={isLoadingStockouts} className="h-9 gap-2">
-              <Download className="h-4 w-4" />
-              <span className="hidden sm:inline">Exportar Rupturas</span>
-            </Button>
-            <Button variant="outline" size="icon" onClick={() => refetch()} disabled={isLoading} className="h-9 w-9">
-              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-            </Button>
-          </div>
-
-        </div>
+            {/* Weekly Brands Quick Access */}
+            <Card className="bg-primary/5 border-primary/10 overflow-hidden">
+              <CardHeader className="p-4 pb-2">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Activity className="h-4 w-4 text-primary" />
+                  Marcas com Execução na Semana
+                </CardTitle>
+                <CardDescription className="text-[10px]">Clique na marca para ver o prontuário completo</CardDescription>
+              </CardHeader>
+              <CardContent className="p-4 pt-0">
+                <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                  {brandActivity.filter((b: any) => b.total_routes > 0).map((b: any) => (
+                    <Button 
+                      key={b.brand_id} 
+                      variant="outline" 
+                      className="h-auto py-2 px-4 flex-shrink-0 bg-background hover:border-primary hover:bg-primary/5 group transition-all"
+                      onClick={() => setSelectedBrandRecord({ id: b.brand_id, name: b.brand_name })}
+                    >
+                      <div className="text-left">
+                        <p className="text-xs font-bold group-hover:text-primary">{b.brand_name}</p>
+                        <p className="text-[10px] text-muted-foreground">{b.total_routes} rotas / {b.pdvs_served} pdvs</p>
+                      </div>
+                      <ChevronRight className="h-3 w-3 ml-2 text-muted-foreground group-hover:text-primary" />
+                    </Button>
+                  ))}
+                  {brandActivity.filter((b: any) => b.total_routes > 0).length === 0 && (
+                    <p className="text-xs text-muted-foreground py-2 italic">Nenhuma atividade registrada nesta semana.</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
 
         {/* Main Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
