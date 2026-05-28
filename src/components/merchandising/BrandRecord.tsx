@@ -31,7 +31,7 @@ export function BrandRecord({ brandId, brandName, onClose, dateRange }: BrandRec
   const filteredStockouts = useMemo(() => {
     if (!data?.stockouts) return [];
     if (pdvFilter === "all") return data.stockouts;
-    return data.stockouts.filter((s: any) => s.pdv_id === pdvFilter || s.pdv_name === pdvFilter);
+    return data.stockouts.filter((s: any) => s.pdv_name === pdvFilter);
   }, [data?.stockouts, pdvFilter]);
 
   if (isLoading) {
@@ -227,7 +227,7 @@ export function BrandRecord({ brandId, brandName, onClose, dateRange }: BrandRec
                     <span className="font-semibold">{p.last_visit ? format(new Date(p.last_visit), 'dd/MM/yyyy') : 'N/A'}</span>
                   </div>
                   <Button variant="ghost" size="sm" className="w-full h-7 text-[10px] mt-2 group-hover:text-primary">
-                    Ver prontuário do PDV <ChevronRight className="ml-1 h-3 w-3" />
+                    Ver detalhes do PDV <ChevronRight className="ml-1 h-3 w-3" />
                   </Button>
                 </CardContent>
               </Card>
@@ -263,6 +263,32 @@ export function BrandRecord({ brandId, brandName, onClose, dateRange }: BrandRec
                       <UserCheck className="h-4 w-4 text-primary" />
                       <div>
                         <p className="text-xs font-medium">Último Promotor</p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {data?.routes?.find((r: any) => r.pdv_id === selectedPDV.id)?.promoter_name || 'Não identificado'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4 text-primary" />
+                      <div>
+                        <p className="text-xs font-medium">Próximo Agendamento</p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {data?.scheduledRoutes?.find((r: any) => r.pdv_name === selectedPDV.name)?.visit_date 
+                            ? format(new Date(data.scheduledRoutes.find((r: any) => r.pdv_name === selectedPDV.name).visit_date), 'dd/MM/yyyy')
+                            : 'Nenhum agendamento futuro'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <Button className="w-full" onClick={() => setSelectedPDV(null)}>Fechar</Button>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+        </TabsContent>
+
         <TabsContent value="products" className="mt-6">
           <Card>
             <CardContent className="p-0">
@@ -302,30 +328,6 @@ export function BrandRecord({ brandId, brandName, onClose, dateRange }: BrandRec
               </ScrollArea>
             </CardContent>
           </Card>
-        </TabsContent>
-                          {data?.routes?.find((r: any) => r.pdv_id === selectedPDV.id)?.promoter_name || 'Não identificado'}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4 text-primary" />
-                      <div>
-                        <p className="text-xs font-medium">Próximo Agendamento</p>
-                        <p className="text-[10px] text-muted-foreground">
-                          {data?.scheduledRoutes?.find((r: any) => r.pdv_name === selectedPDV.name)?.visit_date 
-                            ? format(new Date(data.scheduledRoutes.find((r: any) => r.pdv_name === selectedPDV.name).visit_date), 'dd/MM/yyyy')
-                            : 'Nenhum agendamento futuro'}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <Button className="w-full" onClick={() => setSelectedPDV(null)}>Fechar</Button>
-                </CardContent>
-              </Card>
-            </div>
-          )}
         </TabsContent>
 
         <TabsContent value="stockouts" className="mt-6 space-y-4">
@@ -378,13 +380,6 @@ export function BrandRecord({ brandId, brandName, onClose, dateRange }: BrandRec
                         </td>
                       </tr>
                     ))}
-                    {filteredStockouts.length === 0 && (
-                      <tr>
-                        <td colSpan={5} className="p-12 text-center text-muted-foreground text-xs">
-                          Nenhuma ruptura encontrada com os filtros atuais.
-                        </td>
-                      </tr>
-                    )}
                   </tbody>
                 </table>
               </ScrollArea>
