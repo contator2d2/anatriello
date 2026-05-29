@@ -105,10 +105,10 @@ export function PWAUpdateBanner() {
         localStorage.setItem('app-version', JSON.stringify(newVersion));
       }
       
-      setTimeout(() => window.location.reload(true), 1000);
+      setTimeout(() => window.location.reload(), 1000);
     } catch (err) {
       console.error("[PWA] Update failed:", err);
-      window.location.reload(true);
+      window.location.reload();
     }
   }, [newVersion]);
 
