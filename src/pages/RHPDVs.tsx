@@ -73,16 +73,34 @@ export default function RHPDVs() {
 
   const handleCep = useCallback(async (cep: string) => {
     const clean = cep.replace(/\D/g, '');
-    if (clean.length === 8) {
-      try {
-        const res = await fetch(`https://viacep.com.br/ws/${clean}/json/`);
-        const data = await res.json();
-        if (!data.erro) {
-          setForm(f => ({ ...f, address: data.logradouro || '', neighborhood: data.bairro || '', city: data.localidade || '', state: data.uf || '' }));
-        }
-      } catch {}
+    if (clean.length !== 8) {
+      toast({ title: 'CEP inválido', description: 'O CEP deve ter 8 dígitos.', variant: 'destructive' });
+      return;
     }
-  }, []);
+
+    setIsSearchingCep(true);
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${clean}/json/`);
+      const data = await res.json();
+      if (data.erro) {
+        toast({ title: 'CEP não encontrado', variant: 'destructive' });
+      } else {
+        setForm(f => ({ 
+          ...f, 
+          zip_code: clean.replace(/^(\d{5})(\d{3})$/, '$1-$2'),
+          address: data.logradouro || '', 
+          neighborhood: data.bairro || '', 
+          city: data.localidade || '', 
+          state: data.uf || '' 
+        }));
+        toast({ title: 'Endereço preenchido!' });
+      }
+    } catch (err) {
+      toast({ title: 'Erro ao consultar CEP', variant: 'destructive' });
+    } finally {
+      setIsSearchingCep(false);
+    }
+  }, [toast]);
 
   const openCreate = () => { setForm(EMPTY_PDV); setEditId(null); setShowDialog(true); };
   const openEdit = (pdv: any) => {
