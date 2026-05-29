@@ -23,72 +23,54 @@ export function PWAUpdateBanner() {
   const [updating, setUpdating] = useState(false);
   const [progress, setProgress] = useState(0);
   const [done, setDone] = useState(false);
+  const [newVersion, setNewVersion] = useState<{ web: string, promoter: string } | null>(null);
 
-  useEffect(() => {
-    if (!shouldWatchForUpdates || !("serviceWorker" in navigator)) return;
-
-    let interval: ReturnType<typeof setInterval>;
-
-    // Listen for precache errors and auto-recover
-    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
-      const msg = String(event.reason);
-      if (msg.includes("bad-precaching-response")) {
-        console.warn("[PWA] Precache error detected, clearing caches...");
-        event.preventDefault();
-        if ("caches" in window) {
-          caches.keys().then(names => {
-            Promise.all(names.map(name => caches.delete(name))).then(() => {
-              navigator.serviceWorker.getRegistration().then(reg => {
-                reg?.unregister().then(() => {
-                  setShowPopup(true);
-                });
-              });
-            });
-          });
+  const checkVersion = useCallback(async () => {
+    try {
+      const response = await fetch('/version.json?t=' + Date.now());
+      if (!response.ok) return;
+      
+      const data = await response.json();
+      const storedVersionStr = localStorage.getItem('app-version');
+      const storedVersion = storedVersionStr ? JSON.parse(storedVersionStr) : { web: '1.0.0', promoter: '1.0.0' };
+      
+      const isPromoter = window.location.pathname.startsWith('/promotor');
+      
+      let hasUpdate = false;
+      if (isPromoter) {
+        // Only notify promoters if the promoter version changed
+        if (data.promoter !== storedVersion.promoter) {
+          hasUpdate = true;
+        }
+      } else {
+        // Notify desktop/admin if the web version changed
+        if (data.web !== storedVersion.web) {
+          hasUpdate = true;
         }
       }
-    };
-    window.addEventListener("unhandledrejection", handleUnhandledRejection);
 
-    const setup = async () => {
-      try {
-        const reg = await navigator.serviceWorker.getRegistration();
-        if (!reg) return;
-
-        const onUpdateFound = () => {
-          const newWorker = reg.installing;
-          if (!newWorker) return;
-
-          newWorker.addEventListener("statechange", () => {
-            if (newWorker.state === "installed" && navigator.serviceWorker.controller) {
-              setShowPopup(true);
-            }
-          });
-        };
-
-        reg.addEventListener("updatefound", onUpdateFound);
-
-        if (reg.waiting && navigator.serviceWorker.controller) {
-          setShowPopup(true);
-        }
-
-        // Check for updates every 15 seconds
-        interval = setInterval(() => {
-          reg.update().catch(() => {});
-        }, 15 * 1000);
-      } catch (err) {
-        console.error("[PWA] Error setting up update listener:", err);
+      if (hasUpdate) {
+        setNewVersion(data);
+        setShowPopup(true);
       }
-    };
-
-    setup();
-    return () => {
-      if (interval) clearInterval(interval);
-      window.removeEventListener("unhandledrejection", handleUnhandledRejection);
-    };
+    } catch (err) {
+      console.error("[PWA] Error checking version:", err);
+    }
   }, []);
 
-  const handleUpdate = useCallback(() => {
+  useEffect(() => {
+    if (!shouldWatchForUpdates) return;
+
+    // Initial check
+    checkVersion();
+
+    // Check every 5 minutes
+    const interval = setInterval(checkVersion, 5 * 60 * 1000);
+
+    return () => clearInterval(interval);
+  }, [checkVersion]);
+
+  const handleUpdate = useCallback(async () => {
     setUpdating(true);
     setProgress(0);
 
@@ -102,42 +84,33 @@ export function PWAUpdateBanner() {
       });
     }, 200);
 
-    const doUpdate = async () => {
-      try {
-        // Pre-cache: fetch main assets
-        if ("caches" in window) {
-          const cacheNames = await caches.keys();
-          await Promise.all(cacheNames.map((name) => caches.delete(name)));
-        }
-
-        setProgress(50);
-
-        const reg = await navigator.serviceWorker.getRegistration();
-        const waiting = reg?.waiting;
-
-        if (waiting) {
-          waiting.postMessage({ type: "SKIP_WAITING" });
-
-          navigator.serviceWorker.addEventListener("controllerchange", () => {
-            clearInterval(progressInterval);
-            setProgress(100);
-            setDone(true);
-            setTimeout(() => window.location.reload(), 800);
-          });
-        } else {
-          clearInterval(progressInterval);
-          setProgress(100);
-          setDone(true);
-          setTimeout(() => window.location.reload(), 800);
-        }
-      } catch {
-        clearInterval(progressInterval);
-        window.location.reload();
+    try {
+      // Clear all caches
+      if ("caches" in window) {
+        const cacheNames = await caches.keys();
+        await Promise.all(cacheNames.map((name) => caches.delete(name)));
       }
-    };
 
-    doUpdate();
-  }, []);
+      // Unregister all service workers to ensure fresh start
+      if ("serviceWorker" in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(registrations.map(reg => reg.unregister()));
+      }
+
+      setProgress(100);
+      setDone(true);
+      
+      // Store the new version before reloading
+      if (newVersion) {
+        localStorage.setItem('app-version', JSON.stringify(newVersion));
+      }
+      
+      setTimeout(() => window.location.reload(true), 1000);
+    } catch (err) {
+      console.error("[PWA] Update failed:", err);
+      window.location.reload(true);
+    }
+  }, [newVersion]);
 
   if (!showPopup) return null;
 
@@ -147,14 +120,13 @@ export function PWAUpdateBanner() {
         "bg-card border rounded-2xl shadow-2xl p-6 mx-4 max-w-sm w-full",
         "animate-in zoom-in-95 slide-in-from-bottom-4 duration-300"
       )}>
-        {/* Icon */}
         <div className="flex justify-center mb-4">
           <div className={cn(
             "p-4 rounded-full",
-            done ? "bg-success/10" : updating ? "bg-primary/10" : "bg-primary/10"
+            done ? "bg-green-500/10" : updating ? "bg-primary/10" : "bg-primary/10"
           )}>
             {done ? (
-              <CheckCircle2 className="h-10 w-10 text-success" />
+              <CheckCircle2 className="h-10 w-10 text-green-500" />
             ) : updating ? (
               <RefreshCw className="h-10 w-10 text-primary animate-spin" />
             ) : (
@@ -163,21 +135,18 @@ export function PWAUpdateBanner() {
           </div>
         </div>
 
-        {/* Title */}
         <h3 className="text-lg font-bold text-foreground text-center">
-          {done ? "Atualização concluída!" : updating ? "Atualizando..." : "Nova atualização disponível!"}
+          {done ? "Atualização concluída!" : updating ? "Atualizando..." : "Nova versão disponível!"}
         </h3>
 
-        {/* Description */}
         <p className="text-sm text-muted-foreground text-center mt-2">
           {done
-            ? "O sistema será recarregado automaticamente."
+            ? "O sistema foi atualizado e será recarregado."
             : updating
-            ? "Pré-carregando nova versão, aguarde..."
-            : "Uma nova versão do sistema está pronta. Clique para atualizar agora."}
+            ? "Preparando nova versão, aguarde..."
+            : "Uma nova versão com melhorias está disponível para você."}
         </p>
 
-        {/* Progress bar */}
         {updating && (
           <div className="mt-4">
             <Progress value={progress} className="h-2" />
@@ -187,7 +156,6 @@ export function PWAUpdateBanner() {
           </div>
         )}
 
-        {/* Actions */}
         {!updating && !done && (
           <div className="flex flex-col gap-2 mt-5">
             <Button onClick={handleUpdate} className="w-full gap-2">
