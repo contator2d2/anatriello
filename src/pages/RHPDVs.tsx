@@ -35,6 +35,7 @@ export default function RHPDVs() {
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState(EMPTY_PDV);
   const [search, setSearch] = useState("");
+  const [isSearchingCep, setIsSearchingCep] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const { data: pdvs, isLoading } = usePDVs();
   const { data: employees } = useEmployees();
@@ -72,16 +73,34 @@ export default function RHPDVs() {
 
   const handleCep = useCallback(async (cep: string) => {
     const clean = cep.replace(/\D/g, '');
-    if (clean.length === 8) {
-      try {
-        const res = await fetch(`https://viacep.com.br/ws/${clean}/json/`);
-        const data = await res.json();
-        if (!data.erro) {
-          setForm(f => ({ ...f, address: data.logradouro || '', neighborhood: data.bairro || '', city: data.localidade || '', state: data.uf || '' }));
-        }
-      } catch {}
+    if (clean.length !== 8) {
+      toast({ title: 'CEP inválido', description: 'O CEP deve ter 8 dígitos.', variant: 'destructive' });
+      return;
     }
-  }, []);
+
+    setIsSearchingCep(true);
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${clean}/json/`);
+      const data = await res.json();
+      if (data.erro) {
+        toast({ title: 'CEP não encontrado', variant: 'destructive' });
+      } else {
+        setForm(f => ({ 
+          ...f, 
+          zip_code: clean.replace(/^(\d{5})(\d{3})$/, '$1-$2'),
+          address: data.logradouro || '', 
+          neighborhood: data.bairro || '', 
+          city: data.localidade || '', 
+          state: data.uf || '' 
+        }));
+        toast({ title: 'Endereço preenchido!' });
+      }
+    } catch (err) {
+      toast({ title: 'Erro ao consultar CEP', variant: 'destructive' });
+    } finally {
+      setIsSearchingCep(false);
+    }
+  }, [toast]);
 
   const openCreate = () => { setForm(EMPTY_PDV); setEditId(null); setShowDialog(true); };
   const openEdit = (pdv: any) => {
@@ -116,7 +135,13 @@ export default function RHPDVs() {
     }
   };
 
-  const filtered = (pdvs || []).filter((p: any) => !search || p.name.toLowerCase().includes(search.toLowerCase()) || (p.client_name || '').toLowerCase().includes(search.toLowerCase()));
+  const filtered = (pdvs || []).filter((p: any) => 
+    !search || 
+    p.name.toLowerCase().includes(search.toLowerCase()) || 
+    (p.client_name || '').toLowerCase().includes(search.toLowerCase()) ||
+    (p.zip_code || '').replace(/\D/g, '').includes(search.replace(/\D/g, '')) ||
+    (p.address || '').toLowerCase().includes(search.toLowerCase())
+  );
 
   const handleBulkDelete = async () => {
     if (!selectedIds.size) return;
@@ -237,7 +262,26 @@ export default function RHPDVs() {
               <div className="space-y-1"><Label>Cliente</Label><Input value={form.client_name} onChange={e => setForm(f => ({ ...f, client_name: e.target.value }))} /></div>
             </div>
             <div className="grid grid-cols-3 gap-3">
-              <div className="space-y-1"><Label>CEP</Label><Input value={form.zip_code} onChange={e => { setForm(f => ({ ...f, zip_code: e.target.value })); handleCep(e.target.value); }} placeholder="00000-000" /></div>
+              <div className="space-y-1">
+                <Label>CEP</Label>
+                <div className="flex gap-2">
+                  <Input 
+                    value={form.zip_code} 
+                    onChange={e => setForm(f => ({ ...f, zip_code: e.target.value }))} 
+                    placeholder="00000-000" 
+                    onBlur={e => e.target.value.replace(/\D/g, '').length === 8 && handleCep(e.target.value)}
+                  />
+                  <Button 
+                    type="button" 
+                    size="icon" 
+                    variant="outline" 
+                    onClick={() => handleCep(form.zip_code)}
+                    disabled={isSearchingCep}
+                  >
+                    {isSearchingCep ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                  </Button>
+                </div>
+              </div>
                 <div className="space-y-1 col-span-2"><Label>Endereço</Label><Input value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} /></div>
             </div>
             <div className="grid grid-cols-3 gap-3">
