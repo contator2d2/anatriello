@@ -1,17 +1,7 @@
 let deferredPrompt: any = null;
 
-// Only register service worker in production and if supported
-if ('serviceWorker' in navigator && import.meta.env.PROD) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js', { scope: '/' })
-      .then(registration => {
-        console.log('SW registered: ', registration);
-      })
-      .catch(registrationError => {
-        console.log('SW registration failed: ', registrationError);
-      });
-  });
-}
+// Service worker registration is handled by vite-plugin-pwa in production
+
 
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
