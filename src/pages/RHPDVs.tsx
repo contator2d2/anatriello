@@ -256,7 +256,26 @@ export default function RHPDVs() {
               <div className="space-y-1"><Label>Cliente</Label><Input value={form.client_name} onChange={e => setForm(f => ({ ...f, client_name: e.target.value }))} /></div>
             </div>
             <div className="grid grid-cols-3 gap-3">
-              <div className="space-y-1"><Label>CEP</Label><Input value={form.zip_code} onChange={e => { setForm(f => ({ ...f, zip_code: e.target.value })); handleCep(e.target.value); }} placeholder="00000-000" /></div>
+              <div className="space-y-1">
+                <Label>CEP</Label>
+                <div className="flex gap-2">
+                  <Input 
+                    value={form.zip_code} 
+                    onChange={e => setForm(f => ({ ...f, zip_code: e.target.value }))} 
+                    placeholder="00000-000" 
+                    onBlur={e => e.target.value.replace(/\D/g, '').length === 8 && handleCep(e.target.value)}
+                  />
+                  <Button 
+                    type="button" 
+                    size="icon" 
+                    variant="outline" 
+                    onClick={() => handleCep(form.zip_code)}
+                    disabled={isSearchingCep}
+                  >
+                    {isSearchingCep ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                  </Button>
+                </div>
+              </div>
                 <div className="space-y-1 col-span-2"><Label>Endereço</Label><Input value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} /></div>
             </div>
             <div className="grid grid-cols-3 gap-3">
