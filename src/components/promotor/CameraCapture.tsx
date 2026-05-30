@@ -1,8 +1,9 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { Camera, RotateCcw, Check, X, Loader2, AlertTriangle, Upload } from "lucide-react";
+import { Camera, RotateCcw, Check, X, Loader2, AlertTriangle, Upload, WifiOff } from "lucide-react";
 import { useUpload } from "@/hooks/use-upload";
+import { useOfflineSync } from "@/hooks/use-offline-sync";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -212,6 +213,7 @@ export function CameraCapture({
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { uploadFile, isUploading } = useUpload(customTokenGetter);
+  const { isOnline, queueUpload } = useOfflineSync();
   const config = { ...DEFAULT_QUALITY_CONFIG, ...qualityConfig };
 
   const startCamera = useCallback(async (facing: "environment" | "user") => {
@@ -331,13 +333,22 @@ export function CameraCapture({
         return;
       }
 
-      // Upload
+      // Upload or Queue
       const file = new File([blob], `photo_${Date.now()}.jpg`, { type: "image/jpeg" });
-      const url = await uploadFile(file);
-      if (url) {
-        onCapture(url);
-        toast.success("Foto aprovada e enviada!");
+      
+      if (!isOnline) {
+        const token = (customTokenGetter ? customTokenGetter() : null) || localStorage.getItem('promotor_token');
+        const localUrl = await queueUpload(file, token);
+        onCapture(localUrl);
+        toast.info("Foto salva localmente. Será enviada quando houver internet.");
         handleClose();
+      } else {
+        const url = await uploadFile(file);
+        if (url) {
+          onCapture(url);
+          toast.success("Foto aprovada e enviada!");
+          handleClose();
+        }
       }
     } catch (err: any) {
       toast.error(err.message || "Erro ao enviar foto");
