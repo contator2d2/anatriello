@@ -1311,9 +1311,14 @@ export default function PromotorRota() {
 
                 if (!isOnline) {
                   queueApiCall({
-                    url: `/api/merch/promotor/execution-categories/updates`,
-                    method: 'POST',
-                    body: { updates: [body] },
+                    url: `/api/merch/promotor/executions/${selectedExec.id}`,
+                    method: 'PUT',
+                    body: {
+                      qty_store: actionForm.qty_store ?? selectedExec.qty_store ?? 0,
+                      qty_stock: actionForm.qty_stock ?? selectedExec.qty_stock ?? 0,
+                      observation: actionForm.product_observation ?? selectedExec.observation,
+                      status: 'completed', checked: true,
+                    },
                     headers: { 'Authorization': `Bearer ${localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}` }
                   });
                   toast.info('Produto salvo offline!');
