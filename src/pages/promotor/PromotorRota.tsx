@@ -69,7 +69,7 @@ function CategoryPreparation({ category, catId, routeBrandId, categoryName, rout
 
     if (!isOnline) {
       queueApiCall({
-        url: `/api/merch/promotor/routes/${routeId}/execution-categories/${catId}/point-type`,
+        url: `/api/merch/promotor/routes/${routeId}/categories/${catId}/point-type`,
         method: 'POST',
         body: { 
           route_brand_id: routeBrandId,
