@@ -82,11 +82,11 @@ function CategoryPreparation({ category, catId, routeBrandId, categoryName, rout
       onUnlocked();
       return;
     }
-    
     setPointType.mutate({ 
-...
+      routeId, 
+      catId, 
+      route_brand_id: routeBrandId,
       point_type: type,
-      // Passamos um flag para o hook se ele precisar tratar o desbloqueio imediato no backend
       products_unlocked: shouldUnlockImmediately 
     }, {
       onSuccess: () => { 
