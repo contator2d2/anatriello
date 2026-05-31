@@ -68,21 +68,23 @@ function analyzeImageQuality(
     return { valid: false, message: `Resolução muito baixa (${w}x${h}). Mínimo: ${config.min_resolution_w}x${config.min_resolution_h}.` };
   }
 
-  // Sample center region for analysis (50% of image)
-  const sampleX = Math.floor(w * 0.25);
-  const sampleY = Math.floor(h * 0.25);
-  const sampleW = Math.floor(w * 0.5);
-  const sampleH = Math.floor(h * 0.5);
+  // Optimize: use a smaller sample area for faster analysis
+  const sampleW = Math.min(400, Math.floor(w * 0.4));
+  const sampleH = Math.min(300, Math.floor(h * 0.4));
+  const sampleX = Math.floor((w - sampleW) / 2);
+  const sampleY = Math.floor((h - sampleH) / 2);
+  
   const imageData = ctx.getImageData(sampleX, sampleY, sampleW, sampleH);
   const data = imageData.data;
   const pixelCount = sampleW * sampleH;
 
   // Brightness analysis
   let totalBrightness = 0;
-  for (let i = 0; i < data.length; i += 4) {
+  // Step through pixels to speed up (every 2nd pixel)
+  for (let i = 0; i < data.length; i += 8) {
     totalBrightness += (data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114);
   }
-  const avgBrightness = totalBrightness / pixelCount;
+  const avgBrightness = totalBrightness / (pixelCount / 2);
 
   if (avgBrightness < config.min_brightness) {
     return { valid: false, message: "A foto está muito escura. Melhore a iluminação." };
@@ -99,8 +101,11 @@ function analyzeImageQuality(
   }
 
   let laplacianVar = 0;
-  for (let y = 1; y < sampleH - 1; y++) {
-    for (let x = 1; x < sampleW - 1; x++) {
+  // Step through pixels to speed up
+  const step = 2;
+  let count = 0;
+  for (let y = 1; y < sampleH - 1; y += step) {
+    for (let x = 1; x < sampleW - 1; x += step) {
       const idx = y * sampleW + x;
       const laplacian =
         -grayData[idx - sampleW] -
@@ -109,9 +114,10 @@ function analyzeImageQuality(
         grayData[idx + 1] -
         grayData[idx + sampleW];
       laplacianVar += laplacian * laplacian;
+      count++;
     }
   }
-  laplacianVar /= ((sampleW - 2) * (sampleH - 2));
+  laplacianVar /= count;
 
   if (laplacianVar < config.blur_tolerance) {
     return { valid: false, message: "A foto está borrada. Tire novamente." };
@@ -337,10 +343,10 @@ export function CameraCapture({
       const file = new File([blob], `photo_${Date.now()}.jpg`, { type: "image/jpeg" });
       
       if (!isOnline) {
-        const token = (customTokenGetter ? customTokenGetter() : null) || localStorage.getItem('promotor_token');
+        const token = (customTokenGetter ? customTokenGetter() : null) || localStorage.getItem('promotor_token') || localStorage.getItem('auth_token');
         const localUrl = await queueUpload(file, token);
         onCapture(localUrl);
-        toast.info("Foto salva localmente. Será enviada quando houver internet.");
+        toast.info("Foto salva localmente e otimizada! Será enviada quando houver internet.");
         handleClose();
       } else {
         const url = await uploadFile(file);

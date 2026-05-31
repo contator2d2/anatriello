@@ -148,7 +148,9 @@ export function useOfflineSync() {
     }
 
     setIsSyncing(false);
-    toast.success('Sincronização offline concluída com sucesso!');
+    toast.success('Sincronização offline concluída com sucesso!', {
+      description: `Processados ${pendingUploads.length} arquivos e ${pendingCalls.length} chamadas.`
+    });
   }, [isOnline, isSyncing]);
 
   // Auto-sync when coming online

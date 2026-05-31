@@ -126,6 +126,7 @@ function CategoryPreparation({ category, catId, routeBrandId, categoryName, rout
         });
         toast.info(`${photos.length} foto(s) salvas offline! Produtos liberados.`);
         setPhotos([]);
+        setIsSending(false);
         onUnlocked();
         return;
       }
@@ -294,6 +295,7 @@ function ExtraPointPhotoGate({ catId, categoryName, routeId, pdvName, brandName,
   const setCategoryPhoto = usePromotorCategoryPhoto();
   const [photos, setPhotos] = useState<string[]>([]);
   const [isSending, setIsSending] = useState(false);
+  const { isOnline, queueApiCall } = useOfflineSync();
 
   const handleUploadPhoto = async () => {
     if (photos.length === 0) return toast.error('É necessário tirar pelo menos 1 foto do ponto extra.');
@@ -302,15 +304,43 @@ function ExtraPointPhotoGate({ catId, categoryName, routeId, pdvName, brandName,
       const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
         navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000 })
       ).catch(() => null);
-      setCategoryPhoto.mutate({
-        routeId, catId, photo_url: photos[0],
+
+      const body = {
+        routeId, catId, photo_url: photos[0], photos,
         latitude: pos?.coords.latitude, longitude: pos?.coords.longitude,
-      }, {
-        onSuccess: () => { toast.success('Foto do ponto extra registrada! Produtos liberados.'); setPhotos([]); onPhotoTaken(); },
-        onError: (err: any) => { toast.error(err.message); setIsSending(false); },
+      };
+
+      if (!isOnline) {
+        await queueApiCall({
+          url: `/api/merch/promotor/routes/${routeId}/execution-categories/${catId}/photo`,
+          method: 'POST',
+          body,
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}` },
+          dependsOnUploadId: photos[0].startsWith('blob:') ? photos[0] : undefined
+        });
+        toast.info('Foto do ponto extra salva offline! Produtos liberados.');
+        setPhotos([]);
+        setIsSending(false);
+        onPhotoTaken();
+        return;
+      }
+
+      setCategoryPhoto.mutate(body, {
+        onSuccess: () => { 
+          toast.success('Foto do ponto extra registrada! Produtos liberados.'); 
+          setPhotos([]); 
+          onPhotoTaken(); 
+        },
+        onError: (err: any) => { 
+          toast.error(err.message); 
+          setIsSending(false); 
+        },
       });
-    } catch { setIsSending(false); }
+    } catch { 
+      setIsSending(false); 
+    }
   };
+
 
   return (
     <Card className="border-orange-400/40 bg-orange-50/50">
@@ -385,6 +415,7 @@ function CategoryAfterPhotoGate({ catId, routeBrandId, categoryName, routeId, pd
   const setCategoryAfterPhoto = usePromotorCategoryAfterPhoto();
   const [photos, setPhotos] = useState<string[]>([]);
   const [isSending, setIsSending] = useState(false);
+  const { isOnline, queueApiCall } = useOfflineSync();
   const min = Math.max(1, minPhotos || 1);
 
   const handleUpload = async () => {
@@ -394,15 +425,44 @@ function CategoryAfterPhotoGate({ catId, routeBrandId, categoryName, routeId, pd
       const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
         navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000 })
       ).catch(() => null);
-      setCategoryAfterPhoto.mutate({
+
+      const body = {
         routeId, catId, route_brand_id: routeBrandId, photo_url: photos[0], photos,
         latitude: pos?.coords.latitude, longitude: pos?.coords.longitude,
-      }, {
-        onSuccess: () => { toast.success(`${photos.length} foto(s) DEPOIS registrada(s)! Categoria concluída.`); setPhotos([]); onCompleted(); },
-        onError: (err: any) => { toast.error(err.message); setIsSending(false); },
+      };
+
+      if (!isOnline) {
+        await queueApiCall({
+          url: `/api/merch/promotor/routes/${routeId}/execution-categories/${catId}/after-photo`,
+          method: 'POST',
+          body,
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}` },
+          dependsOnUploadId: photos[0].startsWith('blob:') ? photos[0] : undefined
+        });
+        toast.info('Foto DEPOIS salva offline! Categoria concluída localmente.');
+        setPhotos([]);
+        setIsSending(false);
+        onCompleted();
+        return;
+      }
+
+      setCategoryAfterPhoto.mutate(body, {
+        onSuccess: () => { 
+          toast.success(`${photos.length} foto(s) DEPOIS registrada(s)! Categoria concluída.`); 
+          setPhotos([]); 
+          onCompleted(); 
+        },
+        onError: (err: any) => { 
+          toast.error(err.message); 
+          setIsSending(false); 
+        },
       });
-    } catch { setIsSending(false); }
+    } catch { 
+      setIsSending(false); 
+    }
   };
+
+
 
   return (
     <Card className="border-green-500/40 bg-green-50/50 mt-2">
@@ -678,7 +738,7 @@ export default function PromotorRota() {
     }
   }, [id, checkin, route?.require_checkin_photo, checkinPhotoUrl, isFacialActiveCheckin, faceVerifyAction, route?.pdv_name]);
 
-  const handleCompleteRoute = useCallback(() => {
+  const handleCompleteRoute = useCallback(async () => {
     if (!id) return;
     if (isFacialActiveCheckin && faceVerifyAction !== 'checkout') {
       setFaceVerifyAction('checkout');
@@ -686,7 +746,23 @@ export default function PromotorRota() {
       return;
     }
     setFaceVerifyAction(null);
-    checkout.mutate({ id, notes: actionForm.notes }, {
+
+    const body = { id, notes: actionForm.notes };
+
+    if (!isOnline) {
+      await queueApiCall({
+        url: `/api/merch/promotor/routes/${id}/checkout`,
+        method: 'POST',
+        body: { notes: actionForm.notes },
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}` }
+      });
+      toast.info('Rota finalizada offline! Sincronizando quando houver conexão.');
+      setShowCompleteRoute(false);
+      navigate('/promotor/home');
+      return;
+    }
+
+    checkout.mutate(body, {
       onSuccess: (data: any) => {
         toast.success('Rota finalizada!');
         setShowCompleteRoute(false);
@@ -700,7 +776,7 @@ export default function PromotorRota() {
       },
       onError: (err: any) => toast.error(err.message),
     });
-  }, [id, checkout, actionForm, navigate, isFacialActiveCheckin, faceVerifyAction]);
+  }, [id, checkout, actionForm, navigate, isFacialActiveCheckin, faceVerifyAction, isOnline, queueApiCall]);
 
   const handlePdvCheckout = useCallback(async () => {
     if (!route?.pdv_id) return;
@@ -713,22 +789,39 @@ export default function PromotorRota() {
     try {
       const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
         navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000 })
-      );
-      await pdvCheckout.checkout({
+      ).catch(() => null);
+
+      const body = {
         pdv_id: route.pdv_id,
-        latitude: pos.coords.latitude,
-        longitude: pos.coords.longitude,
+        latitude: pos?.coords.latitude,
+        longitude: pos?.coords.longitude,
         photo_url: pdvCheckoutPhoto || undefined,
         status_override: !pdvCheckoutPhoto ? 'awaiting_photo' : 'completed',
         notes: actionForm.pdv_notes,
-      });
+      };
+
+      if (!isOnline) {
+        await queueApiCall({
+          url: '/api/merch/promotor/pdv-checkout',
+          method: 'POST',
+          body,
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}` },
+          dependsOnUploadId: pdvCheckoutPhoto.startsWith('blob:') ? pdvCheckoutPhoto : undefined
+        });
+        toast.info('Checkout do PDV salvo offline!');
+        setShowPdvCheckout(false);
+        navigate('/promotor/home');
+        return;
+      }
+
+      await pdvCheckout.checkout(body);
       toast.success('Checkout do PDV realizado!');
       setShowPdvCheckout(false);
       navigate('/promotor/home');
     } catch (err: any) {
       toast.error(err.message || 'Erro no checkout do PDV');
     }
-  }, [route?.pdv_id, pdvCheckout, pdvCheckoutPhoto, actionForm, navigate]);
+  }, [route?.pdv_id, pdvCheckout, pdvCheckoutPhoto, actionForm, navigate, isOnline, queueApiCall]);
 
   const handleOpenProduct = useCallback((exec: any) => {
     const routeBrandId = exec.route_brand_id;
