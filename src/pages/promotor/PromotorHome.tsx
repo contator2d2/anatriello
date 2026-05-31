@@ -256,6 +256,7 @@ export default function PromotorHome() {
         setShowPdvCheckout(false);
         setPdvCheckoutPhoto('');
         setPdvCheckoutNotes('');
+        setPunchLoading(false); // Reset loading state
         return;
       }
 
