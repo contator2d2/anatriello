@@ -495,9 +495,35 @@ export default function PromotorHome() {
         )}
 
         {/* Welcome */}
-        <div>
-          <h1 className="text-lg font-bold">Olá, {employee?.full_name?.split(' ')[0]}! 👋</h1>
-          <p className="text-sm text-muted-foreground">{employee?.position || employee?.worker_profile}</p>
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="text-lg font-bold">Olá, {employee?.full_name?.split(' ')[0]}! 👋</h1>
+            <p className="text-sm text-muted-foreground">{employee?.position || employee?.worker_profile}</p>
+          </div>
+          {isOnline && hasRoutesToday && (
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className={cn(
+                "h-8 text-[10px] gap-1.5",
+                isPreloading && "border-primary text-primary"
+              )}
+              onClick={handlePreloadData}
+              disabled={isPreloading}
+            >
+              {isPreloading ? (
+                <>
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  {preloadProgress}%
+                </>
+              ) : (
+                <>
+                  <Download className="h-3 w-3" />
+                  Baixar Offline
+                </>
+              )}
+            </Button>
+          )}
         </div>
 
         {/* ======= SCENARIO 1: HAS ROUTES TODAY ======= */}
