@@ -102,6 +102,21 @@ export default function PromotorHome() {
   const pendingRoutesCount = data?.pending_routes_count || 0;
   const pdvVisits = data?.pdv_visits || [];
 
+  // Auto-preload data whenever we have routes and are online
+  useEffect(() => {
+    if (isOnline && todayRoutes.length > 0 && !isPreloading) {
+      const hasUncachedRoutes = todayRoutes.some((r: any) => {
+        const state = queryClient.getQueryState(['promotor-route', r.id]);
+        return !state || state.status === 'error';
+      });
+
+      if (hasUncachedRoutes) {
+        logger.info('[Auto-Preload] Iniciando pré-carregamento automático de rotas');
+        handlePreloadData();
+      }
+    }
+  }, [isOnline, todayRoutes.length, queryClient]);
+
   // Detect PDVs where all routes are completed but no checkout was done
   const pdvsNeedingCheckout = useMemo(() => {
     if (!todayRoutes.length) return [];
