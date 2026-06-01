@@ -68,9 +68,9 @@ function analyzeImageQuality(
     return { valid: false, message: `Resolução muito baixa (${w}x${h}). Mínimo: ${config.min_resolution_w}x${config.min_resolution_h}.` };
   }
 
-  // Optimize: use a smaller sample area for faster analysis
-  const sampleW = Math.min(400, Math.floor(w * 0.4));
-  const sampleH = Math.min(300, Math.floor(h * 0.4));
+  // Optimize: use an even smaller sample area for faster analysis
+  const sampleW = Math.min(200, Math.floor(w * 0.2));
+  const sampleH = Math.min(150, Math.floor(h * 0.2));
   const sampleX = Math.floor((w - sampleW) / 2);
   const sampleY = Math.floor((h - sampleH) / 2);
   
@@ -80,11 +80,11 @@ function analyzeImageQuality(
 
   // Brightness analysis
   let totalBrightness = 0;
-  // Step through pixels to speed up (every 2nd pixel)
-  for (let i = 0; i < data.length; i += 8) {
+  // Step through pixels to speed up (every 4th pixel)
+  for (let i = 0; i < data.length; i += 16) {
     totalBrightness += (data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114);
   }
-  const avgBrightness = totalBrightness / (pixelCount / 2);
+  const avgBrightness = totalBrightness / (pixelCount / 4);
 
   if (avgBrightness < config.min_brightness) {
     return { valid: false, message: "A foto está muito escura. Melhore a iluminação." };
