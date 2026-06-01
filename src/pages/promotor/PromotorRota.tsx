@@ -431,32 +431,20 @@ function CategoryAfterPhotoGate({ catId, routeBrandId, categoryName, routeId, pd
         latitude: pos?.coords.latitude, longitude: pos?.coords.longitude,
       };
 
-      if (!isOnline) {
-        await queueApiCall({
-          url: `/api/merch/promotor/routes/${routeId}/categories/${catId}/after-photo`,
-          method: 'POST',
-          body,
-          headers: { 'Authorization': `Bearer ${localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}` },
-          dependsOnUploadId: photos[0].startsWith('blob:') ? photos[0] : undefined
-        });
-        toast.info('Foto DEPOIS salva offline! Categoria concluída localmente.');
-        setPhotos([]);
-        setIsSending(false);
-        onCompleted();
-        return;
-      }
-
-      setCategoryAfterPhoto.mutate(body, {
-        onSuccess: () => { 
-          toast.success(`${photos.length} foto(s) DEPOIS registrada(s)! Categoria concluída.`); 
-          setPhotos([]); 
-          onCompleted(); 
-        },
-        onError: (err: any) => { 
-          toast.error(err.message); 
-          setIsSending(false); 
-        },
+      // Always use queue for photo-related actions for maximum performance
+      // This allows the user to continue working immediately
+      await queueApiCall({
+        url: `/api/merch/promotor/routes/${routeId}/categories/${catId}/after-photo`,
+        method: 'POST',
+        body,
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}` },
+        dependsOnUploadId: photos[0].startsWith('blob:') ? photos[0] : undefined
       });
+      
+      toast.success('Categoria concluída! Sincronizando em segundo plano.');
+      setPhotos([]);
+      setIsSending(false);
+      onCompleted();
     } catch { 
       setIsSending(false); 
     }
