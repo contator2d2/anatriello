@@ -105,7 +105,7 @@ function CategoryPreparation({ category, catId, routeBrandId, categoryName, rout
     setIsSending(true);
     try {
       const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
-        navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000 })
+        navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 5000 })
       ).catch(() => null);
 
       const body = {
@@ -118,7 +118,7 @@ function CategoryPreparation({ category, catId, routeBrandId, categoryName, rout
 
       if (!isOnline) {
         queueApiCall({
-          url: `/api/merch/promotor/routes/${routeId}/execution-categories/${catId}/photo`,
+          url: `/api/merch/promotor/routes/${routeId}/categories/${catId}/photo`,
           method: 'POST',
           body,
           headers: { 'Authorization': `Bearer ${localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}` },
