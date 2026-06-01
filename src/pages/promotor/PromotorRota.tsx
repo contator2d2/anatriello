@@ -683,20 +683,20 @@ export default function PromotorRota() {
         if (err.code === 1) throw new Error('Permissão de GPS negada. Por favor, autorize o acesso à localização.');
         if (err.code === 2) throw new Error('Posição indisponível. Verifique se o GPS está ativado.');
         if (err.code === 3) throw new Error('Tempo limite do GPS esgotado. Tente novamente em um local mais aberto.');
-        throw new Error('Erro ao obter localização: ' + (err.message || 'GPS indisponível.'));
+        return null; // Don't block if GPS fails (especially offline)
       });
 
       logger.info('[handleCheckin] Localização obtida para check-in', { 
         routeId: id, 
-        lat: pos.coords.latitude, 
-        lng: pos.coords.longitude,
-        accuracy: pos.coords.accuracy 
+        lat: pos?.coords.latitude, 
+        lng: pos?.coords.longitude,
+        accuracy: pos?.coords.accuracy 
       });
 
       const body = {
         id,
-        latitude: pos.coords.latitude,
-        longitude: pos.coords.longitude,
+        latitude: pos?.coords.latitude,
+        longitude: pos?.coords.longitude,
         device: navigator.userAgent || 'Unknown Device',
         photo_url: checkinPhotoUrl || undefined,
         facial_verified: isFacialActiveCheckin || undefined,
@@ -711,9 +711,9 @@ export default function PromotorRota() {
           headers: { 'Authorization': `Bearer ${localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}` },
           dependsOnUploadId: checkinPhotoUrl.startsWith('blob:') ? checkinPhotoUrl : undefined
         });
-        toast.info('Check-in salvo offline!');
+        toast.info('Check-in salvo offline! Você já pode iniciar os trabalhos.');
         setCheckinPhotoUrl('');
-        refetch();
+        // Optimistically update route status locally if needed
         return;
       }
 
@@ -736,7 +736,7 @@ export default function PromotorRota() {
       logger.error('[handleCheckin] Erro fatal no check-in', { message: err.message, routeId: id }, err);
       toast.error(err.message || 'Não foi possível realizar o check-in');
     }
-  }, [id, checkin, route?.require_checkin_photo, checkinPhotoUrl, isFacialActiveCheckin, faceVerifyAction, route?.pdv_name]);
+  }, [id, checkin, route?.require_checkin_photo, checkinPhotoUrl, isFacialActiveCheckin, faceVerifyAction, route?.pdv_name, isOnline, queueApiCall, refetch]);
 
   const handleCompleteRoute = useCallback(async () => {
     if (!id) return;
