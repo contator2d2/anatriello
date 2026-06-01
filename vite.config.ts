@@ -17,8 +17,8 @@ export default defineConfig(() => ({
         maximumFileSizeToCacheInBytes: 10 * 1024 * 1024, // 10 MB
       },
       manifest: {
-        name: "WhatSale",
-        short_name: "WhatSale",
+        name: "Promotor Ayratech",
+        short_name: "Promotor Ayratech",
         description: "Plataforma de Gestão e Merchandising",
         theme_color: "#000000",
         background_color: "#000000",
