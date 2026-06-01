@@ -116,31 +116,19 @@ function CategoryPreparation({ category, catId, routeBrandId, categoryName, rout
         longitude: pos?.coords.longitude,
       };
 
-      if (!isOnline) {
-        queueApiCall({
-          url: `/api/merch/promotor/routes/${routeId}/categories/${catId}/photo`,
-          method: 'POST',
-          body,
-          headers: { 'Authorization': `Bearer ${localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}` },
-          dependsOnUploadId: photos[0].startsWith('blob:') ? photos[0] : undefined
-        });
-        toast.info(`${photos.length} foto(s) salvas offline! Produtos liberados.`);
-        setPhotos([]);
-        setIsSending(false);
-        onUnlocked();
-        return;
-      }
-
-      setCategoryPhoto.mutate({
-        routeId, catId, ...body
-      }, {
-        onSuccess: () => {
-          toast.success(`${photos.length} foto(s) registrada(s)! Produtos liberados.`);
-          setPhotos([]);
-          onUnlocked();
-        },
-        onError: (err: any) => { toast.error(err.message); setIsSending(false); },
+      // Always use background queue for photo-related actions for performance
+      queueApiCall({
+        url: `/api/merch/promotor/routes/${routeId}/categories/${catId}/photo`,
+        method: 'POST',
+        body: { ...body, routeId, catId },
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}` },
+        dependsOnUploadId: photos[0].startsWith('blob:') ? photos[0] : undefined
       });
+      
+      toast.success(`${photos.length} foto(s) registrada(s)! Produtos liberados.`);
+      setPhotos([]);
+      setIsSending(false);
+      onUnlocked();
     } catch {
       setIsSending(false);
     }
