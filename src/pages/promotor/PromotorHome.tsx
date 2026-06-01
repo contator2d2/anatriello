@@ -15,12 +15,15 @@ import { FaceVerifyDialog } from "@/components/facial-recognition/FaceVerifyDial
 import { PromotorLayout } from "./PromotorLayout";
 import {
   Clock, FileText, Bell, MapPin, Wifi, WifiOff, Navigation, AlertTriangle, CheckCircle2,
-  Loader2, ShieldAlert, Timer, ChevronRight, PlayCircle, Package, Store, ScanFace
+  Loader2, ShieldAlert, Timer, ChevronRight, PlayCircle, Package, Store, ScanFace,
+  Download, Check
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { logger } from "@/lib/logger";
+import { api } from "@/lib/api";
+import { cn } from "@/lib/utils";
 
 const STATUS_COLORS: Record<string, string> = {
   scheduled: 'bg-blue-500/20 text-blue-700',
@@ -59,6 +62,9 @@ export default function PromotorHome() {
   const [pdvCheckinLoading, setPdvCheckinLoading] = useState(false);
   const [actionPdv, setActionPdv] = useState<{ pdv_id: string; pdv_name: string } | null>(null);
   const [showFaceVerify, setShowFaceVerify] = useState(false);
+  const [isPreloading, setIsPreloading] = useState(false);
+  const [preloadProgress, setPreloadProgress] = useState(0);
+  const queryClient = useQueryClient();
 
   // Fetch facial config for this promotor
   const promotorToken = localStorage.getItem('promotor_token');
@@ -400,6 +406,53 @@ export default function PromotorHome() {
     }
   };
 
+  const handlePreloadData = async () => {
+    if (!todayRoutes.length) {
+      toast({ title: 'Sem rotas', description: 'Não há rotas para baixar hoje.' });
+      return;
+    }
+    
+    setIsPreloading(true);
+    setPreloadProgress(0);
+    logger.info('[Preload] Iniciando download de dados para uso offline', { routeCount: todayRoutes.length });
+    
+    try {
+      let completed = 0;
+      const total = todayRoutes.length;
+      
+      for (const route of todayRoutes) {
+        // Prefetch each route detail. React Query will store this in its cache.
+        await queryClient.prefetchQuery({
+          queryKey: ['promotor-route', route.id],
+          queryFn: async () => {
+            const token = localStorage.getItem('promotor_token') || localStorage.getItem('auth_token');
+            const url = `${(import.meta.env.VITE_API_URL || '').replace(/\/$/, '')}/api/merch/promotor/routes/${route.id}`;
+            const res = await fetch(url, {
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (!res.ok) throw new Error('Falha ao baixar rota');
+            return res.json();
+          },
+          staleTime: 1000 * 60 * 60 * 24,
+        });
+        
+        completed++;
+        setPreloadProgress(Math.round((completed / total) * 100));
+      }
+      
+      toast({ 
+        title: 'Dados baixados!', 
+        description: `${total} rotas e checklists preparados para uso offline.`,
+        className: "bg-green-50 border-green-200"
+      });
+    } catch (err: any) {
+      logger.error('[Preload] Erro ao baixar dados', { error: err.message });
+      toast({ title: 'Erro no download', description: 'Não foi possível baixar todos os dados. Tente novamente.', variant: 'destructive' });
+    } finally {
+      setIsPreloading(false);
+    }
+  };
+
   if (isLoading) return <PromotorLayout><div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div></PromotorLayout>;
 
   return (
@@ -443,9 +496,35 @@ export default function PromotorHome() {
         )}
 
         {/* Welcome */}
-        <div>
-          <h1 className="text-lg font-bold">Olá, {employee?.full_name?.split(' ')[0]}! 👋</h1>
-          <p className="text-sm text-muted-foreground">{employee?.position || employee?.worker_profile}</p>
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="text-lg font-bold">Olá, {employee?.full_name?.split(' ')[0]}! 👋</h1>
+            <p className="text-sm text-muted-foreground">{employee?.position || employee?.worker_profile}</p>
+          </div>
+          {isOnline && hasRoutesToday && (
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className={cn(
+                "h-8 text-[10px] gap-1.5",
+                isPreloading && "border-primary text-primary"
+              )}
+              onClick={handlePreloadData}
+              disabled={isPreloading}
+            >
+              {isPreloading ? (
+                <>
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  {preloadProgress}%
+                </>
+              ) : (
+                <>
+                  <Download className="h-3 w-3" />
+                  Baixar Offline
+                </>
+              )}
+            </Button>
+          )}
         </div>
 
         {/* ======= SCENARIO 1: HAS ROUTES TODAY ======= */}
