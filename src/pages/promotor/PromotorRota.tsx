@@ -116,31 +116,19 @@ function CategoryPreparation({ category, catId, routeBrandId, categoryName, rout
         longitude: pos?.coords.longitude,
       };
 
-      if (!isOnline) {
-        queueApiCall({
-          url: `/api/merch/promotor/routes/${routeId}/categories/${catId}/photo`,
-          method: 'POST',
-          body,
-          headers: { 'Authorization': `Bearer ${localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}` },
-          dependsOnUploadId: photos[0].startsWith('blob:') ? photos[0] : undefined
-        });
-        toast.info(`${photos.length} foto(s) salvas offline! Produtos liberados.`);
-        setPhotos([]);
-        setIsSending(false);
-        onUnlocked();
-        return;
-      }
-
-      setCategoryPhoto.mutate({
-        routeId, catId, ...body
-      }, {
-        onSuccess: () => {
-          toast.success(`${photos.length} foto(s) registrada(s)! Produtos liberados.`);
-          setPhotos([]);
-          onUnlocked();
-        },
-        onError: (err: any) => { toast.error(err.message); setIsSending(false); },
+      // Always use background queue for photo-related actions for performance
+      queueApiCall({
+        url: `/api/merch/promotor/routes/${routeId}/categories/${catId}/photo`,
+        method: 'POST',
+        body: { ...body, routeId, catId },
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}` },
+        dependsOnUploadId: photos[0].startsWith('blob:') ? photos[0] : undefined
       });
+      
+      toast.success(`${photos.length} foto(s) registrada(s)! Produtos liberados.`);
+      setPhotos([]);
+      setIsSending(false);
+      onUnlocked();
     } catch {
       setIsSending(false);
     }
@@ -310,32 +298,19 @@ function ExtraPointPhotoGate({ catId, categoryName, routeId, pdvName, brandName,
         latitude: pos?.coords.latitude, longitude: pos?.coords.longitude,
       };
 
-      if (!isOnline) {
-        await queueApiCall({
-          url: `/api/merch/promotor/routes/${routeId}/categories/${catId}/photo`,
-          method: 'POST',
-          body,
-          headers: { 'Authorization': `Bearer ${localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}` },
-          dependsOnUploadId: photos[0].startsWith('blob:') ? photos[0] : undefined
-        });
-        toast.info('Foto do ponto extra salva offline! Produtos liberados.');
-        setPhotos([]);
-        setIsSending(false);
-        onPhotoTaken();
-        return;
-      }
-
-      setCategoryPhoto.mutate(body, {
-        onSuccess: () => { 
-          toast.success('Foto do ponto extra registrada! Produtos liberados.'); 
-          setPhotos([]); 
-          onPhotoTaken(); 
-        },
-        onError: (err: any) => { 
-          toast.error(err.message); 
-          setIsSending(false); 
-        },
+      // Always use background queue for photo-related actions for performance
+      await queueApiCall({
+        url: `/api/merch/promotor/routes/${routeId}/categories/${catId}/photo`,
+        method: 'POST',
+        body,
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}` },
+        dependsOnUploadId: photos[0].startsWith('blob:') ? photos[0] : undefined
       });
+      
+      toast.success('Foto do ponto extra registrada! Produtos liberados.');
+      setPhotos([]);
+      setIsSending(false);
+      onPhotoTaken();
     } catch { 
       setIsSending(false); 
     }
@@ -431,32 +406,20 @@ function CategoryAfterPhotoGate({ catId, routeBrandId, categoryName, routeId, pd
         latitude: pos?.coords.latitude, longitude: pos?.coords.longitude,
       };
 
-      if (!isOnline) {
-        await queueApiCall({
-          url: `/api/merch/promotor/routes/${routeId}/categories/${catId}/after-photo`,
-          method: 'POST',
-          body,
-          headers: { 'Authorization': `Bearer ${localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}` },
-          dependsOnUploadId: photos[0].startsWith('blob:') ? photos[0] : undefined
-        });
-        toast.info('Foto DEPOIS salva offline! Categoria concluída localmente.');
-        setPhotos([]);
-        setIsSending(false);
-        onCompleted();
-        return;
-      }
-
-      setCategoryAfterPhoto.mutate(body, {
-        onSuccess: () => { 
-          toast.success(`${photos.length} foto(s) DEPOIS registrada(s)! Categoria concluída.`); 
-          setPhotos([]); 
-          onCompleted(); 
-        },
-        onError: (err: any) => { 
-          toast.error(err.message); 
-          setIsSending(false); 
-        },
+      // Always use queue for photo-related actions for maximum performance
+      // This allows the user to continue working immediately
+      await queueApiCall({
+        url: `/api/merch/promotor/routes/${routeId}/categories/${catId}/after-photo`,
+        method: 'POST',
+        body,
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}` },
+        dependsOnUploadId: photos[0].startsWith('blob:') ? photos[0] : undefined
       });
+      
+      toast.success('Categoria concluída! Sincronizando em segundo plano.');
+      setPhotos([]);
+      setIsSending(false);
+      onCompleted();
     } catch { 
       setIsSending(false); 
     }
@@ -703,35 +666,21 @@ export default function PromotorRota() {
         all_routes_at_pdv: true,
       };
 
-      if (!isOnline) {
-        queueApiCall({
-          url: `/api/merch/promotor/routes/${id}/checkin`,
-          method: 'POST',
-          body,
-          headers: { 'Authorization': `Bearer ${localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}` },
-          dependsOnUploadId: checkinPhotoUrl.startsWith('blob:') ? checkinPhotoUrl : undefined
-        });
-        toast.info('Check-in salvo offline! Você já pode iniciar os trabalhos.');
-        setCheckinPhotoUrl('');
-        // Optimistically update route status locally if needed
-        return;
-      }
-
-      checkin.mutate(body, {
-        onSuccess: () => {
-          logger.info('[handleCheckin] Check-in realizado com sucesso', { routeId: id });
-          toast.success('Check-in realizado!');
-          refetch(); // Força atualização dos dados da rota
-        },
-        onError: (err: any) => {
-          logger.error('[handleCheckin] Erro na API de check-in', { 
-            error: err.message, 
-            status: err.status,
-            routeId: id 
-          });
-          toast.error('Erro no servidor ao fazer check-in: ' + (err.message || 'Erro desconhecido'));
-        },
+      // Always use background queue for check-in for performance
+      await queueApiCall({
+        url: `/api/merch/promotor/routes/${id}/checkin`,
+        method: 'POST',
+        body,
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}` },
+        dependsOnUploadId: checkinPhotoUrl.startsWith('blob:') ? checkinPhotoUrl : undefined
       });
+      
+      toast.success('Check-in realizado! Sincronizando em segundo plano.');
+      setCheckinPhotoUrl('');
+      // We still want to refetch the route data to show updated status, 
+      // but we do it immediately without waiting for the checkin call to finish.
+      // The backend check-in usually takes care of the status.
+      setTimeout(() => refetch(), 1000); 
     } catch (err: any) {
       logger.error('[handleCheckin] Erro fatal no check-in', { message: err.message, routeId: id }, err);
       toast.error(err.message || 'Não foi possível realizar o check-in');
@@ -800,22 +749,16 @@ export default function PromotorRota() {
         notes: actionForm.pdv_notes,
       };
 
-      if (!isOnline) {
-        await queueApiCall({
-          url: '/api/merch/promotor/pdv-checkout',
-          method: 'POST',
-          body,
-          headers: { 'Authorization': `Bearer ${localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}` },
-          dependsOnUploadId: pdvCheckoutPhoto.startsWith('blob:') ? pdvCheckoutPhoto : undefined
-        });
-        toast.info('Checkout do PDV salvo offline!');
-        setShowPdvCheckout(false);
-        navigate('/promotor/home');
-        return;
-      }
-
-      await pdvCheckout.checkout(body);
-      toast.success('Checkout do PDV realizado!');
+      // Always use background queue for PDV checkout for performance
+      await queueApiCall({
+        url: '/api/merch/promotor/pdv-checkout',
+        method: 'POST',
+        body,
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}` },
+        dependsOnUploadId: pdvCheckoutPhoto.startsWith('blob:') ? pdvCheckoutPhoto : undefined
+      });
+      
+      toast.success('Checkout do PDV realizado! Sincronizando em segundo plano.');
       setShowPdvCheckout(false);
       navigate('/promotor/home');
     } catch (err: any) {

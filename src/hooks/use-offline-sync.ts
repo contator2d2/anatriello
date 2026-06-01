@@ -27,35 +27,6 @@ export function useOfflineSync() {
   const isOnline = useOnlineStatus();
   const [isSyncing, setIsSyncing] = useState(false);
 
-  const queueUpload = useCallback(async (file: File, token: string | null): Promise<string> => {
-    const localId = `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
-    await db.pending_uploads.add({
-      file: file,
-      fileName: file.name,
-      fileType: file.type,
-      timestamp: Date.now(),
-      token,
-      status: 'pending',
-      localId
-    });
-
-    // Return a temporary local URL so the UI can show the photo immediately
-    return URL.createObjectURL(file);
-  }, []);
-
-  const queueApiCall = useCallback(async (config: Omit<PendingApiCall, 'status' | 'timestamp'>) => {
-    await db.pending_api_calls.add({
-      ...config,
-      status: 'pending',
-      timestamp: Date.now()
-    });
-    
-    toast.info('Você está offline. A ação será sincronizada quando houver conexão.', {
-      description: 'Sua atividade foi salva localmente.',
-    });
-  }, []);
-
   const sync = useCallback(async () => {
     if (!isOnline || isSyncing) return;
 
@@ -80,8 +51,6 @@ export function useOfflineSync() {
         const formData = new FormData();
         formData.append('file', upload.file, upload.fileName);
 
-        // We use a raw fetch here to reuse the upload logic or we could import useUpload's logic
-        // But since we are in a hook, we'll do a direct fetch for simplicity in background
         const response = await fetch(`${API_URL}/api/uploads`, {
           method: 'POST',
           headers: upload.token ? { 'Authorization': `Bearer ${upload.token}` } : {},
@@ -112,10 +81,8 @@ export function useOfflineSync() {
 
         let body = call.body;
         
-        // If this call depends on an upload, replace the temporary URL with the real one
         if (call.dependsOnUploadId && uploadMap.has(call.dependsOnUploadId)) {
           const realUrl = uploadMap.get(call.dependsOnUploadId);
-          // Recursively find and replace the localId in the body
           const replaceUrl = (obj: any): any => {
             if (typeof obj === 'string' && obj.startsWith('blob:')) return realUrl;
             if (Array.isArray(obj)) return obj.map(replaceUrl);
@@ -148,10 +115,46 @@ export function useOfflineSync() {
     }
 
     setIsSyncing(false);
-    toast.success('Sincronização offline concluída com sucesso!', {
+    toast.success('Sincronização offline concluída!', {
       description: `Processados ${pendingUploads.length} arquivos e ${pendingCalls.length} chamadas.`
     });
   }, [isOnline, isSyncing]);
+
+  const queueUpload = useCallback(async (file: File, token: string | null): Promise<string> => {
+    const localId = `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    await db.pending_uploads.add({
+      file: file,
+      fileName: file.name,
+      fileType: file.type,
+      timestamp: Date.now(),
+      token,
+      status: 'pending',
+      localId
+    });
+
+    if (isOnline) {
+      setTimeout(() => sync(), 100);
+    }
+
+    return URL.createObjectURL(file);
+  }, [isOnline, sync]);
+
+  const queueApiCall = useCallback(async (config: Omit<PendingApiCall, 'status' | 'timestamp'>) => {
+    await db.pending_api_calls.add({
+      ...config,
+      status: 'pending',
+      timestamp: Date.now()
+    });
+    
+    if (isOnline) {
+      setTimeout(() => sync(), 100);
+    } else {
+      toast.info('Você está offline. A ação será sincronizada quando houver conexão.', {
+        description: 'Sua atividade foi salva localmente.',
+      });
+    }
+  }, [isOnline, sync]);
 
   // Auto-sync when coming online
   useEffect(() => {

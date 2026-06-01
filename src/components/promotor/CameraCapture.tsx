@@ -68,9 +68,9 @@ function analyzeImageQuality(
     return { valid: false, message: `Resolução muito baixa (${w}x${h}). Mínimo: ${config.min_resolution_w}x${config.min_resolution_h}.` };
   }
 
-  // Optimize: use a smaller sample area for faster analysis
-  const sampleW = Math.min(400, Math.floor(w * 0.4));
-  const sampleH = Math.min(300, Math.floor(h * 0.4));
+  // Optimize: use an even smaller sample area for faster analysis
+  const sampleW = Math.min(200, Math.floor(w * 0.2));
+  const sampleH = Math.min(150, Math.floor(h * 0.2));
   const sampleX = Math.floor((w - sampleW) / 2);
   const sampleY = Math.floor((h - sampleH) / 2);
   
@@ -80,11 +80,11 @@ function analyzeImageQuality(
 
   // Brightness analysis
   let totalBrightness = 0;
-  // Step through pixels to speed up (every 2nd pixel)
-  for (let i = 0; i < data.length; i += 8) {
+  // Step through pixels to speed up (every 4th pixel)
+  for (let i = 0; i < data.length; i += 16) {
     totalBrightness += (data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114);
   }
-  const avgBrightness = totalBrightness / (pixelCount / 2);
+  const avgBrightness = totalBrightness / (pixelCount / 4);
 
   if (avgBrightness < config.min_brightness) {
     return { valid: false, message: "A foto está muito escura. Melhore a iluminação." };
@@ -175,28 +175,35 @@ function applyWatermark(
   ctx.fillText(ts, w - tsWidth - padding, padding);
 }
 
-function compressImage(
+async function compressImage(
   canvas: HTMLCanvasElement,
   quality: number,
   maxSizeKb: number
-): Blob | null {
-  let q = quality;
-  let blob: Blob | null = null;
+): Promise<Blob | null> {
+  return new Promise((resolve) => {
+    let q = quality;
+    
+    const attempt = (currentQuality: number, attemptsLeft: number) => {
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) {
+            resolve(null);
+            return;
+          }
+          
+          if (blob.size / 1024 <= maxSizeKb || attemptsLeft <= 0) {
+            resolve(blob);
+          } else {
+            attempt(currentQuality - 0.1, attemptsLeft - 1);
+          }
+        },
+        "image/jpeg",
+        currentQuality
+      );
+    };
 
-  // Try progressive compression
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const dataUrl = canvas.toDataURL("image/jpeg", q);
-    const binary = atob(dataUrl.split(",")[1]);
-    const array = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) array[i] = binary.charCodeAt(i);
-    blob = new Blob([array], { type: "image/jpeg" });
-
-    if (blob.size / 1024 <= maxSizeKb) break;
-    q -= 0.1;
-    if (q < 0.1) break;
-  }
-
-  return blob;
+    attempt(q, 5);
+  });
 }
 
 export function CameraCapture({
@@ -331,33 +338,31 @@ export function CameraCapture({
       const wmData: WatermarkData = { ...watermark, latitude: lat, longitude: lng };
       applyWatermark(canvasRef.current, wmData);
 
-      // Compress
-      const blob = compressImage(canvasRef.current, config.compression_quality, config.max_file_size_kb);
+      // Compress (now async and faster)
+      const blob = await compressImage(canvasRef.current, config.compression_quality, config.max_file_size_kb);
       if (!blob) {
         toast.error("Erro ao comprimir imagem");
         setIsProcessing(false);
         return;
       }
 
-      // Upload or Queue
+      // Create file and always use queue for performance, even when online
+      // This allows the user to continue immediately while sync happens in background
       const file = new File([blob], `photo_${Date.now()}.jpg`, { type: "image/jpeg" });
+      const token = (customTokenGetter ? customTokenGetter() : null) || localStorage.getItem('promotor_token') || localStorage.getItem('auth_token');
+      
+      const localUrl = await queueUpload(file, token);
+      onCapture(localUrl);
       
       if (!isOnline) {
-        const token = (customTokenGetter ? customTokenGetter() : null) || localStorage.getItem('promotor_token') || localStorage.getItem('auth_token');
-        const localUrl = await queueUpload(file, token);
-        onCapture(localUrl);
-        toast.info("Foto salva localmente e otimizada! Será enviada quando houver internet.");
-        handleClose();
+        toast.info("Foto salva localmente! Será enviada quando houver internet.");
       } else {
-        const url = await uploadFile(file);
-        if (url) {
-          onCapture(url);
-          toast.success("Foto aprovada e enviada!");
-          handleClose();
-        }
+        toast.success("Foto registrada e sendo enviada em segundo plano!");
       }
+      
+      handleClose();
     } catch (err: any) {
-      toast.error(err.message || "Erro ao enviar foto");
+      toast.error(err.message || "Erro ao processar foto");
     } finally {
       setIsProcessing(false);
     }
