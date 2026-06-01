@@ -1482,14 +1482,56 @@ export default function PromotorRota() {
                 const execId = selectedExec.id;
                 const onDone = () => { toast.success('Registrado com sucesso'); setActiveAction(null); };
                 const onErr = (err: any) => toast.error(err.message);
+                
+                const body: any = { executionId: execId };
+                let url = '';
+                
                 if (activeAction === 'validity') {
-                  addValidity.mutate({ executionId: execId, expiry_date: actionForm.expiry_date, qty_store: actionForm.val_qty_store || 0, qty_stock: actionForm.val_qty_stock || 0 }, { onSuccess: onDone, onError: onErr });
+                  url = `/api/merch/promotor/executions/${execId}/validity`;
+                  body.expiry_date = actionForm.expiry_date;
+                  body.qty_store = actionForm.val_qty_store || 0;
+                  body.qty_stock = actionForm.val_qty_stock || 0;
                 } else if (activeAction === 'rupture') {
-                  reportRupture.mutate({ executionId: execId, qty_store: actionForm.occ_qty_store || 0, qty_stock: actionForm.occ_qty_stock || 0, reason: actionForm.reason, observation: actionForm.observation }, { onSuccess: onDone, onError: onErr });
+                  url = `/api/merch/promotor/executions/${execId}/rupture`;
+                  body.qty_store = actionForm.occ_qty_store || 0;
+                  body.qty_stock = actionForm.occ_qty_stock || 0;
+                  body.reason = actionForm.reason;
+                  body.observation = actionForm.observation;
                 } else if (activeAction === 'damage') {
-                  reportDamage.mutate({ executionId: execId, qty_store: actionForm.occ_qty_store || 0, qty_stock: actionForm.occ_qty_stock || 0, reason: actionForm.reason, observation: actionForm.observation, description: actionForm.observation, location: actionForm.location }, { onSuccess: onDone, onError: onErr });
+                  url = `/api/merch/promotor/executions/${execId}/damage`;
+                  body.qty_store = actionForm.occ_qty_store || 0;
+                  body.qty_stock = actionForm.occ_qty_stock || 0;
+                  body.reason = actionForm.reason;
+                  body.observation = actionForm.observation;
+                  body.description = actionForm.observation;
+                  body.location = actionForm.location;
                 } else if (activeAction === 'discard') {
-                  reportDiscard.mutate({ executionId: execId, qty_store: actionForm.occ_qty_store || 0, qty_stock: actionForm.occ_qty_stock || 0, reason: actionForm.reason, observation: actionForm.observation }, { onSuccess: onDone, onError: onErr });
+                  url = `/api/merch/promotor/executions/${execId}/discard`;
+                  body.qty_store = actionForm.occ_qty_store || 0;
+                  body.qty_stock = actionForm.occ_qty_stock || 0;
+                  body.reason = actionForm.reason;
+                  body.observation = actionForm.observation;
+                }
+
+                if (!isOnline) {
+                  queueApiCall({
+                    url,
+                    method: 'POST',
+                    body,
+                    headers: { 'Authorization': `Bearer ${localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}` }
+                  });
+                  onDone();
+                  return;
+                }
+
+                if (activeAction === 'validity') {
+                  addValidity.mutate(body, { onSuccess: onDone, onError: onErr });
+                } else if (activeAction === 'rupture') {
+                  reportRupture.mutate(body, { onSuccess: onDone, onError: onErr });
+                } else if (activeAction === 'damage') {
+                  reportDamage.mutate(body, { onSuccess: onDone, onError: onErr });
+                } else if (activeAction === 'discard') {
+                  reportDiscard.mutate(body, { onSuccess: onDone, onError: onErr });
                 }
               }}>Salvar</Button>
             </DialogFooter>
