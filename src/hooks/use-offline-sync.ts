@@ -40,9 +40,14 @@ export function useOfflineSync() {
       localId
     });
 
+    // If online, trigger sync immediately in background
+    if (isOnline) {
+      setTimeout(() => sync(), 100);
+    }
+
     // Return a temporary local URL so the UI can show the photo immediately
     return URL.createObjectURL(file);
-  }, []);
+  }, [isOnline, sync]);
 
   const queueApiCall = useCallback(async (config: Omit<PendingApiCall, 'status' | 'timestamp'>) => {
     await db.pending_api_calls.add({
