@@ -1,6 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-
 import { api } from '@/lib/api';
+
+// Cache constants for offline access
+const ROUTE_CACHE_TIME = 1000 * 60 * 60 * 24; // 24 hours
+const ROUTE_STALE_TIME = 1000 * 60 * 30; // 30 minutes
 
 // Promotor API helper (uses promotor_token)
 const promotorApi = async <T>(endpoint: string, options: any = {}): Promise<T> => {
