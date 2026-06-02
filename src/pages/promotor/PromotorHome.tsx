@@ -984,7 +984,7 @@ export default function PromotorHome() {
               <Label className="text-xs">Foto de saída (opcional)</Label>
               {pdvCheckoutPhoto ? (
                 <div className="space-y-2">
-                  <img src={pdvCheckoutPhoto} alt="Checkout" className="w-full rounded-lg border max-h-48 object-cover" />
+                  <LocalImage src={pdvCheckoutPhoto} alt="Checkout" className="w-full rounded-lg border max-h-48 object-cover" />
                   <Button variant="outline" size="sm" onClick={() => setPdvCheckoutPhoto('')}>Tirar outra foto</Button>
                 </div>
               ) : (
