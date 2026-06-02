@@ -428,8 +428,8 @@ function ModelEditorDialog({ rule, brands, open, onClose }: { rule: any; brands:
                   {products.map((p: any) => (
                     <label key={p.id} className="flex items-center gap-3 p-2 rounded hover:bg-muted/50 cursor-pointer">
                       <Checkbox checked={selectedProducts.includes(p.id)} onCheckedChange={() => toggleProduct(p.id)} />
-                      {p.photo_url ? (
-                        <img src={resolveMediaUrl(p.photo_url) || ''} alt={p.name} className="h-10 w-10 rounded object-cover border flex-shrink-0" />
+                      {resolveMediaUrl(p.photo_url) ? (
+                        <img src={resolveMediaUrl(p.photo_url)!} alt={p.name} className="h-10 w-10 rounded object-cover border flex-shrink-0" />
                       ) : (
                         <div className="h-10 w-10 rounded bg-muted flex items-center justify-center flex-shrink-0"><Package className="h-4 w-4 text-muted-foreground" /></div>
                       )}
@@ -470,8 +470,8 @@ function ModelEditorDialog({ rule, brands, open, onClose }: { rule: any; brands:
                         className="w-full flex items-center gap-3 p-3 text-left hover:bg-muted/30 transition-colors"
                         onClick={() => setExpandedProduct(isExpanded ? null : product.id)}
                       >
-                        {product.photo_url ? (
-                          <img src={resolveMediaUrl(product.photo_url) || ''} alt={product.name} className="h-10 w-10 rounded object-cover border flex-shrink-0" />
+                        {resolveMediaUrl(product.photo_url) ? (
+                          <img src={resolveMediaUrl(product.photo_url)!} alt={product.name} className="h-10 w-10 rounded object-cover border flex-shrink-0" />
                         ) : (
                           <div className="h-10 w-10 rounded bg-muted flex items-center justify-center flex-shrink-0"><Package className="h-4 w-4 text-muted-foreground" /></div>
                         )}
@@ -489,8 +489,8 @@ function ModelEditorDialog({ rule, brands, open, onClose }: { rule: any; brands:
                           {productComps.map((comp, idx) => (
                             <div key={comp.id} className="flex items-start gap-2 p-2 bg-muted/30 rounded"
                               onPaste={(e) => handlePaste(e, product.id, idx)}>
-                              {comp.photo_url ? (
-                                <img src={resolveMediaUrl(comp.photo_url) || ''} alt={comp.name} className="h-12 w-12 rounded object-cover border flex-shrink-0" />
+                              {resolveMediaUrl(comp.photo_url) ? (
+                                <img src={resolveMediaUrl(comp.photo_url)!} alt={comp.name} className="h-12 w-12 rounded object-cover border flex-shrink-0" />
                               ) : (
                                 <div
                                   className="h-12 w-12 rounded border-2 border-dashed border-muted-foreground/30 flex items-center justify-center flex-shrink-0 cursor-pointer hover:border-primary/50 transition-colors"
