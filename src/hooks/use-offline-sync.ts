@@ -102,24 +102,34 @@ export function useOfflineSync() {
 
         let body = call.body;
         
-        if (call.dependsOnUploadId && uploadMap.has(call.dependsOnUploadId)) {
-          const realUrl = uploadMap.get(call.dependsOnUploadId);
-          const replaceUrl = (obj: any): any => {
-            if (typeof obj === 'string' && obj.startsWith('blob:')) return realUrl;
-            if (Array.isArray(obj)) return obj.map(replaceUrl);
-            if (obj !== null && typeof obj === 'object') {
-              const newObj: any = {};
-              for (const key in obj) {
-                newObj[key] = obj[key] === call.dependsOnUploadId || (typeof obj[key] === 'string' && obj[key].startsWith('blob:')) 
-                  ? realUrl 
-                  : replaceUrl(obj[key]);
-              }
-              return newObj;
+        // Comprehensive URL replacement: handles localId directly, blob URLs, and local-file:// format
+        const replaceUrl = (obj: any): any => {
+          if (typeof obj === 'string') {
+            // Check if it's a direct local-file:// reference
+            if (obj.startsWith('local-file://')) {
+              const lid = obj.replace('local-file://', '');
+              return uploadMap.get(lid) || obj;
             }
+            // Check if it's a transient blob URL (fallback)
+            if (obj.startsWith('blob:')) return uploadMap.get(call.dependsOnUploadId || '') || obj;
+            // Check if it's just the raw localId
+            if (uploadMap.has(obj)) return uploadMap.get(obj);
             return obj;
-          };
-          body = replaceUrl(body);
-        }
+          }
+          
+          if (Array.isArray(obj)) return obj.map(replaceUrl);
+          
+          if (obj !== null && typeof obj === 'object') {
+            const newObj: any = {};
+            for (const key in obj) {
+              newObj[key] = replaceUrl(obj[key]);
+            }
+            return newObj;
+          }
+          return obj;
+        };
+
+        body = replaceUrl(body);
 
         await api(call.url, {
           method: call.method as any,
