@@ -767,7 +767,7 @@ export default function PromotorRota() {
         method: 'POST',
         body,
         headers: { 'Authorization': `Bearer ${localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}` },
-        dependsOnUploadId: pdvCheckoutPhoto.startsWith('blob:') ? pdvCheckoutPhoto : undefined
+        dependsOnUploadId: pdvCheckoutPhoto.startsWith('local-file://') ? pdvCheckoutPhoto.replace('local-file://', '') : undefined
       });
       
       toast.success('Checkout do PDV realizado! Sincronizando em segundo plano.');
