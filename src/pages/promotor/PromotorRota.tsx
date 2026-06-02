@@ -616,6 +616,16 @@ export default function PromotorRota() {
     return groups;
   }, [filteredExecs]);
 
+  const productsWithExtraPoint = useMemo(() => {
+    const set = new Set<string>();
+    route?.executions?.forEach((e: any) => {
+      if (e.exposure_point === 'extra') {
+        set.add(`${e.category_id}_${e.product_id}`);
+      }
+    });
+    return set;
+  }, [route?.executions]);
+
   const handleCheckin = useCallback(async () => {
     if (!id) return;
     if (route?.require_checkin_photo && !checkinPhotoUrl) {
