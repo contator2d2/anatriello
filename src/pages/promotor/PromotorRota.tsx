@@ -443,8 +443,7 @@ function CategoryAfterPhotoGate({ catId, routeBrandId, categoryName, routeId, pd
         url: `/api/merch/promotor/routes/${routeId}/categories/${catId}/after-photo`,
         method: 'POST',
         body,
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}` },
-        dependsOnUploadId: photos[0].startsWith('blob:') ? photos[0] : undefined
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}` }
       });
       
       toast.success('Categoria concluída! Sincronizando em segundo plano.');
