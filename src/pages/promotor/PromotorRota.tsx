@@ -1587,12 +1587,23 @@ export default function PromotorRota() {
               {route.require_checkout_photo && (
                 <div className="space-y-2">
                   <Label className="text-xs">Foto final da loja (obrigatória)</Label>
-                  {pdvCheckoutPhoto ? (
-                    <div className="space-y-2">
-                      <img src={pdvCheckoutPhoto} alt="Checkout" className="w-full rounded-lg border max-h-48 object-cover" />
-                      <Button variant="outline" size="sm" onClick={() => setPdvCheckoutPhoto('')}>Tirar outra foto</Button>
-                    </div>
-                  ) : (
+              {pdvCheckoutPhoto ? (
+                <div className="space-y-2">
+                  {/* Resolve local URL if needed */}
+                  {(() => {
+                    const [url, setUrl] = useState<string | null>(null);
+                    useEffect(() => {
+                      if (pdvCheckoutPhoto.startsWith('local-file://')) {
+                        getLocalFileUrl(pdvCheckoutPhoto.replace('local-file://', '')).then(setUrl);
+                      } else {
+                        setUrl(pdvCheckoutPhoto);
+                      }
+                    }, [pdvCheckoutPhoto]);
+                    return url && <img src={url} alt="Checkout" className="w-full rounded-lg border max-h-48 object-cover" />;
+                  })()}
+                  <Button variant="outline" size="sm" onClick={() => setPdvCheckoutPhoto('')}>Tirar outra foto</Button>
+                </div>
+              ) : (
                     <CameraCapture
                       onCapture={setPdvCheckoutPhoto}
                       watermark={{ pdvName: route.pdv_name, brandName: route.brand_name || route.route_brands?.[0]?.brand_name, photoType: 'Checkout PDV' }}
