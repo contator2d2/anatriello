@@ -14,6 +14,7 @@ import { Progress } from "@/components/ui/progress";
 import { useLiveRoutes, useMerchDamages, useReturnRequests, useMerchRouteDetail, useManualCompleteRoute, useContingencyPhotoUpload } from "@/hooks/use-merch-routes";
 import { MapPin, Clock, User, Camera, AlertTriangle, CheckCircle2, Activity, Package, Eye, Store, ChevronRight, Calendar, Filter, Upload } from "lucide-react";
 import { CameraCapture } from "@/components/promotor/CameraCapture";
+import { resolveMediaUrl } from "@/lib/media";
 import { format, subDays, startOfWeek, startOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -311,7 +312,9 @@ export default function MerchExecucao() {
                 </SelectContent>
               </Select>
             </div>
-            {damages.map((d: any) => (
+            {damages.map((d: any) => {
+              const photoUrl = resolveMediaUrl(d.photo_url);
+              return (
               <Card key={d.id}>
                 <CardContent className="p-3">
                   <div className="flex items-center justify-between">
@@ -326,13 +329,20 @@ export default function MerchExecucao() {
                       {d.reason && <div className="text-xs text-muted-foreground mt-0.5">{d.reason}</div>}
                     </div>
                     <div className="flex items-center gap-2">
-                      {d.photo_url && <Camera className="h-4 w-4 text-muted-foreground" />}
+                      {photoUrl && (
+                        <div 
+                          className="h-8 w-8 rounded overflow-hidden border bg-muted cursor-pointer"
+                          onClick={() => window.open(photoUrl, '_blank')}
+                        >
+                          <img src={photoUrl} alt="Avaria" className="h-full w-full object-cover" />
+                        </div>
+                      )}
                       <Badge className="text-[10px]">{DAMAGE_STATUS[d.status] || d.status}</Badge>
                     </div>
                   </div>
                 </CardContent>
               </Card>
-            ))}
+            )})}
             {damages.length === 0 && <p className="text-center text-muted-foreground py-8">Nenhuma avaria registrada</p>}
           </TabsContent>
 
@@ -516,8 +526,8 @@ export default function MerchExecucao() {
                       <div className="space-y-1">
                         <div className="text-[10px] font-semibold text-muted-foreground uppercase">Foto Check-in</div>
                         <div className="aspect-video rounded-md overflow-hidden bg-muted border">
-                          <img src={viewRoute.checkin_photo} alt="Check-in" className="w-full h-full object-cover cursor-pointer" 
-                            onClick={() => window.open(viewRoute.checkin_photo, '_blank')} />
+                          <img src={resolveMediaUrl(viewRoute.checkin_photo) || ''} alt="Check-in" className="w-full h-full object-cover cursor-pointer" 
+                            onClick={() => window.open(resolveMediaUrl(viewRoute.checkin_photo) || '', '_blank')} />
                         </div>
                       </div>
                     )}
@@ -525,8 +535,8 @@ export default function MerchExecucao() {
                       <div className="space-y-1">
                         <div className="text-[10px] font-semibold text-muted-foreground uppercase">Foto Check-out</div>
                         <div className="aspect-video rounded-md overflow-hidden bg-muted border">
-                          <img src={viewRoute.checkout_photo} alt="Check-out" className="w-full h-full object-cover cursor-pointer" 
-                            onClick={() => window.open(viewRoute.checkout_photo, '_blank')} />
+                          <img src={resolveMediaUrl(viewRoute.checkout_photo) || ''} alt="Check-out" className="w-full h-full object-cover cursor-pointer" 
+                            onClick={() => window.open(resolveMediaUrl(viewRoute.checkout_photo) || '', '_blank')} />
                         </div>
                       </div>
                     )}
@@ -540,17 +550,25 @@ export default function MerchExecucao() {
                       <Camera className="h-4 w-4" /> Fotos da Execução ({viewRoute.photos.length})
                     </div>
                     <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                      {viewRoute.photos.map((photo: any) => (
+                      {viewRoute.photos.map((photo: any) => {
+                        const url = resolveMediaUrl(photo.photo_url);
+                        return (
                         <div key={photo.id} className="relative aspect-square rounded-md overflow-hidden bg-muted border group">
-                          <img src={photo.photo_url} alt="Execução" className="w-full h-full object-cover cursor-pointer transition-transform group-hover:scale-110" 
-                            onClick={() => window.open(photo.photo_url, '_blank')} />
+                          {url ? (
+                            <img src={url} alt="Execução" className="w-full h-full object-cover cursor-pointer transition-transform group-hover:scale-110" 
+                              onClick={() => window.open(url, '_blank')} />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                              <Camera className="h-6 w-6" />
+                            </div>
+                          )}
                           {photo.category_name && (
                             <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-[8px] text-white p-1 truncate">
                               {photo.category_name}
                             </div>
                           )}
                         </div>
-                      ))}
+                      )})}
                     </div>
                   </div>
                 )}
