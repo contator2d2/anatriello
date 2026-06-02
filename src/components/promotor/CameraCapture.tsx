@@ -352,6 +352,10 @@ export function CameraCapture({
       const token = (customTokenGetter ? customTokenGetter() : null) || localStorage.getItem('promotor_token') || localStorage.getItem('auth_token');
       
       const localUrl = await queueUpload(file, token);
+      
+      // Clean up previous blob URL if it was a local one
+      // (This is just safety, most local URLs will be new here)
+      
       onCapture(localUrl);
       
       if (!isOnline) {

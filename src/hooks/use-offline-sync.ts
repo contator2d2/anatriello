@@ -26,6 +26,27 @@ export function useOnlineStatus() {
 export function useOfflineSync() {
   const isOnline = useOnlineStatus();
   const [isSyncing, setIsSyncing] = useState(false);
+  const [localFileUrls, setLocalFileUrls] = useState<Record<string, string>>({});
+
+  // Helper to get actual blob URL from localId
+  const getLocalFileUrl = useCallback(async (localId: string) => {
+    if (localFileUrls[localId]) return localFileUrls[localId];
+    
+    const upload = await db.pending_uploads.where('localId').equals(localId).first();
+    if (upload && upload.file) {
+      const url = URL.createObjectURL(upload.file);
+      setLocalFileUrls(prev => ({ ...prev, [localId]: url }));
+      return url;
+    }
+    return null;
+  }, [localFileUrls]);
+
+  // Cleanup blob URLs on unmount
+  useEffect(() => {
+    return () => {
+      Object.values(localFileUrls).forEach(url => URL.revokeObjectURL(url));
+    };
+  }, [localFileUrls]);
 
   const sync = useCallback(async () => {
     if (!isOnline || isSyncing) return;
@@ -123,6 +144,8 @@ export function useOfflineSync() {
   const queueUpload = useCallback(async (file: File, token: string | null): Promise<string> => {
     const localId = `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
+    // Convert file to base64 for persistent storage if it's small, 
+    // or keep as Blob/File if Dexie handles it (it does in IndexedDB)
     await db.pending_uploads.add({
       file: file,
       fileName: file.name,
@@ -137,7 +160,9 @@ export function useOfflineSync() {
       setTimeout(() => sync(), 100);
     }
 
-    return URL.createObjectURL(file);
+    // IMPORTANT: Return the localId as the reference, NOT a transient blob URL
+    // This allows the UI to know it's a pending file
+    return `local-file://${localId}`;
   }, [isOnline, sync]);
 
   const queueApiCall = useCallback(async (config: Omit<PendingApiCall, 'status' | 'timestamp'>) => {
@@ -163,5 +188,5 @@ export function useOfflineSync() {
     }
   }, [isOnline, sync]);
 
-  return { isOnline, isSyncing, queueUpload, queueApiCall, sync };
+  return { isOnline, isSyncing, queueUpload, queueApiCall, sync, getLocalFileUrl };
 }

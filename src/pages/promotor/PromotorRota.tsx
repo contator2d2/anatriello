@@ -52,7 +52,18 @@ function CategoryPreparation({ category, catId, routeBrandId, categoryName, rout
   const setCategoryPhoto = usePromotorCategoryPhoto();
   const [photos, setPhotos] = useState<string[]>([]);
   const [isSending, setIsSending] = useState(false);
-  const { isOnline, queueApiCall } = useOfflineSync();
+  const { isOnline, queueApiCall, getLocalFileUrl } = useOfflineSync();
+  const [resolvedPhotoUrls, setResolvedPhotoUrls] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    photos.forEach(async (p) => {
+      if (p.startsWith('local-file://') && !resolvedPhotoUrls[p]) {
+        const localId = p.replace('local-file://', '');
+        const url = await getLocalFileUrl(localId);
+        if (url) setResolvedPhotoUrls(prev => ({ ...prev, [p]: url }));
+      }
+    });
+  }, [photos, getLocalFileUrl, resolvedPhotoUrls]);
 
   // category may be null/undefined if no merch_execution_categories entry exists yet
   const hasPointType = !!category?.point_type;
@@ -121,8 +132,7 @@ function CategoryPreparation({ category, catId, routeBrandId, categoryName, rout
         url: `/api/merch/promotor/routes/${routeId}/categories/${catId}/photo`,
         method: 'POST',
         body: { ...body, routeId, catId },
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}` },
-        dependsOnUploadId: photos[0].startsWith('blob:') ? photos[0] : undefined
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}` }
       });
       
       toast.success(`${photos.length} foto(s) registrada(s)! Produtos liberados.`);
@@ -221,7 +231,7 @@ function CategoryPreparation({ category, catId, routeBrandId, categoryName, rout
               <div className="grid grid-cols-3 gap-2">
                 {photos.map((url, i) => (
                   <div key={i} className="relative group">
-                    <img src={url} alt={`Foto ${i + 1}`} className="w-full h-20 rounded-lg border object-cover" />
+                    <img src={url.startsWith('local-file://') ? resolvedPhotoUrls[url] : url} alt={`Foto ${i + 1}`} className="w-full h-20 rounded-lg border object-cover" />
                     <button
                       onClick={() => handleRemovePhoto(i)}
                       className="absolute top-1 right-1 bg-destructive text-destructive-foreground rounded-full w-5 h-5 flex items-center justify-center text-[10px] opacity-0 group-hover:opacity-100 transition-opacity"
@@ -283,7 +293,18 @@ function ExtraPointPhotoGate({ catId, categoryName, routeId, pdvName, brandName,
   const setCategoryPhoto = usePromotorCategoryPhoto();
   const [photos, setPhotos] = useState<string[]>([]);
   const [isSending, setIsSending] = useState(false);
-  const { isOnline, queueApiCall } = useOfflineSync();
+  const { isOnline, queueApiCall, getLocalFileUrl } = useOfflineSync();
+  const [resolvedPhotoUrls, setResolvedPhotoUrls] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    photos.forEach(async (p) => {
+      if (p.startsWith('local-file://') && !resolvedPhotoUrls[p]) {
+        const localId = p.replace('local-file://', '');
+        const url = await getLocalFileUrl(localId);
+        if (url) setResolvedPhotoUrls(prev => ({ ...prev, [p]: url }));
+      }
+    });
+  }, [photos, getLocalFileUrl, resolvedPhotoUrls]);
 
   const handleUploadPhoto = async () => {
     if (photos.length === 0) return toast.error('É necessário tirar pelo menos 1 foto do ponto extra.');
@@ -303,8 +324,7 @@ function ExtraPointPhotoGate({ catId, categoryName, routeId, pdvName, brandName,
         url: `/api/merch/promotor/routes/${routeId}/categories/${catId}/photo`,
         method: 'POST',
         body,
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}` },
-        dependsOnUploadId: photos[0].startsWith('blob:') ? photos[0] : undefined
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}` }
       });
       
       toast.success('Foto do ponto extra registrada! Produtos liberados.');
@@ -351,7 +371,7 @@ function ExtraPointPhotoGate({ catId, categoryName, routeId, pdvName, brandName,
             <div className="flex gap-2 flex-wrap">
               {photos.map((p, i) => (
                 <div key={i} className="relative">
-                  <img src={p} alt="" className="w-20 h-20 rounded-lg object-cover border" />
+                  <img src={p.startsWith('local-file://') ? resolvedPhotoUrls[p] : p} alt="" className="w-20 h-20 rounded-lg object-cover border" />
                   <button className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground rounded-full w-5 h-5 flex items-center justify-center text-[10px]"
                     onClick={() => setPhotos(prev => prev.filter((_, idx) => idx !== i))}>✕</button>
                 </div>
@@ -390,7 +410,18 @@ function CategoryAfterPhotoGate({ catId, routeBrandId, categoryName, routeId, pd
   const setCategoryAfterPhoto = usePromotorCategoryAfterPhoto();
   const [photos, setPhotos] = useState<string[]>([]);
   const [isSending, setIsSending] = useState(false);
-  const { isOnline, queueApiCall } = useOfflineSync();
+   const { isOnline, queueApiCall, getLocalFileUrl } = useOfflineSync();
+   const [resolvedPhotoUrls, setResolvedPhotoUrls] = useState<Record<string, string>>({});
+
+   useEffect(() => {
+     photos.forEach(async (p) => {
+       if (p.startsWith('local-file://') && !resolvedPhotoUrls[p]) {
+         const localId = p.replace('local-file://', '');
+         const url = await getLocalFileUrl(localId);
+         if (url) setResolvedPhotoUrls(prev => ({ ...prev, [p]: url }));
+       }
+     });
+   }, [photos, getLocalFileUrl, resolvedPhotoUrls]);
   const min = Math.max(1, minPhotos || 1);
 
   const handleUpload = async () => {
@@ -412,8 +443,7 @@ function CategoryAfterPhotoGate({ catId, routeBrandId, categoryName, routeId, pd
         url: `/api/merch/promotor/routes/${routeId}/categories/${catId}/after-photo`,
         method: 'POST',
         body,
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}` },
-        dependsOnUploadId: photos[0].startsWith('blob:') ? photos[0] : undefined
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}` }
       });
       
       toast.success('Categoria concluída! Sincronizando em segundo plano.');
@@ -446,7 +476,7 @@ function CategoryAfterPhotoGate({ catId, routeBrandId, categoryName, routeId, pd
           <div className="flex gap-2 flex-wrap">
             {photos.map((p, i) => (
               <div key={i} className="relative">
-                <img src={p} alt="" className="w-20 h-20 rounded-lg object-cover border" />
+                <img src={p.startsWith('local-file://') ? resolvedPhotoUrls[p] : p} alt="" className="w-20 h-20 rounded-lg object-cover border" />
                 <button className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground rounded-full w-5 h-5 flex items-center justify-center text-[10px]"
                   onClick={() => setPhotos(prev => prev.filter((_, idx) => idx !== i))}>✕</button>
               </div>
@@ -490,7 +520,7 @@ export default function PromotorRota() {
   const checkin = usePromotorCheckin();
   const checkout = usePromotorCheckout();
   const updateExec = usePromotorUpdateExecution();
-  const { isOnline, isSyncing, queueApiCall } = useOfflineSync();
+  const { isOnline, isSyncing, queueApiCall, getLocalFileUrl } = useOfflineSync();
   const reportDamage = usePromotorReportDamage();
   const reportRupture = usePromotorReportRupture();
   const addValidity = usePromotorAddValidity();
@@ -500,13 +530,6 @@ export default function PromotorRota() {
   const [photoQualityConfig, setPhotoQualityConfig] = useState<PhotoQualityConfig | undefined>();
   const [activeBrandId, setActiveBrandId] = useState<string | null>(null);
 
-  // Load photo quality config
-  useEffect(() => {
-    api<any>('/api/merchandising/photo-quality-config')
-      .then(d => { if (d?.config) setPhotoQualityConfig(d.config); })
-      .catch(() => { /* use defaults */ });
-  }, []);
-
   const [activeAction, setActiveAction] = useState<ActionType>(null);
   const [selectedExec, setSelectedExec] = useState<any>(null);
   const [actionForm, setActionForm] = useState<any>({});
@@ -514,6 +537,26 @@ export default function PromotorRota() {
   const [showPdvCheckout, setShowPdvCheckout] = useState(false);
   const [pdvCheckoutPhoto, setPdvCheckoutPhoto] = useState('');
   const [checkinPhotoUrl, setCheckinPhotoUrl] = useState('');
+  const [resolvedCheckinPhotoUrl, setResolvedCheckinPhotoUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (checkinPhotoUrl?.startsWith('local-file://')) {
+      const localId = checkinPhotoUrl.replace('local-file://', '');
+      getLocalFileUrl(localId).then(url => {
+        if (url) setResolvedCheckinPhotoUrl(url);
+      });
+    } else {
+      setResolvedCheckinPhotoUrl(checkinPhotoUrl);
+    }
+  }, [checkinPhotoUrl, getLocalFileUrl]);
+
+  // Load photo quality config
+  useEffect(() => {
+    api<any>('/api/merchandising/photo-quality-config')
+      .then(d => { if (d?.config) setPhotoQualityConfig(d.config); })
+      .catch(() => { /* use defaults */ });
+  }, []);
+
   const [routeCompletionResult, setRouteCompletionResult] = useState<any>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [showExtraPointDialog, setShowExtraPointDialog] = useState<{ catId: string; categoryName: string } | null>(null);
@@ -681,8 +724,7 @@ export default function PromotorRota() {
         url: `/api/merch/promotor/routes/${id}/checkin`,
         method: 'POST',
         body,
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}` },
-        dependsOnUploadId: checkinPhotoUrl.startsWith('blob:') ? checkinPhotoUrl : undefined
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}` }
       });
       
       toast.success('Check-in realizado! Sincronizando em segundo plano.');
@@ -918,9 +960,9 @@ export default function PromotorRota() {
                 <Camera className="h-4 w-4 text-primary" />
                 Foto obrigatória para check-in
               </div>
-              {checkinPhotoUrl ? (
+              {resolvedCheckinPhotoUrl ? (
                 <div className="space-y-2">
-                  <img src={checkinPhotoUrl} alt="Check-in" className="w-full rounded-lg border max-h-48 object-cover" />
+                  <img src={resolvedCheckinPhotoUrl} alt="Check-in" className="w-full rounded-lg border max-h-48 object-cover" />
                   <Button variant="outline" size="sm" onClick={() => setCheckinPhotoUrl('')}>Tirar outra foto</Button>
                 </div>
               ) : (
@@ -1541,12 +1583,23 @@ export default function PromotorRota() {
               {route.require_checkout_photo && (
                 <div className="space-y-2">
                   <Label className="text-xs">Foto final da loja (obrigatória)</Label>
-                  {pdvCheckoutPhoto ? (
-                    <div className="space-y-2">
-                      <img src={pdvCheckoutPhoto} alt="Checkout" className="w-full rounded-lg border max-h-48 object-cover" />
-                      <Button variant="outline" size="sm" onClick={() => setPdvCheckoutPhoto('')}>Tirar outra foto</Button>
-                    </div>
-                  ) : (
+              {pdvCheckoutPhoto ? (
+                <div className="space-y-2">
+                  {/* Resolve local URL if needed */}
+                  {(() => {
+                    const [url, setUrl] = useState<string | null>(null);
+                    useEffect(() => {
+                      if (pdvCheckoutPhoto.startsWith('local-file://')) {
+                        getLocalFileUrl(pdvCheckoutPhoto.replace('local-file://', '')).then(setUrl);
+                      } else {
+                        setUrl(pdvCheckoutPhoto);
+                      }
+                    }, [pdvCheckoutPhoto]);
+                    return url && <img src={url} alt="Checkout" className="w-full rounded-lg border max-h-48 object-cover" />;
+                  })()}
+                  <Button variant="outline" size="sm" onClick={() => setPdvCheckoutPhoto('')}>Tirar outra foto</Button>
+                </div>
+              ) : (
                     <CameraCapture
                       onCapture={setPdvCheckoutPhoto}
                       watermark={{ pdvName: route.pdv_name, brandName: route.brand_name || route.route_brands?.[0]?.brand_name, photoType: 'Checkout PDV' }}
