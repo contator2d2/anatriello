@@ -939,7 +939,7 @@ export default function PromotorHome() {
               <Label className="text-xs">Foto da Fachada (obrigatória)</Label>
               {pdvCheckinPhoto ? (
                 <div className="space-y-2">
-                  <img src={pdvCheckinPhoto} alt="Check-in" className="w-full rounded-lg border max-h-48 object-cover" />
+                  <LocalImage src={pdvCheckinPhoto} alt="Check-in" className="w-full rounded-lg border max-h-48 object-cover" />
                   <Button variant="outline" size="sm" onClick={() => setPdvCheckinPhoto('')}>Tirar outra foto</Button>
                 </div>
               ) : (
