@@ -294,7 +294,18 @@ function ExtraPointPhotoGate({ catId, categoryName, routeId, pdvName, brandName,
   const setCategoryPhoto = usePromotorCategoryPhoto();
   const [photos, setPhotos] = useState<string[]>([]);
   const [isSending, setIsSending] = useState(false);
-  const { isOnline, queueApiCall } = useOfflineSync();
+  const { isOnline, queueApiCall, getLocalFileUrl } = useOfflineSync();
+  const [resolvedPhotoUrls, setResolvedPhotoUrls] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    photos.forEach(async (p) => {
+      if (p.startsWith('local-file://') && !resolvedPhotoUrls[p]) {
+        const localId = p.replace('local-file://', '');
+        const url = await getLocalFileUrl(localId);
+        if (url) setResolvedPhotoUrls(prev => ({ ...prev, [p]: url }));
+      }
+    });
+  }, [photos, getLocalFileUrl, resolvedPhotoUrls]);
 
   const handleUploadPhoto = async () => {
     if (photos.length === 0) return toast.error('É necessário tirar pelo menos 1 foto do ponto extra.');
