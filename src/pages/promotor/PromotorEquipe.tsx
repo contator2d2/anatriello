@@ -178,7 +178,7 @@ export default function PromotorEquipe() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     {p.photo_url ? (
-                      <img src={p.photo_url} alt="" className="w-10 h-10 rounded-full object-cover border" />
+                      <LocalImage src={p.photo_url} alt="" className="w-10 h-10 rounded-full object-cover border" />
                     ) : (
                       <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-sm font-bold text-primary">
                         {p.full_name?.charAt(0)}
