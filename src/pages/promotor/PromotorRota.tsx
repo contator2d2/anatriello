@@ -977,8 +977,9 @@ export default function PromotorRota() {
               // Unlocked depends on photoMode:
               // if 'after', products_unlocked comes from point-type selection
               // if 'before' or 'both', products_unlocked comes from before-photo upload
+              const anyExecDone = execs.some((e: any) => e.status !== 'pending');
               const isLocked = requireCategoryPhotos 
-                ? (isExtraGroup ? !hasExtraPhoto : !catStatus?.products_unlocked) 
+                ? (isExtraGroup ? (!hasExtraPhoto && !anyExecDone) : !catStatus?.products_unlocked) 
                 : false;
                 
               // Se o modo for "Só Depois" e já tiver selecionado o tipo de ponto, liberamos os produtos mesmo se o backend ainda não marcou products_unlocked
