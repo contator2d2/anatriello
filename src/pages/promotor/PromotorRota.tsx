@@ -1630,7 +1630,7 @@ export default function PromotorRota() {
                     product_ids: selectedExtraProducts,
                   }, {
                     onSuccess: (data: any) => {
-                      toast.success(`${data.count} produto(s) duplicado(s) para ponto extra!`);
+                      toast.success(`${data.count} produto(s) registrados para ponto extra!`);
                       setShowExtraPointDialog(null);
                       setSelectedExtraProducts([]);
                     },
