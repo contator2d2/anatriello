@@ -524,6 +524,22 @@ export default function PromotorRota() {
   const checkout = usePromotorCheckout();
   const updateExec = usePromotorUpdateExecution();
   const { isOnline, isSyncing, queueApiCall, getLocalFileUrl } = useOfflineSync();
+  const reportDamage = usePromotorReportDamage();
+  const reportRupture = usePromotorReportRupture();
+  const addValidity = usePromotorAddValidity();
+  const reportDiscard = usePromotorReportDiscard();
+  const pdvCheckout = usePromotorPdvCheckout();
+  const registerExtraPoint = usePromotorRegisterExtraPoint();
+  const [photoQualityConfig, setPhotoQualityConfig] = useState<PhotoQualityConfig | undefined>();
+  const [activeBrandId, setActiveBrandId] = useState<string | null>(null);
+
+  const [activeAction, setActiveAction] = useState<ActionType>(null);
+  const [selectedExec, setSelectedExec] = useState<any>(null);
+  const [actionForm, setActionForm] = useState<any>({});
+  const [showCompleteRoute, setShowCompleteRoute] = useState(false);
+  const [showPdvCheckout, setShowPdvCheckout] = useState(false);
+  const [pdvCheckoutPhoto, setPdvCheckoutPhoto] = useState('');
+  const [checkinPhotoUrl, setCheckinPhotoUrl] = useState('');
   const [resolvedCheckinPhotoUrl, setResolvedCheckinPhotoUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -536,14 +552,6 @@ export default function PromotorRota() {
       setResolvedCheckinPhotoUrl(checkinPhotoUrl);
     }
   }, [checkinPhotoUrl, getLocalFileUrl]);
-  const reportDamage = usePromotorReportDamage();
-  const reportRupture = usePromotorReportRupture();
-  const addValidity = usePromotorAddValidity();
-  const reportDiscard = usePromotorReportDiscard();
-  const pdvCheckout = usePromotorPdvCheckout();
-  const registerExtraPoint = usePromotorRegisterExtraPoint();
-  const [photoQualityConfig, setPhotoQualityConfig] = useState<PhotoQualityConfig | undefined>();
-  const [activeBrandId, setActiveBrandId] = useState<string | null>(null);
 
   // Load photo quality config
   useEffect(() => {
@@ -552,13 +560,6 @@ export default function PromotorRota() {
       .catch(() => { /* use defaults */ });
   }, []);
 
-  const [activeAction, setActiveAction] = useState<ActionType>(null);
-  const [selectedExec, setSelectedExec] = useState<any>(null);
-  const [actionForm, setActionForm] = useState<any>({});
-  const [showCompleteRoute, setShowCompleteRoute] = useState(false);
-  const [showPdvCheckout, setShowPdvCheckout] = useState(false);
-  const [pdvCheckoutPhoto, setPdvCheckoutPhoto] = useState('');
-  const [checkinPhotoUrl, setCheckinPhotoUrl] = useState('');
   const [routeCompletionResult, setRouteCompletionResult] = useState<any>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [showExtraPointDialog, setShowExtraPointDialog] = useState<{ catId: string; categoryName: string } | null>(null);
