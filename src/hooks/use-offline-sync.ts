@@ -118,7 +118,14 @@ export function useOfflineSync() {
               return uploadMap.get(lid) || obj;
             }
             // Check if it's a transient blob URL (fallback)
-            if (obj.startsWith('blob:')) return uploadMap.get(call.dependsOnUploadId || '') || obj;
+            if (obj.startsWith('blob:')) {
+              const resolved = uploadMap.get(call.dependsOnUploadId || '');
+              if (resolved) return resolved;
+              // If we can't resolve a blob: URL, it's safer to send an empty string or null 
+              // than the invalid blob: string which causes database issues.
+              logger.warn('[OfflineSync] Could not resolve blob URL, sending empty string instead', { url: obj });
+              return '';
+            }
             // Check if it's just the raw localId
             if (uploadMap.has(obj)) return uploadMap.get(obj);
             return obj;
