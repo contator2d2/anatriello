@@ -22,6 +22,15 @@ export function LocalImage({ src, className, ...props }: LocalImageProps) {
         return;
       }
 
+      // If it's a blob: URL, it's likely from a previous session and invalid.
+      // We should not even try to load it to avoid "Not allowed to load local resource" errors.
+      if (src.startsWith('blob:')) {
+        console.warn('[LocalImage] Invalid blob URL from previous session detected and blocked:', src);
+        setResolvedUrl(null);
+        setIsLoading(false);
+        return;
+      }
+
       if (src.startsWith('local-file://')) {
         const localId = src.replace('local-file://', '');
         const url = await getLocalFileUrl(localId);
