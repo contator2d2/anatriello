@@ -26,6 +26,27 @@ export function useOnlineStatus() {
 export function useOfflineSync() {
   const isOnline = useOnlineStatus();
   const [isSyncing, setIsSyncing] = useState(false);
+  const [localFileUrls, setLocalFileUrls] = useState<Record<string, string>>({});
+
+  // Helper to get actual blob URL from localId
+  const getLocalFileUrl = useCallback(async (localId: string) => {
+    if (localFileUrls[localId]) return localFileUrls[localId];
+    
+    const upload = await db.pending_uploads.where('localId').equals(localId).first();
+    if (upload && upload.file) {
+      const url = URL.createObjectURL(upload.file);
+      setLocalFileUrls(prev => ({ ...prev, [localId]: url }));
+      return url;
+    }
+    return null;
+  }, [localFileUrls]);
+
+  // Cleanup blob URLs on unmount
+  useEffect(() => {
+    return () => {
+      Object.values(localFileUrls).forEach(url => URL.revokeObjectURL(url));
+    };
+  }, [localFileUrls]);
 
   const sync = useCallback(async () => {
     if (!isOnline || isSyncing) return;
