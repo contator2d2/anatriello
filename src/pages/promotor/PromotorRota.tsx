@@ -373,7 +373,7 @@ function ExtraPointPhotoGate({ catId, categoryName, routeId, pdvName, brandName,
             <div className="flex gap-2 flex-wrap">
               {photos.map((p, i) => (
                 <div key={i} className="relative">
-                  <img src={p} alt="" className="w-20 h-20 rounded-lg object-cover border" />
+                  <img src={p.startsWith('local-file://') ? resolvedPhotoUrls[p] : p} alt="" className="w-20 h-20 rounded-lg object-cover border" />
                   <button className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground rounded-full w-5 h-5 flex items-center justify-center text-[10px]"
                     onClick={() => setPhotos(prev => prev.filter((_, idx) => idx !== i))}>✕</button>
                 </div>
