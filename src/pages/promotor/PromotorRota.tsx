@@ -52,7 +52,18 @@ function CategoryPreparation({ category, catId, routeBrandId, categoryName, rout
   const setCategoryPhoto = usePromotorCategoryPhoto();
   const [photos, setPhotos] = useState<string[]>([]);
   const [isSending, setIsSending] = useState(false);
-  const { isOnline, queueApiCall } = useOfflineSync();
+  const { isOnline, queueApiCall, getLocalFileUrl } = useOfflineSync();
+  const [resolvedPhotoUrls, setResolvedPhotoUrls] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    photos.forEach(async (p) => {
+      if (p.startsWith('local-file://') && !resolvedPhotoUrls[p]) {
+        const localId = p.replace('local-file://', '');
+        const url = await getLocalFileUrl(localId);
+        if (url) setResolvedPhotoUrls(prev => ({ ...prev, [p]: url }));
+      }
+    });
+  }, [photos, getLocalFileUrl, resolvedPhotoUrls]);
 
   // category may be null/undefined if no merch_execution_categories entry exists yet
   const hasPointType = !!category?.point_type;
