@@ -27,14 +27,20 @@ export function useOfflineSync() {
   const isOnline = useOnlineStatus();
   const [isSyncing, setIsSyncing] = useState(false);
   const [localFileUrls, setLocalFileUrls] = useState<Record<string, string>>({});
+  const urlsToRevoke = useRef<Set<string>>(new Set());
 
   // Helper to get actual blob URL from localId
   const getLocalFileUrl = useCallback(async (localId: string) => {
+    // If we already have a URL for this localId in state, use it
     if (localFileUrls[localId]) return localFileUrls[localId];
+    
+    // Check if we have a URL for this localId in the ref (already created but not yet in state)
+    // Actually, state is better for reactivity.
     
     const upload = await db.pending_uploads.where('localId').equals(localId).first();
     if (upload && upload.file) {
       const url = URL.createObjectURL(upload.file);
+      urlsToRevoke.current.add(url);
       setLocalFileUrls(prev => ({ ...prev, [localId]: url }));
       return url;
     }
