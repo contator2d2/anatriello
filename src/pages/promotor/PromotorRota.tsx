@@ -523,7 +523,19 @@ export default function PromotorRota() {
   const checkin = usePromotorCheckin();
   const checkout = usePromotorCheckout();
   const updateExec = usePromotorUpdateExecution();
-  const { isOnline, isSyncing, queueApiCall } = useOfflineSync();
+  const { isOnline, isSyncing, queueApiCall, getLocalFileUrl } = useOfflineSync();
+  const [resolvedCheckinPhotoUrl, setResolvedCheckinPhotoUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (checkinPhotoUrl?.startsWith('local-file://')) {
+      const localId = checkinPhotoUrl.replace('local-file://', '');
+      getLocalFileUrl(localId).then(url => {
+        if (url) setResolvedCheckinPhotoUrl(url);
+      });
+    } else {
+      setResolvedCheckinPhotoUrl(checkinPhotoUrl);
+    }
+  }, [checkinPhotoUrl, getLocalFileUrl]);
   const reportDamage = usePromotorReportDamage();
   const reportRupture = usePromotorReportRupture();
   const addValidity = usePromotorAddValidity();
