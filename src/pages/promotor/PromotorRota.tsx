@@ -127,7 +127,7 @@ function CategoryPreparation({ category, catId, routeBrandId, categoryName, rout
         dependsOnUploadId: photos[0]?.startsWith('local-file://') ? photos[0].replace('local-file://', '') : undefined
       });
       
-      toast.success(`${photos.length} foto(s) registrada(s)! Produtos liberados.`);
+      // toast.success(`${photos.length} foto(s) registrada(s)! Produtos liberados.`); // Removed toast per user request
       setPhotos([]);
       setIsSending(false);
       onUnlocked();
