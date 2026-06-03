@@ -92,7 +92,7 @@ function CategoryPreparation({ category, catId, routeBrandId, categoryName, rout
       products_unlocked: shouldUnlockImmediately 
     }, {
       onSuccess: () => { 
-        toast.success(`Ponto ${type === 'natural' ? 'Natural' : 'Extra'} selecionado`); 
+        // toast.success(`Ponto ${type === 'natural' ? 'Natural' : 'Extra'} selecionado`); 
         onUnlocked(); 
       },
       onError: (err: any) => {
