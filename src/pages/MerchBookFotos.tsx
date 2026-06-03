@@ -219,7 +219,18 @@ export default function MerchBookFotos() {
                             </div>
                             <div onClick={() => setViewPhoto({ ...photo, photo_url: photoUrl })}>
                               {photoUrl ? (
-                                <img src={photoUrl} alt={photo.product_name || photo.category_name || 'Foto de execução'} className="w-full h-full object-cover" loading="lazy" />
+                                <img 
+                                  src={photoUrl} 
+                                  alt={photo.product_name || photo.category_name || 'Foto de execução'} 
+                                  className="w-full h-full object-cover" 
+                                  loading="lazy" 
+                                  onError={(e) => {
+                                    // If image fails (session blob), hide it from the book selection
+                                    const target = e.target as HTMLImageElement;
+                                    const parent = target.closest('.relative');
+                                    if (parent) (parent as HTMLElement).style.display = 'none';
+                                  }}
+                                />
                               ) : (
                                 <div className="w-full h-full flex items-center justify-center"><Image className="h-6 w-6 text-muted-foreground" /></div>
                               )}
