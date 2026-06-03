@@ -719,7 +719,7 @@ export default function PromotorRota() {
         body: { notes: actionForm.notes },
         headers: { 'Authorization': `Bearer ${localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}` }
       });
-      toast.info('Rota finalizada offline! Sincronizando quando houver conexão.');
+      // toast.info('Rota finalizada offline! Sincronizando quando houver conexão.');
       setShowCompleteRoute(false);
       navigate('/promotor/home');
       return;
