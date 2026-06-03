@@ -186,7 +186,7 @@ export default function PromotorHome() {
           dependsOnUploadId: pdvCheckinPhoto.startsWith('local-file://') ? pdvCheckinPhoto.replace('local-file://', '') : undefined
         });
 
-        toast({ title: 'Check-in salvo offline!', description: 'Será sincronizado automaticamente.' });
+        // toast({ title: 'Check-in salvo offline!', description: 'Será sincronizado automaticamente.' });
         setShowPdvCheckin(false);
         setPdvCheckinPhoto('');
         setTimeout(() => navigate(`/promotor/rota/${activeRouteForPdv.id}`), 100);
