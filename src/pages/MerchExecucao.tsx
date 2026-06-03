@@ -534,10 +534,24 @@ export default function MerchExecucao() {
                     {viewRoute.checkin_photo && (
                       <div className="space-y-1">
                         <div className="text-[10px] font-semibold text-muted-foreground uppercase">Foto Check-in</div>
-                        <div className="aspect-video rounded-md overflow-hidden bg-muted border flex items-center justify-center">
+                        <div className="aspect-video rounded-md overflow-hidden bg-muted border flex items-center justify-center relative">
                           {resolveMediaUrl(viewRoute.checkin_photo) ? (
-                            <img src={resolveMediaUrl(viewRoute.checkin_photo)!} alt="Check-in" className="w-full h-full object-cover cursor-pointer" 
-                              onClick={() => window.open(resolveMediaUrl(viewRoute.checkin_photo)!, '_blank')} />
+                            <img 
+                              src={resolveMediaUrl(viewRoute.checkin_photo)!} 
+                              alt="Check-in" 
+                              className="w-full h-full object-cover cursor-pointer" 
+                              onClick={() => window.open(resolveMediaUrl(viewRoute.checkin_photo)!, '_blank')} 
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).style.display = 'none';
+                                const parent = (e.target as HTMLImageElement).parentElement;
+                                if (parent) {
+                                  const placeholder = document.createElement('div');
+                                  placeholder.className = 'flex flex-col items-center gap-1 text-muted-foreground p-4';
+                                  placeholder.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-6 w-6"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg><span class="text-[8px] text-center">Imagem expirada ou aguardando sincronismo</span>';
+                                  parent.appendChild(placeholder);
+                                }
+                              }}
+                            />
                           ) : (
                             <div className="flex flex-col items-center gap-1 text-muted-foreground">
                               <Camera className="h-6 w-6" />
