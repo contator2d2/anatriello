@@ -183,10 +183,13 @@ export default function AccessOnlyHome() {
                         </div>
                       </div>
                       <Badge variant={
-                        visit.status === 'completed' ? 'success' :
+                        visit.status === 'completed' ? 'outline' :
                         visit.status === 'in_progress' ? 'default' :
                         'secondary'
-                      } className="text-[10px] px-2 py-0">
+                      } className={cn(
+                        "text-[10px] px-2 py-0",
+                        visit.status === 'completed' && "bg-green-100 text-green-700 border-green-200"
+                      )}>
                         {visit.status === 'completed' ? 'Concluída' :
                          visit.status === 'in_progress' ? 'Em curso' : 'Agendada'}
                       </Badge>
