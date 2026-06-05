@@ -49,6 +49,14 @@ async function ensureTables() {
     ADD COLUMN IF NOT EXISTS facial_required BOOLEAN DEFAULT false,
     ADD COLUMN IF NOT EXISTS auto_approve_on_match BOOLEAN DEFAULT true,
     ADD COLUMN IF NOT EXISTS auto_approve_min_score NUMERIC(5,2) DEFAULT 95`);
+
+  // Per-PDV config on supermarket_units (overrides rede)
+  await query(`ALTER TABLE supermarket_units
+    ADD COLUMN IF NOT EXISTS doc_validation_enabled BOOLEAN,
+    ADD COLUMN IF NOT EXISTS required_documents JSONB,
+    ADD COLUMN IF NOT EXISTS facial_required BOOLEAN,
+    ADD COLUMN IF NOT EXISTS auto_approve_on_match BOOLEAN,
+    ADD COLUMN IF NOT EXISTS auto_approve_min_score NUMERIC(5,2)`).catch(() => {});
 }
 
 // Resolve requirements for a rede
@@ -69,6 +77,42 @@ async function loadRedeRequirements(redeId) {
     autoApproveMinScore: Number(row.auto_approve_min_score ?? 95),
   };
 }
+
+async function loadUnitRequirements(unitId) {
+  if (!unitId) return null;
+  try {
+    const r = await query(
+      `SELECT doc_validation_enabled, required_documents, facial_required, auto_approve_on_match, auto_approve_min_score
+       FROM supermarket_units WHERE id = $1`,
+      [unitId]
+    );
+    if (!r.rows[0]) return null;
+    const row = r.rows[0];
+    const out = {};
+    if (row.doc_validation_enabled !== null) out.enabled = !!row.doc_validation_enabled;
+    if (Array.isArray(row.required_documents)) out.requiredDocs = row.required_documents;
+    if (row.facial_required !== null) out.facialRequired = !!row.facial_required;
+    if (row.auto_approve_on_match !== null) out.autoApprove = !!row.auto_approve_on_match;
+    if (row.auto_approve_min_score !== null) out.autoApproveMinScore = Number(row.auto_approve_min_score);
+    return out;
+  } catch { return null; }
+}
+
+// Merge: defaults < rede < unit
+async function loadValidationRequirements(redeId, unitId) {
+  const defaults = {
+    enabled: true,
+    requiredDocs: DOC_CATEGORIES,
+    facialRequired: false,
+    autoApprove: true,
+    autoApproveMinScore: 95,
+  };
+  const rede = (await loadRedeRequirements(redeId)) || {};
+  const unit = (await loadUnitRequirements(unitId)) || {};
+  return { ...defaults, ...rede, ...unit };
+}
+
+
 
 async function loadPromoter(agencyPromoterId) {
   const r = await query(
