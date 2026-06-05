@@ -442,6 +442,8 @@ app.use('/api/merch-analytics', merchAnalyticsRoutes);
 app.use('/api/merch/brand-checklists', merchChecklistsRoutes);
 app.use('/api/ayratech-ai', ayratechAiRoutes);
 app.use('/api/promoter-validations', promoterValidationsRoutes);
+app.use('/api/promoter-leaves', promoterLeavesRoutes);
+app.use('/api/access-control-dashboard', accessControlDashboardRoutes);
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
