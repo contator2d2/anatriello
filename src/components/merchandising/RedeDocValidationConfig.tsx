@@ -5,6 +5,7 @@ import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Loader2, ShieldCheck } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -20,29 +21,48 @@ interface Props {
 
 const ALL_DOCS = Object.keys(DOCUMENT_LABELS);
 
+const DEFAULTS: Record<string, string[]> = {
+  fixo: ['cnh', 'selfie', 'comprovante_endereco', 'contrato_trabalho', 'aso', 'ctps'],
+  freelance: ['cnh', 'selfie'],
+  substituto: ['cnh', 'selfie', 'declaracao_vinculo'],
+};
+
+type PromoterType = 'fixo' | 'freelance' | 'substituto';
+
 export function RedeDocValidationConfig({ redeId, redeName }: Props) {
   const { data, isLoading } = useRedeValidationConfig(redeId);
   const saveMut = useSaveRedeValidationConfig();
   const { toast } = useToast();
 
   const [enabled, setEnabled] = useState(false);
-  const [requiredDocs, setRequiredDocs] = useState<string[]>([]);
+  const [docsByType, setDocsByType] = useState<Record<PromoterType, string[]>>({
+    fixo: [], freelance: [], substituto: [],
+  });
   const [facialRequired, setFacialRequired] = useState(false);
   const [autoApprove, setAutoApprove] = useState(true);
   const [minScore, setMinScore] = useState(95);
+  const [activeTab, setActiveTab] = useState<PromoterType>('fixo');
 
   useEffect(() => {
     if (data) {
-      setEnabled(!!data.doc_validation_enabled);
-      setRequiredDocs(Array.isArray(data.required_documents) ? data.required_documents : []);
-      setFacialRequired(!!data.facial_required);
-      setAutoApprove(data.auto_approve_on_match !== false);
-      setMinScore(Number(data.auto_approve_min_score ?? 95));
+      const d: any = data;
+      setEnabled(!!d.doc_validation_enabled);
+      setDocsByType({
+        fixo: Array.isArray(d.required_documents) && d.required_documents.length ? d.required_documents : DEFAULTS.fixo,
+        freelance: Array.isArray(d.required_documents_freelance) ? d.required_documents_freelance : DEFAULTS.freelance,
+        substituto: Array.isArray(d.required_documents_substituto) ? d.required_documents_substituto : DEFAULTS.substituto,
+      });
+      setFacialRequired(!!d.facial_required);
+      setAutoApprove(d.auto_approve_on_match !== false);
+      setMinScore(Number(d.auto_approve_min_score ?? 95));
     }
   }, [data]);
 
-  const toggleDoc = (doc: string) => {
-    setRequiredDocs(prev => prev.includes(doc) ? prev.filter(d => d !== doc) : [...prev, doc]);
+  const toggleDoc = (type: PromoterType, doc: string) => {
+    setDocsByType(prev => ({
+      ...prev,
+      [type]: prev[type].includes(doc) ? prev[type].filter(d => d !== doc) : [...prev[type], doc],
+    }));
   };
 
   const handleSave = async () => {
@@ -50,11 +70,13 @@ export function RedeDocValidationConfig({ redeId, redeName }: Props) {
       await saveMut.mutateAsync({
         redeId,
         doc_validation_enabled: enabled,
-        required_documents: requiredDocs as any,
+        required_documents: docsByType.fixo as any,
+        required_documents_freelance: docsByType.freelance,
+        required_documents_substituto: docsByType.substituto,
         facial_required: facialRequired,
         auto_approve_on_match: autoApprove,
         auto_approve_min_score: minScore,
-      });
+      } as any);
       toast({ title: 'Configuração salva' });
     } catch (e: any) {
       toast({ title: 'Erro', description: e.message, variant: 'destructive' });
@@ -62,6 +84,20 @@ export function RedeDocValidationConfig({ redeId, redeName }: Props) {
   };
 
   if (isLoading) return <div className="p-4"><Loader2 className="h-5 w-5 animate-spin" /></div>;
+
+  const renderDocs = (type: PromoterType) => (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+      {ALL_DOCS.map(doc => (
+        <label key={doc} className="flex items-center gap-2 rounded-md border p-2 cursor-pointer hover:bg-muted/50">
+          <Checkbox
+            checked={docsByType[type].includes(doc)}
+            onCheckedChange={() => toggleDoc(type, doc)}
+          />
+          <span className="text-sm">{DOCUMENT_LABELS[doc]}</span>
+        </label>
+      ))}
+    </div>
+  );
 
   return (
     <Card>
@@ -85,18 +121,17 @@ export function RedeDocValidationConfig({ redeId, redeName }: Props) {
         {enabled && (
           <>
             <div className="space-y-2">
-              <Label>Documentos exigidos</Label>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                {ALL_DOCS.map(doc => (
-                  <label key={doc} className="flex items-center gap-2 rounded-md border p-2 cursor-pointer hover:bg-muted/50">
-                    <Checkbox
-                      checked={requiredDocs.includes(doc)}
-                      onCheckedChange={() => toggleDoc(doc)}
-                    />
-                    <span className="text-sm">{DOCUMENT_LABELS[doc]}</span>
-                  </label>
-                ))}
-              </div>
+              <Label>Documentos exigidos por tipo de promotor</Label>
+              <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as PromoterType)}>
+                <TabsList className="w-full">
+                  <TabsTrigger value="fixo" className="flex-1">Fixo (CLT)</TabsTrigger>
+                  <TabsTrigger value="freelance" className="flex-1">Freelance</TabsTrigger>
+                  <TabsTrigger value="substituto" className="flex-1">Substituto</TabsTrigger>
+                </TabsList>
+                <TabsContent value="fixo" className="mt-3">{renderDocs('fixo')}</TabsContent>
+                <TabsContent value="freelance" className="mt-3">{renderDocs('freelance')}</TabsContent>
+                <TabsContent value="substituto" className="mt-3">{renderDocs('substituto')}</TabsContent>
+              </Tabs>
             </div>
 
             <div className="flex items-center justify-between rounded-lg border p-3">
