@@ -1,6 +1,6 @@
 import { Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAgencyAuth } from '@/contexts/AgencyAuthContext';
-import { Loader2, LayoutDashboard, Users, LogOut, Building2, Shield, CalendarDays, Tag } from 'lucide-react';
+import { Loader2, LayoutDashboard, Users, LogOut, Building2, Shield, CalendarDays, Tag, CalendarOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 
@@ -9,6 +9,7 @@ const navItems = [
   { path: '/agencia/promotores', label: 'Promotores', icon: Users },
   { path: '/agencia/marcas', label: 'Marcas', icon: Tag },
   { path: '/agencia/visitas', label: 'Solicitações de Visita', icon: CalendarDays },
+  { path: '/agencia/afastamentos', label: 'Afastamentos', icon: CalendarOff },
   { path: '/agencia/regras', label: 'Regras de Acesso', icon: Shield },
 ];
 

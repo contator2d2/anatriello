@@ -1,104 +1,137 @@
-
-# Validação automática de documentos do promotor com IA
-
 ## Objetivo
-Quando o promotor envia documentos (CNH, contrato, comprovante de endereço, CTPS, selfie), uma IA cruza os dados, compara com o cadastro da agência e com os PDVs/marcas vinculados, e pré/auto-aprova o acesso. Cada PDV/Rede configura quais documentos exigir e se exige biometria facial.
 
-## 1. Configuração global do provedor de IA (Superadmin)
+Adicionar 3 capacidades ao módulo de Controle de Acesso:
 
-Nova tela `AyratechAIConfig` em `/admin/ayratech-ai` para o superadmin (`tnicodemos@gmail.com`):
-- Provedor: OpenAI / Gemini / OpenRouter
-- Modelo (com presets: `gpt-4o`, `gpt-4o-mini`, `gemini-2.5-pro`, etc.)
-- API Key (mascarada, criptografada)
-- Botão "Testar conexão" (chama backend que faz uma chamada mínima)
+1. **Tipos de promotor**: `fixo`, `freelance` e `substituto` (temporário).
+2. **Fluxo de afastamento/substituição**: agência marca titular como afastado e escolhe substituto manualmente; visitas pendentes são reatribuídas.
+3. **Dashboard de acompanhamento** com 4 painéis: Operacional em tempo real, Validações IA, Gestão de Promotores, Financeiro/Contratos.
 
-Armazenamento: tabela `system_settings` já existente, chave `doc_validation_ai` (JSONB com provider, model, api_key). Apenas superadmin pode ler/gravar.
+---
 
-Backend: `backend/src/routes/ayratech-ai.js` com:
-- `GET /api/ayratech-ai/config` — retorna config (chave mascarada)
-- `PUT /api/ayratech-ai/config` — atualiza
-- `POST /api/ayratech-ai/test` — testa chamada
+## 1. Schema (backend, via ensureTables JIT)
 
-## 2. Configuração de exigências por Rede/PDV
+**`agency_promoters` (novas colunas)**
+- `promoter_type` text default `'fixo'` — `fixo` | `freelance` | `substituto`
+- `is_available` boolean default true — para freelance/substituto aceitar cobertura
+- `mei_cnpj` text — opcional, freelance pessoa jurídica
+- `hourly_rate` numeric — custo do freelance (financeiro)
 
-Adicionar em `merch_redes`:
-- `doc_validation_enabled BOOLEAN DEFAULT false`
-- `required_documents JSONB DEFAULT '[]'` — array com `cnh`, `contrato_trabalho`, `comprovante_endereco`, `ctps`, `cadastro_agencia`
-- `facial_required BOOLEAN DEFAULT false`
-- `auto_approve_on_match BOOLEAN DEFAULT true` (auto-aprovar se 100% OK)
+**`promoter_leaves` (nova tabela)**
+- `id`, `promoter_id`, `agency_id`
+- `reason` text — `doenca` | `ferias` | `falta` | `desligamento` | `outro`
+- `start_date`, `end_date` (nullable se em aberto)
+- `substitute_promoter_id` uuid nullable
+- `notes` text, `created_at`, `created_by`
 
-PDV (`merch_rede_pdvs`) herda da rede com possibilidade de override (mesmas colunas opcionais, `NULL` = herda).
+**`visit_requests` (novas colunas)**
+- `original_promoter_id` uuid — preserva o titular quando há substituição
+- `substitution_reason` text
+- `leave_id` uuid referenciando `promoter_leaves`
 
-UI: aba "Validação Automática" em `MerchRedes.tsx` (e detalhe do PDV) com checkboxes dos documentos exigidos, toggle de facial e toggle de auto-aprovação.
+**`merch_redes` (novas colunas)**
+- `doc_validation_required_fixo` jsonb — docs exigidos do CLT/fixo
+- `doc_validation_required_freelance` jsonb — docs exigidos do freelance (default: CNH + selfie)
+- `doc_validation_required_substituto` jsonb — docs do substituto
 
-## 3. Coleta de documentos do promotor
+**`supermarket_units` (override por tipo, já tem override por PDV)**
+- `doc_validation_required_freelance` jsonb (override)
+- `doc_validation_required_substituto` jsonb (override)
 
-Reaproveitar tabela `promotor_documents` existente. Adicionar campo `category` padronizado (já existe). Adicionar nova tabela:
+A função `loadValidationRequirements(redeId, unitId, promoterType)` passa a receber o tipo e retorna a lista de docs apropriada com fallback PDV → Rede → default por tipo.
 
-`promoter_document_validations`:
-- `id`, `promoter_id`, `rede_id`, `pdv_id` (nullable)
-- `status` — `pending`, `analyzing`, `approved`, `pre_approved`, `divergent`, `rejected`, `failed`
-- `score` — 0-100
-- `divergences JSONB` — lista de campos com problema (ex: `[{field: "cpf", source_a: "cnh", source_b: "contrato", value_a, value_b}]`)
-- `ai_raw_response TEXT`
-- `documents_analyzed JSONB` — lista dos doc_ids analisados
-- `validated_at`, `created_at`, `updated_at`
-- `reviewed_by`, `reviewed_at`, `override_status`
+---
 
-## 4. Edge function / rota backend de validação
+## 2. Backend — novas rotas
 
-`POST /api/promoter-validations/run` body: `{ promoter_id, rede_id, pdv_id? }`
-1. Carrega config global de IA do `system_settings`
-2. Carrega requisitos da rede/PDV
-3. Carrega documentos do promotor por categoria (URLs)
-4. Carrega cadastro do promotor (`promoters` / `agency_promoters`) e cadastro da agência
-5. Monta prompt multimodal: envia imagens/PDFs + dados textuais e pede JSON estruturado contendo:
-   - Dados extraídos de cada documento (nome, CPF, RG, datas)
-   - Comparação cruzada
-   - Lista de divergências
-   - Score 0-100
-   - Recomendação (`approve`, `review`, `reject`)
-6. Se facial_required: chama validação facial já existente (selfie vs foto CNH) e mescla resultado
-7. Valida PDVs/marcas: confere se as marcas/redes listadas no contrato batem com a lista informada pela agência
-8. Salva em `promoter_document_validations`
-9. Se `auto_approve_on_match` e `score >= 95` e sem divergências críticas: atualiza `agency_visit_requests` para `approved` automaticamente
-10. Notifica agência (push + registro) se houver divergência
+`backend/src/routes/promoter-leaves.js` (registrado em `index.js`)
+- `GET /api/promoter-leaves?agency_id=&active=true` — lista afastamentos
+- `POST /api/promoter-leaves` — cria afastamento, opcionalmente já indicando substituto e reatribui automaticamente `visit_requests` pendentes do titular para o substituto (preserva `original_promoter_id`)
+- `PUT /api/promoter-leaves/:id` — atualiza (encerrar afastamento, trocar substituto)
+- `DELETE /api/promoter-leaves/:id` — cancela
+- `GET /api/promoter-leaves/available-substitutes?agency_id=&date=` — lista promotores `freelance`/`substituto` disponíveis (sem visita marcada)
 
-## 5. UI de revisão (Rede e Agência)
+`backend/src/routes/access-control-dashboard.js`
+- `GET /api/access-control/dashboard/operational` — visitas hoje, no PDV agora, afastamentos ativos, substituições pendentes
+- `GET /api/access-control/dashboard/validations` — pendentes IA, score médio, rejeições, divergências críticas
+- `GET /api/access-control/dashboard/promoters` — totais por tipo, conformidade, score de performance
+- `GET /api/access-control/dashboard/financial` — contratos vencendo (30 dias), freelancers ativados no mês, custo estimado por PDV (hourly_rate × horas)
 
-- Em `AgencyVisitRequests` adicionar coluna "Validação IA" mostrando badge (Aprovado/Pré-aprovado/Divergente) + botão "Ver análise"
-- Modal `ValidationDetailDialog` mostrando:
-  - Score visual
-  - Documentos analisados com previews
-  - Tabela de divergências (campo, valor A vs valor B, fonte)
-  - Recomendação da IA
-  - Ações: Aprovar / Recusar / Reanalisar
-- Em painel da Rede: lista de promotores aguardando análise + ações em massa
+`backend/src/routes/promoter-validations.js` — `loadValidationRequirements` aceita `promoterType` e escolhe a coluna correta.
 
-## 6. Gatilhos automáticos
+---
 
-- Quando promotor envia novo documento numa categoria exigida → enfileirar validação (debounce 30s)
-- Quando agência cria solicitação de acesso ao PDV → roda validação
-- Endpoint manual "Reanalisar" no detalhe
+## 3. Frontend
 
-## Detalhes técnicos
+**`src/pages/agency/AgencyPromoters.tsx`** — adicionar:
+- Select `promoter_type` no formulário (Fixo / Freelance / Substituto)
+- Campos condicionais: `mei_cnpj`, `hourly_rate` aparecem para freelance/substituto
+- Documentos opcionais (contrato/CTPS) ficam ocultos para freelance
+- Badge colorido na lista por tipo
 
-- Backend novo: `backend/src/routes/ayratech-ai.js`, `backend/src/routes/promoter-validations.js`
-- Backend lib reusada: `backend/src/lib/ai-caller.js` (já suporta OpenAI/Gemini/OpenRouter com tool-calling)
-- Frontend novo:
-  - `src/pages/admin/AyratechAIConfig.tsx`
-  - `src/components/merchandising/RedeDocValidationConfig.tsx`
-  - `src/components/access-control/ValidationDetailDialog.tsx`
-  - `src/components/access-control/ValidationBadge.tsx`
-  - Hook `src/hooks/use-promoter-validations.ts`
-  - Hook `src/hooks/use-ayratech-ai.ts`
-- Migração ensureTables no backend (padrão Just-in-Time já adotado no projeto)
-- Timezone `America/Sao_Paulo` em todos os campos de data
-- API key armazenada criptografada (AES com `ENCRYPTION_KEY` já existente) na `system_settings`
-- Acesso à tela de config restrito a `tnicodemos@gmail.com` (master admin)
+**`src/pages/agency/AgencyLeaves.tsx`** (nova página, rota `/agency/leaves`)
+- Lista afastamentos ativos
+- Botão "Registrar afastamento": escolhe promotor titular, motivo, datas
+- Após criar, abre modal "Designar substituto" com lista de freelancers disponíveis
+- Mostra quantas visitas foram reatribuídas
 
-## Entregáveis
-1. Migração + ensureTables das novas tabelas/colunas
-2. Backend: rotas de config global + rotas de validação + worker de validação
-3. Frontend: tela superadmin + config por rede + modal de revisão + badges nas listagens
-4. Gatilho automático no envio de documento e na criação de solicitação de acesso
+**`src/components/merchandising/RedeDocValidationConfig.tsx`** — abas/tabs:
+- Aba "Fixo (CLT)", "Freelance", "Substituto" — cada uma com os checkboxes de documentos exigidos
+
+**`src/components/access-control/UnitDocValidationConfig.tsx`** — mesma estrutura de tabs por tipo (override opcional)
+
+**`src/pages/admin/AccessControlDashboard.tsx`** (nova, rota `/admin/access-control/dashboard`)
+- 4 cards de KPIs no topo (visitas hoje, no PDV agora, afastamentos, validações pendentes)
+- Tabs: Operacional / Validações IA / Promotores / Financeiro
+- Cada tab renderiza gráficos (recharts) e tabelas
+- Link "Ver detalhes" navega para a página correspondente
+
+**`src/hooks/use-promoter-leaves.ts`** — queries/mutations das rotas
+**`src/hooks/use-access-dashboard.ts`** — query dos 4 endpoints
+
+**`src/App.tsx`** — registrar as 2 novas rotas
+
+---
+
+## 4. Lógica de substituição automática
+
+Quando `POST /api/promoter-leaves` é criado com `substitute_promoter_id`:
+```sql
+UPDATE visit_requests
+SET original_promoter_id = promoter_id,
+    promoter_id = $substitute,
+    leave_id = $leave_id,
+    substitution_reason = $reason,
+    -- dispara nova validação IA do substituto
+    validation_status = 'pending'
+WHERE promoter_id = $original
+  AND status IN ('pending','approved')
+  AND visit_date >= $start_date
+  AND ($end_date IS NULL OR visit_date <= $end_date);
+```
+
+Em seguida, o `triggerValidation` é chamado para cada visita reatribuída, usando o `promoter_type` do substituto (que normalmente exige menos documentos).
+
+---
+
+## Arquivos criados/editados (resumo)
+
+Criar:
+- `backend/src/routes/promoter-leaves.js`
+- `backend/src/routes/access-control-dashboard.js`
+- `src/pages/agency/AgencyLeaves.tsx`
+- `src/pages/admin/AccessControlDashboard.tsx`
+- `src/hooks/use-promoter-leaves.ts`
+- `src/hooks/use-access-dashboard.ts`
+
+Editar:
+- `backend/src/index.js` (registrar rotas)
+- `backend/src/routes/promoter-validations.js` (assinatura `loadValidationRequirements` + ensureTables)
+- `backend/src/routes/access-control.js` (ensureTables novas colunas)
+- `src/pages/agency/AgencyPromoters.tsx` (tipos + campos condicionais)
+- `src/pages/agency/AgencyLayout.tsx` (item de menu "Afastamentos")
+- `src/components/merchandising/RedeDocValidationConfig.tsx` (tabs por tipo)
+- `src/components/access-control/UnitDocValidationConfig.tsx` (tabs por tipo)
+- `src/App.tsx` (rotas)
+- `src/pages/Admin.tsx` (card do dashboard)
+
+Posso prosseguir com a implementação completa?

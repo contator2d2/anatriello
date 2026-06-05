@@ -118,6 +118,8 @@ import AgencyPromoters from "./pages/agency/AgencyPromoters";
 import AgencyBrands from "./pages/agency/AgencyBrands";
 import AgencyAccessRules from "./pages/agency/AgencyAccessRules";
 import AgencyVisitRequests from "./pages/agency/AgencyVisitRequests";
+import AgencyLeaves from "./pages/agency/AgencyLeaves";
+import AccessControlDashboard from "./pages/admin/AccessControlDashboard";
 import { SupermarketAuthProvider } from "./contexts/SupermarketAuthContext";
 import SupermarketLogin from "./pages/supermarket/SupermarketLogin";
 import SupermarketLayout from "./pages/supermarket/SupermarketLayout";
@@ -218,6 +220,7 @@ const App = () => (
             <Route path="/organizacoes" element={<ProtectedRoute><Organizacoes /></ProtectedRoute>} />
             <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
             <Route path="/admin/ayratech-ai" element={<ProtectedRoute><AyratechAIConfig /></ProtectedRoute>} />
+            <Route path="/admin/access-control/dashboard" element={<ProtectedRoute><AccessControlDashboard /></ProtectedRoute>} />
             <Route path="/configuracoes" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
             <Route path="/chatbots" element={<ProtectedRoute><Chatbots /></ProtectedRoute>} />
             <Route path="/fluxos" element={<ProtectedRoute><Fluxos /></ProtectedRoute>} />
@@ -285,6 +288,7 @@ const App = () => (
               <Route path="promotores" element={<AgencyPromoters />} />
               <Route path="marcas" element={<AgencyBrands />} />
               <Route path="visitas" element={<AgencyVisitRequests />} />
+              <Route path="afastamentos" element={<AgencyLeaves />} />
               <Route path="regras" element={<AgencyAccessRules />} />
             </Route>
             {/* Supermarket Portal */}

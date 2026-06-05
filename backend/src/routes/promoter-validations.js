@@ -48,7 +48,9 @@ async function ensureTables() {
     ADD COLUMN IF NOT EXISTS required_documents JSONB DEFAULT '[]'::jsonb,
     ADD COLUMN IF NOT EXISTS facial_required BOOLEAN DEFAULT false,
     ADD COLUMN IF NOT EXISTS auto_approve_on_match BOOLEAN DEFAULT true,
-    ADD COLUMN IF NOT EXISTS auto_approve_min_score NUMERIC(5,2) DEFAULT 95`);
+    ADD COLUMN IF NOT EXISTS auto_approve_min_score NUMERIC(5,2) DEFAULT 95,
+    ADD COLUMN IF NOT EXISTS required_documents_freelance JSONB,
+    ADD COLUMN IF NOT EXISTS required_documents_substituto JSONB`);
 
   // Per-PDV config on supermarket_units (overrides rede)
   await query(`ALTER TABLE supermarket_units
@@ -56,33 +58,56 @@ async function ensureTables() {
     ADD COLUMN IF NOT EXISTS required_documents JSONB,
     ADD COLUMN IF NOT EXISTS facial_required BOOLEAN,
     ADD COLUMN IF NOT EXISTS auto_approve_on_match BOOLEAN,
-    ADD COLUMN IF NOT EXISTS auto_approve_min_score NUMERIC(5,2)`).catch(() => {});
+    ADD COLUMN IF NOT EXISTS auto_approve_min_score NUMERIC(5,2),
+    ADD COLUMN IF NOT EXISTS required_documents_freelance JSONB,
+    ADD COLUMN IF NOT EXISTS required_documents_substituto JSONB`).catch(() => {});
+
+  // Promoter type column for downstream selection
+  await query(`ALTER TABLE agency_promoters
+    ADD COLUMN IF NOT EXISTS promoter_type VARCHAR(20) DEFAULT 'fixo'`).catch(() => {});
+}
+
+// Defaults per promoter type
+const DEFAULT_DOCS_BY_TYPE = {
+  fixo: DOC_CATEGORIES,
+  freelance: ['cnh', 'selfie'],
+  substituto: ['cnh', 'selfie'],
+};
+
+function pickDocsForType(row, promoterType) {
+  if (promoterType === 'freelance' && Array.isArray(row?.required_documents_freelance)) return row.required_documents_freelance;
+  if (promoterType === 'substituto' && Array.isArray(row?.required_documents_substituto)) return row.required_documents_substituto;
+  if (Array.isArray(row?.required_documents)) return row.required_documents;
+  return null;
 }
 
 // Resolve requirements for a rede
-async function loadRedeRequirements(redeId) {
+async function loadRedeRequirements(redeId, promoterType) {
   if (!redeId) return null;
   const r = await query(
-    `SELECT id, doc_validation_enabled, required_documents, facial_required, auto_approve_on_match, auto_approve_min_score
+    `SELECT id, doc_validation_enabled, required_documents, required_documents_freelance, required_documents_substituto,
+            facial_required, auto_approve_on_match, auto_approve_min_score
      FROM merch_redes WHERE id = $1`,
     [redeId]
   );
   if (!r.rows[0]) return null;
   const row = r.rows[0];
+  const docs = pickDocsForType(row, promoterType);
   return {
     enabled: !!row.doc_validation_enabled,
-    requiredDocs: Array.isArray(row.required_documents) ? row.required_documents : [],
+    requiredDocs: docs ?? [],
     facialRequired: !!row.facial_required,
     autoApprove: row.auto_approve_on_match !== false,
     autoApproveMinScore: Number(row.auto_approve_min_score ?? 95),
   };
 }
 
-async function loadUnitRequirements(unitId) {
+async function loadUnitRequirements(unitId, promoterType) {
   if (!unitId) return null;
   try {
     const r = await query(
-      `SELECT doc_validation_enabled, required_documents, facial_required, auto_approve_on_match, auto_approve_min_score
+      `SELECT doc_validation_enabled, required_documents, required_documents_freelance, required_documents_substituto,
+              facial_required, auto_approve_on_match, auto_approve_min_score
        FROM supermarket_units WHERE id = $1`,
       [unitId]
     );
@@ -90,7 +115,8 @@ async function loadUnitRequirements(unitId) {
     const row = r.rows[0];
     const out = {};
     if (row.doc_validation_enabled !== null) out.enabled = !!row.doc_validation_enabled;
-    if (Array.isArray(row.required_documents)) out.requiredDocs = row.required_documents;
+    const docs = pickDocsForType(row, promoterType);
+    if (docs) out.requiredDocs = docs;
     if (row.facial_required !== null) out.facialRequired = !!row.facial_required;
     if (row.auto_approve_on_match !== null) out.autoApprove = !!row.auto_approve_on_match;
     if (row.auto_approve_min_score !== null) out.autoApproveMinScore = Number(row.auto_approve_min_score);
@@ -98,19 +124,20 @@ async function loadUnitRequirements(unitId) {
   } catch { return null; }
 }
 
-// Merge: defaults < rede < unit
-async function loadValidationRequirements(redeId, unitId) {
+// Merge: defaults < rede < unit (all aware of promoter type)
+async function loadValidationRequirements(redeId, unitId, promoterType = 'fixo') {
   const defaults = {
     enabled: true,
-    requiredDocs: DOC_CATEGORIES,
+    requiredDocs: DEFAULT_DOCS_BY_TYPE[promoterType] || DOC_CATEGORIES,
     facialRequired: false,
     autoApprove: true,
     autoApproveMinScore: 95,
   };
-  const rede = (await loadRedeRequirements(redeId)) || {};
-  const unit = (await loadUnitRequirements(unitId)) || {};
+  const rede = (await loadRedeRequirements(redeId, promoterType)) || {};
+  const unit = (await loadUnitRequirements(unitId, promoterType)) || {};
   return { ...defaults, ...rede, ...unit };
 }
+
 
 
 
@@ -349,7 +376,7 @@ export async function triggerValidation({ agency_promoter_id, rede_id, supermark
   const promoter = await loadPromoter(agency_promoter_id);
   if (!promoter) throw new Error('Promotor não encontrado');
 
-  const requirements = await loadValidationRequirements(rede_id, supermarket_unit_id);
+  const requirements = await loadValidationRequirements(rede_id, supermarket_unit_id, promoter.promoter_type || 'fixo');
   if (!requirements.enabled) throw new Error('Validação automática desativada para esta rede/PDV');
 
   const allDocs = await loadPromoterDocuments(agency_promoter_id);
@@ -462,8 +489,9 @@ router.get('/rede/:redeId/config', async (req, res) => {
   try {
     await ensureTables();
     const r = await query(
-      `SELECT id, name, doc_validation_enabled, required_documents, facial_required,
-              auto_approve_on_match, auto_approve_min_score
+      `SELECT id, name, doc_validation_enabled, required_documents,
+              required_documents_freelance, required_documents_substituto,
+              facial_required, auto_approve_on_match, auto_approve_min_score
        FROM merch_redes WHERE id = $1`,
       [req.params.redeId]
     );
@@ -477,19 +505,24 @@ router.get('/rede/:redeId/config', async (req, res) => {
 router.put('/rede/:redeId/config', async (req, res) => {
   try {
     await ensureTables();
-    const { doc_validation_enabled, required_documents, facial_required, auto_approve_on_match, auto_approve_min_score } = req.body;
+    const { doc_validation_enabled, required_documents, required_documents_freelance, required_documents_substituto,
+            facial_required, auto_approve_on_match, auto_approve_min_score } = req.body;
     await query(
       `UPDATE merch_redes SET
         doc_validation_enabled = COALESCE($1, doc_validation_enabled),
         required_documents = COALESCE($2, required_documents),
-        facial_required = COALESCE($3, facial_required),
-        auto_approve_on_match = COALESCE($4, auto_approve_on_match),
-        auto_approve_min_score = COALESCE($5, auto_approve_min_score),
+        required_documents_freelance = COALESCE($3, required_documents_freelance),
+        required_documents_substituto = COALESCE($4, required_documents_substituto),
+        facial_required = COALESCE($5, facial_required),
+        auto_approve_on_match = COALESCE($6, auto_approve_on_match),
+        auto_approve_min_score = COALESCE($7, auto_approve_min_score),
         updated_at = NOW()
-       WHERE id = $6`,
+       WHERE id = $8`,
       [
         doc_validation_enabled,
         required_documents ? JSON.stringify(required_documents) : null,
+        required_documents_freelance ? JSON.stringify(required_documents_freelance) : null,
+        required_documents_substituto ? JSON.stringify(required_documents_substituto) : null,
         facial_required,
         auto_approve_on_match,
         auto_approve_min_score,
@@ -508,8 +541,9 @@ router.get('/unit/:unitId/config', async (req, res) => {
   try {
     await ensureTables();
     const r = await query(
-      `SELECT id, name, doc_validation_enabled, required_documents, facial_required,
-              auto_approve_on_match, auto_approve_min_score
+      `SELECT id, name, doc_validation_enabled, required_documents,
+              required_documents_freelance, required_documents_substituto,
+              facial_required, auto_approve_on_match, auto_approve_min_score
        FROM supermarket_units WHERE id = $1`,
       [req.params.unitId]
     );
@@ -524,18 +558,23 @@ router.get('/unit/:unitId/config', async (req, res) => {
 router.put('/unit/:unitId/config', async (req, res) => {
   try {
     await ensureTables();
-    const { doc_validation_enabled, required_documents, facial_required, auto_approve_on_match, auto_approve_min_score } = req.body;
+    const { doc_validation_enabled, required_documents, required_documents_freelance, required_documents_substituto,
+            facial_required, auto_approve_on_match, auto_approve_min_score } = req.body;
     await query(
       `UPDATE supermarket_units SET
         doc_validation_enabled = $1,
         required_documents = $2,
-        facial_required = $3,
-        auto_approve_on_match = $4,
-        auto_approve_min_score = $5
-       WHERE id = $6`,
+        required_documents_freelance = $3,
+        required_documents_substituto = $4,
+        facial_required = $5,
+        auto_approve_on_match = $6,
+        auto_approve_min_score = $7
+       WHERE id = $8`,
       [
         doc_validation_enabled ?? null,
         required_documents ? JSON.stringify(required_documents) : null,
+        required_documents_freelance ? JSON.stringify(required_documents_freelance) : null,
+        required_documents_substituto ? JSON.stringify(required_documents_substituto) : null,
         facial_required ?? null,
         auto_approve_on_match ?? null,
         auto_approve_min_score ?? null,
