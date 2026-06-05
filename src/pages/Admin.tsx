@@ -795,7 +795,7 @@ export default function Admin() {
         </div>
 
         <Tabs defaultValue="plans" className="space-y-6">
-          <TabsList className="grid w-full max-w-6xl grid-cols-8">
+          <TabsList className="grid w-full max-w-6xl grid-cols-9">
             <TabsTrigger value="plans" className="flex items-center gap-2">
               <Package className="h-4 w-4" />
               Planos
@@ -811,6 +811,10 @@ export default function Admin() {
             <TabsTrigger value="global-agents" className="flex items-center gap-2">
               <Bot className="h-4 w-4" />
               IA Global
+            </TabsTrigger>
+            <TabsTrigger value="ayratech-ai" className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4" />
+              IA Validação
             </TabsTrigger>
             <TabsTrigger value="wapi-instances" className="flex items-center gap-2">
               <Server className="h-4 w-4" />
@@ -829,6 +833,20 @@ export default function Admin() {
               Importação
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="ayratech-ai" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2"><Sparkles className="h-5 w-5" /> IA de Validação de Promotores</CardTitle>
+                <CardDescription>Configure o provedor e modelo usados para validar documentos de promotores (CNH, contrato, selfie, etc).</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button onClick={() => navigate('/admin/ayratech-ai')}>
+                  <Sparkles className="h-4 w-4 mr-2" /> Abrir configurações
+                </Button>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
           {/* Plans Tab */}
           <TabsContent value="plans" className="space-y-4">
