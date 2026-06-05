@@ -471,4 +471,50 @@ router.put('/rede/:redeId/config', async (req, res) => {
   }
 });
 
+// Per-PDV (supermarket_units) config
+router.get('/unit/:unitId/config', async (req, res) => {
+  try {
+    await ensureTables();
+    const r = await query(
+      `SELECT id, name, doc_validation_enabled, required_documents, facial_required,
+              auto_approve_on_match, auto_approve_min_score
+       FROM supermarket_units WHERE id = $1`,
+      [req.params.unitId]
+    );
+    if (!r.rows[0]) return res.status(404).json({ error: 'PDV não encontrado' });
+    res.json(r.rows[0]);
+  } catch (e) {
+    console.error('get unit config', e);
+    res.status(500).json({ error: 'Erro' });
+  }
+});
+
+router.put('/unit/:unitId/config', async (req, res) => {
+  try {
+    await ensureTables();
+    const { doc_validation_enabled, required_documents, facial_required, auto_approve_on_match, auto_approve_min_score } = req.body;
+    await query(
+      `UPDATE supermarket_units SET
+        doc_validation_enabled = $1,
+        required_documents = $2,
+        facial_required = $3,
+        auto_approve_on_match = $4,
+        auto_approve_min_score = $5
+       WHERE id = $6`,
+      [
+        doc_validation_enabled ?? null,
+        required_documents ? JSON.stringify(required_documents) : null,
+        facial_required ?? null,
+        auto_approve_on_match ?? null,
+        auto_approve_min_score ?? null,
+        req.params.unitId,
+      ]
+    );
+    res.json({ success: true });
+  } catch (e) {
+    console.error('save unit config', e);
+    res.status(500).json({ error: 'Erro ao salvar' });
+  }
+});
+
 export default router;
