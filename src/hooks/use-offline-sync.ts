@@ -70,8 +70,6 @@ export function useOfflineSync() {
     });
 
     // 1. Process Uploads first
-    const uploadMap = new Map<string, string>(); // localId -> serverUrl
-
     for (const upload of pendingUploads) {
       try {
         await db.pending_uploads.update(upload.id!, { status: 'uploading' });
@@ -93,14 +91,50 @@ export function useOfflineSync() {
           fileUrl = `${API_URL}${fileUrl}`;
         }
 
-        uploadMap.set(upload.localId, fileUrl);
+        logger.info('[OfflineSync] Upload concluído, atualizando referências', { localId: upload.localId, url: fileUrl });
+        
+        // CRITICAL: Update all pending API calls that might use this localId
+        // This ensures that even if sync is interrupted, the mapping is persisted in the body
+        const callsToUpdate = await db.pending_api_calls.toArray();
+        const fullLocalRef = `local-file://${upload.localId}`;
+        
+        for (const call of callsToUpdate) {
+          let bodyChanged = false;
+          
+          const updateBodyRefs = (obj: any): any => {
+            if (typeof obj === 'string') {
+              if (obj === fullLocalRef || obj === upload.localId) {
+                bodyChanged = true;
+                return fileUrl;
+              }
+              return obj;
+            }
+            if (Array.isArray(obj)) return obj.map(updateBodyRefs);
+            if (obj !== null && typeof obj === 'object') {
+              const newObj: any = {};
+              for (const key in obj) {
+                newObj[key] = updateBodyRefs(obj[key]);
+              }
+              return newObj;
+            }
+            return obj;
+          };
+
+          const newBody = updateBodyRefs(call.body);
+          if (bodyChanged) {
+            await db.pending_api_calls.update(call.id!, { body: newBody });
+          }
+        }
+
         await db.pending_uploads.delete(upload.id!);
-        logger.info('[OfflineSync] Upload concluído', { localId: upload.localId, url: fileUrl });
       } catch (err: any) {
         logger.error('[OfflineSync] Erro no upload', { id: upload.id, error: err.message });
         await db.pending_uploads.update(upload.id!, { status: 'failed', error: err.message });
       }
     }
+
+    // Refresh pending calls list since we might have updated them
+    const updatedPendingCalls = await db.pending_api_calls.where('status').equals('pending').toArray();
 
     // 2. Process API Calls
     for (const call of pendingCalls) {
