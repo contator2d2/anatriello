@@ -8,8 +8,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
-import { Settings, Palette, Lock, Key, Copy, RefreshCw, Loader2, Eye, EyeOff, Monitor, UserCog, ExternalLink } from 'lucide-react';
+import { Settings, Palette, Lock, Key, Copy, RefreshCw, Loader2, Eye, EyeOff, Monitor, UserCog, ExternalLink, QrCode } from 'lucide-react';
 import { FileUploadInput } from '@/components/ui/file-upload-input';
 
 const getHeaders = () => {
