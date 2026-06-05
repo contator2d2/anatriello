@@ -489,8 +489,9 @@ router.get('/rede/:redeId/config', async (req, res) => {
   try {
     await ensureTables();
     const r = await query(
-      `SELECT id, name, doc_validation_enabled, required_documents, facial_required,
-              auto_approve_on_match, auto_approve_min_score
+      `SELECT id, name, doc_validation_enabled, required_documents,
+              required_documents_freelance, required_documents_substituto,
+              facial_required, auto_approve_on_match, auto_approve_min_score
        FROM merch_redes WHERE id = $1`,
       [req.params.redeId]
     );
@@ -504,19 +505,24 @@ router.get('/rede/:redeId/config', async (req, res) => {
 router.put('/rede/:redeId/config', async (req, res) => {
   try {
     await ensureTables();
-    const { doc_validation_enabled, required_documents, facial_required, auto_approve_on_match, auto_approve_min_score } = req.body;
+    const { doc_validation_enabled, required_documents, required_documents_freelance, required_documents_substituto,
+            facial_required, auto_approve_on_match, auto_approve_min_score } = req.body;
     await query(
       `UPDATE merch_redes SET
         doc_validation_enabled = COALESCE($1, doc_validation_enabled),
         required_documents = COALESCE($2, required_documents),
-        facial_required = COALESCE($3, facial_required),
-        auto_approve_on_match = COALESCE($4, auto_approve_on_match),
-        auto_approve_min_score = COALESCE($5, auto_approve_min_score),
+        required_documents_freelance = COALESCE($3, required_documents_freelance),
+        required_documents_substituto = COALESCE($4, required_documents_substituto),
+        facial_required = COALESCE($5, facial_required),
+        auto_approve_on_match = COALESCE($6, auto_approve_on_match),
+        auto_approve_min_score = COALESCE($7, auto_approve_min_score),
         updated_at = NOW()
-       WHERE id = $6`,
+       WHERE id = $8`,
       [
         doc_validation_enabled,
         required_documents ? JSON.stringify(required_documents) : null,
+        required_documents_freelance ? JSON.stringify(required_documents_freelance) : null,
+        required_documents_substituto ? JSON.stringify(required_documents_substituto) : null,
         facial_required,
         auto_approve_on_match,
         auto_approve_min_score,
@@ -535,8 +541,9 @@ router.get('/unit/:unitId/config', async (req, res) => {
   try {
     await ensureTables();
     const r = await query(
-      `SELECT id, name, doc_validation_enabled, required_documents, facial_required,
-              auto_approve_on_match, auto_approve_min_score
+      `SELECT id, name, doc_validation_enabled, required_documents,
+              required_documents_freelance, required_documents_substituto,
+              facial_required, auto_approve_on_match, auto_approve_min_score
        FROM supermarket_units WHERE id = $1`,
       [req.params.unitId]
     );
@@ -551,18 +558,23 @@ router.get('/unit/:unitId/config', async (req, res) => {
 router.put('/unit/:unitId/config', async (req, res) => {
   try {
     await ensureTables();
-    const { doc_validation_enabled, required_documents, facial_required, auto_approve_on_match, auto_approve_min_score } = req.body;
+    const { doc_validation_enabled, required_documents, required_documents_freelance, required_documents_substituto,
+            facial_required, auto_approve_on_match, auto_approve_min_score } = req.body;
     await query(
       `UPDATE supermarket_units SET
         doc_validation_enabled = $1,
         required_documents = $2,
-        facial_required = $3,
-        auto_approve_on_match = $4,
-        auto_approve_min_score = $5
-       WHERE id = $6`,
+        required_documents_freelance = $3,
+        required_documents_substituto = $4,
+        facial_required = $5,
+        auto_approve_on_match = $6,
+        auto_approve_min_score = $7
+       WHERE id = $8`,
       [
         doc_validation_enabled ?? null,
         required_documents ? JSON.stringify(required_documents) : null,
+        required_documents_freelance ? JSON.stringify(required_documents_freelance) : null,
+        required_documents_substituto ? JSON.stringify(required_documents_substituto) : null,
         facial_required ?? null,
         auto_approve_on_match ?? null,
         auto_approve_min_score ?? null,
