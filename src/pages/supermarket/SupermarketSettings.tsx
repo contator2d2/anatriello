@@ -264,8 +264,8 @@ export default function SupermarketSettings() {
               <div key={key} className="space-y-1">
                 <Label className="text-xs">{label}</Label>
                 <div className="flex items-center gap-2">
-                  <input type="color" value={customForm[key as keyof typeof customForm] || '#000000'} onChange={(e) => setCustomForm({ ...customForm, [key]: e.target.value })} className="w-10 h-10 rounded border border-border cursor-pointer" />
-                  <Input value={customForm[key as keyof typeof customForm] || ''} onChange={(e) => setCustomForm({ ...customForm, [key]: e.target.value })} className="text-xs font-mono" placeholder="#000000" />
+                  <input type="color" value={String(customForm[key as keyof typeof customForm] || '#000000')} onChange={(e) => setCustomForm({ ...customForm, [key]: e.target.value })} className="w-10 h-10 rounded border border-border cursor-pointer" />
+                  <Input value={String(customForm[key as keyof typeof customForm] || '')} onChange={(e) => setCustomForm({ ...customForm, [key]: e.target.value })} className="text-xs font-mono" placeholder="#000000" />
                 </div>
               </div>
             ))}
