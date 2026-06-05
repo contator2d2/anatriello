@@ -63,6 +63,10 @@ export function useOfflineSync() {
 
     if (pendingUploads.length === 0 && pendingCalls.length === 0) return;
 
+    // Cleanup old mappings (older than 3 days) to keep DB small
+    const threeDaysAgo = Date.now() - (3 * 24 * 60 * 60 * 1000);
+    await db.upload_mappings.where('timestamp').below(threeDaysAgo).delete();
+
     setIsSyncing(true);
     logger.info('[OfflineSync] Iniciando sincronização', { 
       uploads: pendingUploads.length, 
@@ -91,10 +95,12 @@ export function useOfflineSync() {
           fileUrl = `${API_URL}${fileUrl}`;
         }
 
-        logger.info('[OfflineSync] Upload concluído, atualizando referências', { localId: upload.localId, url: fileUrl });
+        logger.info('[OfflineSync] Upload concluído, salvando mapeamento', { localId: upload.localId, url: fileUrl });
         
-        // CRITICAL: Update all pending API calls that might use this localId
-        // This ensures that even if sync is interrupted, the mapping is persisted in the body
+        // Save to persistent mapping so future API calls can resolve it
+        await db.upload_mappings.put({ localId: upload.localId, serverUrl: fileUrl, timestamp: Date.now() });
+
+        // CRITICAL: Update all currently pending API calls that might use this localId
         const callsToUpdate = await db.pending_api_calls.toArray();
         const fullLocalRef = `local-file://${upload.localId}`;
         
@@ -135,15 +141,39 @@ export function useOfflineSync() {
 
     // Refresh pending calls list since we might have updated them
     const updatedPendingCalls = await db.pending_api_calls.where('status').equals('pending').toArray();
+    
+    // Load all current mappings for resolution
+    const allMappings = await db.upload_mappings.toArray();
+    const mappingMap = new Map(allMappings.map(m => [m.localId, m.serverUrl]));
 
     // 2. Process API Calls
     for (const call of updatedPendingCalls) {
       try {
         await db.pending_api_calls.update(call.id!, { status: 'processing' });
 
-        let body = call.body;
+        // Resolve any local-file references using the mapping map
+        const resolveRefs = (obj: any): any => {
+          if (typeof obj === 'string') {
+            if (obj.startsWith('local-file://')) {
+              const lid = obj.replace('local-file://', '');
+              return mappingMap.get(lid) || obj;
+            }
+            return mappingMap.get(obj) || obj;
+          }
+          if (Array.isArray(obj)) return obj.map(resolveRefs);
+          if (obj !== null && typeof obj === 'object') {
+            const newObj: any = {};
+            for (const key in obj) {
+              newObj[key] = resolveRefs(obj[key]);
+            }
+            return newObj;
+          }
+          return obj;
+        };
+
+        const body = resolveRefs(call.body);
         
-        // Final safety check: if there are STILL local-file references, it means the upload failed or is missing
+        // Final safety check
         const hasLocalRefs = (obj: any): boolean => {
           if (typeof obj === 'string') return obj.startsWith('local-file://');
           if (Array.isArray(obj)) return obj.some(hasLocalRefs);
@@ -154,9 +184,7 @@ export function useOfflineSync() {
         };
 
         if (hasLocalRefs(body)) {
-          logger.warn('[OfflineSync] API call still has local-file references. Upload might have failed.', { url: call.url, body });
-          // We could choose to skip or continue. Let's continue but log it.
-          // The server will receive the local-file:// string, which is what the user reported.
+          logger.warn('[OfflineSync] API call still has local-file references.', { url: call.url, body });
         }
 
         await api(call.url, {
