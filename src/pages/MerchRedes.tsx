@@ -21,6 +21,7 @@ export default function MerchRedes() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [pdvDialogOpen, setPdvDialogOpen] = useState(false);
   const [aiDialogOpen, setAiDialogOpen] = useState(false);
+  const [pdvAiUnit, setPdvAiUnit] = useState<any>(null);
   const [form, setForm] = useState({ name: '', description: '' });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [selectedNetwork, setSelectedNetwork] = useState<any>(null);
