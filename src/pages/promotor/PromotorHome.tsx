@@ -1070,43 +1070,41 @@ export default function PromotorHome() {
         threshold={facialConfig?.min_confidence || 70}
         onResult={handleFaceVerifyResult}
       />
-        <Dialog open={showQrScanner} onOpenChange={setShowQrScanner}>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>Escanear QR Code da Loja</DialogTitle>
-            </DialogHeader>
-            <div className="flex flex-col items-center gap-4 py-4">
-              <div className="w-full aspect-square bg-slate-900 rounded-2xl flex flex-col items-center justify-center relative overflow-hidden">
-                {!qrLoading ? (
-                  <div className="text-center p-6 space-y-4">
-                    <QrCode className="h-16 w-16 text-primary mx-auto opacity-50" />
-                    <div className="space-y-2">
-                      <p className="text-sm font-medium text-white">Posicione o código QR da loja</p>
-                      <p className="text-xs text-slate-400">Aponte sua câmera para o código QR afixado na entrada do supermercado.</p>
-                    </div>
-                    {/* Simulating scanner for now since we don't have a specific QR lib yet */}
-                    <div className="pt-4">
-                      <Button size="sm" onClick={() => handleQrScan('simulated-unit-id')}>
-                        <Camera className="h-4 w-4 mr-2" /> Simular Leitura
-                      </Button>
-                    </div>
+      <Dialog open={showQrScanner} onOpenChange={setShowQrScanner}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Escanear QR Code da Loja</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col items-center gap-4 py-4">
+            <div className="w-full aspect-square bg-slate-900 rounded-2xl flex flex-col items-center justify-center relative overflow-hidden">
+              {!qrLoading ? (
+                <div className="text-center p-6 space-y-4">
+                  <QrCode className="h-16 w-16 text-primary mx-auto opacity-50" />
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium text-white">Posicione o código QR da loja</p>
+                    <p className="text-xs text-slate-400">Aponte sua câmera para o código QR afixado na entrada do supermercado.</p>
                   </div>
-                ) : (
-                  <div className="flex flex-col items-center gap-3">
-                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                    <p className="text-sm text-slate-300">Processando acesso...</p>
+                  <div className="pt-4">
+                    <Button size="sm" onClick={() => handleQrScan('simulated-unit-id')}>
+                      <Camera className="h-4 w-4 mr-2" /> Simular Leitura
+                    </Button>
                   </div>
-                )}
-              </div>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-3">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  <p className="text-sm text-slate-300">Processando acesso...</p>
+                </div>
+              )}
             </div>
-            <DialogFooter>
-              <Button variant="outline" className="w-full" onClick={() => setShowQrScanner(false)} disabled={qrLoading}>
-                Cancelar
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" className="w-full" onClick={() => setShowQrScanner(false)} disabled={qrLoading}>
+              Cancelar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </PromotorLayout>
   );
 }
