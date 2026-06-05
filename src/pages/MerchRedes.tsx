@@ -19,6 +19,7 @@ export default function MerchRedes() {
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [pdvDialogOpen, setPdvDialogOpen] = useState(false);
+  const [aiDialogOpen, setAiDialogOpen] = useState(false);
   const [form, setForm] = useState({ name: '', description: '' });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [selectedNetwork, setSelectedNetwork] = useState<any>(null);
