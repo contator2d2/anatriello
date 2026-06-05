@@ -306,78 +306,65 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// Trigger validation
+// Core: start a validation and return its id. Used by HTTP route and by auto-triggers.
+export async function triggerValidation({ agency_promoter_id, rede_id, supermarket_unit_id }) {
+  await ensureTables();
+  if (!agency_promoter_id) throw new Error('agency_promoter_id obrigatório');
+
+  const cfg = await loadDocValidationConfig();
+  if (!cfg?.apiKey || !cfg.enabled) throw new Error('IA Ayratech não configurada');
+
+  const promoter = await loadPromoter(agency_promoter_id);
+  if (!promoter) throw new Error('Promotor não encontrado');
+
+  const requirements = await loadValidationRequirements(rede_id, supermarket_unit_id);
+  if (!requirements.enabled) throw new Error('Validação automática desativada para esta rede/PDV');
+
+  const allDocs = await loadPromoterDocuments(agency_promoter_id);
+  const relevantDocs = allDocs.filter(d => requirements.requiredDocs.length === 0 || requirements.requiredDocs.includes(d.category));
+
+  const insertR = await query(
+    `INSERT INTO promoter_document_validations
+      (agency_promoter_id, organization_id, rede_id, supermarket_unit_id, status,
+       ai_provider, ai_model, documents_analyzed)
+     VALUES ($1, $2, $3, $4, 'analyzing', $5, $6, $7) RETURNING id`,
+    [
+      agency_promoter_id,
+      promoter.organization_id,
+      rede_id || null,
+      supermarket_unit_id || null,
+      cfg.provider,
+      cfg.model,
+      JSON.stringify(relevantDocs.map(d => ({ id: d.id, category: d.category, title: d.title }))),
+    ]
+  );
+  const validationId = insertR.rows[0].id;
+
+  processValidation(validationId, cfg, promoter, relevantDocs, requirements).catch(err => {
+    console.error('[promoter-validations] processValidation error', err);
+    query(
+      `UPDATE promoter_document_validations SET status='failed', error_message=$1, updated_at=NOW() WHERE id=$2`,
+      [String(err.message || err).slice(0, 500), validationId]
+    ).catch(() => {});
+  });
+  return { id: validationId, status: 'analyzing' };
+}
+
+// Trigger validation (HTTP)
 router.post('/run', async (req, res) => {
   try {
-    await ensureTables();
-    const { agency_promoter_id, rede_id, supermarket_unit_id } = req.body;
-    if (!agency_promoter_id) return res.status(400).json({ error: 'agency_promoter_id obrigatório' });
-
-    const cfg = await loadDocValidationConfig();
-    if (!cfg?.apiKey || !cfg.enabled) {
-      return res.status(400).json({ error: 'IA Ayratech não configurada. Acesse Admin → IA Ayratech.' });
-    }
-
-    const promoter = await loadPromoter(agency_promoter_id);
-    if (!promoter) return res.status(404).json({ error: 'Promotor não encontrado' });
-
-    const requirements = (await loadRedeRequirements(rede_id)) || {
-      enabled: true,
-      requiredDocs: DOC_CATEGORIES,
-      facialRequired: false,
-      autoApprove: true,
-      autoApproveMinScore: 95,
-    };
-
-    if (!requirements.enabled) {
-      return res.status(400).json({ error: 'Validação automática desativada para esta rede' });
-    }
-
-    const allDocs = await loadPromoterDocuments(agency_promoter_id);
-    const relevantDocs = allDocs.filter(d => requirements.requiredDocs.length === 0 || requirements.requiredDocs.includes(d.category));
-
-    // Create record in 'analyzing' state
-    const insertR = await query(
-      `INSERT INTO promoter_document_validations
-        (agency_promoter_id, organization_id, rede_id, supermarket_unit_id, status,
-         ai_provider, ai_model, documents_analyzed)
-       VALUES ($1, $2, $3, $4, 'analyzing', $5, $6, $7) RETURNING id`,
-      [
-        agency_promoter_id,
-        promoter.organization_id,
-        rede_id || null,
-        supermarket_unit_id || null,
-        cfg.provider,
-        cfg.model,
-        JSON.stringify(relevantDocs.map(d => ({ id: d.id, category: d.category, title: d.title }))),
-      ]
-    );
-    const validationId = insertR.rows[0].id;
-
-    // Async processing - respond immediately
-    res.json({ id: validationId, status: 'analyzing' });
-
-    // Fire-and-forget
-    processValidation(validationId, cfg, promoter, relevantDocs, requirements).catch(err => {
-      console.error('[promoter-validations] processValidation error', err);
-      query(
-        `UPDATE promoter_document_validations SET status='failed', error_message=$1, updated_at=NOW() WHERE id=$2`,
-        [String(err.message || err).slice(0, 500), validationId]
-      ).catch(() => {});
-    });
+    const result = await triggerValidation(req.body || {});
+    res.json(result);
   } catch (e) {
     console.error('run validation', e);
-    res.status(500).json({ error: e.message || 'Erro ao iniciar validação' });
+    res.status(400).json({ error: e.message || 'Erro ao iniciar validação' });
   }
 });
 
 async function processValidation(validationId, cfg, promoter, documents, requirements) {
   const prompt = buildPrompt(promoter, documents, requirements);
-  const imageUrls = documents
-    .map(d => d.file_url)
-    .filter(u => u && /\.(jpe?g|png|webp|pdf)(\?|$)/i.test(u));
-
-  const raw = await runAIValidation(cfg, prompt, imageUrls);
+  const docs = documents.filter(d => d.file_url);
+  const raw = await runAIValidation(cfg, prompt, docs);
   let parsed;
   try { parsed = JSON.parse(raw); } catch { parsed = { score: 0, divergences: [{ message: 'Resposta inválida da IA' }], recommendation: 'review' }; }
 
