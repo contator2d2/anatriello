@@ -2,6 +2,7 @@
 // Validates CNH, Contract, Address, CTPS, Selfie vs agency registration data.
 
 import express from 'express';
+import pdfParse from 'pdf-parse';
 import { query } from '../db.js';
 import { authenticate } from '../middleware/auth.js';
 import { loadDocValidationConfig } from './ayratech-ai.js';
