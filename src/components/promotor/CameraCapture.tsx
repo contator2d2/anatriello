@@ -7,6 +7,7 @@ import { useOfflineSync } from "@/hooks/use-offline-sync";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { logger } from "@/lib/logger";
 
 interface WatermarkData {
   pdvName?: string;
