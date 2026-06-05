@@ -59,6 +59,7 @@ export default function SupermarketSettings() {
       totem_header_text: settings.totem_header_text || DEFAULTS.totem_header_text,
       totem_slogan: settings.totem_slogan || DEFAULTS.totem_slogan,
       totem_pdv_name: settings.totem_pdv_name || settings.name || DEFAULTS.totem_pdv_name,
+      qr_access_enabled: settings.qr_access_enabled ?? DEFAULTS.qr_access_enabled,
     });
   }, [settings]);
 
