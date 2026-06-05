@@ -189,6 +189,18 @@ export default function SupermarketVisitRequests() {
                               </Badge>
                               {r.rejection_reason && <p className="text-xs text-destructive mt-1">{r.rejection_reason}</p>}
                             </TableCell>
+                            <TableCell>
+                              {(() => {
+                                const v = r.promoter_id ? latestByPromoter.get(r.promoter_id) : null;
+                                if (!v) return <span className="text-xs text-muted-foreground">—</span>;
+                                return (
+                                  <button onClick={() => openValidation(r.promoter_id)} className="flex items-center gap-1 hover:opacity-80">
+                                    <ValidationBadge status={v.status} />
+                                    <span className="text-xs text-muted-foreground">{Number(v.score).toFixed(0)}</span>
+                                  </button>
+                                );
+                              })()}
+                            </TableCell>
                             {tab === 'pending' && (
                               <TableCell>
                                 {isPending && (
