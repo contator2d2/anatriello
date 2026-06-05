@@ -360,9 +360,7 @@ export function CameraCapture({
       onCapture(localUrl);
       
       if (!isOnline) {
-        toast.info("Foto salva localmente! Será enviada quando houver internet.");
-      } else {
-        toast.success("Foto registrada e sendo enviada em segundo plano!");
+        logger.info("Foto salva localmente para sincronização posterior.");
       }
       
       handleClose();

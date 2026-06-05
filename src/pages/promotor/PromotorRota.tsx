@@ -41,7 +41,15 @@ type ActionType = 'validity' | 'rupture' | 'damage' | 'discard' | null;
 
 // PDV checkout hook
 const usePromotorPdvCheckout = () => {
-  const checkout = (data: any) => api('/api/merch/promotor/pdv-checkout', { method: 'POST', body: data, auth: true });
+  const { queueApiCall } = useOfflineSync();
+  const checkout = (data: any) => {
+    return queueApiCall({
+      url: '/api/merch/promotor/pdv-checkout',
+      method: 'POST',
+      body: data,
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}` }
+    });
+  };
   return { checkout };
 };
 
