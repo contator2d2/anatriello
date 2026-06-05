@@ -125,6 +125,9 @@ export default function AgencyPromoters() {
       emergency_contact: p.emergency_contact || '',
       emergency_phone: formatPhone(p.emergency_phone || ''),
       notes: p.notes || '',
+      promoter_type: p.promoter_type || 'fixo',
+      mei_cnpj: p.mei_cnpj || '',
+      hourly_rate: p.hourly_rate != null ? String(p.hourly_rate) : '',
     });
     setDialogTab('dados');
     setDialogOpen(true);
