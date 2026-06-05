@@ -438,7 +438,7 @@ export default function SupermarketLandingPage() {
                 <ul className="space-y-2 mb-8">
                   {[
                     "Promotores ativos no momento",
-                    "Marcas sendo atendidas",
+                    "Acesso via QR Code por APP",
                     "Horário de entrada",
                     "Tempo de permanência",
                     "Agências presentes",
