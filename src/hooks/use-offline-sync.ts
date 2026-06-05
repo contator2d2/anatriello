@@ -184,7 +184,9 @@ export function useOfflineSync() {
         };
 
         if (hasLocalRefs(body)) {
-          logger.warn('[OfflineSync] API call still has local-file references.', { url: call.url, body });
+          logger.warn('[OfflineSync] Chamada API ainda possui referências locais, aguardando upload...', { url: call.url });
+          await db.pending_api_calls.update(call.id!, { status: 'pending' });
+          continue;
         }
 
         await api(call.url, {
@@ -202,9 +204,6 @@ export function useOfflineSync() {
     }
 
     setIsSyncing(false);
-    toast.success('Sincronização offline concluída!', {
-      description: `Processados ${pendingUploads.length} arquivos e ${pendingCalls.length} chamadas.`
-    });
   }, [isOnline, isSyncing]);
 
   const queueUpload = useCallback(async (file: File, token: string | null): Promise<string> => {

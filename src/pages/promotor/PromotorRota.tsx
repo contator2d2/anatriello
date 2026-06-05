@@ -41,7 +41,15 @@ type ActionType = 'validity' | 'rupture' | 'damage' | 'discard' | null;
 
 // PDV checkout hook
 const usePromotorPdvCheckout = () => {
-  const checkout = (data: any) => api('/api/merch/promotor/pdv-checkout', { method: 'POST', body: data, auth: true });
+  const { queueApiCall } = useOfflineSync();
+  const checkout = (data: any) => {
+    return queueApiCall({
+      url: '/api/merch/promotor/pdv-checkout',
+      method: 'POST',
+      body: data,
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}` }
+    });
+  };
   return { checkout };
 };
 
@@ -418,7 +426,7 @@ function CategoryAfterPhotoGate({ catId, routeBrandId, categoryName, routeId, pd
         headers: { 'Authorization': `Bearer ${localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}` }
       });
       
-      toast.success('Categoria concluída! Sincronizando em segundo plano.');
+      // Removed toast per user request
       setPhotos([]);
       setIsSending(false);
       onCompleted();
@@ -698,8 +706,8 @@ export default function PromotorRota() {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}` },
         dependsOnUploadId: checkinPhotoUrl?.startsWith('local-file://') ? checkinPhotoUrl.replace('local-file://', '') : undefined
       });
-      
-      toast.success('Check-in realizado! Sincronizando em segundo plano.');
+      // Removed toast per user request
+
       setCheckinPhotoUrl('');
       // We still want to refetch the route data to show updated status, 
       // but we do it immediately without waiting for the checkin call to finish.
@@ -720,35 +728,16 @@ export default function PromotorRota() {
     }
     setFaceVerifyAction(null);
 
-    const body = { id, notes: actionForm.notes };
-
-    if (!isOnline) {
-      await queueApiCall({
-        url: `/api/merch/promotor/routes/${id}/checkout`,
-        method: 'POST',
-        body: { notes: actionForm.notes },
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}` }
-      });
-      // toast.info('Rota finalizada offline! Sincronizando quando houver conexão.');
-      setShowCompleteRoute(false);
-      navigate('/promotor/home');
-      return;
-    }
-
-    checkout.mutate(body, {
-      onSuccess: (data: any) => {
-        toast.success('Rota finalizada!');
-        setShowCompleteRoute(false);
-        if (data.can_checkout_pdv) {
-          setRouteCompletionResult(data);
-          setShowPdvCheckout(true);
-        } else {
-          toast.info(data.pdv_checkout_message || `Ainda existem ${data.remaining_routes_at_pdv} rota(s) neste PDV.`);
-          navigate('/promotor/home');
-        }
-      },
-      onError: (err: any) => toast.error(err.message),
+    await queueApiCall({
+      url: `/api/merch/promotor/routes/${id}/checkout`,
+      method: 'POST',
+      body: { notes: actionForm.notes },
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}` }
     });
+    
+    setShowCompleteRoute(false);
+    navigate('/promotor/home');
+
   }, [id, checkout, actionForm, navigate, isFacialActiveCheckin, faceVerifyAction, isOnline, queueApiCall]);
 
   const handlePdvCheckout = useCallback(async () => {
@@ -781,8 +770,8 @@ export default function PromotorRota() {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}` },
         dependsOnUploadId: pdvCheckoutPhoto.startsWith('local-file://') ? pdvCheckoutPhoto.replace('local-file://', '') : undefined
       });
-      
-      toast.success('Checkout do PDV realizado! Sincronizando em segundo plano.');
+      // Removed toast per user request
+
       setShowPdvCheckout(false);
       navigate('/promotor/home');
     } catch (err: any) {
@@ -1082,7 +1071,7 @@ export default function PromotorRota() {
                                   });
                                 }
                               }
-                              toast.success('Todos os produtos marcados como concluídos!');
+                              // Removed toast per user request
                               refetch();
                             } catch (err: any) {
                               toast.error('Erro ao concluir produtos: ' + err.message);
@@ -1112,7 +1101,7 @@ export default function PromotorRota() {
                                   qty_store: 0,
                                   qty_stock: 0
                                 }, {
-                                  onSuccess: () => toast.success(exec.status === 'completed' ? 'Produto desmarcado' : 'Produto concluído!'),
+                                  onSuccess: () => { /* toast removed */ },
                                   onError: (err: any) => toast.error(err.message)
                                 });
                               } else {
@@ -1394,7 +1383,7 @@ export default function PromotorRota() {
                 }
 
                 updateExec.mutate(body, {
-                  onSuccess: () => { toast.success('Produto executado!'); setSelectedExec(null); },
+                  onSuccess: () => { setSelectedExec(null); },
                   onError: (err: any) => toast.error(err.message),
                 });
               }} disabled={updateExec.isPending}>
@@ -1454,7 +1443,7 @@ export default function PromotorRota() {
               <Button onClick={() => {
                 if (!selectedExec || !activeAction) return;
                 const execId = selectedExec.id;
-                const onDone = () => { toast.success('Registrado com sucesso'); setActiveAction(null); };
+                const onDone = () => { setActiveAction(null); };
                 const onErr = (err: any) => toast.error(err.message);
                 
                 const body: any = { executionId: execId };
@@ -1487,26 +1476,14 @@ export default function PromotorRota() {
                   body.observation = actionForm.observation;
                 }
 
-                if (!isOnline) {
-                  queueApiCall({
-                    url,
-                    method: 'POST',
-                    body,
-                    headers: { 'Authorization': `Bearer ${localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}` }
-                  });
-                  onDone();
-                  return;
-                }
+                queueApiCall({
+                  url,
+                  method: 'POST',
+                  body,
+                  headers: { 'Authorization': `Bearer ${localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}` }
+                });
+                onDone();
 
-                if (activeAction === 'validity') {
-                  addValidity.mutate(body, { onSuccess: onDone, onError: onErr });
-                } else if (activeAction === 'rupture') {
-                  reportRupture.mutate(body, { onSuccess: onDone, onError: onErr });
-                } else if (activeAction === 'damage') {
-                  reportDamage.mutate(body, { onSuccess: onDone, onError: onErr });
-                } else if (activeAction === 'discard') {
-                  reportDiscard.mutate(body, { onSuccess: onDone, onError: onErr });
-                }
               }}>Salvar</Button>
             </DialogFooter>
           </DialogContent>
@@ -1650,7 +1627,7 @@ export default function PromotorRota() {
                     product_ids: selectedExtraProducts,
                   }, {
                     onSuccess: (data: any) => {
-                      toast.success(`${data.count} produto(s) registrados para ponto extra!`);
+                      // Removed toast per user request
                       setShowExtraPointDialog(null);
                       setSelectedExtraProducts([]);
                     },
