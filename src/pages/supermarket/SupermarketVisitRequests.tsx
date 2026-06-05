@@ -251,6 +251,12 @@ export default function SupermarketVisitRequests() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ValidationDetailDialog
+        validationId={selectedValidationId}
+        open={validationDialogOpen}
+        onOpenChange={setValidationDialogOpen}
+      />
     </div>
   );
 }
