@@ -2,6 +2,7 @@
 // Validates CNH, Contract, Address, CTPS, Selfie vs agency registration data.
 
 import express from 'express';
+import pdfParse from 'pdf-parse';
 import { query } from '../db.js';
 import { authenticate } from '../middleware/auth.js';
 import { loadDocValidationConfig } from './ayratech-ai.js';
@@ -48,6 +49,14 @@ async function ensureTables() {
     ADD COLUMN IF NOT EXISTS facial_required BOOLEAN DEFAULT false,
     ADD COLUMN IF NOT EXISTS auto_approve_on_match BOOLEAN DEFAULT true,
     ADD COLUMN IF NOT EXISTS auto_approve_min_score NUMERIC(5,2) DEFAULT 95`);
+
+  // Per-PDV config on supermarket_units (overrides rede)
+  await query(`ALTER TABLE supermarket_units
+    ADD COLUMN IF NOT EXISTS doc_validation_enabled BOOLEAN,
+    ADD COLUMN IF NOT EXISTS required_documents JSONB,
+    ADD COLUMN IF NOT EXISTS facial_required BOOLEAN,
+    ADD COLUMN IF NOT EXISTS auto_approve_on_match BOOLEAN,
+    ADD COLUMN IF NOT EXISTS auto_approve_min_score NUMERIC(5,2)`).catch(() => {});
 }
 
 // Resolve requirements for a rede
@@ -69,6 +78,42 @@ async function loadRedeRequirements(redeId) {
   };
 }
 
+async function loadUnitRequirements(unitId) {
+  if (!unitId) return null;
+  try {
+    const r = await query(
+      `SELECT doc_validation_enabled, required_documents, facial_required, auto_approve_on_match, auto_approve_min_score
+       FROM supermarket_units WHERE id = $1`,
+      [unitId]
+    );
+    if (!r.rows[0]) return null;
+    const row = r.rows[0];
+    const out = {};
+    if (row.doc_validation_enabled !== null) out.enabled = !!row.doc_validation_enabled;
+    if (Array.isArray(row.required_documents)) out.requiredDocs = row.required_documents;
+    if (row.facial_required !== null) out.facialRequired = !!row.facial_required;
+    if (row.auto_approve_on_match !== null) out.autoApprove = !!row.auto_approve_on_match;
+    if (row.auto_approve_min_score !== null) out.autoApproveMinScore = Number(row.auto_approve_min_score);
+    return out;
+  } catch { return null; }
+}
+
+// Merge: defaults < rede < unit
+async function loadValidationRequirements(redeId, unitId) {
+  const defaults = {
+    enabled: true,
+    requiredDocs: DOC_CATEGORIES,
+    facialRequired: false,
+    autoApprove: true,
+    autoApproveMinScore: 95,
+  };
+  const rede = (await loadRedeRequirements(redeId)) || {};
+  const unit = (await loadUnitRequirements(unitId)) || {};
+  return { ...defaults, ...rede, ...unit };
+}
+
+
+
 async function loadPromoter(agencyPromoterId) {
   const r = await query(
     `SELECT ap.*, a.name as agency_name, a.cnpj as agency_cnpj, a.organization_id
@@ -81,6 +126,17 @@ async function loadPromoter(agencyPromoterId) {
 }
 
 async function loadPromoterDocuments(agencyPromoterId) {
+  // Ensure document URL columns exist on agency_promoters
+  try {
+    await query(`ALTER TABLE agency_promoters
+      ADD COLUMN IF NOT EXISTS cnh_url TEXT,
+      ADD COLUMN IF NOT EXISTS contrato_url TEXT,
+      ADD COLUMN IF NOT EXISTS comprovante_endereco_url TEXT,
+      ADD COLUMN IF NOT EXISTS ctps_url TEXT,
+      ADD COLUMN IF NOT EXISTS selfie_url TEXT`);
+  } catch {}
+
+  // 1) Try optional table promotor_documents
   try {
     const r = await query(
       `SELECT id, category, title, file_url, created_at
@@ -89,7 +145,28 @@ async function loadPromoterDocuments(agencyPromoterId) {
        ORDER BY created_at DESC`,
       [agencyPromoterId]
     );
-    return r.rows;
+    if (r.rows.length) return r.rows;
+  } catch {}
+
+  // 2) Fallback: read from agency_promoters columns
+  try {
+    const r = await query(
+      `SELECT id, cnh_url, contrato_url, comprovante_endereco_url, ctps_url, selfie_url, photo_url, document_url
+       FROM agency_promoters WHERE id = $1`,
+      [agencyPromoterId]
+    );
+    const row = r.rows[0];
+    if (!row) return [];
+    const map = [
+      ['cnh', row.cnh_url || row.document_url],
+      ['contrato_trabalho', row.contrato_url],
+      ['comprovante_endereco', row.comprovante_endereco_url],
+      ['ctps', row.ctps_url],
+      ['selfie', row.selfie_url || row.photo_url],
+    ];
+    return map
+      .filter(([, url]) => !!url)
+      .map(([category, file_url], i) => ({ id: `${row.id}-${category}-${i}`, category, title: category, file_url, created_at: new Date() }));
   } catch {
     return [];
   }
@@ -136,11 +213,41 @@ REGRAS:
 - Retorne SOMENTE o JSON, sem texto antes ou depois.`;
 }
 
-async function callOpenAIVision(cfg, prompt, imageUrls) {
+// Fetch a doc URL once and classify by mime
+async function fetchDoc(url) {
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) return null;
+    const buf = Buffer.from(await resp.arrayBuffer());
+    const mime = (resp.headers.get('content-type') || '').toLowerCase();
+    const isPdf = mime.includes('pdf') || /\.pdf(\?|$)/i.test(url);
+    return { buf, mime: mime || (isPdf ? 'application/pdf' : 'image/jpeg'), isPdf };
+  } catch { return null; }
+}
+
+async function pdfToText(buf) {
+  try {
+    const data = await pdfParse(buf, { max: 5 });
+    return (data.text || '').slice(0, 6000);
+  } catch { return ''; }
+}
+
+async function callOpenAIVision(cfg, prompt, documents) {
   const content = [{ type: 'text', text: prompt }];
-  for (const url of imageUrls.slice(0, 8)) {
-    content.push({ type: 'image_url', image_url: { url } });
+  const pdfTexts = [];
+  for (const d of documents.slice(0, 8)) {
+    const doc = await fetchDoc(d.file_url);
+    if (!doc) continue;
+    if (doc.isPdf) {
+      const text = await pdfToText(doc.buf);
+      if (text) pdfTexts.push(`\n--- TEXTO DO PDF [${d.category}] ${d.title || ''} ---\n${text}`);
+    } else {
+      const b64 = doc.buf.toString('base64');
+      content.push({ type: 'image_url', image_url: { url: `data:${doc.mime};base64,${b64}` } });
+    }
   }
+  if (pdfTexts.length) content[0].text += '\n\n' + pdfTexts.join('\n');
+
   const r = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: { Authorization: `Bearer ${cfg.apiKey}`, 'Content-Type': 'application/json' },
@@ -157,17 +264,12 @@ async function callOpenAIVision(cfg, prompt, imageUrls) {
   return data.choices?.[0]?.message?.content || '{}';
 }
 
-async function callGeminiVision(cfg, prompt, imageUrls) {
+async function callGeminiVision(cfg, prompt, documents) {
   const parts = [{ text: prompt }];
-  for (const url of imageUrls.slice(0, 8)) {
-    try {
-      const imgResp = await fetch(url);
-      if (!imgResp.ok) continue;
-      const buf = await imgResp.arrayBuffer();
-      const b64 = Buffer.from(buf).toString('base64');
-      const mime = imgResp.headers.get('content-type') || 'image/jpeg';
-      parts.push({ inline_data: { mime_type: mime, data: b64 } });
-    } catch {}
+  for (const d of documents.slice(0, 8)) {
+    const doc = await fetchDoc(d.file_url);
+    if (!doc) continue;
+    parts.push({ inline_data: { mime_type: doc.isPdf ? 'application/pdf' : doc.mime, data: doc.buf.toString('base64') } });
   }
   const r = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${cfg.model}:generateContent?key=${cfg.apiKey}`,
@@ -185,12 +287,12 @@ async function callGeminiVision(cfg, prompt, imageUrls) {
   return data.candidates?.[0]?.content?.parts?.map(p => p.text).filter(Boolean).join('') || '{}';
 }
 
-async function runAIValidation(cfg, prompt, imageUrls) {
+async function runAIValidation(cfg, prompt, documents) {
   if (cfg.provider === 'openai' || cfg.provider === 'openrouter') {
-    return callOpenAIVision(cfg, prompt, imageUrls);
+    return callOpenAIVision(cfg, prompt, documents);
   }
   if (cfg.provider === 'gemini') {
-    return callGeminiVision(cfg, prompt, imageUrls);
+    return callGeminiVision(cfg, prompt, documents);
   }
   throw new Error('Provedor não suportado');
 }
@@ -236,78 +338,65 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// Trigger validation
+// Core: start a validation and return its id. Used by HTTP route and by auto-triggers.
+export async function triggerValidation({ agency_promoter_id, rede_id, supermarket_unit_id }) {
+  await ensureTables();
+  if (!agency_promoter_id) throw new Error('agency_promoter_id obrigatório');
+
+  const cfg = await loadDocValidationConfig();
+  if (!cfg?.apiKey || !cfg.enabled) throw new Error('IA Ayratech não configurada');
+
+  const promoter = await loadPromoter(agency_promoter_id);
+  if (!promoter) throw new Error('Promotor não encontrado');
+
+  const requirements = await loadValidationRequirements(rede_id, supermarket_unit_id);
+  if (!requirements.enabled) throw new Error('Validação automática desativada para esta rede/PDV');
+
+  const allDocs = await loadPromoterDocuments(agency_promoter_id);
+  const relevantDocs = allDocs.filter(d => requirements.requiredDocs.length === 0 || requirements.requiredDocs.includes(d.category));
+
+  const insertR = await query(
+    `INSERT INTO promoter_document_validations
+      (agency_promoter_id, organization_id, rede_id, supermarket_unit_id, status,
+       ai_provider, ai_model, documents_analyzed)
+     VALUES ($1, $2, $3, $4, 'analyzing', $5, $6, $7) RETURNING id`,
+    [
+      agency_promoter_id,
+      promoter.organization_id,
+      rede_id || null,
+      supermarket_unit_id || null,
+      cfg.provider,
+      cfg.model,
+      JSON.stringify(relevantDocs.map(d => ({ id: d.id, category: d.category, title: d.title }))),
+    ]
+  );
+  const validationId = insertR.rows[0].id;
+
+  processValidation(validationId, cfg, promoter, relevantDocs, requirements).catch(err => {
+    console.error('[promoter-validations] processValidation error', err);
+    query(
+      `UPDATE promoter_document_validations SET status='failed', error_message=$1, updated_at=NOW() WHERE id=$2`,
+      [String(err.message || err).slice(0, 500), validationId]
+    ).catch(() => {});
+  });
+  return { id: validationId, status: 'analyzing' };
+}
+
+// Trigger validation (HTTP)
 router.post('/run', async (req, res) => {
   try {
-    await ensureTables();
-    const { agency_promoter_id, rede_id, supermarket_unit_id } = req.body;
-    if (!agency_promoter_id) return res.status(400).json({ error: 'agency_promoter_id obrigatório' });
-
-    const cfg = await loadDocValidationConfig();
-    if (!cfg?.apiKey || !cfg.enabled) {
-      return res.status(400).json({ error: 'IA Ayratech não configurada. Acesse Admin → IA Ayratech.' });
-    }
-
-    const promoter = await loadPromoter(agency_promoter_id);
-    if (!promoter) return res.status(404).json({ error: 'Promotor não encontrado' });
-
-    const requirements = (await loadRedeRequirements(rede_id)) || {
-      enabled: true,
-      requiredDocs: DOC_CATEGORIES,
-      facialRequired: false,
-      autoApprove: true,
-      autoApproveMinScore: 95,
-    };
-
-    if (!requirements.enabled) {
-      return res.status(400).json({ error: 'Validação automática desativada para esta rede' });
-    }
-
-    const allDocs = await loadPromoterDocuments(agency_promoter_id);
-    const relevantDocs = allDocs.filter(d => requirements.requiredDocs.length === 0 || requirements.requiredDocs.includes(d.category));
-
-    // Create record in 'analyzing' state
-    const insertR = await query(
-      `INSERT INTO promoter_document_validations
-        (agency_promoter_id, organization_id, rede_id, supermarket_unit_id, status,
-         ai_provider, ai_model, documents_analyzed)
-       VALUES ($1, $2, $3, $4, 'analyzing', $5, $6, $7) RETURNING id`,
-      [
-        agency_promoter_id,
-        promoter.organization_id,
-        rede_id || null,
-        supermarket_unit_id || null,
-        cfg.provider,
-        cfg.model,
-        JSON.stringify(relevantDocs.map(d => ({ id: d.id, category: d.category, title: d.title }))),
-      ]
-    );
-    const validationId = insertR.rows[0].id;
-
-    // Async processing - respond immediately
-    res.json({ id: validationId, status: 'analyzing' });
-
-    // Fire-and-forget
-    processValidation(validationId, cfg, promoter, relevantDocs, requirements).catch(err => {
-      console.error('[promoter-validations] processValidation error', err);
-      query(
-        `UPDATE promoter_document_validations SET status='failed', error_message=$1, updated_at=NOW() WHERE id=$2`,
-        [String(err.message || err).slice(0, 500), validationId]
-      ).catch(() => {});
-    });
+    const result = await triggerValidation(req.body || {});
+    res.json(result);
   } catch (e) {
     console.error('run validation', e);
-    res.status(500).json({ error: e.message || 'Erro ao iniciar validação' });
+    res.status(400).json({ error: e.message || 'Erro ao iniciar validação' });
   }
 });
 
 async function processValidation(validationId, cfg, promoter, documents, requirements) {
   const prompt = buildPrompt(promoter, documents, requirements);
-  const imageUrls = documents
-    .map(d => d.file_url)
-    .filter(u => u && /\.(jpe?g|png|webp|pdf)(\?|$)/i.test(u));
-
-  const raw = await runAIValidation(cfg, prompt, imageUrls);
+  const docs = documents.filter(d => d.file_url);
+  const raw = await runAIValidation(cfg, prompt, docs);
   let parsed;
   try { parsed = JSON.parse(raw); } catch { parsed = { score: 0, divergences: [{ message: 'Resposta inválida da IA' }], recommendation: 'review' }; }
 
@@ -411,6 +500,52 @@ router.put('/rede/:redeId/config', async (req, res) => {
   } catch (e) {
     console.error('save rede config', e);
     res.status(500).json({ error: 'Erro ao salvar configuração' });
+  }
+});
+
+// Per-PDV (supermarket_units) config
+router.get('/unit/:unitId/config', async (req, res) => {
+  try {
+    await ensureTables();
+    const r = await query(
+      `SELECT id, name, doc_validation_enabled, required_documents, facial_required,
+              auto_approve_on_match, auto_approve_min_score
+       FROM supermarket_units WHERE id = $1`,
+      [req.params.unitId]
+    );
+    if (!r.rows[0]) return res.status(404).json({ error: 'PDV não encontrado' });
+    res.json(r.rows[0]);
+  } catch (e) {
+    console.error('get unit config', e);
+    res.status(500).json({ error: 'Erro' });
+  }
+});
+
+router.put('/unit/:unitId/config', async (req, res) => {
+  try {
+    await ensureTables();
+    const { doc_validation_enabled, required_documents, facial_required, auto_approve_on_match, auto_approve_min_score } = req.body;
+    await query(
+      `UPDATE supermarket_units SET
+        doc_validation_enabled = $1,
+        required_documents = $2,
+        facial_required = $3,
+        auto_approve_on_match = $4,
+        auto_approve_min_score = $5
+       WHERE id = $6`,
+      [
+        doc_validation_enabled ?? null,
+        required_documents ? JSON.stringify(required_documents) : null,
+        facial_required ?? null,
+        auto_approve_on_match ?? null,
+        auto_approve_min_score ?? null,
+        req.params.unitId,
+      ]
+    );
+    res.json({ success: true });
+  } catch (e) {
+    console.error('save unit config', e);
+    res.status(500).json({ error: 'Erro ao salvar' });
   }
 });
 

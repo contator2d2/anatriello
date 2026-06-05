@@ -5,6 +5,7 @@ import jwt from 'jsonwebtoken';
 import { query } from '../db.js';
 import { authenticate } from '../middleware/auth.js';
 import { logInfo, logError } from '../logger.js';
+import { triggerValidation } from './promoter-validations.js';
 
 const router = express.Router();
 
@@ -1439,6 +1440,13 @@ router.post('/agency/visit-requests', authenticateAgency, async (req, res) => {
       [req.orgId, req.agencyId, supermarket_unit_id, promoter_id || null, promoter_name || null, brand_name || null,
        period_start, period_end, JSON.stringify(weekdays || [1,2,3,4,5]), start_time || '08:00', end_time || '18:00', notes || null]
     );
+
+    // Auto-trigger AI document validation (fire-and-forget)
+    if (promoter_id) {
+      triggerValidation({ agency_promoter_id: promoter_id, supermarket_unit_id })
+        .catch(err => logError('visit_requests.auto_validation', err));
+    }
+
     res.json(r.rows[0]);
   } catch (err) { logError('agency.visit_requests.create', err); res.status(500).json({ error: 'Erro' }); }
 });
