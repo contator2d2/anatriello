@@ -10,6 +10,7 @@ import { usePromotorNotifications, usePromotorMarkRead, useLocationTracking } fr
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { SyncStatusIndicator } from "@/components/promotor/SyncStatusIndicator";
 
 interface PromotorLayoutProps { children: ReactNode; }
 
