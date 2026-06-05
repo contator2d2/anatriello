@@ -399,6 +399,45 @@ export default function AgencyPromoters() {
                   </Select>
                 </div>
               </div>
+
+              <Separator />
+              <p className="text-sm font-medium text-muted-foreground">Vínculo</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Tipo de Promotor *</Label>
+                  <Select value={form.promoter_type} onValueChange={v => setForm(f => ({ ...f, promoter_type: v }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="fixo">Fixo (CLT)</SelectItem>
+                      <SelectItem value="freelance">Freelance</SelectItem>
+                      <SelectItem value="substituto">Substituto Temporário</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {form.promoter_type !== 'fixo' && (
+                  <div>
+                    <Label>Valor/Hora (R$)</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={form.hourly_rate}
+                      onChange={e => setForm(f => ({ ...f, hourly_rate: e.target.value }))}
+                      placeholder="0,00"
+                    />
+                  </div>
+                )}
+              </div>
+              {form.promoter_type !== 'fixo' && (
+                <div>
+                  <Label>MEI / CNPJ (opcional)</Label>
+                  <Input
+                    value={form.mei_cnpj}
+                    onChange={e => setForm(f => ({ ...f, mei_cnpj: e.target.value }))}
+                    placeholder="00.000.000/0000-00"
+                  />
+                </div>
+              )}
             </TabsContent>
 
             <TabsContent value="contato" className="space-y-4 max-h-[50vh] overflow-y-auto">
