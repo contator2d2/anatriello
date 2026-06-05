@@ -341,7 +341,7 @@ export default function SupermarketLandingPage() {
                 <div className="grid grid-cols-2 gap-3 mb-8">
                   {[
                     "CPF no totem",
-                    "QR Code dinâmico",
+                    "Acesso via QR Code (Sem Totem)",
                     "Selfie na entrada e saída",
                     "Validação por foto com IA",
                     "Controle de horário",
@@ -438,7 +438,7 @@ export default function SupermarketLandingPage() {
                 <ul className="space-y-2 mb-8">
                   {[
                     "Promotores ativos no momento",
-                    "Marcas sendo atendidas",
+                    "Acesso via QR Code por APP",
                     "Horário de entrada",
                     "Tempo de permanência",
                     "Agências presentes",

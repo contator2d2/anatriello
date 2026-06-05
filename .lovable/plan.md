@@ -1,21 +1,30 @@
-A análise dos erros reportados ("Not allowed to load local resource") indica que o sistema está tentando carregar URLs do tipo "blob:" que foram criadas em uma sessão ou origem diferente (no aplicativo do promotor) dentro do painel administrativo. Isso ocorre porque o navegador bloqueia o acesso a esses recursos locais por segurança.
+I will implement a new QR Code scanning access method for the supermarket portal. This allows promoters/agencies to scan a store-specific QR code using their own app to request or validate entry, which will then be approved by the supermarket network.
 
-Para resolver isso de forma definitiva, implementarei as seguintes mudanças:
+### User Interface Changes
 
-### 1. Robustez na Resolução de URLs de Mídia
-Atualizarei a função `resolveMediaUrl` em `src/lib/media.ts` para garantir que URLs `blob:` sejam sempre ignoradas no painel administrativo, evitando que cheguem aos atributos `src` das imagens.
+- **Supermarket Landing Page**: Add information about the new "QR Code Terminal-less Access" method.
+- **Totem Access Page**: 
+    - Update to display a prominent QR Code that identifies the specific PDV when in "QR-only" or "Mixed" mode.
+    - Implement a "QR Scanning" interface for promoters who want to scan the store's code.
+- **Supermarket Settings**: 
+    - Add a toggle for "QR Code Access (App-based)" alongside the existing CPF/Totem settings.
+    - Add a section to download/print the store's unique access QR Code.
+- **Promotor Home**:
+    - Add a prominent "Scan Store QR Code" button.
+    - Implement a QR scanner component that reads the store's code and sends an access request.
+    - Display the real-time status of the access request (pending, approved, denied).
 
-### 2. Correção no Editor de Book de Fotos
-O componente `BookEditorDialog.tsx` possui uma falha onde ele tenta usar a URL original caso a resolução falhe. Vou alterar para que ele use um placeholder ou ignore a foto se ela for um "blob" inválido.
+### Technical Details
 
-### 3. Proteção nos Painéis Administrativos
-Revisarei os componentes de visualização de execução (`MerchExecucao.tsx`), relatórios (`MerchRelatorios.tsx`) e produtos (`MerchProdutos.tsx`) para garantir que todas as imagens passem pela função de resolução e tratem URLs inválidas exibindo ícones de placeholder em vez de causar erros no console.
+- **Database**: Add a column `qr_access_enabled` to the `supermarket_units` or `totem_configs` table.
+- **API Endpoints**:
+    - `POST /api/access-control/qr-scan`: Processes a scan from the promotor app, identifying the PDV and the promotor, and creating a pending visit request if one doesn't exist for the day.
+    - `GET /api/access-control/visit-status`: Allows the promotor app to poll or subscribe to the status of their entry request.
+- **Promotor App**: Integrate a QR scanner library (like `html5-qrcode` or similar already used in the project if any).
 
-### 4. Sincronismo do Promotor
-Garantirei que o aplicativo do promotor (`PromotorRota.tsx`) use referências locais seguras (`local-file://`) ao enfileirar ações que envolvam fotos, garantindo que o sincronismo substitua essas referências pelas URLs finais do servidor antes de enviá-las para o banco de dados.
+### Next Steps
 
-### Detalhes Técnicos:
-- **src/lib/media.ts**: Reforçar a detecção de `blob:` e `local-file://`.
-- **src/components/merch/BookEditorDialog.tsx**: Corrigir a inicialização do estado `bookPhotos` para não aceitar blobs.
-- **src/pages/MerchExecucao.tsx**: Adicionar verificações extras antes de renderizar tags `<img />`.
-- **src/pages/promotor/PromotorRota.tsx**: Validar o envio de fotos para o sincronismo offline.
+1.  Add the `qr_access_enabled` field to the supermarket configuration.
+2.  Update the `SupermarketSettings` page to allow toggling this feature and viewing the QR Code.
+3.  Implement the QR Scanner in `PromotorHome` or a new dedicated page.
+4.  Update the backend logic to handle QR-based visit requests.

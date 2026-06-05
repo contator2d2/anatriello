@@ -8,8 +8,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
-import { Settings, Palette, Lock, Key, Copy, RefreshCw, Loader2, Eye, EyeOff, Monitor, UserCog, ExternalLink } from 'lucide-react';
+import { Settings, Palette, Lock, Key, Copy, RefreshCw, Loader2, Eye, EyeOff, Monitor, UserCog, ExternalLink, QrCode } from 'lucide-react';
 import { FileUploadInput } from '@/components/ui/file-upload-input';
 
 const getHeaders = () => {
@@ -27,6 +28,7 @@ const DEFAULTS = {
   totem_header_text: 'Controle de Acesso',
   totem_slogan: '',
   totem_pdv_name: '',
+  qr_access_enabled: false,
 };
 
 export default function SupermarketSettings() {
@@ -58,6 +60,7 @@ export default function SupermarketSettings() {
       totem_header_text: settings.totem_header_text || DEFAULTS.totem_header_text,
       totem_slogan: settings.totem_slogan || DEFAULTS.totem_slogan,
       totem_pdv_name: settings.totem_pdv_name || settings.name || DEFAULTS.totem_pdv_name,
+      qr_access_enabled: settings.qr_access_enabled ?? DEFAULTS.qr_access_enabled,
     });
   }, [settings]);
 
@@ -209,6 +212,50 @@ export default function SupermarketSettings() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-lg">
+            <QrCode className="h-5 w-5 text-primary" /> Acesso via App (QR Code)
+          </CardTitle>
+          <CardDescription>Permite que promotores acessem o PDV escaneando um código QR pelo próprio celular, sem necessidade de totem físico.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label>Habilitar Acesso via App</Label>
+              <p className="text-xs text-muted-foreground">Promotores poderão solicitar entrada escaneando o QR Code da loja.</p>
+            </div>
+            <Switch 
+              checked={customForm.qr_access_enabled} 
+              onCheckedChange={(v) => setCustomForm({ ...customForm, qr_access_enabled: v })} 
+            />
+          </div>
+          
+          {customForm.qr_access_enabled && (
+            <div className="p-4 bg-muted/30 rounded-lg border border-border space-y-4">
+              <div className="flex flex-col items-center gap-4">
+                <div className="bg-white p-4 rounded-xl shadow-sm border border-border">
+                  <div className="w-48 h-48 bg-slate-100 flex items-center justify-center relative">
+                    <QrCode className="h-32 w-32 text-slate-400 opacity-20" />
+                    <div className="absolute inset-0 flex flex-col items-center justify-center p-2 text-center">
+                      <p className="text-[10px] font-bold text-slate-500 uppercase">QR Code da Unidade</p>
+                      <p className="text-[8px] text-slate-400 break-all px-2 mt-1">ID: {settings?.id}</p>
+                      <Button size="sm" variant="outline" className="mt-2 h-7 text-[10px]" onClick={() => window.print()}>
+                        Imprimir para a Loja
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+                <div className="text-center">
+                  <p className="text-sm font-medium">Instruções para a Loja</p>
+                  <p className="text-xs text-muted-foreground">Imprima este código e coloque na entrada ou recepção. O promotor abrirá o app Ayra e escaneará este código para registrar a entrada.</p>
+                </div>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg">
             <Palette className="h-5 w-5 text-primary" /> Personalização do Totem
           </CardTitle>
           <CardDescription>Configure logo, texto e cores aplicadas na tela do Totem</CardDescription>
@@ -262,8 +309,8 @@ export default function SupermarketSettings() {
               <div key={key} className="space-y-1">
                 <Label className="text-xs">{label}</Label>
                 <div className="flex items-center gap-2">
-                  <input type="color" value={customForm[key as keyof typeof customForm] || '#000000'} onChange={(e) => setCustomForm({ ...customForm, [key]: e.target.value })} className="w-10 h-10 rounded border border-border cursor-pointer" />
-                  <Input value={customForm[key as keyof typeof customForm] || ''} onChange={(e) => setCustomForm({ ...customForm, [key]: e.target.value })} className="text-xs font-mono" placeholder="#000000" />
+                  <input type="color" value={String(customForm[key as keyof typeof customForm] || '#000000')} onChange={(e) => setCustomForm({ ...customForm, [key]: e.target.value })} className="w-10 h-10 rounded border border-border cursor-pointer" />
+                  <Input value={String(customForm[key as keyof typeof customForm] || '')} onChange={(e) => setCustomForm({ ...customForm, [key]: e.target.value })} className="text-xs font-mono" placeholder="#000000" />
                 </div>
               </div>
             ))}

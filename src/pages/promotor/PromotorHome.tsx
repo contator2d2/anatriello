@@ -17,7 +17,7 @@ import { PromotorLayout } from "./PromotorLayout";
 import {
   Clock, FileText, Bell, MapPin, Wifi, WifiOff, Navigation, AlertTriangle, CheckCircle2,
   Loader2, ShieldAlert, Timer, ChevronRight, PlayCircle, Package, Store, ScanFace,
-  Download, Check
+  Download, Check, QrCode, Camera
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -63,6 +63,8 @@ export default function PromotorHome() {
   const [pdvCheckinLoading, setPdvCheckinLoading] = useState(false);
   const [actionPdv, setActionPdv] = useState<{ pdv_id: string; pdv_name: string } | null>(null);
   const [showFaceVerify, setShowFaceVerify] = useState(false);
+  const [showQrScanner, setShowQrScanner] = useState(false);
+  const [qrLoading, setQrLoading] = useState(false);
   const [isPreloading, setIsPreloading] = useState(false);
   const [preloadProgress, setPreloadProgress] = useState(0);
   const queryClient = useQueryClient();
@@ -299,6 +301,34 @@ export default function PromotorHome() {
     }
   }, [pdvCheckoutPhoto, pdvCheckoutNotes, toast]);
 
+  const handleQrScan = async (scannedId: string) => {
+    setQrLoading(true);
+    try {
+      logger.info('[handleQrScan] Processando scan de QR Code', { scannedId });
+      const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
+        navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000 })
+      );
+      
+      const res = await api<any>('/api/access-control/qr-scan', {
+        method: 'POST',
+        body: {
+          unit_id: scannedId,
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude
+        }
+      });
+      
+      toast({ title: 'Solicitação enviada!', description: 'Aguarde a liberação do supermercado.' });
+      setShowQrScanner(false);
+      // Invalida o home para ver se alguma nova rota apareceu ou se o status mudou
+      queryClient.invalidateQueries({ queryKey: ['promotor-home'] });
+    } catch (err: any) {
+      toast({ title: 'Erro no scan', description: err.message, variant: 'destructive' });
+    } finally {
+      setQrLoading(false);
+    }
+  };
+
   // Offline handling is now centralized in useOfflineSync hook
   /*
   useEffect(() => {
@@ -518,29 +548,42 @@ export default function PromotorHome() {
             <h1 className="text-lg font-bold">Olá, {employee?.full_name?.split(' ')[0]}! 👋</h1>
             <p className="text-sm text-muted-foreground">{employee?.position || employee?.worker_profile}</p>
           </div>
-          {isOnline && hasRoutesToday && (
-            <Button 
-              variant="outline" 
-              size="sm" 
-              className={cn(
-                "h-8 text-[10px] gap-1.5",
-                isPreloading && "border-primary text-primary"
+          {isOnline && (
+            <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="h-8 text-[10px] gap-1.5 border-primary/30 text-primary"
+                onClick={() => setShowQrScanner(true)}
+              >
+                <QrCode className="h-3 w-3" />
+                Escanear QR
+              </Button>
+              {hasRoutesToday && (
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className={cn(
+                    "h-8 text-[10px] gap-1.5",
+                    isPreloading && "border-primary text-primary"
+                  )}
+                  onClick={handlePreloadData}
+                  disabled={isPreloading}
+                >
+                  {isPreloading ? (
+                    <>
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      {preloadProgress}%
+                    </>
+                  ) : (
+                    <>
+                      <Download className="h-3 w-3" />
+                      Baixar Offline
+                    </>
+                  )}
+                </Button>
               )}
-              onClick={handlePreloadData}
-              disabled={isPreloading}
-            >
-              {isPreloading ? (
-                <>
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                  {preloadProgress}%
-                </>
-              ) : (
-                <>
-                  <Download className="h-3 w-3" />
-                  Baixar Offline
-                </>
-              )}
-            </Button>
+            </div>
           )}
         </div>
 
@@ -1027,6 +1070,41 @@ export default function PromotorHome() {
         threshold={facialConfig?.min_confidence || 70}
         onResult={handleFaceVerifyResult}
       />
+      <Dialog open={showQrScanner} onOpenChange={setShowQrScanner}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Escanear QR Code da Loja</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col items-center gap-4 py-4">
+            <div className="w-full aspect-square bg-slate-900 rounded-2xl flex flex-col items-center justify-center relative overflow-hidden">
+              {!qrLoading ? (
+                <div className="text-center p-6 space-y-4">
+                  <QrCode className="h-16 w-16 text-primary mx-auto opacity-50" />
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium text-white">Posicione o código QR da loja</p>
+                    <p className="text-xs text-slate-400">Aponte sua câmera para o código QR afixado na entrada do supermercado.</p>
+                  </div>
+                  <div className="pt-4">
+                    <Button size="sm" onClick={() => handleQrScan('simulated-unit-id')}>
+                      <Camera className="h-4 w-4 mr-2" /> Simular Leitura
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-3">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  <p className="text-sm text-slate-300">Processando acesso...</p>
+                </div>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" className="w-full" onClick={() => setShowQrScanner(false)} disabled={qrLoading}>
+              Cancelar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </PromotorLayout>
   );
 }
