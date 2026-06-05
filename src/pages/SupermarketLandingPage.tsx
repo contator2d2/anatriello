@@ -139,7 +139,7 @@ export default function SupermarketLandingPage() {
               </Reveal>
               <Reveal delay={2}>
                 <p className="mt-6 text-lg text-gray-500 leading-relaxed max-w-lg">
-                  O AyraAccess substitui autorizações manuais, organiza o acesso de promotores e dá visibilidade completa de quem está na loja, quais marcas estão sendo atendidas e como está o comportamento de cada profissional.
+                  O AyraAccess substitui autorizações manuais e organiza o acesso de promotores. Escolha entre um **Totem fixo** na recepção ou **QR Code inteligente** para promotores escanearem com o próprio celular.
                 </p>
               </Reveal>
               <Reveal delay={3}>
@@ -167,30 +167,41 @@ export default function SupermarketLandingPage() {
 
             {/* Hero visual — Totem mockup */}
             <Reveal delay={2} className="relative hidden lg:flex justify-center">
-              <div className="relative w-[340px]">
-                <div className="bg-gradient-to-b from-gray-900 to-gray-800 rounded-[2rem] p-6 shadow-2xl border border-gray-700/50">
-                  <div className="bg-gradient-to-b from-violet-600/15 to-transparent rounded-2xl p-5 border border-violet-500/20">
-                    <div className="flex items-center justify-center mb-3">
-                      <div className="w-14 h-14 rounded-2xl bg-violet-500/20 flex items-center justify-center">
-                        <Shield className="h-7 w-7 text-violet-400" />
+              <div className="relative w-full max-w-lg">
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Totem Mockup */}
+                  <div className="bg-gradient-to-b from-gray-900 to-gray-800 rounded-[2rem] p-4 shadow-2xl border border-gray-700/50">
+                    <div className="bg-gradient-to-b from-violet-600/15 to-transparent rounded-2xl p-4 border border-violet-500/20 h-full">
+                      <div className="flex items-center justify-center mb-3">
+                        <Monitor className="h-8 w-8 text-violet-400" />
+                      </div>
+                      <p className="text-center text-violet-300 text-[10px] font-medium mb-3">Modelo Totem</p>
+                      <div className="bg-gray-700/40 rounded-lg p-2 mb-3">
+                        <div className="bg-gray-600/40 rounded px-2 py-1.5 text-white font-mono text-xs tracking-widest text-center">
+                          CPF
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-1">
+                        {[1,2,3,4,5,6,7,8,9].map((k) => (
+                          <div key={k} className="rounded bg-gray-600/50 text-gray-300 py-1 text-center text-[8px]">{k}</div>
+                        ))}
                       </div>
                     </div>
-                    <p className="text-center text-violet-300 text-xs font-medium mb-5">Totem de Acesso — Seu PDV</p>
-                    <div className="bg-gray-700/40 rounded-xl p-3 mb-3">
-                      <p className="text-gray-500 text-[10px] mb-1.5 uppercase tracking-wider">CPF do Promotor</p>
-                      <div className="bg-gray-600/40 rounded-lg px-3 py-2.5 text-white font-mono text-base tracking-widest">
-                        123.456.789-00
+                  </div>
+
+                  {/* QR Code Mockup */}
+                  <div className="bg-white rounded-[2rem] p-4 shadow-2xl border border-violet-100 flex flex-col justify-between">
+                    <div className="flex items-center justify-center mb-2">
+                      <div className="p-3 bg-violet-50 rounded-2xl border-2 border-dashed border-violet-200">
+                        <QrCode className="h-12 w-12 text-violet-600" />
                       </div>
                     </div>
-                    <div className="grid grid-cols-3 gap-1.5 mb-3">
-                      {[1,2,3,4,5,6,7,8,9,"←",0,"✓"].map((k, i) => (
-                        <div key={i} className={`rounded-lg py-2 text-center font-semibold text-xs ${
-                          k === "✓" ? "bg-violet-500 text-white" : "bg-gray-600/50 text-gray-300 hover:bg-gray-500/50"
-                        }`}>{k}</div>
-                      ))}
+                    <div className="text-center">
+                      <p className="text-[10px] font-bold text-gray-800 mb-1">Acesso via QR Code</p>
+                      <p className="text-[8px] text-gray-500">Sem hardware extra. O promotor escaneia e entra.</p>
                     </div>
-                    <div className="flex items-center gap-1.5 text-[10px] text-gray-500 justify-center">
-                      <Lock className="h-3 w-3" /> Validação biométrica ativa
+                    <div className="mt-4 p-2 bg-violet-600 rounded-xl text-center">
+                      <p className="text-[8px] font-bold text-white uppercase tracking-wider">Aprovar agora</p>
                     </div>
                   </div>
                 </div>
@@ -774,7 +785,7 @@ export default function SupermarketLandingPage() {
           <div className="space-y-3">
             {[
               { q: "É realmente gratuito para o supermercado?", a: "Sim, 100%. O modelo é simples: as agências e empresas que precisam acessar sua loja pagam pelo serviço. Seu supermercado tem acesso completo e ilimitado a todos os recursos sem nenhum custo." },
-              { q: "Preciso comprar algum equipamento?", a: "Não. O Totem funciona em qualquer tablet ou computador com navegador web e câmera. Basta acessar o sistema pelo link e posicionar na entrada da loja." },
+              { q: "Preciso comprar algum equipamento?", a: "Não! Você tem duas opções: usar um Totem (em qualquer tablet ou computador) ou simplesmente imprimir um QR Code para os promotores escanearem com o próprio celular. Ambas as opções são gratuitas e integradas." },
               { q: "Como funciona a validação facial?", a: "Utilizamos inteligência artificial para comparar a selfie tirada no Totem com a foto cadastrada do promotor. A precisão é altíssima e o processo leva menos de 5 segundos." },
               { q: "Posso personalizar o visual do Totem?", a: "Sim! No painel de configurações você define as cores, faz upload do logotipo da sua loja, adiciona um slogan e personaliza o nome exibido no Totem." },
               { q: "E se o promotor não tiver foto cadastrada?", a: "A agência é responsável por cadastrar a foto e biometria do promotor antes de solicitar acesso. Sem foto, o promotor não consegue realizar a validação facial." },
