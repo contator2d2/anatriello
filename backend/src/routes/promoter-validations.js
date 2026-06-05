@@ -126,6 +126,17 @@ async function loadPromoter(agencyPromoterId) {
 }
 
 async function loadPromoterDocuments(agencyPromoterId) {
+  // Ensure document URL columns exist on agency_promoters
+  try {
+    await query(`ALTER TABLE agency_promoters
+      ADD COLUMN IF NOT EXISTS cnh_url TEXT,
+      ADD COLUMN IF NOT EXISTS contrato_url TEXT,
+      ADD COLUMN IF NOT EXISTS comprovante_endereco_url TEXT,
+      ADD COLUMN IF NOT EXISTS ctps_url TEXT,
+      ADD COLUMN IF NOT EXISTS selfie_url TEXT`);
+  } catch {}
+
+  // 1) Try optional table promotor_documents
   try {
     const r = await query(
       `SELECT id, category, title, file_url, created_at
@@ -134,7 +145,28 @@ async function loadPromoterDocuments(agencyPromoterId) {
        ORDER BY created_at DESC`,
       [agencyPromoterId]
     );
-    return r.rows;
+    if (r.rows.length) return r.rows;
+  } catch {}
+
+  // 2) Fallback: read from agency_promoters columns
+  try {
+    const r = await query(
+      `SELECT id, cnh_url, contrato_url, comprovante_endereco_url, ctps_url, selfie_url, photo_url, document_url
+       FROM agency_promoters WHERE id = $1`,
+      [agencyPromoterId]
+    );
+    const row = r.rows[0];
+    if (!row) return [];
+    const map = [
+      ['cnh', row.cnh_url || row.document_url],
+      ['contrato_trabalho', row.contrato_url],
+      ['comprovante_endereco', row.comprovante_endereco_url],
+      ['ctps', row.ctps_url],
+      ['selfie', row.selfie_url || row.photo_url],
+    ];
+    return map
+      .filter(([, url]) => !!url)
+      .map(([category, file_url], i) => ({ id: `${row.id}-${category}-${i}`, category, title: category, file_url, created_at: new Date() }));
   } catch {
     return [];
   }
