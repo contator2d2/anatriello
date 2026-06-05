@@ -178,6 +178,12 @@ export default function MerchRedes() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <Dialog open={aiDialogOpen} onOpenChange={setAiDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Validação IA — {selectedNetwork?.name}</DialogTitle></DialogHeader>
+          {selectedNetwork && <RedeDocValidationConfig redeId={selectedNetwork.id} redeName={selectedNetwork.name} />}
+        </DialogContent>
+      </Dialog>
     </MainLayout>
   );
 }
