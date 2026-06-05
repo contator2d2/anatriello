@@ -161,12 +161,15 @@ function FaviconUpdater() {
 // Smart redirect based on hostname and auth state
 function SmartRedirect() {
   const { isAuthenticated, isLoading } = useAuth();
+  const hostname = window.location.hostname;
   const isPWA = window.matchMedia('(display-mode: standalone)').matches
     || (navigator as any).standalone === true;
-  const isPromotorDomain = window.location.hostname.startsWith('promotor.');
+  const isPromotorDomain = hostname.startsWith('promotor.');
+  const isSupermarketDomain = hostname.startsWith('supermercado.') || hostname.startsWith('acesso.');
   
-  // If accessing from promotor subdomain, always go to promotor login
+  // Subdomain specific redirects
   if (isPromotorDomain) return <Navigate to="/promotor/login" replace />;
+  if (isSupermarketDomain) return <Navigate to="/acesso-supermercado" replace />;
   
   if (isLoading) {
     return (
@@ -195,6 +198,7 @@ const App = () => (
             <Route path="/cadastro" element={<Cadastro />} />
             <Route path="/" element={<SmartRedirect />} />
             <Route path="/landing" element={<LandingPage />} />
+            <Route path="/supermercado" element={<SupermarketLandingPage />} />
             <Route path="/dashboard" element={<ProtectedRoute><Index /></ProtectedRoute>} />
             <Route path="/merch/dashboard" element={<ProtectedRoute><MerchDashboard /></ProtectedRoute>} />
             <Route path="/conexao" element={<ProtectedRoute><Conexao /></ProtectedRoute>} />
