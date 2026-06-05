@@ -15,6 +15,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { api } from "@/lib/api";
 import { logger } from "@/lib/logger";
+import { cn } from "@/lib/utils";
 
 export default function AccessOnlyHome() {
   const { data, isLoading, refetch } = usePromotorHome();
