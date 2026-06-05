@@ -301,6 +301,34 @@ export default function PromotorHome() {
     }
   }, [pdvCheckoutPhoto, pdvCheckoutNotes, toast]);
 
+  const handleQrScan = async (scannedId: string) => {
+    setQrLoading(true);
+    try {
+      logger.info('[handleQrScan] Processando scan de QR Code', { scannedId });
+      const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
+        navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000 })
+      );
+      
+      const res = await api<any>('/api/access-control/qr-scan', {
+        method: 'POST',
+        body: {
+          unit_id: scannedId,
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude
+        }
+      });
+      
+      toast({ title: 'Solicitação enviada!', description: 'Aguarde a liberação do supermercado.' });
+      setShowQrScanner(false);
+      // Invalida o home para ver se alguma nova rota apareceu ou se o status mudou
+      queryClient.invalidateQueries({ queryKey: ['promotor-home'] });
+    } catch (err: any) {
+      toast({ title: 'Erro no scan', description: err.message, variant: 'destructive' });
+    } finally {
+      setQrLoading(false);
+    }
+  };
+
   // Offline handling is now centralized in useOfflineSync hook
   /*
   useEffect(() => {
