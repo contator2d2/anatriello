@@ -438,6 +438,8 @@ app.use('/api/access-control', accessControlRoutes);
 app.use('/api/price-research', priceResearchRoutes);
 app.use('/api/merch-analytics', merchAnalyticsRoutes);
 app.use('/api/merch/brand-checklists', merchChecklistsRoutes);
+app.use('/api/ayratech-ai', ayratechAiRoutes);
+app.use('/api/promoter-validations', promoterValidationsRoutes);
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
