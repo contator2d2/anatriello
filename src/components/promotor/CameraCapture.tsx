@@ -175,7 +175,7 @@ function applyWatermark(
   ctx.fillText(ts, w - tsWidth - padding, padding);
 }
 
-async function compressImage(
+async function compressToWebP(
   canvas: HTMLCanvasElement,
   quality: number,
   maxSizeKb: number
@@ -184,6 +184,7 @@ async function compressImage(
     let q = quality;
     
     const attempt = (currentQuality: number, attemptsLeft: number) => {
+      // Use WebP for better compression and faster uploads
       canvas.toBlob(
         (blob) => {
           if (!blob) {
@@ -197,7 +198,7 @@ async function compressImage(
             attempt(currentQuality - 0.1, attemptsLeft - 1);
           }
         },
-        "image/jpeg",
+        "image/webp",
         currentQuality
       );
     };
