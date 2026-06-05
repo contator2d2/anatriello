@@ -26,15 +26,23 @@ export interface PendingApiCall {
   dependsOnUploadId?: string;
 }
 
+export interface UploadMapping {
+  localId: string;
+  serverUrl: string;
+  timestamp: number;
+}
+
 export class OfflineDatabase extends Dexie {
   pending_uploads!: Table<PendingUpload>;
   pending_api_calls!: Table<PendingApiCall>;
+  upload_mappings!: Table<UploadMapping>;
 
   constructor() {
     super('AyraOfflineDB');
-    this.version(1).stores({
+    this.version(2).stores({
       pending_uploads: '++id, localId, status, timestamp',
-      pending_api_calls: '++id, status, timestamp, dependsOnUploadId'
+      pending_api_calls: '++id, status, timestamp, dependsOnUploadId',
+      upload_mappings: 'localId, timestamp'
     });
   }
 }
