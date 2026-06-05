@@ -1161,36 +1161,45 @@ export default function PromotorRota() {
               const completedExecsGlobal = allExecutions.filter((e: any) => e.status === 'completed').length;
               const allProductsDoneGlobal = totalExecsGlobal > 0 && completedExecsGlobal === totalExecsGlobal;
               
-              // Também checamos se todas as marcas estão concluídas (para garantir que fotos obrigatórias foram tiradas)
+              // Verificação global de fotos de categoria (DEPOIS) em todas as marcas/categorias
+              const allExecutionsGroupedGlobal = allExecutions.reduce((acc: any, e: any) => {
+                const key = e.route_brand_id ? `${e.category_id}_${e.route_brand_id}` : e.category_id;
+                if (!acc[key]) acc[key] = { catId: e.category_id, routeBrandId: e.route_brand_id, execs: [] };
+                acc[key].execs.push(e);
+                return acc;
+              }, {});
+
+              const globalMissingAfterPhotos = Object.entries(allExecutionsGroupedGlobal).filter(([key, data]: [string, any]) => {
+                const { catId, routeBrandId, execs } = data;
+                const catStatus = categoryStatusMap[key] || categoryStatusMap[catId];
+                const allDone = execs.every((e: any) => e.status === 'completed');
+                
+                // Busca as configurações da marca para esta categoria
+                const rbConfig = isMultiBrand ? routeBrands.find((b: any) => b.id === routeBrandId) : null;
+                const reqPhotos = (rbConfig || route as any)?.require_category_photos !== false;
+                const pMode = (rbConfig || route as any)?.category_photo_mode || 'both';
+                
+                const needsAfter = reqPhotos && (pMode === 'both' || pMode === 'after');
+                const hasAfter = !!catStatus?.category_after_photo || !!catStatus?.completed;
+                
+                // Uma categoria só exige foto do depois se todos os seus produtos foram executados
+                return allDone && needsAfter && !hasAfter;
+              });
+
+              const allAfterPhotosDone = globalMissingAfterPhotos.length === 0;
+              
+              // Também checamos se todas as marcas estão concluídas (para garantir que o checklist foi processado)
               const allBrandsCompleted = isMultiBrand 
                 ? routeBrands.every((rb: any) => rb.status === 'completed' || rb.progress_pct >= 100)
                 : true;
-
-              // Para o feedback visual no botão da marca atual
-              const totalExecsThisBrand = filteredExecs.length;
-              const completedExecsThisBrand = filteredExecs.filter((e: any) => e.status === 'completed').length;
-              const brandDone = totalExecsThisBrand > 0 && completedExecsThisBrand === totalExecsThisBrand;
-              
-              // No contexto de multi-marcas, precisamos garantir que as fotos de categoria da marca ATUAL foram tiradas
-              const rb = isMultiBrand ? routeBrands.find((b: any) => b.brand_id === activeBrandId) : null;
-              const requireCategoryPhotos = (rb || route as any)?.require_category_photos !== false;
-              
-              const categoryEntries = Object.entries(groupedExecs);
-              const categoriesMissingAfterPhoto = requireCategoryPhotos ? categoryEntries.filter(([, { catId, execs }]) => {
-                const routeBrandId = execs[0]?.route_brand_id;
-                const catStatus = categoryStatusMap[`${catId}_${routeBrandId || 'null'}`] || categoryStatusMap[catId];
-                const catDone = execs.every((e: any) => e.status === 'completed');
-                return catDone && !catStatus?.category_after_photo && !catStatus?.completed;
-              }) : [];
-              const currentBrandCategoriesCompleted = categoriesMissingAfterPhoto.length === 0;
               
               const minDuration = parseInt(route?.min_duration_minutes || "0", 10);
               const checkinAt = route?.checkin_at ? new Date(route.checkin_at) : null;
               const elapsedMinutes = checkinAt ? Math.floor((currentTime.getTime() - checkinAt.getTime()) / 60000) : 0;
               const hasMinDurationMet = minDuration === 0 || elapsedMinutes >= minDuration;
               
-              // A rota só pode ser concluída se TODOS os produtos de TODAS as marcas estiverem prontos
-              const canCompleteRoute = allProductsDoneGlobal && allBrandsCompleted && hasMinDurationMet;
+              // A rota só pode ser concluída se TODOS os produtos, TODAS as fotos e tempo mínimo forem respeitados
+              const canCompleteRoute = allProductsDoneGlobal && allBrandsCompleted && allAfterPhotosDone && hasMinDurationMet;
               
               return (
                 <>
@@ -1202,6 +1211,10 @@ export default function PromotorRota() {
                       } else {
                         toast.error(`Ainda faltam ${totalExecsGlobal - completedExecsGlobal} produto(s) no total para concluir a rota.`);
                       }
+                      return;
+                    }
+                    if (!allAfterPhotosDone) {
+                      toast.error(`Existem fotos da categoria (DEPOIS) obrigatórias pendentes. Verifique as categorias.`);
                       return;
                     }
                     if (!allBrandsCompleted) {
@@ -1221,20 +1234,22 @@ export default function PromotorRota() {
                       <p className="text-[10px] text-center text-destructive">
                         ⚠️ {!allProductsDoneGlobal 
                           ? 'Todos os produtos de TODAS as marcas devem estar executados (100%) para concluir a rota.'
-                          : !allBrandsCompleted 
-                            ? 'Conclua o checklist de todas as marcas antes de finalizar a rota.'
-                            : `Tempo mínimo: faltam ${minDuration - elapsedMinutes} min.`}
+                          : !allAfterPhotosDone
+                            ? 'Tire as fotos obrigatórias (DEPOIS) de todas as categorias concluídas.'
+                            : !allBrandsCompleted 
+                              ? 'Conclua o checklist de todas as marcas antes de finalizar a rota.'
+                              : `Tempo mínimo: faltam ${minDuration - elapsedMinutes} min.`}
                       </p>
-                      {allProductsDoneGlobal && allBrandsCompleted && !hasMinDurationMet && (
+                      {allProductsDoneGlobal && allBrandsCompleted && allAfterPhotosDone && !hasMinDurationMet && (
                         <p className="text-[10px] text-center text-muted-foreground flex items-center justify-center gap-1">
                           <Clock className="h-3 w-3" /> Tempo mínimo de permanência: {minDuration} min
                         </p>
                       )}
                     </div>
                   )}
-                    </>
-                  );
-                })()}
+                </>
+              );
+            })()}
 
 
 
