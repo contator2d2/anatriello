@@ -111,6 +111,9 @@ export default function MerchRedes() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex gap-1 justify-end">
+                        <Button variant="ghost" size="icon" title="Validação IA" onClick={() => { setSelectedNetwork(n); setAiDialogOpen(true); }}>
+                          <ShieldCheck className="h-4 w-4 text-primary" />
+                        </Button>
                         <Button variant="ghost" size="icon" onClick={() => openEdit(n)}><Pencil className="h-4 w-4" /></Button>
                         <Button variant="ghost" size="icon" onClick={() => handleDelete(n.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                       </div>
