@@ -5,6 +5,7 @@ import jwt from 'jsonwebtoken';
 import { query } from '../db.js';
 import { authenticate } from '../middleware/auth.js';
 import { logInfo, logError } from '../logger.js';
+import { triggerValidation } from './promoter-validations.js';
 
 const router = express.Router();
 
