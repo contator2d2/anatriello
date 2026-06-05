@@ -42,11 +42,15 @@ export interface RedeValidationConfig {
 }
 
 export const DOCUMENT_LABELS: Record<string, string> = {
-  cnh: 'CNH',
-  contrato_trabalho: 'Contrato de Trabalho',
-  comprovante_endereco: 'Comprovante de Endereço',
-  ctps: 'CTPS / eSocial',
+  cnh: 'CNH / RG',
   selfie: 'Selfie (Biometria)',
+  comprovante_endereco: 'Comprovante de Residência',
+  contrato_trabalho: 'Contrato de Trabalho',
+  aso: 'ASO (Exame Médico)',
+  declaracao_vinculo: 'Declaração de Vínculo Empregatício',
+  ctps: 'CTPS / eSocial',
+  ctps_app_print: 'Print da CTPS Digital (registro da empresa)',
+  termo_estacionamento: 'Termo de Estacionamento',
 };
 
 export function usePromoterValidations(filters?: { agency_promoter_id?: string; status?: string }) {
