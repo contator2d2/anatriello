@@ -649,7 +649,37 @@ async function processValidation(validationId, cfg, promoter, documents, require
 }
 
 
-// Manual override (approve/reject)
+// Manual override (approve/reject) — shared helper used by admin + portals
+async function applyReview({ validationId, decision, reason, actor }) {
+  const cur = await query(`SELECT * FROM promoter_document_validations WHERE id = $1`, [validationId]);
+  if (!cur.rows[0]) throw new Error('Validação não encontrada');
+  const v = cur.rows[0];
+  await query(
+    `UPDATE promoter_document_validations
+     SET override_status=$1, override_reason=$2, reviewed_by=$3, reviewed_at=NOW(),
+         status=$1, updated_at=NOW()
+     WHERE id=$4`,
+    [decision, reason || null, actor?.id || null, validationId]
+  );
+  if (decision === 'approved') {
+    try { await query(`UPDATE agency_promoters SET status='active', updated_at=NOW() WHERE id=$1`, [v.agency_promoter_id]); } catch {}
+  } else if (decision === 'rejected') {
+    try { await query(`UPDATE agency_promoters SET status='blocked', updated_at=NOW() WHERE id=$1`, [v.agency_promoter_id]); } catch {}
+  }
+  const promoter = await loadPromoter(v.agency_promoter_id);
+  await logAudit({
+    validationId, promoterId: v.agency_promoter_id, redeId: v.rede_id, unitId: v.supermarket_unit_id,
+    eventType: decision === 'approved' ? 'manual_approved' : 'manual_rejected',
+    actorType: actor?.type || 'admin', actorId: actor?.id, actorName: actor?.name,
+    fromStatus: v.status, toStatus: decision, reason,
+    metadata: { ai_recommended: v.recommendation, ai_score: Number(v.score || 0), ai_status: v.status },
+  });
+  await dispatchNotifications({
+    validationId, organizationId: promoter?.organization_id, redeId: v.rede_id, unitId: v.supermarket_unit_id,
+    eventType: decision, promoter, validation: v, reason, actorName: actor?.name || 'Revisor manual',
+  });
+}
+
 router.post('/:id/review', async (req, res) => {
   try {
     await ensureTables();
@@ -657,16 +687,77 @@ router.post('/:id/review', async (req, res) => {
     if (!['approved', 'rejected'].includes(decision)) {
       return res.status(400).json({ error: 'decision deve ser approved ou rejected' });
     }
-    await query(
-      `UPDATE promoter_document_validations
-       SET override_status=$1, override_reason=$2, reviewed_by=$3, reviewed_at=NOW(), updated_at=NOW()
-       WHERE id=$4`,
-      [decision, reason || null, req.userId, req.params.id]
-    );
+    await applyReview({
+      validationId: req.params.id, decision, reason,
+      actor: { type: 'admin', id: req.userId, name: req.user?.name },
+    });
     res.json({ success: true });
   } catch (e) {
-    res.status(500).json({ error: 'Erro ao revisar' });
+    console.error('review error', e);
+    res.status(500).json({ error: e.message || 'Erro ao revisar' });
   }
+});
+
+// Audit trail
+router.get('/:id/audit', async (req, res) => {
+  try {
+    await ensureAuditTables();
+    const r = await query(`SELECT * FROM promoter_validation_audit WHERE validation_id = $1 ORDER BY created_at ASC`, [req.params.id]);
+    res.json(r.rows);
+  } catch { res.status(500).json({ error: 'Erro' }); }
+});
+
+router.get('/:id/notifications', async (req, res) => {
+  try {
+    await ensureAuditTables();
+    const r = await query(`SELECT * FROM promoter_validation_notifications WHERE validation_id = $1 ORDER BY created_at DESC`, [req.params.id]);
+    res.json(r.rows);
+  } catch { res.status(500).json({ error: 'Erro' }); }
+});
+
+// Compliance metrics (IA vs humano)
+router.get('/compliance/metrics', async (req, res) => {
+  try {
+    await ensureTables();
+    const { from, to, rede_id, supermarket_unit_id } = req.query;
+    const where = [`1=1`];
+    const params = [];
+    if (from) { params.push(from); where.push(`v.created_at >= $${params.length}`); }
+    if (to) { params.push(to); where.push(`v.created_at <= $${params.length}`); }
+    if (rede_id) { params.push(rede_id); where.push(`v.rede_id = $${params.length}`); }
+    if (supermarket_unit_id) { params.push(supermarket_unit_id); where.push(`v.supermarket_unit_id = $${params.length}`); }
+    const wsql = 'WHERE ' + where.join(' AND ');
+    const totals = await query(
+      `SELECT
+         COUNT(*)::int AS total,
+         COUNT(*) FILTER (WHERE v.status='approved')::int AS approved,
+         COUNT(*) FILTER (WHERE v.status='rejected')::int AS rejected,
+         COUNT(*) FILTER (WHERE v.status='divergent')::int AS divergent,
+         COUNT(*) FILTER (WHERE v.status='pre_approved')::int AS pre_approved,
+         COUNT(*) FILTER (WHERE v.status='failed')::int AS failed,
+         COUNT(*) FILTER (WHERE v.auto_applied=true)::int AS auto_applied,
+         COUNT(*) FILTER (WHERE v.override_status IS NOT NULL)::int AS overridden,
+         AVG(v.score)::numeric(5,2) AS avg_score
+       FROM promoter_document_validations v ${wsql}`, params
+    );
+    const agreement = await query(
+      `SELECT
+         COUNT(*) FILTER (WHERE v.override_status IS NOT NULL AND v.recommendation IS NOT NULL)::int AS reviewed_after_ai,
+         COUNT(*) FILTER (WHERE v.override_status='approved' AND v.recommendation='approve')::int AS agreed_approve,
+         COUNT(*) FILTER (WHERE v.override_status='rejected' AND v.recommendation='reject')::int AS agreed_reject,
+         COUNT(*) FILTER (WHERE v.override_status='rejected' AND v.recommendation='approve')::int AS false_positive,
+         COUNT(*) FILTER (WHERE v.override_status='approved' AND v.recommendation='reject')::int AS false_negative
+       FROM promoter_document_validations v ${wsql}`, params
+    );
+    const divs = await query(
+      `SELECT field, COUNT(*)::int AS count FROM (
+         SELECT (d->>'field') AS field
+         FROM promoter_document_validations v, jsonb_array_elements(COALESCE(v.divergences,'[]'::jsonb)) d
+         ${wsql}
+       ) x WHERE field IS NOT NULL GROUP BY field ORDER BY count DESC LIMIT 10`, params
+    );
+    res.json({ totals: totals.rows[0], agreement: agreement.rows[0], top_divergences: divs.rows });
+  } catch (e) { console.error('compliance metrics', e); res.status(500).json({ error: 'Erro' }); }
 });
 
 // Rede config
@@ -676,22 +767,19 @@ router.get('/rede/:redeId/config', async (req, res) => {
     const r = await query(
       `SELECT id, name, doc_validation_enabled, required_documents,
               required_documents_freelance, required_documents_substituto,
-              facial_required, auto_approve_on_match, auto_approve_min_score
-       FROM merch_redes WHERE id = $1`,
-      [req.params.redeId]
+              facial_required, auto_approve_on_match, auto_approve_min_score,
+              approval_mode, notify_enabled, notify_events, notify_whatsapp, notify_emails
+       FROM merch_redes WHERE id = $1`, [req.params.redeId]
     );
     if (!r.rows[0]) return res.status(404).json({ error: 'Rede não encontrada' });
     res.json(r.rows[0]);
-  } catch (e) {
-    res.status(500).json({ error: 'Erro' });
-  }
+  } catch { res.status(500).json({ error: 'Erro' }); }
 });
 
 router.put('/rede/:redeId/config', async (req, res) => {
   try {
     await ensureTables();
-    const { doc_validation_enabled, required_documents, required_documents_freelance, required_documents_substituto,
-            facial_required, auto_approve_on_match, auto_approve_min_score } = req.body;
+    const b = req.body || {};
     await query(
       `UPDATE merch_redes SET
         doc_validation_enabled = COALESCE($1, doc_validation_enabled),
@@ -701,76 +789,125 @@ router.put('/rede/:redeId/config', async (req, res) => {
         facial_required = COALESCE($5, facial_required),
         auto_approve_on_match = COALESCE($6, auto_approve_on_match),
         auto_approve_min_score = COALESCE($7, auto_approve_min_score),
+        approval_mode = COALESCE($8, approval_mode),
+        notify_enabled = COALESCE($9, notify_enabled),
+        notify_events = COALESCE($10, notify_events),
+        notify_whatsapp = COALESCE($11, notify_whatsapp),
+        notify_emails = COALESCE($12, notify_emails),
         updated_at = NOW()
-       WHERE id = $8`,
+       WHERE id = $13`,
       [
-        doc_validation_enabled,
-        required_documents ? JSON.stringify(required_documents) : null,
-        required_documents_freelance ? JSON.stringify(required_documents_freelance) : null,
-        required_documents_substituto ? JSON.stringify(required_documents_substituto) : null,
-        facial_required,
-        auto_approve_on_match,
-        auto_approve_min_score,
+        b.doc_validation_enabled,
+        b.required_documents ? JSON.stringify(b.required_documents) : null,
+        b.required_documents_freelance ? JSON.stringify(b.required_documents_freelance) : null,
+        b.required_documents_substituto ? JSON.stringify(b.required_documents_substituto) : null,
+        b.facial_required, b.auto_approve_on_match, b.auto_approve_min_score,
+        b.approval_mode || null,
+        b.notify_enabled,
+        b.notify_events ? JSON.stringify(b.notify_events) : null,
+        b.notify_whatsapp ? JSON.stringify(b.notify_whatsapp) : null,
+        b.notify_emails ? JSON.stringify(b.notify_emails) : null,
         req.params.redeId,
       ]
     );
     res.json({ success: true });
-  } catch (e) {
-    console.error('save rede config', e);
-    res.status(500).json({ error: 'Erro ao salvar configuração' });
-  }
+  } catch (e) { console.error('save rede config', e); res.status(500).json({ error: 'Erro' }); }
 });
 
-// Per-PDV (supermarket_units) config
+// Per-PDV config
 router.get('/unit/:unitId/config', async (req, res) => {
   try {
     await ensureTables();
     const r = await query(
       `SELECT id, name, doc_validation_enabled, required_documents,
               required_documents_freelance, required_documents_substituto,
-              facial_required, auto_approve_on_match, auto_approve_min_score
-       FROM supermarket_units WHERE id = $1`,
-      [req.params.unitId]
+              facial_required, auto_approve_on_match, auto_approve_min_score,
+              approval_mode, notify_enabled, notify_events, notify_whatsapp, notify_emails
+       FROM supermarket_units WHERE id = $1`, [req.params.unitId]
     );
     if (!r.rows[0]) return res.status(404).json({ error: 'PDV não encontrado' });
     res.json(r.rows[0]);
-  } catch (e) {
-    console.error('get unit config', e);
-    res.status(500).json({ error: 'Erro' });
-  }
+  } catch { res.status(500).json({ error: 'Erro' }); }
 });
 
 router.put('/unit/:unitId/config', async (req, res) => {
   try {
     await ensureTables();
-    const { doc_validation_enabled, required_documents, required_documents_freelance, required_documents_substituto,
-            facial_required, auto_approve_on_match, auto_approve_min_score } = req.body;
+    const b = req.body || {};
     await query(
       `UPDATE supermarket_units SET
-        doc_validation_enabled = $1,
-        required_documents = $2,
-        required_documents_freelance = $3,
-        required_documents_substituto = $4,
-        facial_required = $5,
-        auto_approve_on_match = $6,
-        auto_approve_min_score = $7
-       WHERE id = $8`,
+        doc_validation_enabled = $1, required_documents = $2,
+        required_documents_freelance = $3, required_documents_substituto = $4,
+        facial_required = $5, auto_approve_on_match = $6, auto_approve_min_score = $7,
+        approval_mode = $8, notify_enabled = $9, notify_events = $10,
+        notify_whatsapp = $11, notify_emails = $12
+       WHERE id = $13`,
       [
-        doc_validation_enabled ?? null,
-        required_documents ? JSON.stringify(required_documents) : null,
-        required_documents_freelance ? JSON.stringify(required_documents_freelance) : null,
-        required_documents_substituto ? JSON.stringify(required_documents_substituto) : null,
-        facial_required ?? null,
-        auto_approve_on_match ?? null,
-        auto_approve_min_score ?? null,
+        b.doc_validation_enabled ?? null,
+        b.required_documents ? JSON.stringify(b.required_documents) : null,
+        b.required_documents_freelance ? JSON.stringify(b.required_documents_freelance) : null,
+        b.required_documents_substituto ? JSON.stringify(b.required_documents_substituto) : null,
+        b.facial_required ?? null, b.auto_approve_on_match ?? null, b.auto_approve_min_score ?? null,
+        b.approval_mode ?? null, b.notify_enabled ?? null,
+        b.notify_events ? JSON.stringify(b.notify_events) : null,
+        b.notify_whatsapp ? JSON.stringify(b.notify_whatsapp) : null,
+        b.notify_emails ? JSON.stringify(b.notify_emails) : null,
         req.params.unitId,
       ]
     );
     res.json({ success: true });
-  } catch (e) {
-    console.error('save unit config', e);
-    res.status(500).json({ error: 'Erro ao salvar' });
-  }
+  } catch (e) { console.error('save unit config', e); res.status(500).json({ error: 'Erro' }); }
+});
+
+// Portal: supermarket lists validations of its PDV
+router.get('/portal/supermarket', async (req, res) => {
+  try {
+    await ensureTables();
+    const unitId = req.headers['x-supermarket-unit-id'] || req.query.unit_id;
+    if (!unitId) return res.status(400).json({ error: 'unit_id obrigatório' });
+    const r = await query(
+      `SELECT v.*, ap.name as promoter_name, ap.cpf as promoter_cpf, ag.name as agency_name
+       FROM promoter_document_validations v
+       LEFT JOIN agency_promoters ap ON ap.id = v.agency_promoter_id
+       LEFT JOIN agencies ag ON ag.id = ap.agency_id
+       WHERE v.supermarket_unit_id = $1
+       ORDER BY v.created_at DESC LIMIT 200`, [unitId]
+    );
+    res.json(r.rows);
+  } catch { res.status(500).json({ error: 'Erro' }); }
+});
+
+router.post('/portal/supermarket/:id/review', async (req, res) => {
+  try {
+    await ensureTables();
+    const unitId = req.headers['x-supermarket-unit-id'] || req.body.unit_id;
+    const { decision, reason } = req.body;
+    if (!unitId) return res.status(400).json({ error: 'unit_id obrigatório' });
+    if (!['approved', 'rejected'].includes(decision)) return res.status(400).json({ error: 'decision inválida' });
+    const check = await query(`SELECT supermarket_unit_id FROM promoter_document_validations WHERE id=$1`, [req.params.id]);
+    if (!check.rows[0]) return res.status(404).json({ error: 'Não encontrado' });
+    if (String(check.rows[0].supermarket_unit_id) !== String(unitId)) return res.status(403).json({ error: 'Sem permissão' });
+    await applyReview({
+      validationId: req.params.id, decision, reason,
+      actor: { type: 'supermarket', name: req.headers['x-supermarket-user-name'] || 'PDV' },
+    });
+    res.json({ success: true });
+  } catch (e) { console.error('portal sm review', e); res.status(500).json({ error: e.message || 'Erro' }); }
+});
+
+// Portal: agency lists validations for its promoters
+router.get('/portal/agency/:agencyId', async (req, res) => {
+  try {
+    await ensureTables();
+    const r = await query(
+      `SELECT v.*, ap.name as promoter_name, ap.cpf as promoter_cpf
+       FROM promoter_document_validations v
+       JOIN agency_promoters ap ON ap.id = v.agency_promoter_id
+       WHERE ap.agency_id = $1
+       ORDER BY v.created_at DESC LIMIT 200`, [req.params.agencyId]
+    );
+    res.json(r.rows);
+  } catch { res.status(500).json({ error: 'Erro' }); }
 });
 
 export default router;
