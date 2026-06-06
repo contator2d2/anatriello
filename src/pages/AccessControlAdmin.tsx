@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Building2, Store, Users, ShieldCheck, ClipboardList, DollarSign, ShieldAlert, Fingerprint, Bot } from "lucide-react";
+import { Building2, Store, Users, ShieldCheck, ClipboardList, DollarSign, ShieldAlert, Fingerprint, Bot, BarChart3 } from "lucide-react";
 import AccessControlNetworks from "@/components/access-control/NetworksTab";
 import AccessControlUnits from "@/components/access-control/UnitsTab";
 import AccessControlAgencies from "@/components/access-control/AgenciesTab";
@@ -11,6 +11,7 @@ import { AgencyBillingPanel } from "@/components/access-control/AgencyBillingPan
 import AuthAttemptsTab from "@/components/access-control/AuthAttemptsTab";
 import FraudLogsTab from "@/components/access-control/FraudLogsTab";
 import WhatsAppAgentConfigTab from "@/components/access-control/WhatsAppAgentConfigTab";
+import ComplianceTab from "@/components/access-control/ComplianceTab";
 
 const AccessControlAdmin = () => {
   const [tab, setTab] = useState("networks");
@@ -44,6 +45,9 @@ const AccessControlAdmin = () => {
             <TabsTrigger value="fraud" className="gap-1.5 text-xs sm:text-sm">
               <ShieldAlert className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> <span className="hidden sm:inline">Fraudes</span><span className="sm:hidden">Fraud</span>
             </TabsTrigger>
+            <TabsTrigger value="compliance" className="gap-1.5 text-xs sm:text-sm">
+              <BarChart3 className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> <span className="hidden sm:inline">Compliance IA</span><span className="sm:hidden">Compl.</span>
+            </TabsTrigger>
             <TabsTrigger value="logs" className="gap-1.5 text-xs sm:text-sm">
               <ClipboardList className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> Logs
             </TabsTrigger>
@@ -58,6 +62,7 @@ const AccessControlAdmin = () => {
         <TabsContent value="whatsapp-agent"><WhatsAppAgentConfigTab /></TabsContent>
         <TabsContent value="auth-audit"><AuthAttemptsTab /></TabsContent>
         <TabsContent value="fraud"><FraudLogsTab /></TabsContent>
+        <TabsContent value="compliance"><ComplianceTab /></TabsContent>
         <TabsContent value="logs"><AccessControlLogs /></TabsContent>
       </Tabs>
     </MainLayout>

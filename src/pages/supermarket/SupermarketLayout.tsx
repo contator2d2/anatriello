@@ -1,6 +1,6 @@
 import { Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useSupermarketAuth } from '@/contexts/SupermarketAuthContext';
-import { Loader2, LayoutDashboard, Clock, History, LogOut, Store, Users, CalendarDays, AlertTriangle, Phone, Bot, Settings } from 'lucide-react';
+import { Loader2, LayoutDashboard, Clock, History, LogOut, Store, Users, CalendarDays, AlertTriangle, Phone, Bot, Settings, ShieldCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 
@@ -8,6 +8,7 @@ const navItems = [
   { path: '/supermercado/dashboard', label: 'Tempo Real', icon: LayoutDashboard },
   { path: '/supermercado/ocorrencias', label: 'Ocorrências', icon: AlertTriangle },
   { path: '/supermercado/visitas', label: 'Solicitações', icon: CalendarDays },
+  { path: '/supermercado/acessos', label: 'Acessos / Compliance', icon: ShieldCheck },
   { path: '/supermercado/contatos', label: 'Contatos WhatsApp', icon: Phone },
   { path: '/supermercado/assistente', label: 'Log Assistente', icon: Bot },
   { path: '/supermercado/historico', label: 'Histórico', icon: History },

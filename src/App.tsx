@@ -130,6 +130,7 @@ import SupermarketIncidents from "./pages/supermarket/SupermarketIncidents";
 import SupermarketContacts from "./pages/supermarket/SupermarketContacts";
 import SupermarketAssistant from "./pages/supermarket/SupermarketAssistant";
 import SupermarketSettings from "./pages/supermarket/SupermarketSettings";
+import SupermarketAccessRequests from "./pages/supermarket/SupermarketAccessRequests";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -297,6 +298,7 @@ const App = () => (
               <Route path="dashboard" element={<SupermarketDashboard />} />
               <Route path="ocorrencias" element={<SupermarketIncidents />} />
               <Route path="visitas" element={<SupermarketVisitRequests />} />
+              <Route path="acessos" element={<SupermarketAccessRequests />} />
               <Route path="contatos" element={<SupermarketContacts />} />
               <Route path="assistente" element={<SupermarketAssistant />} />
               <Route path="historico" element={<SupermarketHistory />} />

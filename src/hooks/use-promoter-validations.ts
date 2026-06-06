@@ -36,9 +36,16 @@ export interface RedeValidationConfig {
   name: string;
   doc_validation_enabled: boolean;
   required_documents: string[];
+  required_documents_freelance?: string[];
+  required_documents_substituto?: string[];
   facial_required: boolean;
   auto_approve_on_match: boolean;
   auto_approve_min_score: number;
+  approval_mode?: 'ai' | 'hybrid' | 'manual';
+  notify_enabled?: boolean;
+  notify_events?: string[];
+  notify_whatsapp?: string[];
+  notify_emails?: string[];
 }
 
 export const DOCUMENT_LABELS: Record<string, string> = {
