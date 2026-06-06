@@ -32,6 +32,11 @@ export function UnitDocValidationConfig({ unitId }: { unitId: string }) {
   const [autoApprove, setAutoApprove] = useState<boolean | null>(null);
   const [minScore, setMinScore] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<PromoterType>('fixo');
+  const [approvalMode, setApprovalMode] = useState<ApprovalMode | null>(null);
+  const [notifyEnabled, setNotifyEnabled] = useState(false);
+  const [notifyWhatsapp, setNotifyWhatsapp] = useState<string[]>([]);
+  const [notifyEmails, setNotifyEmails] = useState<string[]>([]);
+  const [notifyEvents, setNotifyEvents] = useState<string[]>([]);
 
   useEffect(() => {
     if (!data) return;
@@ -44,6 +49,11 @@ export function UnitDocValidationConfig({ unitId }: { unitId: string }) {
     setFacial(data.facial_required);
     setAutoApprove(data.auto_approve_on_match);
     setMinScore(data.auto_approve_min_score != null ? Number(data.auto_approve_min_score) : null);
+    setApprovalMode((data.approval_mode as ApprovalMode) || 'ai');
+    setNotifyEnabled(!!data.notify_enabled);
+    setNotifyWhatsapp(Array.isArray(data.notify_whatsapp) ? data.notify_whatsapp : []);
+    setNotifyEmails(Array.isArray(data.notify_emails) ? data.notify_emails : []);
+    setNotifyEvents(Array.isArray(data.notify_events) ? data.notify_events : ['approved', 'rejected', 'divergent']);
   }, [data]);
 
   const saveMut = useMutation({
