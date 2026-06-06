@@ -10,6 +10,7 @@ import { Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { api } from '@/lib/api';
 import { DOCUMENT_LABELS } from '@/hooks/use-promoter-validations';
+import { ApprovalAndNotificationFields, ApprovalMode } from './ApprovalAndNotificationFields';
 
 const ALL_DOCS = Object.keys(DOCUMENT_LABELS);
 type PromoterType = 'fixo' | 'freelance' | 'substituto';
