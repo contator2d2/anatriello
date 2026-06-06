@@ -185,6 +185,20 @@ export function RedeDocValidationConfig({ redeId, redeName }: Props) {
           </>
         )}
 
+        <ApprovalAndNotificationFields
+          approvalMode={approvalMode}
+          setApprovalMode={setApprovalMode}
+          notifyEnabled={notifyEnabled}
+          setNotifyEnabled={setNotifyEnabled}
+          notifyWhatsapp={notifyWhatsapp}
+          setNotifyWhatsapp={setNotifyWhatsapp}
+          notifyEmails={notifyEmails}
+          setNotifyEmails={setNotifyEmails}
+          notifyEvents={notifyEvents}
+          setNotifyEvents={setNotifyEvents}
+        />
+
+
         <Button onClick={handleSave} disabled={saveMut.isPending} className="w-full">
           {saveMut.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
           Salvar
