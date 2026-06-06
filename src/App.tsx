@@ -130,6 +130,7 @@ import SupermarketIncidents from "./pages/supermarket/SupermarketIncidents";
 import SupermarketContacts from "./pages/supermarket/SupermarketContacts";
 import SupermarketAssistant from "./pages/supermarket/SupermarketAssistant";
 import SupermarketSettings from "./pages/supermarket/SupermarketSettings";
+import SupermarketAccessRequests from "./pages/supermarket/SupermarketAccessRequests";
 
 const queryClient = new QueryClient({
   defaultOptions: {
