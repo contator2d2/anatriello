@@ -124,6 +124,19 @@ export function UnitDocValidationConfig({ unitId }: { unitId: string }) {
         <Input type="number" min={0} max={100} value={minScore ?? ''} onChange={e => setMinScore(e.target.value ? Number(e.target.value) : null)} />
       </div>
 
+      <ApprovalAndNotificationFields
+        approvalMode={approvalMode}
+        setApprovalMode={setApprovalMode}
+        notifyEnabled={notifyEnabled}
+        setNotifyEnabled={setNotifyEnabled}
+        notifyWhatsapp={notifyWhatsapp}
+        setNotifyWhatsapp={setNotifyWhatsapp}
+        notifyEmails={notifyEmails}
+        setNotifyEmails={setNotifyEmails}
+        notifyEvents={notifyEvents}
+        setNotifyEvents={setNotifyEvents}
+      />
+
       <Button
         className="w-full"
         disabled={saveMut.isPending}
@@ -135,6 +148,11 @@ export function UnitDocValidationConfig({ unitId }: { unitId: string }) {
           facial_required: facial,
           auto_approve_on_match: autoApprove,
           auto_approve_min_score: minScore,
+          approval_mode: approvalMode,
+          notify_enabled: notifyEnabled,
+          notify_events: notifyEvents,
+          notify_whatsapp: notifyWhatsapp,
+          notify_emails: notifyEmails,
         })}
       >
         {saveMut.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />} Salvar
