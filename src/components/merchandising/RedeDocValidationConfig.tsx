@@ -87,6 +87,11 @@ export function RedeDocValidationConfig({ redeId, redeName }: Props) {
         facial_required: facialRequired,
         auto_approve_on_match: autoApprove,
         auto_approve_min_score: minScore,
+        approval_mode: approvalMode,
+        notify_enabled: notifyEnabled,
+        notify_events: notifyEvents,
+        notify_whatsapp: notifyWhatsapp,
+        notify_emails: notifyEmails,
       } as any);
       toast({ title: 'Configuração salva' });
     } catch (e: any) {
