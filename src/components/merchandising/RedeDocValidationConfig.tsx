@@ -13,6 +13,7 @@ import {
   useSaveRedeValidationConfig,
   DOCUMENT_LABELS,
 } from '@/hooks/use-promoter-validations';
+import { ApprovalAndNotificationFields, ApprovalMode } from '@/components/access-control/ApprovalAndNotificationFields';
 
 interface Props {
   redeId: string;
