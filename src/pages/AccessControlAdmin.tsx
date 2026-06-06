@@ -62,6 +62,7 @@ const AccessControlAdmin = () => {
         <TabsContent value="whatsapp-agent"><WhatsAppAgentConfigTab /></TabsContent>
         <TabsContent value="auth-audit"><AuthAttemptsTab /></TabsContent>
         <TabsContent value="fraud"><FraudLogsTab /></TabsContent>
+        <TabsContent value="compliance"><ComplianceTab /></TabsContent>
         <TabsContent value="logs"><AccessControlLogs /></TabsContent>
       </Tabs>
     </MainLayout>
