@@ -129,6 +129,10 @@ const getScopedAuthToken = (endpoint: string) => {
     return localStorage.getItem('supermarket_auth_token') || localStorage.getItem('auth_token');
   }
 
+  if (endpoint.startsWith('/api/network-portal') && !endpoint.startsWith('/api/network-portal/admin')) {
+    return localStorage.getItem('network_auth_token') || localStorage.getItem('auth_token');
+  }
+
   // Use promotor_token for ALL merchandising/promotor related endpoints
   if (endpoint.startsWith('/api/promotor') || endpoint.includes('/merch/promotor/')) {
     return localStorage.getItem('promotor_token') || localStorage.getItem('auth_token');
@@ -147,6 +151,10 @@ const clearScopedAuthTokens = (endpoint?: string) => {
   }
   if (endpoint?.startsWith('/api/access-control/supermarket')) {
     localStorage.removeItem('supermarket_auth_token');
+    return;
+  }
+  if (endpoint?.startsWith('/api/network-portal') && !endpoint?.startsWith('/api/network-portal/admin')) {
+    localStorage.removeItem('network_auth_token');
     return;
   }
   if (endpoint?.startsWith('/api/promotor') || endpoint?.includes('/merch/promotor/')) {

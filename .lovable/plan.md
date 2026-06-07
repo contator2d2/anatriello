@@ -1,67 +1,96 @@
 
-# Reestruturação do Sistema de Acesso a Supermercados
+# Portal da Rede — Visão 360° por Supermercado
 
-## Novo Fluxo
+## Conceito
+
+Hoje cada **PDV** tem login próprio (`supermarket_users` → `supermarket_unit_id`). Vou criar um **nível acima**: usuários **da rede inteira** (`network_id`), com painel 360° sobre todos os PDVs daquela rede.
 
 ```text
-Agência A  ──(envia documentos + lista de PDVs + marcas)──►  Rede Muffato
-                                                                  │
-                                                          aprova cadastro (1x)
-                                                                  │
-                              ┌───────────────────────────────────┼─────────────────────────┐
-                              ▼                                   ▼                         ▼
-                          PDV 01                              PDV 02                    PDV N
-                    (acesso liberado por padrão — pode bloquear individualmente se houver problema)
-                                                                  │
-                                                    bloqueio → notifica Agência + Rede
+┌──────────────────────────────────────────────────────┐
+│  PORTAL DA REDE  (login: network_users)              │
+│  ─ Dashboard global (PDVs ativos, marcas, parceiros) │
+│  ─ Solicitar novo PDV (inauguração)                  │
+│  ─ Lista de PDVs + drill-down em cada um             │
+│  ─ Parceiros (agências + instaladores + manutenção)  │
+│  ─ Auditoria global e bloqueios em qualquer PDV      │
+│  ─ Configuração de docs/IA (única, herdada por PDVs) │
+└──────────────────────────────────────────────────────┘
+        │
+        ├── PDV 01 (login próprio, visão restrita)
+        ├── PDV 02
+        └── PDV N
 ```
-
-**Regra central:** Documentação e aprovação cadastral acontecem **apenas na Rede**. PDVs **não validam documentos**, apenas exercem controle operacional de bloqueio individual do promotor naquele PDV específico.
 
 ## Mudanças
 
-### 1. Backend (`backend/src/routes/promoter-validations.js`)
-- **Remover** endpoints/config de validação de documento por PDV (`/unit/:id/config` de docs).
-- Mantém `approval_mode`, documentos exigidos, score IA e notificações **apenas na Rede**.
-- Novo endpoint `POST /portal/supermarket/units/:unitId/block-promoter` — PDV bloqueia/desbloqueia promotor individualmente.
-- Novo endpoint `GET /portal/supermarket/units/:unitId/blocked-promoters` — lista bloqueios do PDV.
-- Bloqueio dispara notificação automática para:
-  - Agência do promotor (WhatsApp + e-mail configurados na agência)
-  - Rede (canais de notificação configurados na Rede)
-- Verificação de acesso (totem/check-in) passa a checar: aprovação da Rede **E** ausência de bloqueio no PDV.
+### 1. Banco (ensureSchema, sem migration manual)
+- **`network_users`** — login da rede:
+  - `network_id`, `email` (UNIQUE), `password_hash`, `name`, `role` (`admin`/`viewer`), `last_login`, `active`.
+- **`pdv_inauguration_requests`** — pedidos de novo PDV pela rede:
+  - `network_id`, `requested_by`, `name`, `cnpj`, `address`, `city`, `state`, `contact_*`, `expected_opening`, `notes`, `status` (`pending`/`approved`/`rejected`), `reviewed_by`, `reviewed_at`, `review_notes`, `created_unit_id`.
+- **`partners`** (extensão do conceito de agência para terceiros):
+  - Reaproveita tabela `agencies` adicionando coluna `partner_type` (`agency`/`installer`/`maintenance`/`other`) e `category_label`.
+  - Toda lógica existente continua tratando `agencies` como entidade unificada; UI filtra por tipo.
 
-### 2. Banco de dados (nova migration)
-- Nova tabela `pdv_promoter_blocks`:
-  - `supermarket_unit_id`, `agency_promoter_id`, `blocked_by` (supermarket_user), `reason`, `blocked_at`, `unblocked_at`, `active`.
-- Auditoria via `access_audit_logs` existente (action: `pdv_block_promoter` / `pdv_unblock_promoter`).
-- **Sem remoção de colunas** de `supermarket_units` para não quebrar dados — apenas deixam de ser usadas pelo frontend.
+### 2. Backend (`backend/src/routes/network-portal.js` — novo)
+- Auth flexível (`network` token JWT — type `network`).
+- `POST /login` `GET /me`
+- `GET /dashboard` — métricas agregadas:
+  - PDVs ativos / total / inativos
+  - Total de promotores ativos no período
+  - Total de marcas distintas atendidas (via `merch_visits` ou `agency_promoters`)
+  - Total de parceiros por tipo (agency/installer/maintenance)
+  - Entradas hoje / semana / mês
+  - Bloqueios ativos
+  - Solicitações de inauguração pendentes
+- `GET /units` — todos os PDVs da rede com métricas por unidade (entradas hoje, promotores ativos, bloqueios).
+- `GET /units/:id/overview` — drill-down de um PDV (logs recentes, promotores ativos, bloqueios, marcas).
+- `GET /partners` — agências + terceiros operando na rede (filtro por tipo).
+- `GET /brands` — marcas atendidas na rede com promotor count.
+- `GET /blocks` — bloqueios em qualquer PDV da rede (delega ao `pdv-blocks`).
+- `POST /inauguration-requests` `GET /inauguration-requests`
+- `GET /audit` — logs de `access_audit_logs` filtrados pelos PDVs da rede.
+- Reusa `dispatchNotifications` para notificar admin Ayratech sobre solicitações.
 
-### 3. Frontend Admin (`src/pages/AccessControlAdmin.tsx` + componentes)
-- `UnitDocValidationConfig.tsx`: **remover** a aba/tela de configuração de documentos no PDV. Substituir por aviso: "Documentação é configurada na Rede" + atalho para a Rede vinculada.
-- `RedeDocValidationConfig.tsx`: continua sendo a fonte única de verdade (docs, IA, notificações).
-- Compliance Tab: continua agregando por Rede.
+### 3. Backend (extensões pontuais)
+- `agencies` ganha `partner_type` + `category_label` via `ALTER TABLE ... IF NOT EXISTS`.
+- `access-control.js` lista de agências aceita query `?partner_type=` opcional.
+- `supermarket_networks` continua sendo a entidade-mãe.
 
-### 4. Portal Supermercado (`src/pages/supermarket/`)
-- `SupermarketAccessRequests.tsx`: remover configuração de docs/IA. Manter apenas:
-  - Lista de promotores autorizados pela Rede com filtros.
-  - Botão **"Bloquear neste PDV"** com motivo obrigatório.
-  - Lista de bloqueios ativos com possibilidade de remover (gera notificação).
-  - Histórico de eventos (auditado).
-- Mostra status: "Aprovado pela Rede" / "Bloqueado neste PDV (motivo)".
+### 4. Frontend — novo módulo `src/pages/network/`
+- `NetworkLogin.tsx` — `/rede/login`
+- `NetworkLayout.tsx` — sidebar com: Dashboard, PDVs, Parceiros, Marcas, Bloqueios, Solicitações, Auditoria, Configuração
+- `NetworkDashboard.tsx` — cards 360° (KPIs) + gráfico de entradas + lista resumida de PDVs
+- `NetworkUnits.tsx` — tabela de PDVs com filtros; ação **"Solicitar novo PDV"**
+- `NetworkUnitDetail.tsx` — drill-down por PDV
+- `NetworkPartners.tsx` — agências + instaladores + manutenção (com seletor de tipo no cadastro)
+- `NetworkBrands.tsx` — marcas atendidas
+- `NetworkBlocks.tsx` — bloqueios em todos os PDVs
+- `NetworkInaugurationRequests.tsx` — fila de pedidos
+- `NetworkAudit.tsx` — auditoria consolidada
+- `NetworkSettings.tsx` — configuração de docs/IA da rede (reusa `RedeDocValidationConfig`)
 
-### 5. Notificações
-- Reaproveita `promoter_validation_notifications` (outbox) + `whatsappProvider`.
-- Eventos novos: `pdv_blocked`, `pdv_unblocked`.
-- Destinatários: agência (do promotor) + rede (do PDV).
+### 5. Frontend — contexto + hooks
+- `src/contexts/NetworkAuthContext.tsx` — análogo ao de supermercado, token `network_auth_token`.
+- `src/hooks/use-network-portal.ts` — todos os endpoints.
+- `src/lib/api.ts` — adicionar scope para `/api/network-portal` resolver `network_auth_token`.
+
+### 6. Admin Ayratech
+- `AccessControlAdmin.tsx`: aba **"Solicitações de PDV"** para o admin aprovar/rejeitar inaugurações (cria o `supermarket_unit` automaticamente quando aprovado).
+- Em **Agências**, dropdown de **Tipo de parceiro** (Agência/Instalador/Manutenção/Outro).
+
+### 7. Rotas (`src/App.tsx`)
+- `/rede/login` (público)
+- `/rede/*` (protegido por `NetworkAuthContext`) — dashboard, pdvs, parceiros, marcas, bloqueios, solicitações, auditoria, configurações.
 
 ## Detalhes Técnicos
 
-- Hook `usePromoterValidations` ganha:
-  - `usePdvBlockPromoter()` — mutação para bloquear/desbloquear.
-  - `usePdvBlockedPromoters(unitId)` — listagem.
-- `pdv_access_rules` continua existindo para horário/dia/marcas, mas o gate de aprovação documental olha somente a Rede.
-- Migration adiciona índice em `(supermarket_unit_id, agency_promoter_id, active)`.
+- Login da rede gera JWT `{ type: 'network', userId, networkId, orgId }`.
+- `authFlex` em `pdv-blocks.js` ganha branch `network` para permitir bloquear/desbloquear qualquer PDV da rede.
+- Dashboard usa queries agregadas (CTE) para evitar N+1.
+- Solicitação de PDV aprovada cria registro em `supermarket_units` com `network_id` da rede e `active=false` até o admin completar dados.
+- `partner_type` default `agency` para não quebrar dados existentes.
 
 ## Fora de escopo
-- Não vou migrar dados antigos de configs por PDV — ficam órfãos e inertes.
-- Não vou mexer no fluxo de check-in do totem além do gate de bloqueio (continua usando regras existentes).
+- Não migrar usuários `supermarket_users` em massa para `network_users` (são logins diferentes).
+- Não criar billing por tipo de parceiro neste loop (segue o billing existente das agências).

@@ -74,6 +74,10 @@ function authFlex(req, res, next) {
       req.agencyUserId = decoded.userId;
       req.agencyId = decoded.agencyId;
       req.orgId = decoded.orgId;
+    } else if (decoded.type === 'network') {
+      req.networkUserId = decoded.userId;
+      req.networkId = decoded.networkId;
+      req.orgId = decoded.orgId;
     } else {
       req.userId = decoded.userId;
       req.userEmail = decoded.email;
@@ -207,6 +211,10 @@ router.get('/blocks', authFlex, async (req, res) => {
     const params = [];
     let where = '1=1';
     if (unitId) { params.push(unitId); where += ` AND b.supermarket_unit_id = $${params.length}`; }
+    if (req.tokenType === 'network') {
+      params.push(req.networkId);
+      where += ` AND su.network_id = $${params.length}`;
+    }
     if (req.query.active === 'true') where += ` AND b.active = true`;
     if (req.query.active === 'false') where += ` AND b.active = false`;
     const r = await query(
