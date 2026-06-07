@@ -1,107 +1,141 @@
 import { useMemo, useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api';
 import { useSupermarketAuth } from '@/contexts/SupermarketAuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, Check, X, Brain, Eye, ShieldCheck, UserCheck } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Loader2, ShieldCheck, Ban, Undo2, Info, Search } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
-import { UnitDocValidationConfig } from '@/components/access-control/UnitDocValidationConfig';
-import { ValidationDetailDialog } from '@/components/access-control/ValidationDetailDialog';
-
-const STATUS_LABEL: Record<string, { label: string; variant: any }> = {
-  pending: { label: 'Pendente', variant: 'secondary' },
-  analyzing: { label: 'Analisando', variant: 'secondary' },
-  pre_approved: { label: 'Pré-aprovado IA', variant: 'default' },
-  approved: { label: 'Aprovado', variant: 'default' },
-  divergent: { label: 'Divergente', variant: 'destructive' },
-  rejected: { label: 'Rejeitado', variant: 'destructive' },
-  failed: { label: 'Falha', variant: 'destructive' },
-};
+import {
+  useAuthorizedPromoters,
+  usePdvBlocks,
+  useBlockPromoter,
+  useUnblockPromoter,
+  type AuthorizedPromoter,
+  type PdvPromoterBlock,
+} from '@/hooks/use-pdv-blocks';
 
 export default function SupermarketAccessRequests() {
   const { user } = useSupermarketAuth();
   const { toast } = useToast();
-  const qc = useQueryClient();
   const unitId = user?.supermarket_unit_id;
 
-  const headers = useMemo(() => {
-    const t = localStorage.getItem('supermarket_auth_token');
+  const extraHeaders = useMemo(() => {
     const h: Record<string, string> = {};
-    if (t) h.Authorization = `Bearer ${t}`;
-    if (unitId) h['x-supermarket-unit-id'] = unitId;
     if (user?.email) h['x-supermarket-user-name'] = user.email;
     return h;
-  }, [unitId, user]);
+  }, [user?.email]);
 
-  const [tab, setTab] = useState<'requests' | 'config'>('requests');
-  const [filter, setFilter] = useState<string>('all');
-  const [reviewing, setReviewing] = useState<{ id: string; decision: 'approved' | 'rejected' } | null>(null);
+  const [tab, setTab] = useState<'authorized' | 'blocks'>('authorized');
+  const [search, setSearch] = useState('');
+  const [blocking, setBlocking] = useState<AuthorizedPromoter | null>(null);
+  const [unblocking, setUnblocking] = useState<PdvPromoterBlock | null>(null);
   const [reason, setReason] = useState('');
-  const [detailId, setDetailId] = useState<string | undefined>();
 
-  const { data: items = [], isLoading } = useQuery<any[]>({
-    queryKey: ['portal-sm-validations', unitId],
-    queryFn: () => api(`/api/promoter-validations/portal/supermarket?unit_id=${unitId}`, { headers }),
-    enabled: !!unitId,
-  });
+  const { data: promoters = [], isLoading: loadingPromoters } = useAuthorizedPromoters(unitId, extraHeaders);
+  const { data: blocks = [], isLoading: loadingBlocks } = usePdvBlocks({ unitId }, extraHeaders);
 
-  const reviewMut = useMutation({
-    mutationFn: ({ id, decision, reason }: { id: string; decision: 'approved' | 'rejected'; reason?: string }) =>
-      api(`/api/promoter-validations/portal/supermarket/${id}/review`, {
-        method: 'POST', body: { decision, reason }, headers,
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['portal-sm-validations'] });
-      setReviewing(null); setReason('');
-      toast({ title: 'Decisão registrada' });
-    },
-    onError: (e: any) => toast({ title: 'Erro', description: e.message, variant: 'destructive' }),
-  });
+  const blockMut = useBlockPromoter(extraHeaders);
+  const unblockMut = useUnblockPromoter(extraHeaders);
 
-  const filtered = filter === 'all' ? items : items.filter((i: any) => i.status === filter);
+  const filteredPromoters = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return promoters;
+    return promoters.filter(p =>
+      (p.name || '').toLowerCase().includes(q) ||
+      (p.cpf || '').toLowerCase().includes(q) ||
+      (p.agency_name || '').toLowerCase().includes(q)
+    );
+  }, [promoters, search]);
+
+  const handleBlock = () => {
+    if (!blocking || !reason.trim()) {
+      toast({ title: 'Motivo obrigatório', variant: 'destructive' });
+      return;
+    }
+    blockMut.mutate(
+      { agency_promoter_id: blocking.id, reason: reason.trim() },
+      {
+        onSuccess: () => {
+          toast({ title: 'Promotor bloqueado neste PDV', description: 'Agência e rede foram notificadas.' });
+          setBlocking(null); setReason('');
+        },
+        onError: (e: any) => toast({ title: 'Erro', description: e.message, variant: 'destructive' }),
+      }
+    );
+  };
+
+  const handleUnblock = () => {
+    if (!unblocking) return;
+    unblockMut.mutate(
+      { id: unblocking.id, reason: reason.trim() || undefined },
+      {
+        onSuccess: () => {
+          toast({ title: 'Promotor desbloqueado', description: 'Agência e rede foram notificadas.' });
+          setUnblocking(null); setReason('');
+        },
+        onError: (e: any) => toast({ title: 'Erro', description: e.message, variant: 'destructive' }),
+      }
+    );
+  };
 
   return (
     <div className="p-4 sm:p-6 space-y-4 max-w-7xl mx-auto">
       <div>
         <h1 className="text-xl font-semibold flex items-center gap-2">
-          <ShieldCheck className="h-5 w-5 text-primary" /> Solicitações de Acesso
+          <ShieldCheck className="h-5 w-5 text-primary" /> Acessos do PDV
         </h1>
-        <p className="text-sm text-muted-foreground">Aprove ou rejeite promotores que solicitaram acesso a este PDV.</p>
+        <p className="text-sm text-muted-foreground">
+          Promotores aprovados pela rede. Você pode bloquear individualmente neste PDV se houver problema.
+        </p>
       </div>
+
+      <Alert>
+        <Info className="h-4 w-4" />
+        <AlertTitle>Como funciona</AlertTitle>
+        <AlertDescription className="text-sm">
+          A documentação dos promotores é validada e aprovada pela <strong>rede</strong>. Este PDV
+          recebe a lista de promotores autorizados pelas agências contratadas e pode bloquear ou
+          liberar individualmente. Toda ação é auditada e <strong>notifica a agência e a rede</strong>.
+        </AlertDescription>
+      </Alert>
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as any)}>
         <TabsList>
-          <TabsTrigger value="requests">Solicitações</TabsTrigger>
-          <TabsTrigger value="config">Configuração</TabsTrigger>
+          <TabsTrigger value="authorized">Promotores autorizados</TabsTrigger>
+          <TabsTrigger value="blocks">Bloqueios ({blocks.filter(b => b.active).length})</TabsTrigger>
         </TabsList>
       </Tabs>
 
-      {tab === 'requests' && (
+      {tab === 'authorized' && (
         <Card>
           <CardHeader className="pb-3">
             <div className="flex flex-wrap gap-2 items-center justify-between">
-              <CardTitle className="text-base">Histórico</CardTitle>
-              <div className="flex flex-wrap gap-1">
-                {['all', 'pending', 'pre_approved', 'divergent', 'approved', 'rejected'].map(s => (
-                  <Button key={s} size="sm" variant={filter === s ? 'default' : 'outline'} onClick={() => setFilter(s)}>
-                    {s === 'all' ? 'Todas' : STATUS_LABEL[s]?.label || s}
-                  </Button>
-                ))}
+              <CardTitle className="text-base">Promotores aprovados pela rede</CardTitle>
+              <div className="relative w-full sm:w-72">
+                <Search className="h-4 w-4 absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar por nome, CPF ou agência..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-8"
+                />
               </div>
             </div>
           </CardHeader>
           <CardContent>
-            {isLoading ? (
+            {loadingPromoters ? (
               <div className="py-10 flex justify-center"><Loader2 className="h-5 w-5 animate-spin" /></div>
-            ) : filtered.length === 0 ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">Nenhuma solicitação no filtro selecionado.</p>
+            ) : filteredPromoters.length === 0 ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                Nenhum promotor autorizado para este PDV.
+              </p>
             ) : (
               <div className="overflow-x-auto">
                 <Table>
@@ -109,55 +143,53 @@ export default function SupermarketAccessRequests() {
                     <TableRow>
                       <TableHead>Promotor</TableHead>
                       <TableHead className="hidden md:table-cell">Agência</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Score IA</TableHead>
-                      <TableHead>Decisão</TableHead>
-                      <TableHead className="hidden sm:table-cell">Data</TableHead>
+                      <TableHead>Status no PDV</TableHead>
                       <TableHead className="text-right">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filtered.map((v: any) => {
-                      const st = STATUS_LABEL[v.status] || { label: v.status, variant: 'secondary' };
-                      const decidedBy = v.override_status
-                        ? <span className="inline-flex items-center gap-1 text-xs"><UserCheck className="h-3 w-3" /> Manual</span>
-                        : v.auto_applied
-                        ? <span className="inline-flex items-center gap-1 text-xs"><Brain className="h-3 w-3" /> IA</span>
-                        : <span className="text-xs text-muted-foreground">—</span>;
-                      const pending = ['pending', 'analyzing', 'pre_approved', 'divergent'].includes(v.status);
+                    {filteredPromoters.map((p) => {
+                      const blocked = !!p.active_block_id;
                       return (
-                        <TableRow key={v.id}>
+                        <TableRow key={p.id}>
                           <TableCell>
-                            <div className="font-medium">{v.promoter_name || '—'}</div>
-                            <div className="text-xs text-muted-foreground">{v.promoter_cpf}</div>
+                            <div className="font-medium">{p.name}</div>
+                            <div className="text-xs text-muted-foreground">{p.cpf}</div>
                           </TableCell>
-                          <TableCell className="hidden md:table-cell text-sm">{v.agency_name || '—'}</TableCell>
-                          <TableCell><Badge variant={st.variant}>{st.label}</Badge></TableCell>
+                          <TableCell className="hidden md:table-cell text-sm">{p.agency_name || '—'}</TableCell>
                           <TableCell>
-                            <span className={`text-sm font-medium ${Number(v.score) >= 90 ? 'text-green-600' : Number(v.score) >= 70 ? 'text-amber-600' : 'text-destructive'}`}>
-                              {v.score != null ? Number(v.score).toFixed(0) : '—'}
-                            </span>
-                          </TableCell>
-                          <TableCell>{decidedBy}</TableCell>
-                          <TableCell className="hidden sm:table-cell text-xs text-muted-foreground">
-                            {v.created_at ? format(new Date(v.created_at), 'dd/MM HH:mm') : ''}
+                            {blocked ? (
+                              <div className="flex flex-col">
+                                <Badge variant="destructive" className="w-fit">Bloqueado neste PDV</Badge>
+                                {p.active_block_reason && (
+                                  <span className="text-xs text-muted-foreground mt-1">{p.active_block_reason}</span>
+                                )}
+                              </div>
+                            ) : (
+                              <Badge variant="default" className="w-fit bg-emerald-600 hover:bg-emerald-600">
+                                Aprovado pela rede
+                              </Badge>
+                            )}
                           </TableCell>
                           <TableCell className="text-right">
-                            <div className="flex justify-end gap-1">
-                              <Button size="sm" variant="ghost" onClick={() => setDetailId(v.id)}>
-                                <Eye className="h-4 w-4" />
+                            {blocked ? (
+                              <Button
+                                size="sm" variant="outline"
+                                onClick={() => {
+                                  const b = blocks.find(x => x.id === p.active_block_id);
+                                  if (b) setUnblocking(b);
+                                }}
+                              >
+                                <Undo2 className="h-4 w-4 mr-1" /> Desbloquear
                               </Button>
-                              {pending && (
-                                <>
-                                  <Button size="sm" variant="outline" className="text-green-600" onClick={() => setReviewing({ id: v.id, decision: 'approved' })}>
-                                    <Check className="h-4 w-4" />
-                                  </Button>
-                                  <Button size="sm" variant="outline" className="text-destructive" onClick={() => setReviewing({ id: v.id, decision: 'rejected' })}>
-                                    <X className="h-4 w-4" />
-                                  </Button>
-                                </>
-                              )}
-                            </div>
+                            ) : (
+                              <Button
+                                size="sm" variant="outline" className="text-destructive"
+                                onClick={() => setBlocking(p)}
+                              >
+                                <Ban className="h-4 w-4 mr-1" /> Bloquear neste PDV
+                              </Button>
+                            )}
                           </TableCell>
                         </TableRow>
                       );
@@ -170,42 +202,126 @@ export default function SupermarketAccessRequests() {
         </Card>
       )}
 
-      {tab === 'config' && unitId && (
+      {tab === 'blocks' && (
         <Card>
-          <CardHeader><CardTitle className="text-base">Validação de documentos deste PDV</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-base">Histórico de bloqueios</CardTitle></CardHeader>
           <CardContent>
-            <UnitDocValidationConfig unitId={unitId} />
+            {loadingBlocks ? (
+              <div className="py-10 flex justify-center"><Loader2 className="h-5 w-5 animate-spin" /></div>
+            ) : blocks.length === 0 ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">Nenhum bloqueio registrado.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Promotor</TableHead>
+                      <TableHead className="hidden md:table-cell">Agência</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="hidden md:table-cell">Motivo</TableHead>
+                      <TableHead>Bloqueado em</TableHead>
+                      <TableHead className="text-right">Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {blocks.map((b) => (
+                      <TableRow key={b.id}>
+                        <TableCell>
+                          <div className="font-medium">{b.promoter_name || '—'}</div>
+                          <div className="text-xs text-muted-foreground">{b.promoter_cpf}</div>
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell text-sm">{b.agency_name || '—'}</TableCell>
+                        <TableCell>
+                          {b.active
+                            ? <Badge variant="destructive">Ativo</Badge>
+                            : <Badge variant="secondary">Removido</Badge>}
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell text-xs">{b.reason || '—'}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground">
+                          {b.blocked_at ? format(new Date(b.blocked_at), 'dd/MM/yy HH:mm') : ''}
+                          {b.blocked_by_name && <div>por {b.blocked_by_name}</div>}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {b.active && (
+                            <Button size="sm" variant="outline" onClick={() => setUnblocking(b)}>
+                              <Undo2 className="h-4 w-4 mr-1" /> Desbloquear
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
 
-      <Dialog open={!!reviewing} onOpenChange={(o) => { if (!o) { setReviewing(null); setReason(''); } }}>
+      {/* Block dialog */}
+      <Dialog open={!!blocking} onOpenChange={(o) => { if (!o) { setBlocking(null); setReason(''); } }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{reviewing?.decision === 'approved' ? 'Aprovar solicitação' : 'Rejeitar solicitação'}</DialogTitle>
+            <DialogTitle>Bloquear promotor neste PDV</DialogTitle>
           </DialogHeader>
-          <div className="space-y-2">
-            <p className="text-sm text-muted-foreground">Informe um motivo (opcional). Todas as decisões são auditadas.</p>
-            <Textarea rows={3} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Motivo..." />
+          <div className="space-y-3">
+            <div className="text-sm">
+              <div className="font-medium">{blocking?.name}</div>
+              <div className="text-muted-foreground text-xs">{blocking?.cpf} · {blocking?.agency_name}</div>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Motivo do bloqueio *</label>
+              <Textarea
+                rows={3} value={reason} onChange={(e) => setReason(e.target.value)}
+                placeholder="Ex: comportamento inadequado, ausências recorrentes, etc."
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              A agência e a rede serão notificadas automaticamente.
+            </p>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setReviewing(null)}>Cancelar</Button>
-            <Button
-              variant={reviewing?.decision === 'approved' ? 'default' : 'destructive'}
-              disabled={reviewMut.isPending}
-              onClick={() => reviewing && reviewMut.mutate({ id: reviewing.id, decision: reviewing.decision, reason })}
-            >
-              {reviewMut.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Confirmar
+            <Button variant="outline" onClick={() => setBlocking(null)}>Cancelar</Button>
+            <Button variant="destructive" disabled={blockMut.isPending || !reason.trim()} onClick={handleBlock}>
+              {blockMut.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Confirmar bloqueio
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <ValidationDetailDialog
-        validationId={detailId}
-        open={!!detailId}
-        onOpenChange={(o) => { if (!o) setDetailId(undefined); }}
-      />
+      {/* Unblock dialog */}
+      <Dialog open={!!unblocking} onOpenChange={(o) => { if (!o) { setUnblocking(null); setReason(''); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Desbloquear promotor</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="text-sm">
+              <div className="font-medium">{unblocking?.promoter_name}</div>
+              <div className="text-muted-foreground text-xs">
+                {unblocking?.promoter_cpf} · {unblocking?.agency_name}
+              </div>
+              {unblocking?.reason && (
+                <div className="mt-2 text-xs">
+                  <span className="text-muted-foreground">Motivo original: </span>{unblocking.reason}
+                </div>
+              )}
+            </div>
+            <div>
+              <label className="text-sm font-medium">Motivo do desbloqueio (opcional)</label>
+              <Textarea rows={3} value={reason} onChange={(e) => setReason(e.target.value)} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setUnblocking(null)}>Cancelar</Button>
+            <Button disabled={unblockMut.isPending} onClick={handleUnblock}>
+              {unblockMut.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Confirmar desbloqueio
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
