@@ -180,13 +180,21 @@ async function loadPromoterFull(promoterId) {
 async function loadUnitWithRede(unitId) {
   const r = await query(
     `SELECT su.id, su.name, su.organization_id, su.network_id,
-            mr.id as merch_rede_id, mr.notify_enabled, mr.notify_events, mr.notify_whatsapp, mr.notify_emails
-     FROM supermarket_units su
-     LEFT JOIN merch_redes mr ON mr.id = su.network_id
-     WHERE su.id = $1`,
+            sn.id as sn_id, sn.name as sn_name,
+            sn.contact_phone as sn_contact_phone, sn.contact_email as sn_contact_email
+       FROM supermarket_units su
+       LEFT JOIN supermarket_networks sn ON sn.id = su.network_id
+      WHERE su.id = $1`,
     [unitId]
   ).catch(() => ({ rows: [] }));
-  return r.rows[0] || null;
+  const unit = r.rows[0] || null;
+  if (!unit) return null;
+  // Build a "rede" notification object from supermarket_networks contact info.
+  unit.notify_enabled = !!(unit.sn_contact_phone || unit.sn_contact_email);
+  unit.notify_events = ['pdv_blocked', 'pdv_unblocked'];
+  unit.notify_whatsapp = unit.sn_contact_phone ? [unit.sn_contact_phone] : [];
+  unit.notify_emails = unit.sn_contact_email ? [unit.sn_contact_email] : [];
+  return unit;
 }
 
 // =============== ROUTES ===============
