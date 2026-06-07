@@ -1,162 +1,48 @@
-import { useEffect, useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Loader2 } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
+import { useQuery } from '@tanstack/react-query';
+import { Info, ExternalLink } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { api } from '@/lib/api';
-import { DOCUMENT_LABELS } from '@/hooks/use-promoter-validations';
-import { ApprovalAndNotificationFields, ApprovalMode } from './ApprovalAndNotificationFields';
+import { Link } from 'react-router-dom';
 
-const ALL_DOCS = Object.keys(DOCUMENT_LABELS);
-type PromoterType = 'fixo' | 'freelance' | 'substituto';
-
+/**
+ * Document validation and approval are ALWAYS configured at the Network (Rede) level.
+ * PDVs only have operational control to block individual promoters after approval.
+ * This component now only shows where to go to configure docs.
+ */
 export function UnitDocValidationConfig({ unitId }: { unitId: string }) {
-  const { toast } = useToast();
-  const qc = useQueryClient();
-  const { data, isLoading } = useQuery<any>({
-    queryKey: ['unit-validation-config', unitId],
-    queryFn: () => api(`/api/promoter-validations/unit/${unitId}/config`),
+  const { data: unit } = useQuery<any>({
+    queryKey: ['unit-info-for-doc-config', unitId],
+    queryFn: () => api(`/api/access-control/units/${unitId}`).catch(() => null),
     enabled: !!unitId,
   });
-
-  const [enabled, setEnabled] = useState<boolean | null>(null);
-  const [docsByType, setDocsByType] = useState<Record<PromoterType, string[] | null>>({
-    fixo: null, freelance: null, substituto: null,
-  });
-  const [facial, setFacial] = useState<boolean | null>(null);
-  const [autoApprove, setAutoApprove] = useState<boolean | null>(null);
-  const [minScore, setMinScore] = useState<number | null>(null);
-  const [activeTab, setActiveTab] = useState<PromoterType>('fixo');
-  const [approvalMode, setApprovalMode] = useState<ApprovalMode | null>(null);
-  const [notifyEnabled, setNotifyEnabled] = useState(false);
-  const [notifyWhatsapp, setNotifyWhatsapp] = useState<string[]>([]);
-  const [notifyEmails, setNotifyEmails] = useState<string[]>([]);
-  const [notifyEvents, setNotifyEvents] = useState<string[]>([]);
-
-  useEffect(() => {
-    if (!data) return;
-    setEnabled(data.doc_validation_enabled);
-    setDocsByType({
-      fixo: Array.isArray(data.required_documents) ? data.required_documents : null,
-      freelance: Array.isArray(data.required_documents_freelance) ? data.required_documents_freelance : null,
-      substituto: Array.isArray(data.required_documents_substituto) ? data.required_documents_substituto : null,
-    });
-    setFacial(data.facial_required);
-    setAutoApprove(data.auto_approve_on_match);
-    setMinScore(data.auto_approve_min_score != null ? Number(data.auto_approve_min_score) : null);
-    setApprovalMode((data.approval_mode as ApprovalMode) || 'ai');
-    setNotifyEnabled(!!data.notify_enabled);
-    setNotifyWhatsapp(Array.isArray(data.notify_whatsapp) ? data.notify_whatsapp : []);
-    setNotifyEmails(Array.isArray(data.notify_emails) ? data.notify_emails : []);
-    setNotifyEvents(Array.isArray(data.notify_events) ? data.notify_events : ['approved', 'rejected', 'divergent']);
-  }, [data]);
-
-  const saveMut = useMutation({
-    mutationFn: (body: any) => api(`/api/promoter-validations/unit/${unitId}/config`, { method: 'PUT', body }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['unit-validation-config', unitId] });
-      toast({ title: 'Configuração salva' });
-    },
-    onError: (e: any) => toast({ title: 'Erro', description: e.message, variant: 'destructive' }),
-  });
-
-  if (isLoading) return <div className="py-6 flex justify-center"><Loader2 className="h-5 w-5 animate-spin" /></div>;
-
-  const toggleDoc = (type: PromoterType, k: string) => {
-    const cur = docsByType[type] || [];
-    setDocsByType(prev => ({
-      ...prev,
-      [type]: cur.includes(k) ? cur.filter(x => x !== k) : [...cur, k],
-    }));
-  };
-
-  const renderDocs = (type: PromoterType) => (
-    <div className="grid grid-cols-2 gap-2">
-      {ALL_DOCS.map(k => (
-        <label key={k} className="flex items-center gap-2 text-sm rounded-md border p-2 cursor-pointer hover:bg-muted/50">
-          <Checkbox checked={(docsByType[type] || []).includes(k)} onCheckedChange={() => toggleDoc(type, k)} />
-          {DOCUMENT_LABELS[k]}
-        </label>
-      ))}
-    </div>
-  );
+  const networkId = unit?.network_id;
 
   return (
-    <div className="space-y-4">
-      <p className="text-xs text-muted-foreground">Configuração específica deste PDV. Campos vazios herdam da Rede.</p>
-
-      <div className="flex items-center justify-between">
-        <Label>Validação habilitada (override)</Label>
-        <Switch checked={!!enabled} onCheckedChange={v => setEnabled(v)} />
-      </div>
-
-      <div>
-        <Label>Documentos exigidos por tipo de promotor</Label>
-        <Tabs value={activeTab} onValueChange={v => setActiveTab(v as PromoterType)} className="mt-2">
-          <TabsList className="w-full">
-            <TabsTrigger value="fixo" className="flex-1">Fixo</TabsTrigger>
-            <TabsTrigger value="freelance" className="flex-1">Freelance</TabsTrigger>
-            <TabsTrigger value="substituto" className="flex-1">Substituto</TabsTrigger>
-          </TabsList>
-          <TabsContent value="fixo" className="mt-3">{renderDocs('fixo')}</TabsContent>
-          <TabsContent value="freelance" className="mt-3">{renderDocs('freelance')}</TabsContent>
-          <TabsContent value="substituto" className="mt-3">{renderDocs('substituto')}</TabsContent>
-        </Tabs>
-      </div>
-
-      <div className="flex items-center justify-between">
-        <Label>Selfie / reconhecimento facial obrigatório</Label>
-        <Switch checked={!!facial} onCheckedChange={v => setFacial(v)} />
-      </div>
-
-      <div className="flex items-center justify-between">
-        <Label>Aprovar automaticamente quando IA aprovar</Label>
-        <Switch checked={!!autoApprove} onCheckedChange={v => setAutoApprove(v)} />
-      </div>
-
-      <div>
-        <Label>Score mínimo para auto-aprovação</Label>
-        <Input type="number" min={0} max={100} value={minScore ?? ''} onChange={e => setMinScore(e.target.value ? Number(e.target.value) : null)} />
-      </div>
-
-      <ApprovalAndNotificationFields
-        approvalMode={approvalMode}
-        setApprovalMode={setApprovalMode}
-        notifyEnabled={notifyEnabled}
-        setNotifyEnabled={setNotifyEnabled}
-        notifyWhatsapp={notifyWhatsapp}
-        setNotifyWhatsapp={setNotifyWhatsapp}
-        notifyEmails={notifyEmails}
-        setNotifyEmails={setNotifyEmails}
-        notifyEvents={notifyEvents}
-        setNotifyEvents={setNotifyEvents}
-      />
-
-      <Button
-        className="w-full"
-        disabled={saveMut.isPending}
-        onClick={() => saveMut.mutate({
-          doc_validation_enabled: enabled,
-          required_documents: docsByType.fixo,
-          required_documents_freelance: docsByType.freelance,
-          required_documents_substituto: docsByType.substituto,
-          facial_required: facial,
-          auto_approve_on_match: autoApprove,
-          auto_approve_min_score: minScore,
-          approval_mode: approvalMode,
-          notify_enabled: notifyEnabled,
-          notify_events: notifyEvents,
-          notify_whatsapp: notifyWhatsapp,
-          notify_emails: notifyEmails,
-        })}
-      >
-        {saveMut.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />} Salvar
-      </Button>
+    <div className="space-y-3">
+      <Alert>
+        <Info className="h-4 w-4" />
+        <AlertTitle>Validação de documentos é configurada na Rede</AlertTitle>
+        <AlertDescription className="space-y-2">
+          <p className="text-sm">
+            A documentação exigida, o modo de aprovação (IA, híbrido, manual) e as notificações
+            externas são definidos uma única vez por <strong>Rede</strong>. A rede aprova o
+            cadastro do promotor e libera o acesso a todos os PDVs vinculados.
+          </p>
+          <p className="text-sm">
+            Este PDV pode <strong>bloquear individualmente</strong> um promotor já aprovado se
+            houver algum problema operacional — a agência e a rede são notificadas
+            automaticamente do bloqueio.
+          </p>
+          {networkId && (
+            <Link
+              to={`/access-control?tab=networks`}
+              className="inline-flex items-center gap-1 text-primary text-sm hover:underline"
+            >
+              Abrir configuração da rede <ExternalLink className="h-3 w-3" />
+            </Link>
+          )}
+        </AlertDescription>
+      </Alert>
     </div>
   );
 }
