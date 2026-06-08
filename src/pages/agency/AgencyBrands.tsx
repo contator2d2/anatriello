@@ -318,7 +318,7 @@ export default function AgencyBrands() {
             <Button variant="outline" onClick={closeDialog}>Cancelar</Button>
             <Button
               onClick={handleSave}
-              disabled={saveMutation.isPending || !cnpjValid || (!!conflict && !conflict.is_own)}
+              disabled={saveMutation.isPending || !cnpjValid || (!!conflict?.is_own && (!editing || conflict.id !== editing.id))}
             >
               {saveMutation.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
               {editing ? 'Salvar' : 'Cadastrar'}
