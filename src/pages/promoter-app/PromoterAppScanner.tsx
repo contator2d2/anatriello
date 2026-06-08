@@ -122,7 +122,7 @@ export default function PromoterAppScanner() {
                 {result.ok ? (
                   <>
                     <CheckCircle2 className="h-14 w-14 text-green-600 mx-auto" />
-                    <h2 className="text-xl font-bold">Check-in liberado!</h2>
+                    <h2 className="text-xl font-bold">Acesso liberado!</h2>
                     <p className="text-sm text-muted-foreground">{result.unit?.name}</p>
                     <Button className="w-full" onClick={() => navigate('/p/visit')}>
                       Ver visita
