@@ -1215,7 +1215,8 @@ router.post('/agency/promoters', authenticateAgency, async (req, res) => {
   try {
     const { name, cpf, phone, photo_url, document_url, employee_id, email, whatsapp, birth_date, rg, gender,
             address, city, state, emergency_contact, emergency_phone, notes,
-            promoter_type, mei_cnpj, hourly_rate, is_available } = req.body;
+            promoter_type, mei_cnpj, hourly_rate, is_available,
+            cnh_url, contrato_url, comprovante_endereco_url, ctps_url, selfie_url } = req.body;
     if (!name || !cpf) return res.status(400).json({ error: 'Nome e CPF são obrigatórios' });
     if (!isValidCpf(cpf)) return res.status(400).json({ error: 'CPF inválido' });
     if (phone && !isValidPhone(phone)) return res.status(400).json({ error: 'Telefone inválido' });
@@ -1226,19 +1227,25 @@ router.post('/agency/promoters', authenticateAgency, async (req, res) => {
       ADD COLUMN IF NOT EXISTS promoter_type VARCHAR(20) DEFAULT 'fixo',
       ADD COLUMN IF NOT EXISTS is_available BOOLEAN DEFAULT true,
       ADD COLUMN IF NOT EXISTS mei_cnpj VARCHAR(20),
-      ADD COLUMN IF NOT EXISTS hourly_rate NUMERIC(10,2)`).catch(() => {});
+      ADD COLUMN IF NOT EXISTS hourly_rate NUMERIC(10,2),
+      ADD COLUMN IF NOT EXISTS cnh_url TEXT,
+      ADD COLUMN IF NOT EXISTS contrato_url TEXT,
+      ADD COLUMN IF NOT EXISTS comprovante_endereco_url TEXT,
+      ADD COLUMN IF NOT EXISTS ctps_url TEXT,
+      ADD COLUMN IF NOT EXISTS selfie_url TEXT`).catch(() => {});
     const agency = await query('SELECT max_promoters FROM agencies WHERE id=$1', [req.agencyId]);
     const count = await query('SELECT COUNT(*) as c FROM agency_promoters WHERE agency_id=$1 AND status=\'active\'', [req.agencyId]);
     if (parseInt(count.rows[0].c) >= agency.rows[0]?.max_promoters) {
       return res.status(400).json({ error: 'Limite de promotores atingido' });
     }
     const r = await query(
-      `INSERT INTO agency_promoters (agency_id, name, cpf, phone, photo_url, document_url, employee_id, email, whatsapp, birth_date, rg, gender, address, city, state, emergency_contact, emergency_phone, notes, promoter_type, mei_cnpj, hourly_rate, is_available)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22) RETURNING *`,
+      `INSERT INTO agency_promoters (agency_id, name, cpf, phone, photo_url, document_url, employee_id, email, whatsapp, birth_date, rg, gender, address, city, state, emergency_contact, emergency_phone, notes, promoter_type, mei_cnpj, hourly_rate, is_available, cnh_url, contrato_url, comprovante_endereco_url, ctps_url, selfie_url)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27) RETURNING *`,
       [req.agencyId, name, onlyDigits(cpf), phone ? onlyDigits(phone) : null, photo_url||null, document_url||null, employee_id||null,
        email||null, whatsapp ? onlyDigits(whatsapp) : null, birth_date||null, rg||null, gender||null, address||null, city||null, state||null,
        emergency_contact||null, emergency_phone ? onlyDigits(emergency_phone) : null, notes||null,
-       ptype, mei_cnpj||null, hourly_rate||null, is_available !== false]
+       ptype, mei_cnpj||null, hourly_rate||null, is_available !== false,
+       cnh_url||null, contrato_url||null, comprovante_endereco_url||null, ctps_url||null, selfie_url||null]
     );
     res.json(r.rows[0]);
   } catch (err) {
@@ -1246,6 +1253,7 @@ router.post('/agency/promoters', authenticateAgency, async (req, res) => {
     logError('agency.promoters.create', err); res.status(500).json({ error: 'Erro' });
   }
 });
+
 
 // Agency: update promoter
 router.put('/agency/promoters/:id', authenticateAgency, async (req, res) => {
