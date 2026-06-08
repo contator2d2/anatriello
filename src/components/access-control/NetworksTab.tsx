@@ -22,6 +22,7 @@ const NetworksTab = () => {
   const [editing, setEditing] = useState<any>(null);
   const [form, setForm] = useState({ name: "", cnpj: "", contact_email: "", contact_phone: "", notes: "" });
   const [authSettingsNetwork, setAuthSettingsNetwork] = useState<any>(null);
+  const [accessNetwork, setAccessNetwork] = useState<any>(null);
 
   const openNew = () => {
     setEditing(null);
