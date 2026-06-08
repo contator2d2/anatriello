@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Building2, Store, Users, ShieldCheck, ClipboardList, DollarSign, ShieldAlert, Fingerprint, Bot, BarChart3 } from "lucide-react";
+import { Building2, Store, Users, ShieldCheck, ClipboardList, DollarSign, ShieldAlert, Fingerprint, Bot, BarChart3, ClipboardPlus } from "lucide-react";
 import AccessControlNetworks from "@/components/access-control/NetworksTab";
 import AccessControlUnits from "@/components/access-control/UnitsTab";
 import AccessControlAgencies from "@/components/access-control/AgenciesTab";
