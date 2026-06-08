@@ -1260,14 +1260,20 @@ router.put('/agency/promoters/:id', authenticateAgency, async (req, res) => {
   try {
     const { name, phone, photo_url, document_url, email, whatsapp, birth_date, rg, gender, address, city, state,
             emergency_contact, emergency_phone, notes,
-            promoter_type, mei_cnpj, hourly_rate, is_available } = req.body;
+            promoter_type, mei_cnpj, hourly_rate, is_available,
+            cnh_url, contrato_url, comprovante_endereco_url, ctps_url, selfie_url } = req.body;
     if (phone && !isValidPhone(phone)) return res.status(400).json({ error: 'Telefone inválido' });
     if (whatsapp && !isValidPhone(whatsapp)) return res.status(400).json({ error: 'WhatsApp inválido' });
     await query(`ALTER TABLE agency_promoters
       ADD COLUMN IF NOT EXISTS promoter_type VARCHAR(20) DEFAULT 'fixo',
       ADD COLUMN IF NOT EXISTS is_available BOOLEAN DEFAULT true,
       ADD COLUMN IF NOT EXISTS mei_cnpj VARCHAR(20),
-      ADD COLUMN IF NOT EXISTS hourly_rate NUMERIC(10,2)`).catch(() => {});
+      ADD COLUMN IF NOT EXISTS hourly_rate NUMERIC(10,2),
+      ADD COLUMN IF NOT EXISTS cnh_url TEXT,
+      ADD COLUMN IF NOT EXISTS contrato_url TEXT,
+      ADD COLUMN IF NOT EXISTS comprovante_endereco_url TEXT,
+      ADD COLUMN IF NOT EXISTS ctps_url TEXT,
+      ADD COLUMN IF NOT EXISTS selfie_url TEXT`).catch(() => {});
     const ptype = ['fixo','freelance','substituto'].includes(promoter_type) ? promoter_type : null;
     const r = await query(
       `UPDATE agency_promoters SET name=COALESCE($1,name), phone=$2, photo_url=COALESCE($3,photo_url), document_url=COALESCE($4,document_url),
@@ -1275,18 +1281,25 @@ router.put('/agency/promoters/:id', authenticateAgency, async (req, res) => {
        emergency_contact=$13, emergency_phone=$14, notes=$15,
        promoter_type=COALESCE($16, promoter_type),
        mei_cnpj=$17, hourly_rate=$18, is_available=COALESCE($19, is_available),
+       cnh_url=COALESCE($20, cnh_url),
+       contrato_url=COALESCE($21, contrato_url),
+       comprovante_endereco_url=COALESCE($22, comprovante_endereco_url),
+       ctps_url=COALESCE($23, ctps_url),
+       selfie_url=COALESCE($24, selfie_url),
        updated_at=NOW()
-       WHERE id=$20 AND agency_id=$21 RETURNING *`,
+       WHERE id=$25 AND agency_id=$26 RETURNING *`,
       [name, phone ? onlyDigits(phone) : null, photo_url, document_url, email||null, whatsapp ? onlyDigits(whatsapp) : null,
        birth_date||null, rg||null, gender||null, address||null, city||null, state||null,
        emergency_contact||null, emergency_phone ? onlyDigits(emergency_phone) : null, notes||null,
        ptype, mei_cnpj||null, hourly_rate||null, is_available,
+       cnh_url||null, contrato_url||null, comprovante_endereco_url||null, ctps_url||null, selfie_url||null,
        req.params.id, req.agencyId]
     );
     if (!r.rows.length) return res.status(404).json({ error: 'Promotor não encontrado' });
     res.json(r.rows[0]);
   } catch (err) { logError('agency.promoters.update', err); res.status(500).json({ error: 'Erro' }); }
 });
+
 
 // Agency: toggle promoter status
 router.put('/agency/promoters/:id/status', authenticateAgency, async (req, res) => {
