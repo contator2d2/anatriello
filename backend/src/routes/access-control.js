@@ -1369,7 +1369,7 @@ router.delete('/agency/access-rules/:id', authenticateAgency, async (req, res) =
 
 // ============ AGENCY BRANDS ============
 
-// Ensure agency_brands table exists
+// Ensure agency_brands table exists (with CNPJ canonical uniqueness per organization)
 let agencyBrandsSchemaReady = null;
 async function ensureAgencyBrandsSchema() {
   if (agencyBrandsSchemaReady) return agencyBrandsSchemaReady;
@@ -1393,11 +1393,25 @@ async function ensureAgencyBrandsSchema() {
       )
     `);
     await query('CREATE INDEX IF NOT EXISTS idx_agency_brands_agency ON agency_brands(agency_id)');
+    // Backfill columns if they don't exist yet
+    await query(`ALTER TABLE agency_brands ADD COLUMN IF NOT EXISTS razao_social VARCHAR(255)`).catch(() => {});
+    await query(`ALTER TABLE agency_brands ADD COLUMN IF NOT EXISTS street VARCHAR(255)`).catch(() => {});
+    await query(`ALTER TABLE agency_brands ADD COLUMN IF NOT EXISTS number VARCHAR(50)`).catch(() => {});
+    await query(`ALTER TABLE agency_brands ADD COLUMN IF NOT EXISTS neighborhood VARCHAR(120)`).catch(() => {});
+    await query(`ALTER TABLE agency_brands ADD COLUMN IF NOT EXISTS city VARCHAR(120)`).catch(() => {});
+    await query(`ALTER TABLE agency_brands ADD COLUMN IF NOT EXISTS zip VARCHAR(20)`).catch(() => {});
+    // Normalized CNPJ (digits only) for canonical uniqueness across all agencies of the same organization
+    await query(`ALTER TABLE agency_brands ADD COLUMN IF NOT EXISTS cnpj_digits VARCHAR(14)`).catch(() => {});
+    await query(`UPDATE agency_brands SET cnpj_digits = regexp_replace(COALESCE(cnpj,''), '\\D', '', 'g') WHERE cnpj_digits IS NULL`).catch(() => {});
+    await query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_agency_brands_org_cnpj
+                 ON agency_brands(organization_id, cnpj_digits)
+                 WHERE cnpj_digits IS NOT NULL AND cnpj_digits <> ''`).catch(() => {});
+    await query(`CREATE INDEX IF NOT EXISTS idx_agency_brands_org_name ON agency_brands(organization_id, lower(name))`).catch(() => {});
   })();
   try { await agencyBrandsSchemaReady; } catch(e) { agencyBrandsSchemaReady = null; throw e; }
 }
 
-// Agency: list brands
+// Agency: list brands (own agency)
 router.get('/agency/brands', authenticateAgency, async (req, res) => {
   try {
     await ensureAgencyBrandsSchema();
@@ -1406,20 +1420,79 @@ router.get('/agency/brands', authenticateAgency, async (req, res) => {
   } catch (err) { logError('agency.brands.list', err); res.status(500).json({ error: 'Erro' }); }
 });
 
-// Agency: create brand
+// Agency: suggestions — autocomplete by name OR CNPJ across all agencies of the same org
+// Helps prevent duplicates like "Saboroso" vs "Saboroso Laticínios"
+router.get('/agency/brands/suggestions', authenticateAgency, async (req, res) => {
+  try {
+    await ensureAgencyBrandsSchema();
+    const q = String(req.query.q || '').trim();
+    const cnpjDigits = onlyDigits(req.query.cnpj);
+    if (!q && !cnpjDigits) return res.json([]);
+    const params = [req.orgId];
+    const where = ['ab.organization_id = $1'];
+    if (cnpjDigits) {
+      params.push(cnpjDigits);
+      where.push(`ab.cnpj_digits = $${params.length}`);
+    } else {
+      params.push(`%${q.toLowerCase()}%`);
+      where.push(`lower(ab.name) LIKE $${params.length}`);
+    }
+    const r = await query(
+      `SELECT ab.id, ab.name, ab.cnpj, ab.cnpj_digits, ab.segment, ab.agency_id,
+              a.name AS agency_name,
+              (ab.agency_id = $${params.length + 1}) AS is_own
+         FROM agency_brands ab
+         JOIN agencies a ON a.id = ab.agency_id
+        WHERE ${where.join(' AND ')}
+        ORDER BY is_own DESC, ab.name ASC
+        LIMIT 8`,
+      [...params, req.agencyId]
+    );
+    res.json(r.rows);
+  } catch (err) { logError('agency.brands.suggestions', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// Agency: create brand — CNPJ obrigatório e validado; bloqueia se já existe na org
 router.post('/agency/brands', authenticateAgency, async (req, res) => {
   try {
     await ensureAgencyBrandsSchema();
-    const { name, cnpj, segment, contact_name, contact_phone, contact_email, notes } = req.body;
+    const { name, cnpj, segment, contact_name, contact_phone, contact_email, notes,
+            razao_social, street, number, neighborhood, city, zip } = req.body;
     if (!name?.trim()) return res.status(400).json({ error: 'Nome é obrigatório' });
+    const cnpjDigits = onlyDigits(cnpj);
+    if (!cnpjDigits) return res.status(400).json({ error: 'CNPJ é obrigatório' });
+    if (!isValidCnpj(cnpjDigits)) return res.status(400).json({ error: 'CNPJ inválido' });
+
+    // Canonical conflict: same CNPJ already cadastrado por qualquer agência da org
+    const dup = await query(
+      `SELECT ab.id, ab.name, ab.agency_id, a.name AS agency_name
+         FROM agency_brands ab JOIN agencies a ON a.id = ab.agency_id
+        WHERE ab.organization_id = $1 AND ab.cnpj_digits = $2 LIMIT 1`,
+      [req.orgId, cnpjDigits]
+    );
+    if (dup.rows[0]) {
+      const d = dup.rows[0];
+      if (d.agency_id === req.agencyId) {
+        return res.status(409).json({ error: `Você já cadastrou essa marca como "${d.name}"`, duplicate: d });
+      }
+      return res.status(409).json({
+        error: `Já existe a marca "${d.name}" (CNPJ idêntico) cadastrada pela agência ${d.agency_name}. Use outro CNPJ ou alinhe com a rede.`,
+        duplicate: d,
+      });
+    }
+
     const r = await query(
-      `INSERT INTO agency_brands (agency_id, organization_id, name, cnpj, segment, contact_name, contact_phone, contact_email, notes)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
-      [req.agencyId, req.orgId, name.trim(), cnpj||null, segment||null, contact_name||null, contact_phone||null, contact_email||null, notes||null]
+      `INSERT INTO agency_brands (agency_id, organization_id, name, cnpj, cnpj_digits, segment,
+         contact_name, contact_phone, contact_email, notes,
+         razao_social, street, number, neighborhood, city, zip)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
+      [req.agencyId, req.orgId, name.trim(), cnpj, cnpjDigits, segment||null,
+       contact_name||null, contact_phone||null, contact_email||null, notes||null,
+       razao_social||null, street||null, number||null, neighborhood||null, city||null, zip||null]
     );
     res.json(r.rows[0]);
   } catch (err) {
-    if (err.code === '23505') return res.status(400).json({ error: 'Marca já cadastrada com esse nome' });
+    if (err.code === '23505') return res.status(409).json({ error: 'Marca já cadastrada (CNPJ ou nome em uso)' });
     logError('agency.brands.create', err); res.status(500).json({ error: 'Erro' });
   }
 });
@@ -1428,15 +1501,44 @@ router.post('/agency/brands', authenticateAgency, async (req, res) => {
 router.put('/agency/brands/:id', authenticateAgency, async (req, res) => {
   try {
     await ensureAgencyBrandsSchema();
-    const { name, cnpj, segment, contact_name, contact_phone, contact_email, notes } = req.body;
+    const { name, cnpj, segment, contact_name, contact_phone, contact_email, notes,
+            razao_social, street, number, neighborhood, city, zip } = req.body;
+    const cnpjDigits = onlyDigits(cnpj);
+    if (!cnpjDigits) return res.status(400).json({ error: 'CNPJ é obrigatório' });
+    if (!isValidCnpj(cnpjDigits)) return res.status(400).json({ error: 'CNPJ inválido' });
+
+    // Bloqueia se outra marca (não esta) já usa esse CNPJ na org
+    const dup = await query(
+      `SELECT ab.id, ab.name, ab.agency_id, a.name AS agency_name
+         FROM agency_brands ab JOIN agencies a ON a.id = ab.agency_id
+        WHERE ab.organization_id = $1 AND ab.cnpj_digits = $2 AND ab.id <> $3 LIMIT 1`,
+      [req.orgId, cnpjDigits, req.params.id]
+    );
+    if (dup.rows[0]) {
+      const d = dup.rows[0];
+      return res.status(409).json({
+        error: `Já existe a marca "${d.name}" com esse CNPJ (agência ${d.agency_name}).`,
+        duplicate: d,
+      });
+    }
+
     const r = await query(
-      `UPDATE agency_brands SET name=COALESCE($1,name), cnpj=$2, segment=$3, contact_name=$4, contact_phone=$5, contact_email=$6, notes=$7, updated_at=NOW()
-       WHERE id=$8 AND agency_id=$9 RETURNING *`,
-      [name?.trim(), cnpj||null, segment||null, contact_name||null, contact_phone||null, contact_email||null, notes||null, req.params.id, req.agencyId]
+      `UPDATE agency_brands SET name=COALESCE($1,name), cnpj=$2, cnpj_digits=$3, segment=$4,
+              contact_name=$5, contact_phone=$6, contact_email=$7, notes=$8,
+              razao_social=$9, street=$10, number=$11, neighborhood=$12, city=$13, zip=$14,
+              updated_at=NOW()
+        WHERE id=$15 AND agency_id=$16 RETURNING *`,
+      [name?.trim(), cnpj, cnpjDigits, segment||null,
+       contact_name||null, contact_phone||null, contact_email||null, notes||null,
+       razao_social||null, street||null, number||null, neighborhood||null, city||null, zip||null,
+       req.params.id, req.agencyId]
     );
     if (!r.rows.length) return res.status(404).json({ error: 'Marca não encontrada' });
     res.json(r.rows[0]);
-  } catch (err) { logError('agency.brands.update', err); res.status(500).json({ error: 'Erro' }); }
+  } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ error: 'Marca já cadastrada (CNPJ ou nome em uso)' });
+    logError('agency.brands.update', err); res.status(500).json({ error: 'Erro' });
+  }
 });
 
 // Agency: delete brand
