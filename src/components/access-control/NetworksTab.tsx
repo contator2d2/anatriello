@@ -116,6 +116,9 @@ const NetworksTab = () => {
                   </TableCell>
                   <TableCell>
                     <div className="flex gap-1">
+                      <Button size="icon" variant="ghost" onClick={() => setAccessNetwork(n)} title="Dar acesso ao Portal da Rede">
+                        <KeyRound className="h-4 w-4 text-amber-600" />
+                      </Button>
                       <Button size="icon" variant="ghost" onClick={() => setAuthSettingsNetwork(n)} title="Regras de Autenticação">
                         <Shield className="h-4 w-4 text-primary" />
                       </Button>
