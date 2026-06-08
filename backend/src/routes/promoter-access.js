@@ -211,39 +211,83 @@ router.post('/agency-signup', async (req, res) => {
       return res.status(400).json({ error: 'Senha deve ter no mínimo 6 caracteres' });
     }
 
-    // Check duplicates
-    const dupe = await query(
-      `SELECT id FROM agency_signup_requests WHERE responsible_email = $1 AND status='pending' LIMIT 1`,
+    const exists = await query(
+      `SELECT id FROM agency_users WHERE email=$1 LIMIT 1`,
       [responsible_email]
-    );
-    if (dupe.rows.length) {
-      return res.status(409).json({ error: 'Já existe um cadastro pendente para este e-mail' });
-    }
-    const exists = await query(`SELECT id FROM agency_users WHERE email=$1 LIMIT 1`, [responsible_email]).catch(() => ({ rows: [] }));
+    ).catch(() => ({ rows: [] }));
     if (exists.rows.length) {
       return res.status(409).json({ error: 'Já existe um login com este e-mail' });
     }
 
-    const hash = await bcrypt.hash(password, 10);
-    // The desired_networks holds either UUIDs (when public listing is wired)
-    // or free-text labels (current fallback).
-    const networkId = Array.isArray(desired_networks) && desired_networks.length === 1
-      && /^[0-9a-f-]{36}$/i.test(desired_networks[0]) ? desired_networks[0] : null;
+    // Resolve a network (and its organization) for the new agency.
+    // The signup form sends `desired_networks` as an array of supermarket_networks.id.
+    let networkId = null;
+    let organizationId = null;
+    const firstUuid = (Array.isArray(desired_networks) ? desired_networks : [])
+      .find((v) => typeof v === 'string' && /^[0-9a-f-]{36}$/i.test(v));
+    if (firstUuid) {
+      const n = await query(
+        `SELECT id, organization_id FROM supermarket_networks WHERE id = $1 AND active = true LIMIT 1`,
+        [firstUuid]
+      ).catch(() => ({ rows: [] }));
+      if (n.rows.length) {
+        networkId = n.rows[0].id;
+        organizationId = n.rows[0].organization_id;
+      }
+    }
+    if (!organizationId) {
+      // Fallback: first network available (single-tenant scenario)
+      const fb = await query(
+        `SELECT id, organization_id FROM supermarket_networks WHERE active = true ORDER BY created_at ASC LIMIT 1`
+      ).catch(() => ({ rows: [] }));
+      if (fb.rows.length) {
+        networkId = networkId || fb.rows[0].id;
+        organizationId = fb.rows[0].organization_id;
+      }
+    }
+    if (!organizationId) {
+      return res.status(400).json({ error: 'Nenhuma rede disponível para cadastro' });
+    }
 
-    const r = await query(
-      `INSERT INTO agency_signup_requests
-       (network_id, company_name, cnpj, responsible_name, responsible_phone, responsible_email,
-        password_hash, city, state, desired_networks, message)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11) RETURNING id, status, created_at`,
-      [networkId, company_name, onlyDigits(cnpj) || null, responsible_name, responsible_phone || null,
-       responsible_email, hash, city || null, state || null, JSON.stringify(desired_networks), message || null]
+    const hash = await bcrypt.hash(password, 10);
+
+    // Create agency immediately (active, no approval gate)
+    const agencyR = await query(
+      `INSERT INTO agencies (organization_id, name, cnpj, responsible_name, responsible_phone,
+        responsible_email, city, state, max_promoters, status, notes)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'active',$10) RETURNING id`,
+      [organizationId, company_name, onlyDigits(cnpj) || null, responsible_name,
+       responsible_phone || null, responsible_email, city || null, state || null,
+       10, message || null]
     );
-    res.json({ ok: true, request: r.rows[0] });
+    const agencyId = agencyR.rows[0].id;
+
+    // Create login
+    await query(
+      `INSERT INTO agency_users (agency_id, email, password_hash, name, role, active)
+       VALUES ($1,$2,$3,$4,'admin',true)`,
+      [agencyId, responsible_email, hash, responsible_name]
+    );
+
+    // Keep a record of the self-signup for audit, already marked approved
+    await query(
+      `INSERT INTO agency_signup_requests
+       (organization_id, network_id, company_name, cnpj, responsible_name, responsible_phone,
+        responsible_email, password_hash, city, state, desired_networks, message,
+        status, created_agency_id, reviewed_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12,'approved',$13, NOW())`,
+      [organizationId, networkId, company_name, onlyDigits(cnpj) || null, responsible_name,
+       responsible_phone || null, responsible_email, hash, city || null, state || null,
+       JSON.stringify(desired_networks), message || null, agencyId]
+    ).catch(() => {});
+
+    res.json({ ok: true, agency_id: agencyId, login_ready: true });
   } catch (err) {
     logError('promoter-access.agency-signup', err);
-    res.status(500).json({ error: 'Erro ao registrar solicitação' });
+    res.status(500).json({ error: 'Erro ao registrar cadastro' });
   }
 });
+
 
 // Public list of networks (for the signup form)
 router.get('/public/networks', async (_req, res) => {
