@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Building2, Store, Users, ShieldCheck, ClipboardList, DollarSign, ShieldAlert, Fingerprint, Bot, BarChart3 } from "lucide-react";
+import { Building2, Store, Users, ShieldCheck, ClipboardList, DollarSign, ShieldAlert, Fingerprint, Bot, BarChart3, ClipboardPlus } from "lucide-react";
 import AccessControlNetworks from "@/components/access-control/NetworksTab";
 import AccessControlUnits from "@/components/access-control/UnitsTab";
 import AccessControlAgencies from "@/components/access-control/AgenciesTab";
@@ -12,6 +12,7 @@ import AuthAttemptsTab from "@/components/access-control/AuthAttemptsTab";
 import FraudLogsTab from "@/components/access-control/FraudLogsTab";
 import WhatsAppAgentConfigTab from "@/components/access-control/WhatsAppAgentConfigTab";
 import ComplianceTab from "@/components/access-control/ComplianceTab";
+import InaugurationRequestsTab from "@/components/access-control/InaugurationRequestsTab";
 
 const AccessControlAdmin = () => {
   const [tab, setTab] = useState("networks");
@@ -26,6 +27,9 @@ const AccessControlAdmin = () => {
             </TabsTrigger>
             <TabsTrigger value="units" className="gap-1.5 text-xs sm:text-sm">
               <Store className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> <span className="hidden sm:inline">Unidades</span><span className="sm:hidden">PDVs</span>
+            </TabsTrigger>
+            <TabsTrigger value="inaugurations" className="gap-1.5 text-xs sm:text-sm">
+              <ClipboardPlus className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> <span className="hidden sm:inline">Inaugurações</span><span className="sm:hidden">Inaug.</span>
             </TabsTrigger>
             <TabsTrigger value="agencies" className="gap-1.5 text-xs sm:text-sm">
               <Users className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> <span className="hidden sm:inline">Agências</span><span className="sm:hidden">Agên.</span>
@@ -56,6 +60,7 @@ const AccessControlAdmin = () => {
 
         <TabsContent value="networks"><AccessControlNetworks /></TabsContent>
         <TabsContent value="units"><AccessControlUnits /></TabsContent>
+        <TabsContent value="inaugurations"><InaugurationRequestsTab /></TabsContent>
         <TabsContent value="agencies"><AccessControlAgencies /></TabsContent>
         <TabsContent value="promoters"><AccessControlPromoters /></TabsContent>
         <TabsContent value="billing"><AgencyBillingPanel /></TabsContent>

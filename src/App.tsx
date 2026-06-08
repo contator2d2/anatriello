@@ -131,6 +131,13 @@ import SupermarketContacts from "./pages/supermarket/SupermarketContacts";
 import SupermarketAssistant from "./pages/supermarket/SupermarketAssistant";
 import SupermarketSettings from "./pages/supermarket/SupermarketSettings";
 import SupermarketAccessRequests from "./pages/supermarket/SupermarketAccessRequests";
+import { NetworkAuthProvider } from "./contexts/NetworkAuthContext";
+import NetworkLogin from "./pages/network/NetworkLogin";
+import NetworkLayout from "./pages/network/NetworkLayout";
+import NetworkDashboard from "./pages/network/NetworkDashboard";
+import NetworkUnits from "./pages/network/NetworkUnits";
+import NetworkPartners from "./pages/network/NetworkPartners";
+import { NetworkBrands, NetworkBlocks, NetworkAudit, NetworkSettings } from "./pages/network/NetworkPages";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -303,6 +310,18 @@ const App = () => (
               <Route path="assistente" element={<SupermarketAssistant />} />
               <Route path="historico" element={<SupermarketHistory />} />
               <Route path="configuracoes" element={<SupermarketSettings />} />
+            </Route>
+            {/* Network Portal (Visão 360°) */}
+            <Route path="/rede/login" element={<NetworkAuthProvider><NetworkLogin /></NetworkAuthProvider>} />
+            <Route path="/rede" element={<NetworkAuthProvider><NetworkLayout /></NetworkAuthProvider>}>
+              <Route path="dashboard" element={<NetworkDashboard />} />
+              <Route path="pdvs" element={<NetworkUnits />} />
+              <Route path="parceiros" element={<NetworkPartners />} />
+              <Route path="marcas" element={<NetworkBrands />} />
+              <Route path="bloqueios" element={<NetworkBlocks />} />
+              <Route path="solicitacoes" element={<NetworkUnits />} />
+              <Route path="auditoria" element={<NetworkAudit />} />
+              <Route path="configuracoes" element={<NetworkSettings />} />
             </Route>
             {/* Promotor App */}
             <Route path="/promotor/login" element={<PromotorLogin />} />
