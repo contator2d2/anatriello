@@ -29,7 +29,7 @@ export default function PromoterAppVisit() {
         method: 'POST',
         body: { lat: pos?.coords.latitude ?? null, lng: pos?.coords.longitude ?? null },
       });
-      toast({ title: 'Check-out registrado' });
+      toast({ title: 'Saída do PDV registrada' });
       navigate('/p/home');
     } catch (e: any) {
       toast({ title: 'Erro', description: e?.message, variant: 'destructive' });
