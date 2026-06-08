@@ -338,6 +338,8 @@ const App = () => (
               <Route path="solicitacoes-acesso" element={<NetworkAccessRequests />} />
               <Route path="cadastros-agencia" element={<NetworkAgencySignups />} />
               <Route path="qrcodes" element={<NetworkPdvQrCodes />} />
+              <Route path="documentos-exigidos" element={<NetworkDocRequirements />} />
+
               <Route path="auditoria" element={<NetworkAudit />} />
               <Route path="configuracoes" element={<NetworkSettings />} />
             </Route>
