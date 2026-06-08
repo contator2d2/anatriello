@@ -311,6 +311,18 @@ const App = () => (
               <Route path="historico" element={<SupermarketHistory />} />
               <Route path="configuracoes" element={<SupermarketSettings />} />
             </Route>
+            {/* Network Portal (Visão 360°) */}
+            <Route path="/rede/login" element={<NetworkAuthProvider><NetworkLogin /></NetworkAuthProvider>} />
+            <Route path="/rede" element={<NetworkAuthProvider><NetworkLayout /></NetworkAuthProvider>}>
+              <Route path="dashboard" element={<NetworkDashboard />} />
+              <Route path="pdvs" element={<NetworkUnits />} />
+              <Route path="parceiros" element={<NetworkPartners />} />
+              <Route path="marcas" element={<NetworkBrands />} />
+              <Route path="bloqueios" element={<NetworkBlocks />} />
+              <Route path="solicitacoes" element={<NetworkUnits />} />
+              <Route path="auditoria" element={<NetworkAudit />} />
+              <Route path="configuracoes" element={<NetworkSettings />} />
+            </Route>
             {/* Promotor App */}
             <Route path="/promotor/login" element={<PromotorLogin />} />
             <Route path="/promotor/home" element={<PromotorHome />} />
