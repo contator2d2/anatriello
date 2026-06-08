@@ -7,9 +7,10 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Pencil, Trash2, Building2, Loader2, Shield } from "lucide-react";
+import { Plus, Pencil, Trash2, Building2, Loader2, Shield, KeyRound } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { NetworkAuthSettingsDialog } from "./NetworkAuthSettingsDialog";
+import { NetworkAccessDialog } from "./NetworkAccessDialog";
 import HelpPanel from "./HelpPanel";
 
 const NetworksTab = () => {
