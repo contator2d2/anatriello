@@ -34,7 +34,23 @@ const defaultForm = {
   address: '', city: '', state: '',
   emergency_contact: '', emergency_phone: '', notes: '',
   promoter_type: 'fixo', mei_cnpj: '', hourly_rate: '',
+  cnh_url: '', contrato_url: '', comprovante_endereco_url: '', ctps_url: '', selfie_url: '',
+  aso_url: '', declaracao_vinculo_url: '', ctps_app_print_url: '', termo_estacionamento_url: '',
 };
+
+// Maps a required-doc key to the form field where its URL is stored
+const DOC_FIELD_MAP: Record<string, keyof typeof defaultForm> = {
+  cnh: 'cnh_url',
+  selfie: 'selfie_url',
+  comprovante_endereco: 'comprovante_endereco_url',
+  contrato_trabalho: 'contrato_url',
+  ctps: 'ctps_url',
+  aso: 'aso_url',
+  declaracao_vinculo: 'declaracao_vinculo_url',
+  ctps_app_print: 'ctps_app_print_url',
+  termo_estacionamento: 'termo_estacionamento_url',
+};
+
 
 export default function AgencyPromoters() {
   const { user, isLoading: isAuthLoading } = useAgencyAuth();
