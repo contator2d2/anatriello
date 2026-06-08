@@ -1,7 +1,7 @@
 import { Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useNetworkAuth } from '@/contexts/NetworkAuthContext';
 import {
-  Loader2, LayoutDashboard, Store, Users, Tag, Ban, ClipboardPlus, FileSearch, Settings, LogOut, Building2,
+  Loader2, LayoutDashboard, Store, Users, Tag, Ban, ClipboardPlus, FileSearch, Settings, LogOut, Building2, Inbox,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,7 @@ const navItems = [
   { path: '/rede/pdvs', label: 'PDVs', icon: Store },
   { path: '/rede/parceiros', label: 'Parceiros', icon: Users },
   { path: '/rede/marcas', label: 'Marcas', icon: Tag },
+  { path: '/rede/solicitacoes-acesso', label: 'Solicitações Agências', icon: Inbox },
   { path: '/rede/bloqueios', label: 'Bloqueios', icon: Ban },
   { path: '/rede/solicitacoes', label: 'Solicitar PDV', icon: ClipboardPlus },
   { path: '/rede/auditoria', label: 'Auditoria', icon: FileSearch },

@@ -138,6 +138,8 @@ import NetworkDashboard from "./pages/network/NetworkDashboard";
 import NetworkUnits from "./pages/network/NetworkUnits";
 import NetworkPartners from "./pages/network/NetworkPartners";
 import { NetworkBrands, NetworkBlocks, NetworkAudit, NetworkSettings } from "./pages/network/NetworkPages";
+import NetworkAccessRequests from "./pages/network/NetworkAccessRequests";
+import AgencyNetworkRequest from "./pages/agency/AgencyNetworkRequest";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -298,6 +300,7 @@ const App = () => (
               <Route path="visitas" element={<AgencyVisitRequests />} />
               <Route path="afastamentos" element={<AgencyLeaves />} />
               <Route path="regras" element={<AgencyAccessRules />} />
+              <Route path="solicitar-acesso" element={<AgencyNetworkRequest />} />
             </Route>
             {/* Supermarket Portal */}
             <Route path="/supermercado/login" element={<SupermarketAuthProvider><SupermarketLogin /></SupermarketAuthProvider>} />
@@ -320,6 +323,7 @@ const App = () => (
               <Route path="marcas" element={<NetworkBrands />} />
               <Route path="bloqueios" element={<NetworkBlocks />} />
               <Route path="solicitacoes" element={<NetworkUnits />} />
+              <Route path="solicitacoes-acesso" element={<NetworkAccessRequests />} />
               <Route path="auditoria" element={<NetworkAudit />} />
               <Route path="configuracoes" element={<NetworkSettings />} />
             </Route>
