@@ -62,7 +62,7 @@ export default function PromoterAppHome() {
           <Card className="border-primary">
             <CardHeader className="pb-2">
               <CardTitle className="text-base flex items-center gap-2">
-                <CheckCircle2 className="h-5 w-5 text-primary" /> Visita em andamento
+                <CheckCircle2 className="h-5 w-5 text-primary" /> Acesso liberado no PDV
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -70,8 +70,11 @@ export default function PromoterAppHome() {
               <p className="text-xs text-muted-foreground">
                 Entrada: {new Date(data.open_visit.checkin_at).toLocaleTimeString('pt-BR')}
               </p>
+              <p className="text-[11px] text-muted-foreground">
+                Este registro é apenas controle de acesso ao PDV — não é registro de ponto.
+              </p>
               <Button className="w-full" onClick={() => navigate('/p/visit')}>
-                Registrar saída
+                Registrar saída do PDV
               </Button>
             </CardContent>
           </Card>
