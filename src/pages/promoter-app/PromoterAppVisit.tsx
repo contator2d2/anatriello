@@ -72,9 +72,12 @@ export default function PromoterAppVisit() {
                 Distância do PDV: {visit.checkin_distance_m}m
               </p>
             )}
+            <p className="text-[11px] text-muted-foreground">
+              Controle de acesso ao PDV — não substitui registro de ponto.
+            </p>
             <Button className="w-full" size="lg" onClick={checkout} disabled={submitting}>
               {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <LogOut className="h-4 w-4 mr-2" />}
-              Registrar saída
+              Registrar saída do PDV
             </Button>
           </CardContent>
         </Card>
