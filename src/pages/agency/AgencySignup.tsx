@@ -26,6 +26,7 @@ const schema = z.object({
 export default function AgencySignup() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { login } = useAgencyAuth();
   const [form, setForm] = useState({
     company_name: '', cnpj: '', responsible_name: '', responsible_phone: '',
     responsible_email: '', password: '', city: '', state: '', message: '',
@@ -33,7 +34,6 @@ export default function AgencySignup() {
   const [networks, setNetworks] = useState<Array<{ id: string; name: string }>>([]);
   const [selectedNetworks, setSelectedNetworks] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
-  const [done, setDone] = useState(false);
 
   useEffect(() => {
     api<any[]>('/api/public/networks', { auth: false }).then(setNetworks).catch(() => setNetworks([]));
