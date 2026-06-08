@@ -61,7 +61,15 @@ async function ensureSchema() {
     await query(`ALTER TABLE agencies
       ADD COLUMN IF NOT EXISTS partner_type VARCHAR(30) DEFAULT 'agency',
       ADD COLUMN IF NOT EXISTS category_label VARCHAR(100)`).catch(() => {});
+
+    // Required documents configuration on supermarket_networks (set by network admin)
+    await query(`ALTER TABLE supermarket_networks
+      ADD COLUMN IF NOT EXISTS required_documents JSONB DEFAULT '[]'::jsonb,
+      ADD COLUMN IF NOT EXISTS required_documents_freelance JSONB,
+      ADD COLUMN IF NOT EXISTS required_documents_substituto JSONB,
+      ADD COLUMN IF NOT EXISTS docs_block_submission BOOLEAN DEFAULT true`).catch(() => {});
   })();
+
   try { await schemaReady; } catch (e) { schemaReady = null; throw e; }
   return schemaReady;
 }
@@ -506,5 +514,60 @@ router.delete('/admin/network-users/:id', authenticate, async (req, res) => {
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: 'Erro' }); }
 });
+
+// ---------- Required documents configuration (network admin) ----------
+router.get('/doc-config', authenticateNetwork, async (req, res) => {
+  try {
+    await ensureSchema();
+    const r = await query(
+      `SELECT id, name, required_documents, required_documents_freelance, required_documents_substituto, docs_block_submission
+         FROM supermarket_networks WHERE id = $1`,
+      [req.networkId]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'Rede não encontrada' });
+    const row = r.rows[0];
+    res.json({
+      id: row.id,
+      name: row.name,
+      required_documents: Array.isArray(row.required_documents) ? row.required_documents : [],
+      required_documents_freelance: Array.isArray(row.required_documents_freelance) ? row.required_documents_freelance : null,
+      required_documents_substituto: Array.isArray(row.required_documents_substituto) ? row.required_documents_substituto : null,
+      docs_block_submission: row.docs_block_submission !== false,
+    });
+  } catch (e) { console.error('get doc-config', e); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.put('/doc-config', authenticateNetwork, async (req, res) => {
+  try {
+    await ensureSchema();
+    const {
+      required_documents = [],
+      required_documents_freelance = null,
+      required_documents_substituto = null,
+      docs_block_submission = true,
+    } = req.body || {};
+    const norm = (v) => (Array.isArray(v) ? v.filter(x => typeof x === 'string') : null);
+    await query(
+      `UPDATE supermarket_networks
+         SET required_documents = $1::jsonb,
+             required_documents_freelance = $2::jsonb,
+             required_documents_substituto = $3::jsonb,
+             docs_block_submission = $4,
+             updated_at = NOW()
+       WHERE id = $5`,
+      [
+        JSON.stringify(norm(required_documents) || []),
+        required_documents_freelance == null ? null : JSON.stringify(norm(required_documents_freelance) || []),
+        required_documents_substituto == null ? null : JSON.stringify(norm(required_documents_substituto) || []),
+        !!docs_block_submission,
+        req.networkId,
+      ]
+    );
+    res.json({ success: true });
+  } catch (e) { console.error('put doc-config', e); res.status(500).json({ error: 'Erro' }); }
+});
+
+export default router;
+
 
 export default router;

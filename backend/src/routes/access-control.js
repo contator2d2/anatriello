@@ -1215,7 +1215,8 @@ router.post('/agency/promoters', authenticateAgency, async (req, res) => {
   try {
     const { name, cpf, phone, photo_url, document_url, employee_id, email, whatsapp, birth_date, rg, gender,
             address, city, state, emergency_contact, emergency_phone, notes,
-            promoter_type, mei_cnpj, hourly_rate, is_available } = req.body;
+            promoter_type, mei_cnpj, hourly_rate, is_available,
+            cnh_url, contrato_url, comprovante_endereco_url, ctps_url, selfie_url } = req.body;
     if (!name || !cpf) return res.status(400).json({ error: 'Nome e CPF são obrigatórios' });
     if (!isValidCpf(cpf)) return res.status(400).json({ error: 'CPF inválido' });
     if (phone && !isValidPhone(phone)) return res.status(400).json({ error: 'Telefone inválido' });
@@ -1226,19 +1227,25 @@ router.post('/agency/promoters', authenticateAgency, async (req, res) => {
       ADD COLUMN IF NOT EXISTS promoter_type VARCHAR(20) DEFAULT 'fixo',
       ADD COLUMN IF NOT EXISTS is_available BOOLEAN DEFAULT true,
       ADD COLUMN IF NOT EXISTS mei_cnpj VARCHAR(20),
-      ADD COLUMN IF NOT EXISTS hourly_rate NUMERIC(10,2)`).catch(() => {});
+      ADD COLUMN IF NOT EXISTS hourly_rate NUMERIC(10,2),
+      ADD COLUMN IF NOT EXISTS cnh_url TEXT,
+      ADD COLUMN IF NOT EXISTS contrato_url TEXT,
+      ADD COLUMN IF NOT EXISTS comprovante_endereco_url TEXT,
+      ADD COLUMN IF NOT EXISTS ctps_url TEXT,
+      ADD COLUMN IF NOT EXISTS selfie_url TEXT`).catch(() => {});
     const agency = await query('SELECT max_promoters FROM agencies WHERE id=$1', [req.agencyId]);
     const count = await query('SELECT COUNT(*) as c FROM agency_promoters WHERE agency_id=$1 AND status=\'active\'', [req.agencyId]);
     if (parseInt(count.rows[0].c) >= agency.rows[0]?.max_promoters) {
       return res.status(400).json({ error: 'Limite de promotores atingido' });
     }
     const r = await query(
-      `INSERT INTO agency_promoters (agency_id, name, cpf, phone, photo_url, document_url, employee_id, email, whatsapp, birth_date, rg, gender, address, city, state, emergency_contact, emergency_phone, notes, promoter_type, mei_cnpj, hourly_rate, is_available)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22) RETURNING *`,
+      `INSERT INTO agency_promoters (agency_id, name, cpf, phone, photo_url, document_url, employee_id, email, whatsapp, birth_date, rg, gender, address, city, state, emergency_contact, emergency_phone, notes, promoter_type, mei_cnpj, hourly_rate, is_available, cnh_url, contrato_url, comprovante_endereco_url, ctps_url, selfie_url)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27) RETURNING *`,
       [req.agencyId, name, onlyDigits(cpf), phone ? onlyDigits(phone) : null, photo_url||null, document_url||null, employee_id||null,
        email||null, whatsapp ? onlyDigits(whatsapp) : null, birth_date||null, rg||null, gender||null, address||null, city||null, state||null,
        emergency_contact||null, emergency_phone ? onlyDigits(emergency_phone) : null, notes||null,
-       ptype, mei_cnpj||null, hourly_rate||null, is_available !== false]
+       ptype, mei_cnpj||null, hourly_rate||null, is_available !== false,
+       cnh_url||null, contrato_url||null, comprovante_endereco_url||null, ctps_url||null, selfie_url||null]
     );
     res.json(r.rows[0]);
   } catch (err) {
@@ -1247,19 +1254,26 @@ router.post('/agency/promoters', authenticateAgency, async (req, res) => {
   }
 });
 
+
 // Agency: update promoter
 router.put('/agency/promoters/:id', authenticateAgency, async (req, res) => {
   try {
     const { name, phone, photo_url, document_url, email, whatsapp, birth_date, rg, gender, address, city, state,
             emergency_contact, emergency_phone, notes,
-            promoter_type, mei_cnpj, hourly_rate, is_available } = req.body;
+            promoter_type, mei_cnpj, hourly_rate, is_available,
+            cnh_url, contrato_url, comprovante_endereco_url, ctps_url, selfie_url } = req.body;
     if (phone && !isValidPhone(phone)) return res.status(400).json({ error: 'Telefone inválido' });
     if (whatsapp && !isValidPhone(whatsapp)) return res.status(400).json({ error: 'WhatsApp inválido' });
     await query(`ALTER TABLE agency_promoters
       ADD COLUMN IF NOT EXISTS promoter_type VARCHAR(20) DEFAULT 'fixo',
       ADD COLUMN IF NOT EXISTS is_available BOOLEAN DEFAULT true,
       ADD COLUMN IF NOT EXISTS mei_cnpj VARCHAR(20),
-      ADD COLUMN IF NOT EXISTS hourly_rate NUMERIC(10,2)`).catch(() => {});
+      ADD COLUMN IF NOT EXISTS hourly_rate NUMERIC(10,2),
+      ADD COLUMN IF NOT EXISTS cnh_url TEXT,
+      ADD COLUMN IF NOT EXISTS contrato_url TEXT,
+      ADD COLUMN IF NOT EXISTS comprovante_endereco_url TEXT,
+      ADD COLUMN IF NOT EXISTS ctps_url TEXT,
+      ADD COLUMN IF NOT EXISTS selfie_url TEXT`).catch(() => {});
     const ptype = ['fixo','freelance','substituto'].includes(promoter_type) ? promoter_type : null;
     const r = await query(
       `UPDATE agency_promoters SET name=COALESCE($1,name), phone=$2, photo_url=COALESCE($3,photo_url), document_url=COALESCE($4,document_url),
@@ -1267,18 +1281,25 @@ router.put('/agency/promoters/:id', authenticateAgency, async (req, res) => {
        emergency_contact=$13, emergency_phone=$14, notes=$15,
        promoter_type=COALESCE($16, promoter_type),
        mei_cnpj=$17, hourly_rate=$18, is_available=COALESCE($19, is_available),
+       cnh_url=COALESCE($20, cnh_url),
+       contrato_url=COALESCE($21, contrato_url),
+       comprovante_endereco_url=COALESCE($22, comprovante_endereco_url),
+       ctps_url=COALESCE($23, ctps_url),
+       selfie_url=COALESCE($24, selfie_url),
        updated_at=NOW()
-       WHERE id=$20 AND agency_id=$21 RETURNING *`,
+       WHERE id=$25 AND agency_id=$26 RETURNING *`,
       [name, phone ? onlyDigits(phone) : null, photo_url, document_url, email||null, whatsapp ? onlyDigits(whatsapp) : null,
        birth_date||null, rg||null, gender||null, address||null, city||null, state||null,
        emergency_contact||null, emergency_phone ? onlyDigits(emergency_phone) : null, notes||null,
        ptype, mei_cnpj||null, hourly_rate||null, is_available,
+       cnh_url||null, contrato_url||null, comprovante_endereco_url||null, ctps_url||null, selfie_url||null,
        req.params.id, req.agencyId]
     );
     if (!r.rows.length) return res.status(404).json({ error: 'Promotor não encontrado' });
     res.json(r.rows[0]);
   } catch (err) { logError('agency.promoters.update', err); res.status(500).json({ error: 'Erro' }); }
 });
+
 
 // Agency: toggle promoter status
 router.put('/agency/promoters/:id/status', authenticateAgency, async (req, res) => {
@@ -1487,6 +1508,63 @@ router.get('/agency/allowed-units', authenticateAgency, async (req, res) => {
     res.json(r.rows);
   } catch (err) { logError('agency.allowed_units.list', err); res.status(500).json({ error: 'Erro' }); }
 });
+
+// Agency: required documents aggregated across networks this agency operates in
+router.get('/agency/required-documents', authenticateAgency, async (req, res) => {
+  try {
+    // Ensure columns exist
+    await query(`ALTER TABLE supermarket_networks
+      ADD COLUMN IF NOT EXISTS required_documents JSONB DEFAULT '[]'::jsonb,
+      ADD COLUMN IF NOT EXISTS required_documents_freelance JSONB,
+      ADD COLUMN IF NOT EXISTS required_documents_substituto JSONB,
+      ADD COLUMN IF NOT EXISTS docs_block_submission BOOLEAN DEFAULT true`).catch(() => {});
+
+    const r = await query(
+      `SELECT DISTINCT sn.id, sn.name,
+              sn.required_documents,
+              sn.required_documents_freelance,
+              sn.required_documents_substituto,
+              sn.docs_block_submission
+         FROM agency_allowed_units aau
+         JOIN supermarket_units su ON su.id = aau.supermarket_unit_id
+         JOIN supermarket_networks sn ON sn.id = su.network_id
+        WHERE aau.agency_id = $1 AND su.active = true`,
+      [req.agencyId]
+    );
+
+    const pickForType = (row, type) => {
+      if (type === 'freelance' && Array.isArray(row.required_documents_freelance)) return row.required_documents_freelance;
+      if (type === 'substituto' && Array.isArray(row.required_documents_substituto)) return row.required_documents_substituto;
+      return Array.isArray(row.required_documents) ? row.required_documents : [];
+    };
+
+    const byType = { fixo: new Set(), freelance: new Set(), substituto: new Set() };
+    let blockSubmission = false;
+    const networks = r.rows.map(row => {
+      ['fixo', 'freelance', 'substituto'].forEach(t => pickForType(row, t).forEach(d => byType[t].add(d)));
+      if (row.docs_block_submission !== false) blockSubmission = true;
+      return {
+        id: row.id,
+        name: row.name,
+        required_documents: pickForType(row, 'fixo'),
+        required_documents_freelance: pickForType(row, 'freelance'),
+        required_documents_substituto: pickForType(row, 'substituto'),
+        docs_block_submission: row.docs_block_submission !== false,
+      };
+    });
+
+    res.json({
+      block_submission: blockSubmission,
+      required_by_type: {
+        fixo: Array.from(byType.fixo),
+        freelance: Array.from(byType.freelance),
+        substituto: Array.from(byType.substituto),
+      },
+      networks,
+    });
+  } catch (err) { logError('agency.required_documents', err); res.status(500).json({ error: 'Erro' }); }
+});
+
 
 // =====================================================================
 // VISIT REQUESTS (Supermarket side)

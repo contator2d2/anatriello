@@ -1,7 +1,7 @@
 import { Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useNetworkAuth } from '@/contexts/NetworkAuthContext';
 import {
-  Loader2, LayoutDashboard, Store, Users, Tag, Ban, ClipboardPlus, FileSearch, Settings, LogOut, Building2, Inbox, UserPlus, QrCode,
+  Loader2, LayoutDashboard, Store, Users, Tag, Ban, ClipboardPlus, FileSearch, Settings, LogOut, Building2, Inbox, UserPlus, QrCode, FileText,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -14,11 +14,13 @@ const navItems = [
   { path: '/rede/marcas', label: 'Marcas', icon: Tag },
   { path: '/rede/solicitacoes-acesso', label: 'Solicitações Agências', icon: Inbox },
   { path: '/rede/cadastros-agencia', label: 'Cadastros de Agências', icon: UserPlus },
+  { path: '/rede/documentos-exigidos', label: 'Documentos Exigidos', icon: FileText },
   { path: '/rede/bloqueios', label: 'Bloqueios', icon: Ban },
   { path: '/rede/solicitacoes', label: 'Solicitar PDV', icon: ClipboardPlus },
   { path: '/rede/auditoria', label: 'Auditoria', icon: FileSearch },
   { path: '/rede/configuracoes', label: 'Configurações', icon: Settings },
 ];
+
 
 export default function NetworkLayout() {
   const { user, isLoading, isAuthenticated, logout } = useNetworkAuth();
