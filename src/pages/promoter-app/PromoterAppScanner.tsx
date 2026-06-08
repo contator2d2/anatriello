@@ -71,7 +71,7 @@ export default function PromoterAppScanner() {
         setResult({ ok: false, reason });
       }
     } catch (e: any) {
-      setResult({ ok: false, reason: 'Permita o GPS para registrar o check-in' });
+      setResult({ ok: false, reason: 'Permita o GPS para validar o acesso ao PDV' });
     } finally {
       setSubmitting(false);
     }
