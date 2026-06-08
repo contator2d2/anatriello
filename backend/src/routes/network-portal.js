@@ -61,7 +61,15 @@ async function ensureSchema() {
     await query(`ALTER TABLE agencies
       ADD COLUMN IF NOT EXISTS partner_type VARCHAR(30) DEFAULT 'agency',
       ADD COLUMN IF NOT EXISTS category_label VARCHAR(100)`).catch(() => {});
+
+    // Required documents configuration on supermarket_networks (set by network admin)
+    await query(`ALTER TABLE supermarket_networks
+      ADD COLUMN IF NOT EXISTS required_documents JSONB DEFAULT '[]'::jsonb,
+      ADD COLUMN IF NOT EXISTS required_documents_freelance JSONB,
+      ADD COLUMN IF NOT EXISTS required_documents_substituto JSONB,
+      ADD COLUMN IF NOT EXISTS docs_block_submission BOOLEAN DEFAULT true`).catch(() => {});
   })();
+
   try { await schemaReady; } catch (e) { schemaReady = null; throw e; }
   return schemaReady;
 }
