@@ -54,7 +54,15 @@ export default function AgencySignup() {
         method: 'POST', auth: false,
         body: { ...parsed.data, desired_networks: selectedNetworks },
       });
-      setDone(true);
+      // Cadastro já cria o login ativo — logar automaticamente
+      try {
+        await login(parsed.data.responsible_email, parsed.data.password);
+        toast({ title: 'Cadastro concluído!', description: 'Agora cadastre suas marcas e PDVs.' });
+        navigate('/agencia/dashboard', { replace: true });
+      } catch {
+        toast({ title: 'Cadastro concluído', description: 'Faça login para continuar.' });
+        navigate('/agencia/login', { replace: true });
+      }
     } catch (err: any) {
       toast({ title: 'Erro', description: err?.message || 'Não foi possível enviar', variant: 'destructive' });
     } finally {
@@ -62,24 +70,7 @@ export default function AgencySignup() {
     }
   };
 
-  if (done) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
-        <Card className="w-full max-w-lg text-center">
-          <CardHeader>
-            <CardTitle>Solicitação enviada!</CardTitle>
-            <CardDescription>
-              Sua agência está aguardando aprovação da rede. Você receberá um e-mail
-              quando o acesso for liberado.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <Button className="w-full" onClick={() => navigate('/agencia/login')}>Ir para o login</Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
+
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-muted p-4 py-10">
