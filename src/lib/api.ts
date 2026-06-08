@@ -138,6 +138,11 @@ const getScopedAuthToken = (endpoint: string) => {
     return localStorage.getItem('promotor_token') || localStorage.getItem('auth_token');
   }
 
+  // External promoter PWA token
+  if (endpoint.startsWith('/api/promoter-app')) {
+    return localStorage.getItem('promoter_app_token');
+  }
+
   return localStorage.getItem('auth_token');
 };
 
