@@ -166,6 +166,10 @@ const clearScopedAuthTokens = (endpoint?: string) => {
     localStorage.removeItem('promotor_token');
     return;
   }
+  if (endpoint?.startsWith('/api/promoter-app')) {
+    localStorage.removeItem('promoter_app_token');
+    return;
+  }
   localStorage.removeItem('auth_token');
   window.sessionStorage.removeItem('user_org_id');
 };
