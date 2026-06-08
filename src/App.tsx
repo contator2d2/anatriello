@@ -140,6 +140,15 @@ import NetworkPartners from "./pages/network/NetworkPartners";
 import { NetworkBrands, NetworkBlocks, NetworkAudit, NetworkSettings } from "./pages/network/NetworkPages";
 import NetworkAccessRequests from "./pages/network/NetworkAccessRequests";
 import AgencyNetworkRequest from "./pages/agency/AgencyNetworkRequest";
+import AgencySignup from "./pages/agency/AgencySignup";
+import NetworkAgencySignups from "./pages/network/NetworkAgencySignups";
+import NetworkPdvQrCodes from "./pages/network/NetworkPdvQrCodes";
+import { PromoterAppAuthProvider } from "./contexts/PromoterAppAuthContext";
+import PromoterAppLogin from "./pages/promoter-app/PromoterAppLogin";
+import PromoterAppHome from "./pages/promoter-app/PromoterAppHome";
+import PromoterAppScanner from "./pages/promoter-app/PromoterAppScanner";
+import PromoterAppVisit from "./pages/promoter-app/PromoterAppVisit";
+import PromoterAppHistory from "./pages/promoter-app/PromoterAppHistory";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -293,6 +302,7 @@ const App = () => (
             <Route path="/acesso-supermercado" element={<SupermarketLandingPage />} />
             {/* Agency Portal */}
             <Route path="/agencia/login" element={<AgencyAuthProvider><AgencyLogin /></AgencyAuthProvider>} />
+            <Route path="/agencia/cadastro" element={<AgencySignup />} />
             <Route path="/agencia" element={<AgencyAuthProvider><AgencyLayout /></AgencyAuthProvider>}>
               <Route path="dashboard" element={<AgencyDashboard />} />
               <Route path="promotores" element={<AgencyPromoters />} />
@@ -324,9 +334,18 @@ const App = () => (
               <Route path="bloqueios" element={<NetworkBlocks />} />
               <Route path="solicitacoes" element={<NetworkUnits />} />
               <Route path="solicitacoes-acesso" element={<NetworkAccessRequests />} />
+              <Route path="cadastros-agencia" element={<NetworkAgencySignups />} />
+              <Route path="qrcodes" element={<NetworkPdvQrCodes />} />
               <Route path="auditoria" element={<NetworkAudit />} />
               <Route path="configuracoes" element={<NetworkSettings />} />
             </Route>
+            {/* External Promoter PWA (agencies without Ayratech) */}
+            <Route path="/p" element={<PromoterAppAuthProvider><PromoterAppHome /></PromoterAppAuthProvider>} />
+            <Route path="/p/login" element={<PromoterAppAuthProvider><PromoterAppLogin /></PromoterAppAuthProvider>} />
+            <Route path="/p/home" element={<PromoterAppAuthProvider><PromoterAppHome /></PromoterAppAuthProvider>} />
+            <Route path="/p/scanner" element={<PromoterAppAuthProvider><PromoterAppScanner /></PromoterAppAuthProvider>} />
+            <Route path="/p/visit" element={<PromoterAppAuthProvider><PromoterAppVisit /></PromoterAppAuthProvider>} />
+            <Route path="/p/history" element={<PromoterAppAuthProvider><PromoterAppHistory /></PromoterAppAuthProvider>} />
             {/* Promotor App */}
             <Route path="/promotor/login" element={<PromotorLogin />} />
             <Route path="/promotor/home" element={<PromotorHome />} />

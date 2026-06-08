@@ -82,6 +82,10 @@ export default function AgencyLogin() {
               {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               Entrar
             </Button>
+            <p className="text-xs text-center text-muted-foreground">
+              Ainda não tem cadastro?{' '}
+              <a href="/agencia/cadastro" className="text-primary underline">Cadastrar agência</a>
+            </p>
           </form>
         </CardContent>
       </Card>

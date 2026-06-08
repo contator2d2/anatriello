@@ -1,0 +1,14 @@
+{
+  "name": "Acesso PDV — ayratech",
+  "short_name": "Acesso PDV",
+  "description": "Controle de acesso ao PDV para promotores de agências parceiras.",
+  "start_url": "/p",
+  "scope": "/p",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [
+    { "src": "/favicon.ico", "sizes": "64x64", "type": "image/x-icon" }
+  ]
+}

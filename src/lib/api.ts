@@ -138,6 +138,11 @@ const getScopedAuthToken = (endpoint: string) => {
     return localStorage.getItem('promotor_token') || localStorage.getItem('auth_token');
   }
 
+  // External promoter PWA token
+  if (endpoint.startsWith('/api/promoter-app')) {
+    return localStorage.getItem('promoter_app_token');
+  }
+
   return localStorage.getItem('auth_token');
 };
 
@@ -159,6 +164,10 @@ const clearScopedAuthTokens = (endpoint?: string) => {
   }
   if (endpoint?.startsWith('/api/promotor') || endpoint?.includes('/merch/promotor/')) {
     localStorage.removeItem('promotor_token');
+    return;
+  }
+  if (endpoint?.startsWith('/api/promoter-app')) {
+    localStorage.removeItem('promoter_app_token');
     return;
   }
   localStorage.removeItem('auth_token');
