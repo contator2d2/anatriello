@@ -334,9 +334,18 @@ const App = () => (
               <Route path="bloqueios" element={<NetworkBlocks />} />
               <Route path="solicitacoes" element={<NetworkUnits />} />
               <Route path="solicitacoes-acesso" element={<NetworkAccessRequests />} />
+              <Route path="cadastros-agencia" element={<NetworkAgencySignups />} />
+              <Route path="qrcodes" element={<NetworkPdvQrCodes />} />
               <Route path="auditoria" element={<NetworkAudit />} />
               <Route path="configuracoes" element={<NetworkSettings />} />
             </Route>
+            {/* External Promoter PWA (agencies without Ayratech) */}
+            <Route path="/p" element={<PromoterAppAuthProvider><PromoterAppHome /></PromoterAppAuthProvider>} />
+            <Route path="/p/login" element={<PromoterAppAuthProvider><PromoterAppLogin /></PromoterAppAuthProvider>} />
+            <Route path="/p/home" element={<PromoterAppAuthProvider><PromoterAppHome /></PromoterAppAuthProvider>} />
+            <Route path="/p/scanner" element={<PromoterAppAuthProvider><PromoterAppScanner /></PromoterAppAuthProvider>} />
+            <Route path="/p/visit" element={<PromoterAppAuthProvider><PromoterAppVisit /></PromoterAppAuthProvider>} />
+            <Route path="/p/history" element={<PromoterAppAuthProvider><PromoterAppHistory /></PromoterAppAuthProvider>} />
             {/* Promotor App */}
             <Route path="/promotor/login" element={<PromotorLogin />} />
             <Route path="/promotor/home" element={<PromotorHome />} />
