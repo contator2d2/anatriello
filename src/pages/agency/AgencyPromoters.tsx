@@ -15,11 +15,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useToast } from '@/hooks/use-toast';
 import { useUpload } from '@/hooks/use-upload';
-import { Plus, Search, Edit, Ban, CheckCircle, Users, FileText, Camera, CalendarDays, Loader2, Phone, Mail, MapPin, Key } from 'lucide-react';
+import { Plus, Search, Edit, Ban, CheckCircle, Users, FileText, Camera, CalendarDays, Loader2, Phone, Mail, MapPin, Key, AlertCircle, Upload } from 'lucide-react';
 import { RegistrationKeyDialog } from '@/components/access-control/RegistrationKeyDialog';
 import { AuthorizationLetterDialog } from '@/components/access-control/AuthorizationLetterDialog';
 import { formatCpf, formatPhone, isValidCpf, onlyDigits } from '@/lib/br-utils';
 import { format, differenceInYears } from 'date-fns';
+import { DOCUMENT_LABELS } from '@/hooks/use-promoter-validations';
+
 
 const getHeaders = () => {
   const token = localStorage.getItem('agency_auth_token');
