@@ -1466,21 +1466,16 @@ router.post('/agency/brands', authenticateAgency, async (req, res) => {
     if (!cnpjDigits) return res.status(400).json({ error: 'CNPJ é obrigatório' });
     if (!isValidCnpj(cnpjDigits)) return res.status(400).json({ error: 'CNPJ inválido' });
 
-    // Canonical conflict: same CNPJ already cadastrado por qualquer agência da org
+    // Bloqueia apenas se a MESMA agência já cadastrou esse CNPJ; outras agências podem cadastrar a mesma marca
     const dup = await query(
-      `SELECT ab.id, ab.name, ab.agency_id, a.name AS agency_name
-         FROM agency_brands ab JOIN agencies a ON a.id = ab.agency_id
-        WHERE ab.organization_id = $1 AND ab.cnpj_digits = $2 LIMIT 1`,
-      [req.orgId, cnpjDigits]
+      `SELECT id, name FROM agency_brands
+        WHERE agency_id = $1 AND cnpj_digits = $2 LIMIT 1`,
+      [req.agencyId, cnpjDigits]
     );
     if (dup.rows[0]) {
-      const d = dup.rows[0];
-      if (d.agency_id === req.agencyId) {
-        return res.status(409).json({ error: `Você já cadastrou essa marca como "${d.name}"`, duplicate: d });
-      }
       return res.status(409).json({
-        error: `Já existe a marca "${d.name}" (CNPJ idêntico) cadastrada pela agência ${d.agency_name}. Use outro CNPJ ou alinhe com a rede.`,
-        duplicate: d,
+        error: `Você já cadastrou essa marca como "${dup.rows[0].name}"`,
+        duplicate: dup.rows[0],
       });
     }
 
