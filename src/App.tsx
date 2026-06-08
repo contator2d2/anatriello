@@ -131,6 +131,13 @@ import SupermarketContacts from "./pages/supermarket/SupermarketContacts";
 import SupermarketAssistant from "./pages/supermarket/SupermarketAssistant";
 import SupermarketSettings from "./pages/supermarket/SupermarketSettings";
 import SupermarketAccessRequests from "./pages/supermarket/SupermarketAccessRequests";
+import { NetworkAuthProvider } from "./contexts/NetworkAuthContext";
+import NetworkLogin from "./pages/network/NetworkLogin";
+import NetworkLayout from "./pages/network/NetworkLayout";
+import NetworkDashboard from "./pages/network/NetworkDashboard";
+import NetworkUnits from "./pages/network/NetworkUnits";
+import NetworkPartners from "./pages/network/NetworkPartners";
+import { NetworkBrands, NetworkBlocks, NetworkAudit, NetworkSettings } from "./pages/network/NetworkPages";
 
 const queryClient = new QueryClient({
   defaultOptions: {
