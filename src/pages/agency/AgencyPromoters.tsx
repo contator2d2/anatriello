@@ -509,17 +509,77 @@ export default function AgencyPromoters() {
             </TabsContent>
 
             <TabsContent value="docs" className="space-y-4 max-h-[50vh] overflow-y-auto">
-              <p className="text-sm text-muted-foreground">Documentos adicionais como comprovante de residência, certificações, etc.</p>
-              {form.document_url ? (
-                <div className="p-3 rounded-lg border border-border">
-                  <p className="text-sm font-medium">Documento enviado</p>
-                  <a href={form.document_url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">Visualizar documento</a>
-                </div>
+              {requiredDocs.length > 0 ? (
+                <>
+                  <div className={`p-3 rounded-lg border ${missingDocs.length === 0 ? 'border-primary/30 bg-primary/5' : 'border-amber-500/40 bg-amber-50 dark:bg-amber-950/20'}`}>
+                    <p className="text-sm font-medium flex items-center gap-2">
+                      {missingDocs.length === 0
+                        ? <><CheckCircle className="h-4 w-4 text-primary" /> Todos os documentos exigidos foram enviados</>
+                        : <><AlertCircle className="h-4 w-4 text-amber-600" /> Faltam {missingDocs.length} documento(s) exigido(s) pela rede</>
+                      }
+                    </p>
+                    {docRequirements?.block_submission && missingDocs.length > 0 && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Você só poderá salvar o promotor após anexar todos os itens da checklist abaixo.
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    {requiredDocs.map((doc) => {
+                      const field = DOC_FIELD_MAP[doc];
+                      const url = field ? (form as any)[field] : '';
+                      const hasFile = !!url;
+                      return (
+                        <div key={doc} className="flex items-center justify-between gap-3 p-3 rounded-lg border">
+                          <div className="flex items-center gap-2 min-w-0">
+                            {hasFile
+                              ? <CheckCircle className="h-4 w-4 text-primary flex-shrink-0" />
+                              : <AlertCircle className="h-4 w-4 text-amber-600 flex-shrink-0" />}
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium truncate">{DOCUMENT_LABELS[doc] || doc}</p>
+                              {hasFile && (
+                                <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">
+                                  Ver arquivo enviado
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                          <label className="flex-shrink-0">
+                            <Button type="button" variant={hasFile ? 'outline' : 'default'} size="sm" asChild>
+                              <span className="cursor-pointer">
+                                <Upload className="h-3.5 w-3.5 mr-1" />
+                                {hasFile ? 'Trocar' : 'Enviar'}
+                              </span>
+                            </Button>
+                            <input
+                              type="file"
+                              accept=".pdf,.jpg,.jpeg,.png"
+                              className="hidden"
+                              disabled={isUploading || !field}
+                              onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (!file || !field) return;
+                                try {
+                                  const u = await uploadFile(file);
+                                  if (u) setForm(f => ({ ...f, [field]: u }));
+                                } catch (err: any) {
+                                  toast({ title: 'Erro', description: err?.message, variant: 'destructive' });
+                                }
+                              }}
+                            />
+                          </label>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
               ) : (
-                <p className="text-sm text-muted-foreground">Nenhum documento enviado</p>
+                <p className="text-sm text-muted-foreground">Nenhuma rede definiu documentos exigidos para o tipo <strong>{form.promoter_type}</strong>.</p>
               )}
-              <div>
-                <Label>Enviar Documento</Label>
+
+              <div className="pt-2 border-t">
+                <Label>Outro documento (opcional)</Label>
                 <Input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={async (e) => {
                   const file = e.target.files?.[0];
                   if (!file) return;
@@ -530,17 +590,31 @@ export default function AgencyPromoters() {
                     toast({ title: 'Erro', description: err?.message, variant: 'destructive' });
                   }
                 }} disabled={isUploading} />
+                {form.document_url && (
+                  <a href={form.document_url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline mt-1 inline-block">
+                    Ver documento adicional
+                  </a>
+                )}
               </div>
             </TabsContent>
           </Tabs>
 
-          <DialogFooter>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            {blockBecauseDocs && (
+              <p className="text-xs text-amber-600 flex items-center gap-1 mr-auto">
+                <AlertCircle className="h-3.5 w-3.5" /> Faltam documentos exigidos ({missingDocs.length})
+              </p>
+            )}
             <Button variant="outline" onClick={closeDialog}>Cancelar</Button>
-            <Button onClick={handleSave} disabled={!form.name || !form.cpf || saveMutation.isPending || isUploading}>
+            <Button
+              onClick={() => { if (blockBecauseDocs) { setDialogTab('docs'); return; } handleSave(); }}
+              disabled={!form.name || !form.cpf || saveMutation.isPending || isUploading || blockBecauseDocs}
+            >
               {saveMutation.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
               {editing ? 'Salvar' : 'Cadastrar'}
             </Button>
           </DialogFooter>
+
         </DialogContent>
       </Dialog>
 
