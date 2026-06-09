@@ -231,7 +231,7 @@ export function CameraCapture({
   const { isOnline, queueUpload } = useOfflineSync();
   const config = { ...DEFAULT_QUALITY_CONFIG, ...qualityConfig };
 
-  const startCamera = useCallback(async (facing: "environment" | "user") => {
+  const startCamera = useCallback(async (facing: "environment" | "user"): Promise<MediaStream | null> => {
     try {
       // Stop existing stream
       if (stream) stream.getTracks().forEach((t) => t.stop());
@@ -247,11 +247,13 @@ export function CameraCapture({
       setStream(s);
       if (videoRef.current) {
         videoRef.current.srcObject = s;
-        videoRef.current.play();
+        videoRef.current.play().catch(() => {});
       }
+      return s;
     } catch {
       toast.error("Não foi possível acessar a câmera. Verifique as permissões.");
       setIsOpen(false);
+      return null;
     }
   }, [stream]);
 
@@ -262,20 +264,25 @@ export function CameraCapture({
     }
   }, [stream]);
 
-  const handleOpen = () => {
+  // Open dialog and request the camera SYNCHRONOUSLY within the user click,
+  // so the browser keeps the permission gesture context and doesn't re-prompt
+  // on every photo.
+  const handleOpen = async () => {
     setCapturedImage(null);
     setValidationError(null);
     setIsOpen(true);
+    // Fire getUserMedia in the same tick as the click handler
+    await startCamera(facingMode);
   };
 
+  // Re-attach the existing stream to the video element when the dialog mounts
+  // (in case the <video> wasn't in the DOM when startCamera ran).
   useEffect(() => {
-    if (isOpen && !capturedImage) {
-      startCamera(facingMode);
+    if (isOpen && !capturedImage && stream && videoRef.current && !videoRef.current.srcObject) {
+      videoRef.current.srcObject = stream;
+      videoRef.current.play().catch(() => {});
     }
-    return () => {
-      if (!isOpen) stopCamera();
-    };
-  }, [isOpen, facingMode]);
+  }, [isOpen, capturedImage, stream]);
 
   const handleClose = () => {
     stopCamera();
