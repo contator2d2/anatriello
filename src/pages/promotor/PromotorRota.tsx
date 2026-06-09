@@ -1549,26 +1549,8 @@ export default function PromotorRota() {
                 </CardContent>
               </Card>
 
-              {route.require_checkout_photo && (
-                <div className="space-y-2">
-                  <Label className="text-xs">Foto final da loja (obrigatória)</Label>
-              {pdvCheckoutPhoto ? (
-                <div className="space-y-2">
-                  <LocalImage src={pdvCheckoutPhoto} alt="Checkout" className="w-full rounded-lg border max-h-48 object-cover" />
-                  <Button variant="outline" size="sm" onClick={() => setPdvCheckoutPhoto('')}>Tirar outra foto</Button>
-                </div>
-              ) : (
-                    <CameraCapture
-                      onCapture={setPdvCheckoutPhoto}
-                      watermark={{ pdvName: route.pdv_name, brandName: route.brand_name || route.route_brands?.[0]?.brand_name, photoType: 'Checkout PDV' }}
-                      customTokenGetter={() => localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}
-                      buttonLabel="Tirar foto de saída da loja"
-                      qualityConfig={photoQualityConfig}
-                      allowManualUpload={false}
-                    />
-                  )}
-                </div>
-              )}
+              {/* Foto da fachada já foi capturada no check-in; não pedimos novamente no checkout. */}
+
 
               <div>
                 <Label className="text-xs">Observação</Label>
