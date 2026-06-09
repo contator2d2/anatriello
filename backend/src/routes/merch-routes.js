@@ -2605,10 +2605,21 @@ router.post('/promotor/routes/:routeId/categories/:catId/extra-point', promotorA
     const created = [];
     for (const productId of product_ids) {
       try {
-        const result = await query(
-          `INSERT INTO route_product_executions (route_id, product_id, category_id, exposure_point, status)
-           VALUES ($1, $2, $3, 'extra', 'pending') RETURNING *`,
+        // Copy route_brand_id from the original (natural) execution of the same product+category,
+        // so that multi-brand routes correctly attribute the extra-point items to the active brand
+        // (otherwise the frontend filter hides them and blocks route completion).
+        const src = await query(
+          `SELECT route_brand_id FROM route_product_executions
+            WHERE route_id=$1 AND product_id=$2 AND category_id=$3 AND exposure_point <> 'extra'
+            LIMIT 1`,
           [routeId, productId, catId]
+        );
+        const routeBrandId = src.rows[0]?.route_brand_id || null;
+
+        const result = await query(
+          `INSERT INTO route_product_executions (route_id, product_id, category_id, route_brand_id, exposure_point, status)
+           VALUES ($1, $2, $3, $4, 'extra', 'pending') RETURNING *`,
+          [routeId, productId, catId, routeBrandId]
         );
         if (result.rows[0]) created.push(result.rows[0]);
       } catch (e) {
