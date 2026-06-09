@@ -253,24 +253,28 @@ router.put('/routes/:id', async (req, res) => {
     const scope = req.body._scope || 'single';
 
     // Block edits when the route is already being executed by the promoter.
-    // Allow only safe fields (notes/status transitions) and forbid structural
-    // changes that would wipe progress (brand/pdv/promoter/checklist/brands/products).
+    // We allow reassigning promoter/supervisor (does NOT wipe progress — fotos,
+    // execuções e check-in ficam vinculados à rota, não ao promotor) e ajustes
+    // de notas/observações. Mudanças estruturais (marca, PDV, checklist, data,
+    // janela de horário, tipo de visita, lista de marcas) são bloqueadas para
+    // não zerar o trabalho já feito.
     const LOCKED_STATUSES = ['in_progress', 'completed'];
     if (LOCKED_STATUSES.includes(old.status)) {
-      const forbidden = ['promoter_id','supervisor_id','pdv_id','brand_id','checklist_id','visit_date','scheduled_time','window_start','window_end','visit_type','brands'];
+      const forbidden = ['pdv_id','brand_id','checklist_id','visit_date','scheduled_time','window_start','window_end','visit_type'];
       const attempted = forbidden.filter((f) => req.body[f] !== undefined && JSON.stringify(req.body[f]) !== JSON.stringify(old[f]));
       const hasBrandsChange = Array.isArray(req.body.brands);
       if (attempted.length || hasBrandsChange) {
         return res.status(409).json({
           error: old.status === 'in_progress'
-            ? 'Esta rota já está em execução pelo promotor e não pode ser editada. Aguarde a finalização ou cancele a rota antes de modificá-la.'
-            : 'Esta rota já foi concluída e não pode ser modificada estruturalmente.',
+            ? 'Esta rota já está em execução. Você pode reatribuir o promotor/supervisor ou adicionar observações, mas não pode alterar PDV, marcas, checklist, data ou janela de horário sem cancelar a rota antes.'
+            : 'Esta rota já foi concluída. Reatribuição de promotor é permitida; alterações estruturais não.',
           code: 'ROUTE_LOCKED',
           status: old.status,
           fields: hasBrandsChange ? [...attempted, 'brands'] : attempted,
         });
       }
     }
+
 
     // Remove internal field
     delete req.body._scope;

@@ -462,18 +462,16 @@ export default function MerchRotas() {
                       <Button
                         size="sm"
                         className="flex-1"
-                        disabled={locked}
-                        title={locked ? 'Rota em execução ou concluída não pode ser editada' : ''}
+                        title={locked ? 'Rota em execução: apenas reatribuição de promotor/supervisor e observações' : ''}
                         onClick={() => {
                           if (locked) {
-                            toast.error('Esta rota já está em execução e não pode ser editada. Aguarde a finalização do promotor.');
-                            return;
+                            toast.info('Rota em execução: você só pode reatribuir promotor/supervisor ou editar observações. Mudanças de PDV, marca, checklist ou horário estão bloqueadas.');
                           }
                           setSelectedRoute(viewRoute);
                           setViewRoute(null);
                         }}
                       >
-                        <Edit className="h-4 w-4 mr-1" /> {locked ? 'Bloqueada' : 'Editar'}
+                        <Edit className="h-4 w-4 mr-1" /> {locked ? 'Editar (restrito)' : 'Editar'}
                       </Button>
                     );
                   })()}
