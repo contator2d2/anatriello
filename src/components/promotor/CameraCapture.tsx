@@ -232,10 +232,11 @@ export function CameraCapture({
   const { isOnline, queueUpload } = useOfflineSync();
   const config = { ...DEFAULT_QUALITY_CONFIG, ...qualityConfig };
 
-  const startCamera = useCallback(async (facing: "environment" | "user"): Promise<MediaStream | null> => {
+  const startCamera = useCallback(async (facing: "environment" | "user", existingStream?: MediaStream | null): Promise<MediaStream | null> => {
     try {
       // Stop existing stream
-      if (stream) stream.getTracks().forEach((t) => t.stop());
+      const prev = existingStream ?? stream;
+      if (prev) prev.getTracks().forEach((t) => t.stop());
 
       const s = await navigator.mediaDevices.getUserMedia({
         video: {
@@ -246,12 +247,17 @@ export function CameraCapture({
         audio: false,
       });
       setStream(s);
+      // Attach immediately if the video element is already mounted (iOS needs
+      // srcObject + play() within the same user gesture to avoid black screen).
       if (videoRef.current) {
         videoRef.current.srcObject = s;
-        videoRef.current.play().catch(() => {});
+        videoRef.current.setAttribute('playsinline', 'true');
+        videoRef.current.muted = true;
+        try { await videoRef.current.play(); } catch { /* will retry via effect */ }
       }
       return s;
-    } catch {
+    } catch (err: any) {
+      logger.warn('[CameraCapture] getUserMedia failed', { error: err?.message, name: err?.name });
       toast.error("Não foi possível acessar a câmera. Verifique as permissões.");
       setIsOpen(false);
       return null;
@@ -265,15 +271,19 @@ export function CameraCapture({
     }
   }, [stream]);
 
-  // Open dialog and request the camera SYNCHRONOUSLY within the user click,
-  // so the browser keeps the permission gesture context and doesn't re-prompt
-  // on every photo.
-  const handleOpen = async () => {
-    setCapturedImage(null);
-    setValidationError(null);
-    setIsOpen(true);
-    // Fire getUserMedia in the same tick as the click handler
-    await startCamera(facingMode);
+  // Open dialog and request the camera within the same user gesture.
+  // flushSync forces React to mount the <video> element BEFORE we call
+  // getUserMedia, so srcObject + play() happen in the gesture context.
+  // This is required on iOS Safari to avoid the "black screen / permission re-prompt"
+  // bug when the video element is mounted asynchronously.
+  const handleOpen = () => {
+    flushSync(() => {
+      setCapturedImage(null);
+      setValidationError(null);
+      setIsOpen(true);
+    });
+    // Fire getUserMedia synchronously after the DOM is committed
+    void startCamera(facingMode);
   };
 
   // Re-attach the existing stream to the video element when the dialog mounts
