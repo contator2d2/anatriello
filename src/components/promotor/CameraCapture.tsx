@@ -355,22 +355,27 @@ export function CameraCapture({
         return;
       }
 
-      // Create file and always use queue for performance, even when online
-      // This allows the user to continue immediately while sync happens in background
+      // Prefer immediate upload when online so the server URL is available
+      // right away. This avoids storing local-file:// references that fail
+      // to render in the book/feed when the queue can't resolve them.
       const file = new File([blob], `photo_${Date.now()}.webp`, { type: "image/webp" });
       const token = (customTokenGetter ? customTokenGetter() : null) || localStorage.getItem('promotor_token') || localStorage.getItem('auth_token');
-      
-      const localUrl = await queueUpload(file, token);
-      
-      // Clean up previous blob URL if it was a local one
-      // (This is just safety, most local URLs will be new here)
-      
-      onCapture(localUrl);
-      
-      if (!isOnline) {
-        logger.info("Foto salva localmente para sincronização posterior.");
+
+      let finalUrl: string | null = null;
+      if (isOnline) {
+        try {
+          finalUrl = await uploadFile(file);
+        } catch (err: any) {
+          logger.warn('[CameraCapture] Upload imediato falhou, usando fila offline', { error: err?.message });
+        }
       }
-      
+      if (!finalUrl) {
+        finalUrl = await queueUpload(file, token);
+        logger.info("Foto enfileirada para sincronização posterior.");
+      }
+
+      onCapture(finalUrl);
+
       handleClose();
     } catch (err: any) {
       toast.error(err.message || "Erro ao processar foto");
