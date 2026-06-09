@@ -209,6 +209,7 @@ export default function MerchBookFotos() {
                       <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
                         {bPhotos.map((photo: any) => {
                           const photoUrl = resolveMediaUrl(photo.photo_url);
+                          if (!photoUrl) return null;
                           const isSelected = selectedIds.has(photo.id);
 
                           return (
