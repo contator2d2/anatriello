@@ -518,6 +518,7 @@ export default function PromotorRota() {
   const [showPdvCheckout, setShowPdvCheckout] = useState(false);
   const [pdvCheckoutPhoto, setPdvCheckoutPhoto] = useState('');
   const [checkinPhotoUrl, setCheckinPhotoUrl] = useState('');
+  const [checkinSubmitted, setCheckinSubmitted] = useState(false);
 
 
   // Load photo quality config
