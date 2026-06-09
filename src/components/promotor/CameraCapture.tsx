@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
+import { flushSync } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Camera, RotateCcw, Check, X, Loader2, AlertTriangle, Upload, WifiOff } from "lucide-react";
