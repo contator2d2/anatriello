@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { db, type PendingApiCall, type PendingUpload } from '@/lib/offline-db';
 import { api, API_URL } from '@/lib/api';
-import { toast } from 'sonner';
+
 import { logger } from '@/lib/logger';
 
 export function useOnlineStatus() {
