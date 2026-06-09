@@ -518,6 +518,7 @@ export default function PromotorRota() {
   const [showPdvCheckout, setShowPdvCheckout] = useState(false);
   const [pdvCheckoutPhoto, setPdvCheckoutPhoto] = useState('');
   const [checkinPhotoUrl, setCheckinPhotoUrl] = useState('');
+  const [checkinSubmitted, setCheckinSubmitted] = useState(false);
 
 
   // Load photo quality config
@@ -709,7 +710,9 @@ export default function PromotorRota() {
       });
       // Removed toast per user request
 
-      setCheckinPhotoUrl('');
+      // Otimista: libera a UI imediatamente para o promotor seguir o trabalho
+      // sem esperar o refetch (a chamada de check-in é processada em background).
+      setCheckinSubmitted(true);
       // We still want to refetch the route data to show updated status, 
       // but we do it immediately without waiting for the checkin call to finish.
       // The backend check-in usually takes care of the status.
@@ -800,8 +803,8 @@ export default function PromotorRota() {
   if (isLoading) return <PromotorLayout><div className="flex items-center justify-center h-64"><div className="animate-spin h-8 w-8 border-2 border-primary border-t-transparent rounded-full" /></div></PromotorLayout>;
   if (!route) return <PromotorLayout><div className="text-center py-12 text-muted-foreground">Rota não encontrada</div></PromotorLayout>;
 
-  const needsCheckin = route.status === 'scheduled' || route.status === 'confirmed';
-  const isActive = route.status === 'in_progress';
+  const needsCheckin = (route.status === 'scheduled' || route.status === 'confirmed') && !checkinSubmitted;
+  const isActive = route.status === 'in_progress' || (checkinSubmitted && (route.status === 'scheduled' || route.status === 'confirmed'));
   const isCompleted = route.status === 'completed';
 
   // Multi-brand: show brand selection screen after check-in
@@ -1549,7 +1552,26 @@ export default function PromotorRota() {
                 </CardContent>
               </Card>
 
-              {/* Foto da fachada já foi capturada no check-in; não pedimos novamente no checkout. */}
+              {route.require_checkout_photo && (
+                <div className="space-y-2">
+                  <Label className="text-xs">Foto final da loja (obrigatória)</Label>
+                  {pdvCheckoutPhoto ? (
+                    <div className="space-y-2">
+                      <LocalImage src={pdvCheckoutPhoto} alt="Checkout" className="w-full rounded-lg border max-h-48 object-cover" />
+                      <Button variant="outline" size="sm" onClick={() => setPdvCheckoutPhoto('')}>Tirar outra foto</Button>
+                    </div>
+                  ) : (
+                    <CameraCapture
+                      onCapture={setPdvCheckoutPhoto}
+                      watermark={{ pdvName: route.pdv_name, brandName: route.brand_name || route.route_brands?.[0]?.brand_name, photoType: 'Checkout PDV' }}
+                      customTokenGetter={() => localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}
+                      buttonLabel="Tirar foto de saída da loja"
+                      qualityConfig={photoQualityConfig}
+                      allowManualUpload={false}
+                    />
+                  )}
+                </div>
+              )}
 
 
               <div>
@@ -1561,7 +1583,7 @@ export default function PromotorRota() {
               <Button variant="outline" onClick={() => { setShowPdvCheckout(false); navigate('/promotor/home'); }}>
                 Pular
               </Button>
-              <Button onClick={handlePdvCheckout}>
+              <Button onClick={handlePdvCheckout} disabled={route.require_checkout_photo && !pdvCheckoutPhoto}>
                 Fazer Checkout
               </Button>
             </DialogFooter>
