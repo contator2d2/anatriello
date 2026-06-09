@@ -251,6 +251,27 @@ router.put('/routes/:id', async (req, res) => {
 
     const old = existing.rows[0];
     const scope = req.body._scope || 'single';
+
+    // Block edits when the route is already being executed by the promoter.
+    // Allow only safe fields (notes/status transitions) and forbid structural
+    // changes that would wipe progress (brand/pdv/promoter/checklist/brands/products).
+    const LOCKED_STATUSES = ['in_progress', 'completed'];
+    if (LOCKED_STATUSES.includes(old.status)) {
+      const forbidden = ['promoter_id','supervisor_id','pdv_id','brand_id','checklist_id','visit_date','scheduled_time','window_start','window_end','visit_type','brands'];
+      const attempted = forbidden.filter((f) => req.body[f] !== undefined && JSON.stringify(req.body[f]) !== JSON.stringify(old[f]));
+      const hasBrandsChange = Array.isArray(req.body.brands);
+      if (attempted.length || hasBrandsChange) {
+        return res.status(409).json({
+          error: old.status === 'in_progress'
+            ? 'Esta rota já está em execução pelo promotor e não pode ser editada. Aguarde a finalização ou cancele a rota antes de modificá-la.'
+            : 'Esta rota já foi concluída e não pode ser modificada estruturalmente.',
+          code: 'ROUTE_LOCKED',
+          status: old.status,
+          fields: hasBrandsChange ? [...attempted, 'brands'] : attempted,
+        });
+      }
+    }
+
     // Remove internal field
     delete req.body._scope;
 
