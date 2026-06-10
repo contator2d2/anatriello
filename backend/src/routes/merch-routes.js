@@ -1730,7 +1730,9 @@ router.get('/promotor/routes/:id', promotorAuth, async (req, res) => {
     const executions = await query(
       `SELECT rpe.*, (COALESCE(rpe.qty_store,0) + COALESCE(rpe.qty_stock,0)) as qty_total,
        pr.name as product_name, pr.sku, pr.barcode, pr.image_url,
-       pc.name as category_name, ps.name as subcategory_name
+       pc.name as category_name, ps.name as subcategory_name,
+       (SELECT pve.expiry_date FROM product_validity_entries pve WHERE pve.execution_id = rpe.id ORDER BY pve.expiry_date ASC LIMIT 1) as nearest_expiry_date,
+       (SELECT pve.id FROM product_validity_entries pve WHERE pve.execution_id = rpe.id ORDER BY pve.expiry_date ASC LIMIT 1) as nearest_expiry_id
        FROM route_product_executions rpe
        JOIN merch_products pr ON pr.id = rpe.product_id
        LEFT JOIN merch_categories pc ON pc.id = rpe.category_id
@@ -1780,7 +1782,9 @@ router.get('/promotor/routes/:id', promotorAuth, async (req, res) => {
         const re = await query(
           `SELECT rpe.*, (COALESCE(rpe.qty_store,0) + COALESCE(rpe.qty_stock,0)) as qty_total,
            pr.name as product_name, pr.sku, pr.barcode, pr.image_url,
-           pc.name as category_name, ps.name as subcategory_name
+           pc.name as category_name, ps.name as subcategory_name,
+           (SELECT pve.expiry_date FROM product_validity_entries pve WHERE pve.execution_id = rpe.id ORDER BY pve.expiry_date ASC LIMIT 1) as nearest_expiry_date,
+           (SELECT pve.id FROM product_validity_entries pve WHERE pve.execution_id = rpe.id ORDER BY pve.expiry_date ASC LIMIT 1) as nearest_expiry_id
            FROM route_product_executions rpe
            JOIN merch_products pr ON pr.id = rpe.product_id
            LEFT JOIN merch_categories pc ON pc.id = rpe.category_id
@@ -2016,19 +2020,24 @@ router.put('/promotor/executions/:id', promotorAuth, async (req, res) => {
   }
 });
 
-// Promotor: Add validity entry
+// Promotor: Add validity entry (upsert when called inline from product checklist)
 router.post('/promotor/executions/:id/validity', promotorAuth, async (req, res) => {
   try {
     const exec = await query('SELECT * FROM route_product_executions WHERE id=$1', [req.params.id]);
     if (!exec.rows.length) return res.status(404).json({ error: 'Execução não encontrada' });
-    const { expiry_date, qty_store, qty_stock } = req.body;
+    const { expiry_date, qty_store, qty_stock, replace } = req.body;
+    if (!expiry_date) return res.status(400).json({ error: 'expiry_date é obrigatório' });
+    // When called inline (replace=true), keep a single validity entry per execution
+    if (replace) {
+      await query('DELETE FROM product_validity_entries WHERE execution_id=$1', [req.params.id]);
+    }
     const result = await query(
       `INSERT INTO product_validity_entries (execution_id, route_id, product_id, expiry_date, qty_store, qty_stock, recorded_by)
        VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
       [req.params.id, exec.rows[0].route_id, exec.rows[0].product_id, expiry_date, qty_store || 0, qty_stock || 0, req.employeeId]
     );
     res.json(result.rows[0]);
-  } catch (err) { res.status(500).json({ error: 'Erro' }); }
+  } catch (err) { res.status(500).json({ error: err?.message || 'Erro' }); }
 });
 
 // Promotor: Report rupture

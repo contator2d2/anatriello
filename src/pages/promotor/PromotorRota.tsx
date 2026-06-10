@@ -846,7 +846,11 @@ export default function PromotorRota() {
       return;
     }
     setSelectedExec(exec);
-    setActionForm({ qty_store: exec.qty_store || 0, qty_stock: exec.qty_stock || 0 });
+    setActionForm({
+      qty_store: exec.qty_store || 0,
+      qty_stock: exec.qty_stock || 0,
+      expiry_date: exec.nearest_expiry_date ? String(exec.nearest_expiry_date).slice(0, 10) : '',
+    });
     setActiveAction(null);
   }, [categoryStatusMap]);
 
@@ -1215,6 +1219,11 @@ export default function PromotorRota() {
                                           Loja: {exec.qty_store} | Estoque: {exec.qty_stock} | Total: {exec.qty_total}
                                         </div>
                                       )}
+                                      {requireValidityCheck && exec.nearest_expiry_date && (
+                                        <div className="text-[10px] text-blue-600 mt-0.5 flex items-center gap-1">
+                                          <CalendarIcon className="h-2.5 w-2.5" /> Val: {new Date(exec.nearest_expiry_date).toLocaleDateString('pt-BR')}
+                                        </div>
+                                      )}
                                     </div>
                                     <div className="flex items-center gap-1.5 cursor-pointer" onClick={() => handleOpenProduct(exec)}>
                                       {exec.has_rupture && <AlertTriangle className="h-3.5 w-3.5 text-red-500" />}
@@ -1440,6 +1449,22 @@ export default function PromotorRota() {
                 </div>
               )}
 
+              {/* Inline Validity (when checklist requires it) */}
+              {requireValidityCheck && (
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold flex items-center gap-1">
+                    <CalendarIcon className="h-3.5 w-3.5 text-blue-600" /> Validade mais próxima
+                  </Label>
+                  <Input
+                    type="date"
+                    value={actionForm.expiry_date ?? ''}
+                    onChange={e => setActionForm({ ...actionForm, expiry_date: e.target.value })}
+                  />
+                  <p className="text-[10px] text-muted-foreground">
+                    Informe a data de vencimento mais próxima encontrada na loja/estoque.
+                  </p>
+                </div>
+              )}
 
               {/* Observation */}
               <div>
@@ -1452,9 +1477,8 @@ export default function PromotorRota() {
               {/* Action buttons */}
               <div className="space-y-2">
                 <Label className="text-xs font-semibold">Registrar ocorrência</Label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-3 gap-2">
                   {[
-                    { key: 'validity', label: 'Validade', icon: CalendarIcon, color: 'text-blue-600', show: requireValidityCheck },
                     { key: 'rupture', label: 'Ruptura', icon: AlertTriangle, color: 'text-red-600', show: true },
                     { key: 'damage', label: 'Avaria', icon: Archive, color: 'text-orange-600', show: true },
                     { key: 'discard', label: 'Descarte', icon: Trash2, color: 'text-purple-600', show: true },
@@ -1473,38 +1497,72 @@ export default function PromotorRota() {
               <Button variant="outline" size="sm" onClick={() => setSelectedExec(null)}>Fechar</Button>
               <Button size="sm" onClick={() => {
                 if (!selectedExec) return;
+                const qtyStore = actionForm.qty_store ?? selectedExec.qty_store ?? 0;
+                const qtyStock = actionForm.qty_stock ?? selectedExec.qty_stock ?? 0;
+                const observation = actionForm.product_observation ?? selectedExec.observation;
+                const expiryDate = actionForm.expiry_date || null;
+
+                if (requireValidityCheck && !expiryDate) {
+                  toast.error('Informe a data de validade mais próxima.');
+                  return;
+                }
+
                 const body = {
                   id: selectedExec.id,
-                  qty_store: actionForm.qty_store ?? selectedExec.qty_store ?? 0,
-                  qty_stock: actionForm.qty_stock ?? selectedExec.qty_stock ?? 0,
-                  observation: actionForm.product_observation ?? selectedExec.observation,
+                  qty_store: qtyStore,
+                  qty_stock: qtyStock,
+                  observation,
                   status: 'completed', checked: true,
+                };
+
+                // Save validity inline when checklist requires it
+                const saveValidityIfNeeded = async () => {
+                  if (!requireValidityCheck || !expiryDate) return;
+                  const validityBody = {
+                    expiry_date: expiryDate,
+                    qty_store: qtyStore,
+                    qty_stock: qtyStock,
+                    replace: true,
+                  };
+                  if (!isOnline) {
+                    queueApiCall({
+                      url: `/api/merch/promotor/executions/${selectedExec.id}/validity`,
+                      method: 'POST',
+                      body: validityBody,
+                      headers: { 'Authorization': `Bearer ${localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}` }
+                    });
+                  } else {
+                    await addValidity.mutateAsync({ executionId: selectedExec.id, ...validityBody }).catch((e: any) => {
+                      toast.error('Erro ao salvar validade: ' + (e?.message || ''));
+                      throw e;
+                    });
+                  }
                 };
 
                 if (!isOnline) {
                   queueApiCall({
                     url: `/api/merch/promotor/executions/${selectedExec.id}`,
                     method: 'PUT',
-                    body: {
-                      qty_store: actionForm.qty_store ?? selectedExec.qty_store ?? 0,
-                      qty_stock: actionForm.qty_stock ?? selectedExec.qty_stock ?? 0,
-                      observation: actionForm.product_observation ?? selectedExec.observation,
-                      status: 'completed', checked: true,
-                    },
+                    body: { qty_store: qtyStore, qty_stock: qtyStock, observation, status: 'completed', checked: true },
                     headers: { 'Authorization': `Bearer ${localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}` }
                   });
-                  // toast.info('Produto salvo offline!');
+                  saveValidityIfNeeded();
                   setSelectedExec(null);
                   return;
                 }
 
-                updateExec.mutate(body, {
-                  onSuccess: () => { setSelectedExec(null); },
-                  onError: (err: any) => toast.error(err.message),
-                });
-              }} disabled={updateExec.isPending}>
+                (async () => {
+                  try {
+                    await saveValidityIfNeeded();
+                    await updateExec.mutateAsync(body);
+                    setSelectedExec(null);
+                  } catch (err: any) {
+                    if (err?.message) toast.error(err.message);
+                  }
+                })();
+              }} disabled={updateExec.isPending || addValidity.isPending}>
                 <Check className="h-4 w-4 mr-1" />
-                {updateExec.isPending ? 'Salvando...' : 'Salvar e Concluir'}
+                {(updateExec.isPending || addValidity.isPending) ? 'Salvando...' : 'Salvar e Concluir'}
               </Button>
             </DialogFooter>
           </DialogContent>
