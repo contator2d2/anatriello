@@ -45,6 +45,9 @@ export default function PromoterAppLinkCard() {
         <p className="text-xs text-muted-foreground">
           Encaminhe este link aos seus promotores. Ao abrir, eles receberão o convite para instalar o app no celular.
         </p>
+        <p className="text-[11px] text-primary mt-1">
+          💡 Para gerar <strong>senha individual</strong> e enviar credenciais por WhatsApp, vá em <strong>Promotores → Acesso App</strong>.
+        </p>
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="flex items-center gap-2">
