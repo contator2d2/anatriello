@@ -271,6 +271,16 @@ function CategoryPreparation({ category, catId, routeBrandId, categoryName, rout
   return (
     <Card className="border-primary/40 bg-primary/5">
       <CardContent className="p-4 space-y-4">
+        {/* Tabs Antes / Depois */}
+        <div className="grid grid-cols-2 gap-1 p-1 bg-muted rounded-lg">
+          <div className="text-center py-1.5 rounded-md bg-primary text-primary-foreground text-xs font-semibold">
+            📷 Foto Antes
+          </div>
+          <div className="text-center py-1.5 rounded-md text-xs font-medium text-muted-foreground/60 cursor-not-allowed flex items-center justify-center gap-1">
+            <Lock className="h-3 w-3" /> Foto Depois
+          </div>
+        </div>
+
         {/* Bloco 1: Identification */}
         <div className="flex items-center gap-2 text-sm">
           <Target className="h-4 w-4 text-primary" />
