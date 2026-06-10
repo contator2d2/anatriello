@@ -1385,7 +1385,7 @@ router.put('/agency/access-rules/:id', authenticateAgency, async (req, res) => {
       }
     }
     res.json(r.rows[0]);
-  } catch (err) { logError('agency.rules.update', err); res.status(500).json({ error: 'Erro' }); }
+  } catch (err) { logError('agency.rules.update', err); res.status(500).json({ error: err?.message || 'Erro', detail: err?.detail, code: err?.code }); }
 });
 
 // Agency: delete access rule
