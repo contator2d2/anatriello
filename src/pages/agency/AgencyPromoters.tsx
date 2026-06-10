@@ -215,6 +215,21 @@ export default function AgencyPromoters() {
     return differenceInYears(new Date(), new Date(birthDate));
   };
 
+  // Per-promoter doc gap based on their own type
+  const getPromoterDocStatus = (p: any) => {
+    const reqs: string[] = (docRequirements?.required_by_type as any)?.[p.promoter_type || 'fixo'] || [];
+    const missing = reqs.filter(d => {
+      const field = DOC_FIELD_MAP[d];
+      if (!field) return false;
+      return !p[field];
+    });
+    return { missing, total: reqs.length };
+  };
+
+  const networksRequireAutoApproval = (docRequirements?.networks || []).some(
+    (n: any) => n.doc_validation_enabled && !n.auto_approve_on_match
+  );
+
   const filtered = promoters.filter((p: any) =>
     p.name?.toLowerCase().includes(search.toLowerCase()) || p.cpf?.includes(onlyDigits(search))
   );
@@ -257,8 +272,12 @@ export default function AgencyPromoters() {
             const vrs = getPromoterVisitRequests(p.id);
             const pendingVrs = vrs.filter((v: any) => v.status === 'pending').length;
             const approvedVrs = vrs.filter((v: any) => v.status === 'approved').length;
+            const docStatus = getPromoterDocStatus(p);
+            const hasDocAlert = docStatus.missing.length > 0;
+            const hasApprovalAlert = networksRequireAutoApproval && docStatus.total > 0;
+            const showWarning = hasDocAlert || hasApprovalAlert;
             return (
-              <Card key={p.id} className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => setDetailPromoter(p)}>
+              <Card key={p.id} className={`hover:shadow-md transition-shadow cursor-pointer ${showWarning ? 'border-amber-400/60' : ''}`} onClick={() => setDetailPromoter(p)}>
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-3">
@@ -279,6 +298,20 @@ export default function AgencyPromoters() {
                     </Badge>
                   </div>
 
+                  {showWarning && (
+                    <div className="mt-3 p-2 rounded-md border border-amber-400/60 bg-amber-50 dark:bg-amber-950/30 text-xs flex items-start gap-2">
+                      <AlertTriangle className="h-3.5 w-3.5 text-amber-600 flex-shrink-0 mt-0.5" />
+                      <div className="text-amber-900 dark:text-amber-200">
+                        {hasDocAlert && (
+                          <p className="font-medium">{docStatus.missing.length} documento(s) pendente(s)</p>
+                        )}
+                        {hasApprovalAlert && (
+                          <p>Sem aprovação automática — requer validação manual da rede</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Contact info */}
                   <div className="mt-3 space-y-1">
                     {p.whatsapp && <p className="text-xs text-muted-foreground flex items-center gap-1"><Phone className="h-3 w-3" /> {formatPhone(p.whatsapp)}</p>}
@@ -294,9 +327,12 @@ export default function AgencyPromoters() {
                     </div>
                   )}
 
-                  <div className="flex gap-2 mt-4" onClick={e => e.stopPropagation()}>
+                  <div className="flex gap-2 mt-4 flex-wrap" onClick={e => e.stopPropagation()}>
                     <Button size="sm" variant="outline" onClick={() => openEdit(p)}>
                       <Edit className="h-3 w-3 mr-1" /> Editar
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => setRulesPromoter(p)}>
+                      <Shield className="h-3 w-3 mr-1" /> Regras
                     </Button>
                     <Button size="sm" variant="outline" onClick={() => { setLetterPromoter(p); setLetterOpen(true); }}>
                       <FileText className="h-3 w-3 mr-1" /> Carta
@@ -651,6 +687,12 @@ export default function AgencyPromoters() {
         open={!!appAccessPromoter}
         onOpenChange={(o) => { if (!o) setAppAccessPromoter(null); }}
         promoter={appAccessPromoter}
+      />
+
+      <PromoterAccessRulesDialog
+        open={!!rulesPromoter}
+        onOpenChange={(o) => { if (!o) setRulesPromoter(null); }}
+        promoter={rulesPromoter}
       />
     </div>
   );
