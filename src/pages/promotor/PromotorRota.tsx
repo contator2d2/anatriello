@@ -1444,6 +1444,22 @@ export default function PromotorRota() {
                 </div>
               )}
 
+              {/* Inline Validity (when checklist requires it) */}
+              {requireValidityCheck && (
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold flex items-center gap-1">
+                    <CalendarIcon className="h-3.5 w-3.5 text-blue-600" /> Validade mais próxima
+                  </Label>
+                  <Input
+                    type="date"
+                    value={actionForm.expiry_date ?? ''}
+                    onChange={e => setActionForm({ ...actionForm, expiry_date: e.target.value })}
+                  />
+                  <p className="text-[10px] text-muted-foreground">
+                    Informe a data de vencimento mais próxima encontrada na loja/estoque.
+                  </p>
+                </div>
+              )}
 
               {/* Observation */}
               <div>
@@ -1456,9 +1472,8 @@ export default function PromotorRota() {
               {/* Action buttons */}
               <div className="space-y-2">
                 <Label className="text-xs font-semibold">Registrar ocorrência</Label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-3 gap-2">
                   {[
-                    { key: 'validity', label: 'Validade', icon: CalendarIcon, color: 'text-blue-600', show: requireValidityCheck },
                     { key: 'rupture', label: 'Ruptura', icon: AlertTriangle, color: 'text-red-600', show: true },
                     { key: 'damage', label: 'Avaria', icon: Archive, color: 'text-orange-600', show: true },
                     { key: 'discard', label: 'Descarte', icon: Trash2, color: 'text-purple-600', show: true },
