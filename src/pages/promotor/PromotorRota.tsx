@@ -569,6 +569,8 @@ export default function PromotorRota() {
   const [selectedExtraProducts, setSelectedExtraProducts] = useState<string[]>([]);
   const [showExtraPointCategoryPicker, setShowExtraPointCategoryPicker] = useState(false);
   const [extraGroupPhotos, setExtraGroupPhotos] = useState<Record<string, boolean>>({});
+  const [optimisticAfterPhoto, setOptimisticAfterPhoto] = useState<Record<string, boolean>>({});
+
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
   const [showFaceVerify, setShowFaceVerify] = useState(false);
   const [faceVerifyAction, setFaceVerifyAction] = useState<'checkin' | 'checkout' | 'pdv_checkout' | null>(null);
