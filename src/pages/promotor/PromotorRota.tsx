@@ -693,8 +693,16 @@ export default function PromotorRota() {
   const handleCheckin = useCallback(async () => {
     if (!id) return;
     
+    // Guarda contra múltiplos cliques (queueApiCall não expõe isPending)
+    if ((handleCheckin as any)._running || checkinSubmitted) {
+      logger.warn('[handleCheckin] Check-in já em andamento, ignorando duplicado');
+      return;
+    }
+    (handleCheckin as any)._running = true;
+    
     // Check if route is already in progress or completed
     if (route?.status === 'in_progress' || route?.status === 'completed') {
+      (handleCheckin as any)._running = false;
       logger.warn('[handleCheckin] Rota já em andamento ou concluída, ignorando check-in duplicado', { 
         status: route?.status, 
         routeId: id 
