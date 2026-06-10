@@ -644,6 +644,12 @@ export default function AgencyPromoters() {
       />
 
       <RegistrationKeyDialog open={regKeyOpen} onOpenChange={setRegKeyOpen} />
+
+      <PromoterAppAccessDialog
+        open={!!appAccessPromoter}
+        onOpenChange={(o) => { if (!o) setAppAccessPromoter(null); }}
+        promoter={appAccessPromoter}
+      />
     </div>
   );
 }
