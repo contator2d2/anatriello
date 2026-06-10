@@ -403,6 +403,7 @@ const AgenciesTab = () => {
               icon: "check",
               content: [
                 "📤 Enviar Acesso — envia credenciais do portal para a agência.",
+                "📱 Copiar Link do App — link do app do promotor para registrar entrada/saída no PDV.",
                 "📝 Gerar Contrato — cria contrato de prestação de serviços para assinatura digital.",
                 "✏️ Editar — dados, login do portal e PDVs autorizados.",
               ],
