@@ -641,6 +641,32 @@ export default function PromotorRota() {
     return set;
   }, [route?.executions]);
 
+  // Photo-only mode: auto-complete all pending products once the category is unlocked
+  // (in this mode the checklist requires only category photos, no per-item check)
+  useEffect(() => {
+    if (requireStockCount || requireValidityCheck) return;
+    if (!route?.executions?.length) return;
+    Object.values(groupedExecs).forEach(({ catId, execs, isExtraGroup }) => {
+      const catStatus = categoryStatusMap[catId];
+      const unlocked = isExtraGroup
+        ? !!extraGroupPhotos[`extra_${catId}_${execs[0]?.route_brand_id || 'null'}`]
+        : !!catStatus?.products_unlocked;
+      if (!unlocked) return;
+      execs.forEach((exec: any) => {
+        if (exec.status !== 'completed' && !exec.has_rupture && !exec.has_damage) {
+          updateExec.mutate({
+            id: exec.id,
+            status: 'completed',
+            checked: true,
+            qty_store: 0,
+            qty_stock: 0,
+          });
+        }
+      });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groupedExecs, categoryStatusMap, extraGroupPhotos, requireStockCount, requireValidityCheck]);
+
   const handleCheckin = useCallback(async () => {
     if (!id) return;
     
