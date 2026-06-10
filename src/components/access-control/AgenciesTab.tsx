@@ -14,7 +14,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Pencil, Users, Loader2, KeyRound, Eye, EyeOff, Store, FileSignature, DollarSign, Send } from "lucide-react";
+import { Plus, Pencil, Users, Loader2, KeyRound, Eye, EyeOff, Store, FileSignature, DollarSign, Send, Smartphone } from "lucide-react";
 import SendAccessDialog from "./SendAccessDialog";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api";
@@ -403,6 +403,7 @@ const AgenciesTab = () => {
               icon: "check",
               content: [
                 "📤 Enviar Acesso — envia credenciais do portal para a agência.",
+                "📱 Copiar Link do App — link do app do promotor para registrar entrada/saída no PDV.",
                 "📝 Gerar Contrato — cria contrato de prestação de serviços para assinatura digital.",
                 "✏️ Editar — dados, login do portal e PDVs autorizados.",
               ],
@@ -439,8 +440,20 @@ const AgenciesTab = () => {
                   </TableCell>
                   <TableCell>
                     <div className="flex gap-1">
-                      <Button size="icon" variant="ghost" onClick={() => { setSendAccessAgency(a); setSendAccessOpen(true); }} title="Enviar Acesso">
+                      <Button size="icon" variant="ghost" onClick={() => { setSendAccessAgency(a); setSendAccessOpen(true); }} title="Enviar Acesso ao Portal">
                         <Send className="h-4 w-4 text-primary" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        title="Copiar link do App do Promotor (entrada/saída PDV)"
+                        onClick={() => {
+                          const url = `${window.location.origin}/p/login`;
+                          navigator.clipboard.writeText(url);
+                          toast({ title: "Link copiado!", description: url });
+                        }}
+                      >
+                        <Smartphone className="h-4 w-4 text-primary" />
                       </Button>
                       <Button size="icon" variant="ghost" onClick={() => openContractDialog(a)} title="Gerar Contrato">
                         <FileSignature className="h-4 w-4 text-primary" />
