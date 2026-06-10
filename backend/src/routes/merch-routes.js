@@ -1730,7 +1730,9 @@ router.get('/promotor/routes/:id', promotorAuth, async (req, res) => {
     const executions = await query(
       `SELECT rpe.*, (COALESCE(rpe.qty_store,0) + COALESCE(rpe.qty_stock,0)) as qty_total,
        pr.name as product_name, pr.sku, pr.barcode, pr.image_url,
-       pc.name as category_name, ps.name as subcategory_name
+       pc.name as category_name, ps.name as subcategory_name,
+       (SELECT pve.expiry_date FROM product_validity_entries pve WHERE pve.execution_id = rpe.id ORDER BY pve.expiry_date ASC LIMIT 1) as nearest_expiry_date,
+       (SELECT pve.id FROM product_validity_entries pve WHERE pve.execution_id = rpe.id ORDER BY pve.expiry_date ASC LIMIT 1) as nearest_expiry_id
        FROM route_product_executions rpe
        JOIN merch_products pr ON pr.id = rpe.product_id
        LEFT JOIN merch_categories pc ON pc.id = rpe.category_id
