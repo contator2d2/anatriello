@@ -15,7 +15,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useToast } from '@/hooks/use-toast';
 import { useUpload } from '@/hooks/use-upload';
-import { Plus, Search, Edit, Ban, CheckCircle, Users, FileText, Camera, CalendarDays, Loader2, Phone, Mail, MapPin, Key, AlertCircle, Upload } from 'lucide-react';
+import { Plus, Search, Edit, Ban, CheckCircle, Users, FileText, Camera, CalendarDays, Loader2, Phone, Mail, MapPin, Key, AlertCircle, Upload, Smartphone } from 'lucide-react';
+import PromoterAppAccessDialog from '@/components/agency/PromoterAppAccessDialog';
 import { RegistrationKeyDialog } from '@/components/access-control/RegistrationKeyDialog';
 import { AuthorizationLetterDialog } from '@/components/access-control/AuthorizationLetterDialog';
 import { formatCpf, formatPhone, isValidCpf, onlyDigits } from '@/lib/br-utils';
@@ -65,6 +66,7 @@ export default function AgencyPromoters() {
   const [editing, setEditing] = useState<any>(null);
   const [form, setForm] = useState(defaultForm);
   const [detailPromoter, setDetailPromoter] = useState<any>(null);
+  const [appAccessPromoter, setAppAccessPromoter] = useState<any>(null);
   const [regKeyOpen, setRegKeyOpen] = useState(false);
 
   const { data: promoters = [], isLoading } = useQuery({
@@ -296,6 +298,9 @@ export default function AgencyPromoters() {
                     </Button>
                     <Button size="sm" variant="outline" onClick={() => { setLetterPromoter(p); setLetterOpen(true); }}>
                       <FileText className="h-3 w-3 mr-1" /> Carta
+                    </Button>
+                    <Button size="sm" variant="outline" className="text-primary border-primary/30" onClick={() => setAppAccessPromoter(p)}>
+                      <Smartphone className="h-3 w-3 mr-1" /> Acesso App
                     </Button>
                     {p.status === 'active' ? (
                       <Button size="sm" variant="outline" className="text-destructive" onClick={() => toggleMutation.mutate({ id: p.id, status: 'blocked' })}>
@@ -639,6 +644,12 @@ export default function AgencyPromoters() {
       />
 
       <RegistrationKeyDialog open={regKeyOpen} onOpenChange={setRegKeyOpen} />
+
+      <PromoterAppAccessDialog
+        open={!!appAccessPromoter}
+        onOpenChange={(o) => { if (!o) setAppAccessPromoter(null); }}
+        promoter={appAccessPromoter}
+      />
     </div>
   );
 }
