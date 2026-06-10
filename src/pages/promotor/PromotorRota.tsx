@@ -569,6 +569,8 @@ export default function PromotorRota() {
   const [selectedExtraProducts, setSelectedExtraProducts] = useState<string[]>([]);
   const [showExtraPointCategoryPicker, setShowExtraPointCategoryPicker] = useState(false);
   const [extraGroupPhotos, setExtraGroupPhotos] = useState<Record<string, boolean>>({});
+  const [optimisticAfterPhoto, setOptimisticAfterPhoto] = useState<Record<string, boolean>>({});
+
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
   const [showFaceVerify, setShowFaceVerify] = useState(false);
   const [faceVerifyAction, setFaceVerifyAction] = useState<'checkin' | 'checkout' | 'pdv_checkout' | null>(null);
@@ -1093,7 +1095,8 @@ export default function PromotorRota() {
                 
               const doneCount = execs.filter((e: any) => e.status === 'completed').length;
               const allProductsDone = doneCount === execs.length && execs.length > 0;
-              const hasAfterPhoto = !!catStatus?.category_after_photo || !!catStatus?.completed;
+              const afterPhotoKey = `${catId}_${routeBrandId || 'null'}`;
+              const hasAfterPhoto = !!catStatus?.category_after_photo || !!catStatus?.completed || !!optimisticAfterPhoto[afterPhotoKey];
               
               // Show after photo gate when all products done AND mode is 'both' or 'after'
               const needsAfterPhoto = requireCategoryPhotos && 
@@ -1101,6 +1104,7 @@ export default function PromotorRota() {
                 !isLocked && 
                 !hasAfterPhoto && 
                 (photoMode === 'both' || photoMode === 'after');
+
 
               return (
 
@@ -1275,7 +1279,7 @@ export default function PromotorRota() {
                       promotorName={route.promotor_name}
                       qualityConfig={photoQualityConfig}
                       minPhotos={Math.max(1, parseInt((rb || route as any)?.min_category_photos_after, 10) || 1)}
-                      onCompleted={() => refetch()}
+                      onCompleted={() => { setOptimisticAfterPhoto(p => ({ ...p, [afterPhotoKey]: true })); refetch(); }}
                     />
                   )}
                 </div>
@@ -1309,7 +1313,7 @@ export default function PromotorRota() {
                 const pMode = (rbConfig || route as any)?.category_photo_mode || 'both';
                 
                 const needsAfter = reqPhotos && (pMode === 'both' || pMode === 'after');
-                const hasAfter = !!catStatus?.category_after_photo || !!catStatus?.completed;
+                const hasAfter = !!catStatus?.category_after_photo || !!catStatus?.completed || !!optimisticAfterPhoto[`${catId}_${routeBrandId || 'null'}`];
                 
                 // Uma categoria só exige foto do depois se todos os seus produtos foram executados
                 return allDone && needsAfter && !hasAfter;
