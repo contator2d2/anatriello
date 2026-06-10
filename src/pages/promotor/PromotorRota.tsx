@@ -957,9 +957,26 @@ export default function PromotorRota() {
               </div>
               {checkinPhotoUrl ? (
                 <div className="space-y-2">
-                  <LocalImage src={checkinPhotoUrl} alt="Check-in" className="w-full rounded-lg border max-h-48 object-cover" />
-
-                  <Button variant="outline" size="sm" onClick={() => setCheckinPhotoUrl('')}>Tirar outra foto</Button>
+                  <LocalImage src={checkinPhotoUrl} alt="Check-in" className="w-full rounded-lg border max-h-64 object-cover" />
+                  <p className="text-xs text-muted-foreground text-center">A foto ficou boa? Aprove para concluir o check-in.</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      variant="outline"
+                      className="h-12"
+                      onClick={() => setCheckinPhotoUrl('')}
+                      disabled={checkin.isPending}
+                    >
+                      <Camera className="h-4 w-4 mr-1" /> Reprovar
+                    </Button>
+                    <Button
+                      className="h-12"
+                      onClick={handleCheckin}
+                      disabled={checkin.isPending}
+                    >
+                      {isFacialActiveCheckin ? <ScanFace className="h-4 w-4 mr-1" /> : <Check className="h-4 w-4 mr-1" />}
+                      {checkin.isPending ? 'Enviando...' : 'Aprovar'}
+                    </Button>
+                  </div>
                 </div>
               ) : (
                 <CameraCapture
@@ -982,10 +999,11 @@ export default function PromotorRota() {
           </div>
         )}
 
-        {needsCheckin && (
+        {/* Botão de check-in padrão (sem foto obrigatória OU sem foto ainda) */}
+        {needsCheckin && !(route.require_checkin_photo && checkinPhotoUrl) && (
           <Button className="w-full h-14 text-lg" onClick={handleCheckin} disabled={checkin.isPending || (route.require_checkin_photo && !checkinPhotoUrl)}>
             {isFacialActiveCheckin ? <ScanFace className="h-5 w-5 mr-2" /> : <MapPin className="h-5 w-5 mr-2" />}
-            {checkin.isPending ? 'Realizando check-in...' : route.require_checkin_photo ? 'Enviar foto e fazer check-in' : 'Fazer Check-in'}
+            {checkin.isPending ? 'Realizando check-in...' : route.require_checkin_photo ? 'Tire a foto para continuar' : 'Fazer Check-in'}
           </Button>
         )}
 
