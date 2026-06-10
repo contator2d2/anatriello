@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useOfflineSync } from "@/hooks/use-offline-sync";
 import { useParams, useNavigate } from "react-router-dom";
 import { PromotorLayout } from "./PromotorLayout";
@@ -34,44 +34,45 @@ import { SyncStatusIndicator } from "@/components/promotor/SyncStatusIndicator";
 
 // ===== Photo capture with Approve/Reject preview =====
 function PhotoApprovalCapture({
-  photos, onPhotosChange, min, allowExtras, isSending, onSubmit,
-  cameraProps, label, submitLabel, accentColorClass = 'text-primary',
+  photos, onPhotosChange, min, isSending, onSubmit,
+  cameraProps, label, accentColorClass = 'text-primary',
 }: {
   photos: string[];
   onPhotosChange: (next: string[]) => void;
   min: number;
-  allowExtras: boolean;
+  allowExtras?: boolean; // ignored — kept for backward compatibility
   isSending: boolean;
   onSubmit: () => void;
   cameraProps: any;
   label: string;
-  submitLabel: string;
+  submitLabel?: string; // ignored — kept for backward compatibility
   accentColorClass?: string;
 }) {
   const [pending, setPending] = useState<string | null>(null);
-  const [showExtraCamera, setShowExtraCamera] = useState(false);
+  const submittedRef = useRef(false);
 
   const reachedMin = photos.length >= min;
   const needsMore = photos.length < min;
-  // Auto-submit when min===1 and the single required photo was just approved
-  const autoSubmitAfterApprove = min === 1;
 
   const approve = () => {
     if (!pending) return;
     const next = [...photos, pending];
     onPhotosChange(next);
     setPending(null);
-    setShowExtraCamera(false);
-    if (autoSubmitAfterApprove && next.length >= min) {
-      // defer to next tick so state is committed
+    // Auto-submit as soon as min is reached — no extra confirm button
+    if (next.length >= min && !submittedRef.current) {
+      submittedRef.current = true;
       setTimeout(() => onSubmit(), 0);
     }
   };
   const reject = () => setPending(null);
-  const removeAt = (i: number) => onPhotosChange(photos.filter((_, idx) => idx !== i));
+  const removeAt = (i: number) => {
+    submittedRef.current = false;
+    onPhotosChange(photos.filter((_, idx) => idx !== i));
+  };
 
-  // Show camera if: nothing pending AND (no photos yet OR still below min OR user asked for extras)
-  const showCamera = !pending && (needsMore || showExtraCamera);
+  // Show camera if nothing pending AND still below min
+  const showCamera = !pending && needsMore;
 
   return (
     <div className="space-y-2">
@@ -93,6 +94,7 @@ function PhotoApprovalCapture({
               <button
                 onClick={() => removeAt(i)}
                 className="absolute top-1 right-1 bg-destructive text-destructive-foreground rounded-full w-5 h-5 flex items-center justify-center text-[10px]"
+                disabled={isSending}
               >✕</button>
               <div className="absolute bottom-1 left-1 bg-green-600 text-white rounded px-1 text-[9px] font-medium flex items-center gap-0.5">
                 <Check className="h-2.5 w-2.5" /> {i + 1}
@@ -122,24 +124,14 @@ function PhotoApprovalCapture({
       {showCamera && (
         <CameraCapture
           {...cameraProps}
-          onCapture={(url: string) => { setPending(url); setShowExtraCamera(false); }}
+          onCapture={(url: string) => { setPending(url); }}
           buttonLabel={photos.length === 0 ? 'Tirar foto' : `Tirar foto ${photos.length + 1}`}
         />
       )}
 
-      {/* Final actions when min reached and no pending */}
-      {!pending && reachedMin && !showCamera && (
-        <div className="space-y-2">
-          <Button className="w-full" onClick={onSubmit} disabled={isSending}>
-            <CheckCircle2 className="h-4 w-4 mr-2" />
-            {isSending ? 'Enviando...' : submitLabel}
-          </Button>
-          {allowExtras && (
-            <Button variant="outline" className="w-full" onClick={() => setShowExtraCamera(true)} disabled={isSending}>
-              <Camera className="h-4 w-4 mr-2" /> Tirar mais uma foto
-            </Button>
-          )}
-        </div>
+      {/* Sending feedback when min reached */}
+      {!pending && reachedMin && !showCamera && isSending && (
+        <p className="text-[11px] text-center text-muted-foreground">Enviando...</p>
       )}
     </div>
   );
@@ -279,6 +271,16 @@ function CategoryPreparation({ category, catId, routeBrandId, categoryName, rout
   return (
     <Card className="border-primary/40 bg-primary/5">
       <CardContent className="p-4 space-y-4">
+        {/* Tabs Antes / Depois */}
+        <div className="grid grid-cols-2 gap-1 p-1 bg-muted rounded-lg">
+          <div className="text-center py-1.5 rounded-md bg-primary text-primary-foreground text-xs font-semibold">
+            📷 Foto Antes
+          </div>
+          <div className="text-center py-1.5 rounded-md text-xs font-medium text-muted-foreground/60 cursor-not-allowed flex items-center justify-center gap-1">
+            <Lock className="h-3 w-3" /> Foto Depois
+          </div>
+        </div>
+
         {/* Bloco 1: Identification */}
         <div className="flex items-center gap-2 text-sm">
           <Target className="h-4 w-4 text-primary" />
@@ -482,6 +484,16 @@ function CategoryAfterPhotoGate({ catId, routeBrandId, categoryName, routeId, pd
   return (
     <Card className="border-green-500/40 bg-green-50/50 mt-2">
       <CardContent className="p-4 space-y-3">
+        {/* Tabs Antes / Depois */}
+        <div className="grid grid-cols-2 gap-1 p-1 bg-muted rounded-lg">
+          <div className="text-center py-1.5 rounded-md text-xs font-medium text-green-700 flex items-center justify-center gap-1">
+            <CheckCircle2 className="h-3 w-3" /> Foto Antes
+          </div>
+          <div className="text-center py-1.5 rounded-md bg-green-600 text-white text-xs font-semibold">
+            📷 Foto Depois
+          </div>
+        </div>
+
         <div className="flex items-center gap-2 text-sm">
           <Camera className="h-4 w-4 text-green-600" />
           <div>
