@@ -268,6 +268,14 @@ function CategoryPreparation({ category, catId, routeBrandId, categoryName, rout
 
   if (isUnlocked) return null;
 
+  // Auto-set point type to 'natural' by default — extra points are added via the dedicated "Registrar Ponto Extra" flow
+  useEffect(() => {
+    if (!isUnlocked && !hasPointType && !setPointType.isPending) {
+      handleSetPointType('natural');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasPointType, isUnlocked]);
+
   return (
     <Card className="border-primary/40 bg-primary/5">
       <CardContent className="p-4 space-y-4">
@@ -282,58 +290,23 @@ function CategoryPreparation({ category, catId, routeBrandId, categoryName, rout
 
         {/* Step indicator */}
         <div className="flex items-center gap-2 text-[11px] flex-wrap">
-          <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full ${hasPointType ? 'bg-green-500/20 text-green-700' : 'bg-yellow-500/20 text-yellow-700'}`}>
-            {hasPointType ? <CheckCircle2 className="h-3 w-3" /> : <span className="font-bold">1</span>}
-            Tipo de Ponto
-          </div>
           {photoMode !== 'after' && (
             <>
-              <ChevronRight className="h-3 w-3 text-muted-foreground" />
-              <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full ${(hasPhoto || photos.length > 0) ? 'bg-green-500/20 text-green-700' : hasPointType ? 'bg-yellow-500/20 text-yellow-700' : 'bg-muted text-muted-foreground'}`}>
-                {(hasPhoto || photos.length > 0) ? <CheckCircle2 className="h-3 w-3" /> : <span className="font-bold">2</span>}
+              <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full ${(hasPhoto || photos.length > 0) ? 'bg-green-500/20 text-green-700' : 'bg-yellow-500/20 text-yellow-700'}`}>
+                {(hasPhoto || photos.length > 0) ? <CheckCircle2 className="h-3 w-3" /> : <span className="font-bold">1</span>}
                 Foto{photoCount > 1 ? `s (${photoCount})` : ''}
               </div>
+              <ChevronRight className="h-3 w-3 text-muted-foreground" />
             </>
           )}
-          <ChevronRight className="h-3 w-3 text-muted-foreground" />
           <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
             <Lock className="h-3 w-3" />
             Produtos
           </div>
         </div>
 
-        {/* Bloco 2: Point Type */}
-        {!hasPointType && (
-          <div className="space-y-2">
-            <Label className="text-xs font-semibold">Selecione o tipo de ponto:</Label>
-            <div className="grid grid-cols-2 gap-2">
-              <Button
-                variant="outline" className="h-14 flex-col gap-1 border-2 hover:border-primary hover:bg-primary/10"
-                onClick={() => handleSetPointType('natural')} disabled={setPointType.isPending}
-              >
-                <MapPin className="h-5 w-5 text-blue-600" />
-                <span className="text-xs font-medium">Ponto Natural</span>
-              </Button>
-              <Button
-                variant="outline" className="h-14 flex-col gap-1 border-2 hover:border-primary hover:bg-primary/10"
-                onClick={() => handleSetPointType('extra')} disabled={setPointType.isPending}
-              >
-                <Target className="h-5 w-5 text-orange-600" />
-                <span className="text-xs font-medium">Ponto Extra</span>
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* Show selected point type */}
-        {hasPointType && (
-          <div className="flex items-center gap-2 text-xs">
-            <Badge variant="secondary">{category?.point_type === 'natural' ? '📍 Ponto Natural' : '🎯 Ponto Extra'}</Badge>
-          </div>
-        )}
-
         {/* Bloco 3: Photos (multiple) */}
-        {hasPointType && !hasPhoto && photoMode !== 'after' && (
+        {!hasPhoto && photoMode !== 'after' && (
           <PhotoApprovalCapture
             photos={photos}
             onPhotosChange={setPhotos}
@@ -356,13 +329,11 @@ function CategoryPreparation({ category, catId, routeBrandId, categoryName, rout
         <div className="flex items-center gap-2 p-2 rounded bg-destructive/10 text-destructive text-xs">
           <Lock className="h-4 w-4 flex-shrink-0" />
           <span>
-            {!hasPointType
-              ? 'Antes de iniciar, selecione se é ponto natural ou extra.'
-              : photoMode === 'after'
-                ? 'Tipo de ponto selecionado. Liberando produtos...'
-                : photos.length === 0 && !hasPhoto
-                  ? 'É necessário tirar a foto da categoria antes de acessar os produtos.'
-                  : 'Registre a(s) foto(s) para liberar os produtos.'}
+            {photoMode === 'after'
+              ? 'Liberando produtos...'
+              : photos.length === 0 && !hasPhoto
+                ? 'É necessário tirar a foto da categoria antes de acessar os produtos.'
+                : 'Registre a(s) foto(s) para liberar os produtos.'}
           </span>
         </div>
       </CardContent>
