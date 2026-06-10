@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { ShieldCheck, Loader2 } from 'lucide-react';
+import InstallPwaPrompt from '@/components/InstallPwaPrompt';
 
 export default function PromoterAppLogin() {
   const [cpf, setCpf] = useState('');
