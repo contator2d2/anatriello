@@ -11,7 +11,7 @@ const navItems = [
   { path: '/agencia/solicitar-acesso', label: 'Solicitar Acesso à Rede', icon: Send },
   { path: '/agencia/visitas', label: 'Solicitações de Visita', icon: CalendarDays },
   { path: '/agencia/afastamentos', label: 'Afastamentos', icon: CalendarOff },
-  { path: '/agencia/regras', label: 'Regras de Acesso', icon: Shield },
+  
 ];
 
 export default function AgencyLayout() {

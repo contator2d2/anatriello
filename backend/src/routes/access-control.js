@@ -1355,6 +1355,39 @@ router.post('/agency/access-rules', authenticateAgency, async (req, res) => {
   } catch (err) { logError('agency.rules.create', err); res.status(500).json({ error: 'Erro' }); }
 });
 
+// Agency: update access rule
+router.put('/agency/access-rules/:id', authenticateAgency, async (req, res) => {
+  try {
+    const { allowed_weekdays, start_time, end_time, supermarket_unit_id, brand_ids, active } = req.body;
+    // Ensure rule belongs to a promoter of this agency
+    const owns = await query(
+      `SELECT ar.id FROM pdv_access_rules ar
+       JOIN agency_promoters ap ON ap.id = ar.agency_promoter_id
+       WHERE ar.id=$1 AND ap.agency_id=$2`,
+      [req.params.id, req.agencyId]
+    );
+    if (!owns.rows.length) return res.status(404).json({ error: 'Regra não encontrada' });
+    const r = await query(
+      `UPDATE pdv_access_rules SET
+         allowed_weekdays = COALESCE($1::jsonb, allowed_weekdays),
+         start_time = COALESCE($2, start_time),
+         end_time = COALESCE($3, end_time),
+         supermarket_unit_id = COALESCE($4, supermarket_unit_id),
+         active = COALESCE($5, active),
+         updated_at = NOW()
+       WHERE id=$6 RETURNING *`,
+      [allowed_weekdays ? JSON.stringify(allowed_weekdays) : null, start_time||null, end_time||null, supermarket_unit_id||null, typeof active === 'boolean' ? active : null, req.params.id]
+    );
+    if (Array.isArray(brand_ids)) {
+      await query('DELETE FROM promoter_brand_permissions WHERE access_rule_id=$1', [req.params.id]);
+      for (const bid of brand_ids) {
+        await query('INSERT INTO promoter_brand_permissions (access_rule_id, brand_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [req.params.id, bid]);
+      }
+    }
+    res.json(r.rows[0]);
+  } catch (err) { logError('agency.rules.update', err); res.status(500).json({ error: 'Erro' }); }
+});
+
 // Agency: delete access rule
 router.delete('/agency/access-rules/:id', authenticateAgency, async (req, res) => {
   try {
