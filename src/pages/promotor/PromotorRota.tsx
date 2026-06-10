@@ -693,8 +693,16 @@ export default function PromotorRota() {
   const handleCheckin = useCallback(async () => {
     if (!id) return;
     
+    // Guarda contra múltiplos cliques (queueApiCall não expõe isPending)
+    if ((handleCheckin as any)._running || checkinSubmitted) {
+      logger.warn('[handleCheckin] Check-in já em andamento, ignorando duplicado');
+      return;
+    }
+    (handleCheckin as any)._running = true;
+    
     // Check if route is already in progress or completed
     if (route?.status === 'in_progress' || route?.status === 'completed') {
+      (handleCheckin as any)._running = false;
       logger.warn('[handleCheckin] Rota já em andamento ou concluída, ignorando check-in duplicado', { 
         status: route?.status, 
         routeId: id 
@@ -703,10 +711,12 @@ export default function PromotorRota() {
     }
 
     if (route?.require_checkin_photo && !checkinPhotoUrl) {
+      (handleCheckin as any)._running = false;
       toast.error('Esta rota exige foto obrigatória no check-in');
       return;
     }
     if (isFacialActiveCheckin && faceVerifyAction !== 'checkin') {
+      (handleCheckin as any)._running = false;
       setFaceVerifyAction('checkin');
       setShowFaceVerify(true);
       return;
@@ -768,10 +778,11 @@ export default function PromotorRota() {
       // The backend check-in usually takes care of the status.
       setTimeout(() => refetch(), 1000); 
     } catch (err: any) {
+      (handleCheckin as any)._running = false;
       logger.error('[handleCheckin] Erro fatal no check-in', { message: err.message, routeId: id }, err);
       toast.error(err.message || 'Não foi possível realizar o check-in');
     }
-  }, [id, checkin, route?.require_checkin_photo, route?.status, checkinPhotoUrl, isFacialActiveCheckin, faceVerifyAction, route?.pdv_name, isOnline, queueApiCall, refetch]);
+  }, [id, checkin, route?.require_checkin_photo, route?.status, checkinPhotoUrl, isFacialActiveCheckin, faceVerifyAction, route?.pdv_name, isOnline, queueApiCall, refetch, checkinSubmitted]);
 
   const handleCompleteRoute = useCallback(async () => {
     if (!id) return;
@@ -991,17 +1002,17 @@ export default function PromotorRota() {
                       variant="outline"
                       className="h-12"
                       onClick={() => setCheckinPhotoUrl('')}
-                      disabled={checkin.isPending}
+                      disabled={checkin.isPending || checkinSubmitted}
                     >
                       <Camera className="h-4 w-4 mr-1" /> Reprovar
                     </Button>
                     <Button
                       className="h-12"
                       onClick={handleCheckin}
-                      disabled={checkin.isPending}
+                      disabled={checkin.isPending || checkinSubmitted}
                     >
                       {isFacialActiveCheckin ? <ScanFace className="h-4 w-4 mr-1" /> : <Check className="h-4 w-4 mr-1" />}
-                      {checkin.isPending ? 'Enviando...' : 'Aprovar'}
+                      {checkin.isPending || checkinSubmitted ? 'Enviando...' : 'Aprovar'}
                     </Button>
                   </div>
                 </div>
