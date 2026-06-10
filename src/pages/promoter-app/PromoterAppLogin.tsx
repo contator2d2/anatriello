@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { ShieldCheck, Loader2 } from 'lucide-react';
+import InstallPwaPrompt from '@/components/InstallPwaPrompt';
 
 export default function PromoterAppLogin() {
   const [cpf, setCpf] = useState('');
@@ -56,6 +57,10 @@ export default function PromoterAppLogin() {
       <p className="text-xs text-muted-foreground mt-4">
         App de controle de acesso · ayratech
       </p>
+      <InstallPwaPrompt
+        storageKey="promoter_app_install_dismissed_at"
+        manifestHref="/promoter-app-manifest.webmanifest"
+      />
     </div>
   );
 }
