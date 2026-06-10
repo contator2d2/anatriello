@@ -519,41 +519,23 @@ function CategoryAfterPhotoGate({ catId, routeBrandId, categoryName, routeId, pd
           </div>
         </div>
 
-        <p className="text-[10px] text-muted-foreground">
-          Tire pelo menos <b>{min}</b> foto(s) da categoria <b>DEPOIS</b> da execução para concluir.
-        </p>
-
-        {photos.length > 0 && (
-          <div className="flex gap-2 flex-wrap">
-            {photos.map((p, i) => (
-              <div key={i} className="relative">
-                <LocalImage src={p} alt="" className="w-20 h-20 rounded-lg object-cover border" />
-                <button className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground rounded-full w-5 h-5 flex items-center justify-center text-[10px]"
-                  onClick={() => setPhotos(prev => prev.filter((_, idx) => idx !== i))}>✕</button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <CameraCapture
-          onCapture={(url: string) => setPhotos(prev => [...prev, url])}
-          watermark={{ pdvName, brandName, promotorName, photoType: `Categoria (depois)` }}
-          customTokenGetter={() => localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}
-          buttonLabel={photos.length > 0 ? 'Tirar mais uma foto' : 'Tirar foto DEPOIS'}
-          qualityConfig={qualityConfig}
-          allowManualUpload={false}
+        <PhotoApprovalCapture
+          photos={photos}
+          onPhotosChange={setPhotos}
+          min={min}
+          allowExtras={min > 1}
+          isSending={isSending || setCategoryAfterPhoto.isPending}
+          onSubmit={handleUpload}
+          cameraProps={{
+            watermark: { pdvName, brandName, promotorName, photoType: 'Categoria (depois)' },
+            customTokenGetter: () => localStorage.getItem('promotor_token') || localStorage.getItem('auth_token'),
+            qualityConfig,
+            allowManualUpload: false,
+          }}
+          label="Foto da categoria DEPOIS da execução"
+          submitLabel="Registrar fotos e concluir categoria"
+          accentColorClass="text-green-700"
         />
-
-        {photos.length > 0 && (
-          <Button className="w-full" onClick={handleUpload} disabled={isSending || setCategoryAfterPhoto.isPending || photos.length < min}>
-            <CheckCircle2 className="h-4 w-4 mr-2" />
-            {isSending
-              ? 'Enviando...'
-              : photos.length < min
-                ? `Faltam ${min - photos.length} foto(s) DEPOIS`
-                : `Registrar ${photos.length} foto(s) e concluir categoria`}
-          </Button>
-        )}
 
         <div className="flex items-center gap-2 p-2 rounded-md bg-green-100/50 text-green-800 text-[11px]">
           <Camera className="h-4 w-4 flex-shrink-0" />
