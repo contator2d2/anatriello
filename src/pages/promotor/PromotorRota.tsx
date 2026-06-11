@@ -42,7 +42,7 @@ function PhotoApprovalCapture({
   min: number;
   allowExtras?: boolean; // ignored — kept for backward compatibility
   isSending: boolean;
-  onSubmit: () => void;
+  onSubmit: (photos: string[]) => void;
   cameraProps: any;
   label: string;
   submitLabel?: string; // ignored — kept for backward compatibility
@@ -58,7 +58,8 @@ function PhotoApprovalCapture({
     onPhotosChange(next);
     if (next.length >= min && !submittedRef.current) {
       submittedRef.current = true;
-      setTimeout(() => onSubmit(), 0);
+      // Pass the freshly captured array — parent's `photos` state may not be flushed yet
+      setTimeout(() => onSubmit(next), 0);
     }
   };
 
