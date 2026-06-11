@@ -1476,39 +1476,35 @@ export default function PromotorRota() {
                     value={actionForm.expiry_date ?? ''}
                     onChange={e => setActionForm({ ...actionForm, expiry_date: e.target.value })}
                   />
-                  {!requireStockCount && (
-                    <>
-                      <div className="grid grid-cols-2 gap-2 pt-1">
-                        {(() => {
-                          const storeVal = Number(actionForm.qty_store ?? selectedExec?.qty_store ?? 0) || 0;
-                          const stockVal = Number(actionForm.qty_stock ?? selectedExec?.qty_stock ?? 0) || 0;
-                          return <>
-                            <div>
-                              <Label className="text-[10px] text-muted-foreground">Qtd Loja</Label>
-                              <Input type="number" min="0" inputMode="numeric" placeholder="0"
-                                value={storeVal === 0 ? '' : storeVal}
-                                onChange={e => {
-                                  const v = e.target.value.replace(/^0+(?=\d)/, '');
-                                  setActionForm({ ...actionForm, qty_store: v === '' ? 0 : parseInt(v) || 0 });
-                                }} />
-                            </div>
-                            <div>
-                              <Label className="text-[10px] text-muted-foreground">Qtd Estoque</Label>
-                              <Input type="number" min="0" inputMode="numeric" placeholder="0"
-                                value={stockVal === 0 ? '' : stockVal}
-                                onChange={e => {
-                                  const v = e.target.value.replace(/^0+(?=\d)/, '');
-                                  setActionForm({ ...actionForm, qty_stock: v === '' ? 0 : parseInt(v) || 0 });
-                                }} />
-                            </div>
-                          </>;
-                        })()}
-                      </div>
-                      <div className="text-[10px] text-muted-foreground text-right">
-                        Total: {(Number(actionForm.qty_store ?? selectedExec?.qty_store ?? 0) || 0) + (Number(actionForm.qty_stock ?? selectedExec?.qty_stock ?? 0) || 0)}
-                      </div>
-                    </>
-                  )}
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    {(() => {
+                      const storeVal = Number(actionForm.val_qty_store ?? 0) || 0;
+                      const stockVal = Number(actionForm.val_qty_stock ?? 0) || 0;
+                      return <>
+                        <div>
+                          <Label className="text-[10px] text-muted-foreground">Qtd na Loja (desta validade)</Label>
+                          <Input type="number" min="0" inputMode="numeric" placeholder="0"
+                            value={storeVal === 0 ? '' : storeVal}
+                            onChange={e => {
+                              const v = e.target.value.replace(/^0+(?=\d)/, '');
+                              setActionForm({ ...actionForm, val_qty_store: v === '' ? 0 : parseInt(v) || 0 });
+                            }} />
+                        </div>
+                        <div>
+                          <Label className="text-[10px] text-muted-foreground">Qtd no Estoque (desta validade)</Label>
+                          <Input type="number" min="0" inputMode="numeric" placeholder="0"
+                            value={stockVal === 0 ? '' : stockVal}
+                            onChange={e => {
+                              const v = e.target.value.replace(/^0+(?=\d)/, '');
+                              setActionForm({ ...actionForm, val_qty_stock: v === '' ? 0 : parseInt(v) || 0 });
+                            }} />
+                        </div>
+                      </>;
+                    })()}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground text-right">
+                    Total desta validade: {(Number(actionForm.val_qty_store ?? 0) || 0) + (Number(actionForm.val_qty_stock ?? 0) || 0)}
+                  </div>
                   <p className="text-[10px] text-muted-foreground">
                     Informe a data de vencimento mais próxima encontrada na loja/estoque.
                   </p>
