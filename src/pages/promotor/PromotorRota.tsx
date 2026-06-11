@@ -151,7 +151,7 @@ function CategoryPreparation({ category, catId, routeBrandId, categoryName, rout
   // category may be null/undefined if no merch_execution_categories entry exists yet
   const hasPointType = !!category?.point_type;
   const hasPhoto = !!category?.category_before_photo;
-  const isUnlocked = !!category?.products_unlocked;
+  const isUnlocked = !!category?.products_unlocked || (hasPointType && (hasPhoto || photoMode === 'after'));
   const photoCount = photos.length + (hasPhoto ? 1 : 0);
   const min = Math.max(1, minPhotos || 1);
 
@@ -843,7 +843,7 @@ export default function PromotorRota() {
     const rb = isMultiBrand ? routeBrands.find((b: any) => b.id === routeBrandId) : null;
     const requireCategoryPhotos = (rb || route as any)?.require_category_photos !== false;
     
-    if (requireCategoryPhotos && !catStatus?.products_unlocked && !optimisticBeforeUnlock[categoryKey]) {
+    if (requireCategoryPhotos && !catStatus?.products_unlocked && !catStatus?.category_before_photo && !optimisticBeforeUnlock[categoryKey]) {
       toast.error('Finalize a etapa de preparação da categoria antes de executar produtos.');
       return;
     }
@@ -1064,7 +1064,7 @@ export default function PromotorRota() {
               // if 'after', products_unlocked comes from point-type selection
               // if 'before' or 'both', products_unlocked comes from before-photo upload
               const anyExecDone = execs.some((e: any) => e.status !== 'pending');
-              const hasBeforeUnlock = !!catStatus?.products_unlocked || !!optimisticBeforeUnlock[categoryKey];
+              const hasBeforeUnlock = !!catStatus?.products_unlocked || !!catStatus?.category_before_photo || !!optimisticBeforeUnlock[categoryKey];
               const isLocked = requireCategoryPhotos 
                 ? (isExtraGroup ? (!hasExtraPhoto && !anyExecDone) : !hasBeforeUnlock) 
                 : false;
