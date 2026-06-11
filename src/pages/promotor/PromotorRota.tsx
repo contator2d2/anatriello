@@ -1049,7 +1049,8 @@ export default function PromotorRota() {
           <div className="space-y-4">
             {Object.entries(groupedExecs).map(([category, { catId, execs, isExtraGroup }]) => {
               const routeBrandId = execs[0]?.route_brand_id;
-              const catStatus = categoryStatusMap[`${catId}_${routeBrandId || 'null'}`] || categoryStatusMap[catId];
+              const categoryKey = `${catId}_${routeBrandId || 'null'}`;
+              const catStatus = categoryStatusMap[categoryKey] || categoryStatusMap[catId];
               
               // Use checklist settings if available
               const rb = isMultiBrand ? routeBrands.find((b: any) => b.brand_id === activeBrandId) : null;
@@ -1063,8 +1064,9 @@ export default function PromotorRota() {
               // if 'after', products_unlocked comes from point-type selection
               // if 'before' or 'both', products_unlocked comes from before-photo upload
               const anyExecDone = execs.some((e: any) => e.status !== 'pending');
+              const hasBeforeUnlock = !!catStatus?.products_unlocked || !!optimisticBeforeUnlock[categoryKey];
               const isLocked = requireCategoryPhotos 
-                ? (isExtraGroup ? (!hasExtraPhoto && !anyExecDone) : !catStatus?.products_unlocked) 
+                ? (isExtraGroup ? (!hasExtraPhoto && !anyExecDone) : !hasBeforeUnlock) 
                 : false;
                 
               // Se o modo for "Só Depois" e já tiver selecionado o tipo de ponto, liberamos os produtos mesmo se o backend ainda não marcou products_unlocked
@@ -1078,7 +1080,7 @@ export default function PromotorRota() {
               // Show after photo gate when all products done AND mode is 'both' or 'after'
               const needsAfterPhoto = requireCategoryPhotos && 
                 allProductsDone && 
-                !isLocked && 
+                !effectivelyLocked && 
                 !hasAfterPhoto && 
                 (photoMode === 'both' || photoMode === 'after');
 
@@ -1100,7 +1102,7 @@ export default function PromotorRota() {
                       qualityConfig={photoQualityConfig}
                       photoMode={photoMode}
                       minPhotos={Math.max(1, parseInt((rb || route as any)?.min_category_photos_before, 10) || 1)}
-                      onUnlocked={() => refetch()}
+                      onUnlocked={() => { setOptimisticBeforeUnlock(prev => ({ ...prev, [categoryKey]: true })); refetch(); }}
                     />
                   )}
 
