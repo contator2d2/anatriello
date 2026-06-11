@@ -151,7 +151,7 @@ function CategoryPreparation({ category, catId, routeBrandId, categoryName, rout
   // category may be null/undefined if no merch_execution_categories entry exists yet
   const hasPointType = !!category?.point_type;
   const hasPhoto = !!category?.category_before_photo;
-  const isUnlocked = !!category?.products_unlocked;
+  const isUnlocked = !!category?.products_unlocked || (hasPointType && (hasPhoto || photoMode === 'after'));
   const photoCount = photos.length + (hasPhoto ? 1 : 0);
   const min = Math.max(1, minPhotos || 1);
 
@@ -236,8 +236,6 @@ function CategoryPreparation({ category, catId, routeBrandId, categoryName, rout
     setPhotos(prev => prev.filter((_, i) => i !== index));
   };
 
-  if (isUnlocked) return null;
-
   // Auto-set point type to 'natural' by default — extra points are added via the dedicated "Registrar Ponto Extra" flow
   useEffect(() => {
     if (!isUnlocked && !hasPointType && !setPointType.isPending) {
@@ -245,6 +243,8 @@ function CategoryPreparation({ category, catId, routeBrandId, categoryName, rout
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasPointType, isUnlocked]);
+
+  if (isUnlocked) return null;
 
   return (
     <Card className="border-primary/40 bg-primary/5">
@@ -544,6 +544,7 @@ export default function PromotorRota() {
   const [selectedExtraProducts, setSelectedExtraProducts] = useState<string[]>([]);
   const [showExtraPointCategoryPicker, setShowExtraPointCategoryPicker] = useState(false);
   const [extraGroupPhotos, setExtraGroupPhotos] = useState<Record<string, boolean>>({});
+  const [optimisticBeforeUnlock, setOptimisticBeforeUnlock] = useState<Record<string, boolean>>({});
   const [optimisticAfterPhoto, setOptimisticAfterPhoto] = useState<Record<string, boolean>>({});
 
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
@@ -835,13 +836,14 @@ export default function PromotorRota() {
 
   const handleOpenProduct = useCallback((exec: any) => {
     const routeBrandId = exec.route_brand_id;
-    const catStatus = categoryStatusMap[`${exec.category_id}_${routeBrandId || 'null'}`] || categoryStatusMap[exec.category_id];
+    const categoryKey = `${exec.category_id}_${routeBrandId || 'null'}`;
+    const catStatus = categoryStatusMap[categoryKey] || categoryStatusMap[exec.category_id];
     
     // Check checklist settings for this brand
     const rb = isMultiBrand ? routeBrands.find((b: any) => b.id === routeBrandId) : null;
     const requireCategoryPhotos = (rb || route as any)?.require_category_photos !== false;
     
-    if (requireCategoryPhotos && !catStatus?.products_unlocked) {
+    if (requireCategoryPhotos && !catStatus?.products_unlocked && !catStatus?.category_before_photo && !optimisticBeforeUnlock[categoryKey]) {
       toast.error('Finalize a etapa de preparação da categoria antes de executar produtos.');
       return;
     }
@@ -852,7 +854,7 @@ export default function PromotorRota() {
       expiry_date: exec.nearest_expiry_date ? String(exec.nearest_expiry_date).slice(0, 10) : '',
     });
     setActiveAction(null);
-  }, [categoryStatusMap]);
+  }, [categoryStatusMap, optimisticBeforeUnlock]);
 
   if (isLoading) return <PromotorLayout><div className="flex items-center justify-center h-64"><div className="animate-spin h-8 w-8 border-2 border-primary border-t-transparent rounded-full" /></div></PromotorLayout>;
   if (!route) return <PromotorLayout><div className="text-center py-12 text-muted-foreground">Rota não encontrada</div></PromotorLayout>;
@@ -1047,7 +1049,8 @@ export default function PromotorRota() {
           <div className="space-y-4">
             {Object.entries(groupedExecs).map(([category, { catId, execs, isExtraGroup }]) => {
               const routeBrandId = execs[0]?.route_brand_id;
-              const catStatus = categoryStatusMap[`${catId}_${routeBrandId || 'null'}`] || categoryStatusMap[catId];
+              const categoryKey = `${catId}_${routeBrandId || 'null'}`;
+              const catStatus = categoryStatusMap[categoryKey] || categoryStatusMap[catId];
               
               // Use checklist settings if available
               const rb = isMultiBrand ? routeBrands.find((b: any) => b.brand_id === activeBrandId) : null;
@@ -1061,8 +1064,9 @@ export default function PromotorRota() {
               // if 'after', products_unlocked comes from point-type selection
               // if 'before' or 'both', products_unlocked comes from before-photo upload
               const anyExecDone = execs.some((e: any) => e.status !== 'pending');
+              const hasBeforeUnlock = !!catStatus?.products_unlocked || !!catStatus?.category_before_photo || !!optimisticBeforeUnlock[categoryKey];
               const isLocked = requireCategoryPhotos 
-                ? (isExtraGroup ? (!hasExtraPhoto && !anyExecDone) : !catStatus?.products_unlocked) 
+                ? (isExtraGroup ? (!hasExtraPhoto && !anyExecDone) : !hasBeforeUnlock) 
                 : false;
                 
               // Se o modo for "Só Depois" e já tiver selecionado o tipo de ponto, liberamos os produtos mesmo se o backend ainda não marcou products_unlocked
@@ -1072,11 +1076,13 @@ export default function PromotorRota() {
               const allProductsDone = doneCount === execs.length && execs.length > 0;
               const afterPhotoKey = `${catId}_${routeBrandId || 'null'}`;
               const hasAfterPhoto = !!catStatus?.category_after_photo || !!catStatus?.completed || !!optimisticAfterPhoto[afterPhotoKey];
+              const accordionKey = categoryKey;
+              const isCompletedCategory = hasAfterPhoto;
               
               // Show after photo gate when all products done AND mode is 'both' or 'after'
               const needsAfterPhoto = requireCategoryPhotos && 
                 allProductsDone && 
-                !isLocked && 
+                !effectivelyLocked && 
                 !hasAfterPhoto && 
                 (photoMode === 'both' || photoMode === 'after');
 
@@ -1098,7 +1104,7 @@ export default function PromotorRota() {
                       qualityConfig={photoQualityConfig}
                       photoMode={photoMode}
                       minPhotos={Math.max(1, parseInt((rb || route as any)?.min_category_photos_before, 10) || 1)}
-                      onUnlocked={() => refetch()}
+                      onUnlocked={() => { setOptimisticBeforeUnlock(prev => ({ ...prev, [categoryKey]: true })); refetch(); }}
                     />
                   )}
 
@@ -1117,12 +1123,15 @@ export default function PromotorRota() {
                   )}
 
                   {/* Category header */}
-                  <div className="flex items-center justify-between mb-2 mt-3">
+                  <div
+                    className={`flex items-center justify-between mb-2 mt-3 rounded-md border px-3 py-2 transition-colors ${isCompletedCategory ? 'cursor-pointer border-green-500/30 bg-green-500/10 text-green-800' : 'border-transparent'}`}
+                    onClick={isCompletedCategory ? () => setExpandedCategories(prev => ({ ...prev, [accordionKey]: !prev[accordionKey] })) : undefined}
+                  >
                     <div className="flex items-center gap-2">
                       {hasAfterPhoto ? <CheckCircle2 className="h-4 w-4 text-green-600" /> : isExtraGroup ? <Target className="h-4 w-4 text-orange-600" /> : (requireCategoryPhotos && effectivelyLocked) ? <Lock className="h-4 w-4 text-muted-foreground" /> : <Unlock className="h-4 w-4 text-green-600" />}
                       <h3 className="text-sm font-bold">{category}</h3>
                       {hasAfterPhoto && (
-                        <Badge variant="secondary" className="text-[9px] bg-green-100 text-green-700">✅ Concluída</Badge>
+                        <Badge variant="secondary" className="text-[9px] bg-green-100 text-green-700">✅ OK</Badge>
                       )}
                       {isExtraGroup && !hasAfterPhoto ? (
                         <Badge variant="secondary" className="text-[9px] bg-orange-100 text-orange-700 border-orange-300">🎯 Extra</Badge>
@@ -1138,25 +1147,28 @@ export default function PromotorRota() {
                           variant="outline"
                           size="sm"
                           className="h-7 text-[10px] bg-green-50 text-green-700 hover:bg-green-100 border-green-200"
-                          onClick={async () => {
-                            if (!window.confirm(`Deseja marcar todos os ${execs.length - doneCount} produto(s) desta categoria como concluídos?`)) return;
-                            try {
-                              for (const exec of execs) {
-                                if (exec.status !== 'completed') {
-                                  await updateExec.mutateAsync({
-                                    id: exec.id,
-                                    status: 'completed',
-                                    checked: true,
-                                    qty_store: 0,
-                                    qty_stock: 0
-                                  });
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            (async () => {
+                              if (!window.confirm(`Deseja marcar todos os ${execs.length - doneCount} produto(s) desta categoria como concluídos?`)) return;
+                              try {
+                                for (const exec of execs) {
+                                  if (exec.status !== 'completed') {
+                                    await updateExec.mutateAsync({
+                                      id: exec.id,
+                                      status: 'completed',
+                                      checked: true,
+                                      qty_store: 0,
+                                      qty_stock: 0
+                                    });
+                                  }
                                 }
+                                // Removed toast per user request
+                                refetch();
+                              } catch (err: any) {
+                                toast.error('Erro ao concluir produtos: ' + err.message);
                               }
-                              // Removed toast per user request
-                              refetch();
-                            } catch (err: any) {
-                              toast.error('Erro ao concluir produtos: ' + err.message);
-                            }
+                            })();
                           }}
                           disabled={updateExec.isPending}
                         >
@@ -1164,18 +1176,18 @@ export default function PromotorRota() {
                         </Button>
                       )}
                       <Badge variant="outline" className="text-[10px]">{doneCount}/{execs.length}</Badge>
+                      {isCompletedCategory && (expandedCategories[accordionKey] ? <ChevronUp className="h-4 w-4 text-green-700" /> : <ChevronDown className="h-4 w-4 text-green-700" />)}
                     </div>
                   </div>
 
                   {/* Photo-only mode: collapse products into accordion (only matters when stock/validity counting is OFF) */}
                   {(() => {
                     const photoOnlyMode = !requireStockCount && !requireValidityCheck;
-                    const accordionKey = `${catId}_${routeBrandId || 'null'}`;
-                    const isExpanded = photoOnlyMode ? !!expandedCategories[accordionKey] : true;
-                    const showProducts = !photoOnlyMode || isExpanded;
+                    const isExpanded = isCompletedCategory ? !!expandedCategories[accordionKey] : photoOnlyMode ? !!expandedCategories[accordionKey] : true;
+                    const showProducts = isCompletedCategory ? isExpanded : (!photoOnlyMode || isExpanded);
                     return (
                       <>
-                        {photoOnlyMode && !effectivelyLocked && (
+                        {photoOnlyMode && !isCompletedCategory && !effectivelyLocked && (
                           <button
                             type="button"
                             onClick={() => setExpandedCategories(prev => ({ ...prev, [accordionKey]: !prev[accordionKey] }))}
