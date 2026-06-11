@@ -1076,6 +1076,8 @@ export default function PromotorRota() {
               const allProductsDone = doneCount === execs.length && execs.length > 0;
               const afterPhotoKey = `${catId}_${routeBrandId || 'null'}`;
               const hasAfterPhoto = !!catStatus?.category_after_photo || !!catStatus?.completed || !!optimisticAfterPhoto[afterPhotoKey];
+              const accordionKey = categoryKey;
+              const isCompletedCategory = hasAfterPhoto;
               
               // Show after photo gate when all products done AND mode is 'both' or 'after'
               const needsAfterPhoto = requireCategoryPhotos && 
@@ -1121,12 +1123,15 @@ export default function PromotorRota() {
                   )}
 
                   {/* Category header */}
-                  <div className="flex items-center justify-between mb-2 mt-3">
+                  <div
+                    className={`flex items-center justify-between mb-2 mt-3 rounded-md border px-3 py-2 transition-colors ${isCompletedCategory ? 'cursor-pointer border-green-500/30 bg-green-500/10 text-green-800' : 'border-transparent'}`}
+                    onClick={isCompletedCategory ? () => setExpandedCategories(prev => ({ ...prev, [accordionKey]: !prev[accordionKey] })) : undefined}
+                  >
                     <div className="flex items-center gap-2">
                       {hasAfterPhoto ? <CheckCircle2 className="h-4 w-4 text-green-600" /> : isExtraGroup ? <Target className="h-4 w-4 text-orange-600" /> : (requireCategoryPhotos && effectivelyLocked) ? <Lock className="h-4 w-4 text-muted-foreground" /> : <Unlock className="h-4 w-4 text-green-600" />}
                       <h3 className="text-sm font-bold">{category}</h3>
                       {hasAfterPhoto && (
-                        <Badge variant="secondary" className="text-[9px] bg-green-100 text-green-700">✅ Concluída</Badge>
+                        <Badge variant="secondary" className="text-[9px] bg-green-100 text-green-700">✅ OK</Badge>
                       )}
                       {isExtraGroup && !hasAfterPhoto ? (
                         <Badge variant="secondary" className="text-[9px] bg-orange-100 text-orange-700 border-orange-300">🎯 Extra</Badge>
@@ -1142,25 +1147,28 @@ export default function PromotorRota() {
                           variant="outline"
                           size="sm"
                           className="h-7 text-[10px] bg-green-50 text-green-700 hover:bg-green-100 border-green-200"
-                          onClick={async () => {
-                            if (!window.confirm(`Deseja marcar todos os ${execs.length - doneCount} produto(s) desta categoria como concluídos?`)) return;
-                            try {
-                              for (const exec of execs) {
-                                if (exec.status !== 'completed') {
-                                  await updateExec.mutateAsync({
-                                    id: exec.id,
-                                    status: 'completed',
-                                    checked: true,
-                                    qty_store: 0,
-                                    qty_stock: 0
-                                  });
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            (async () => {
+                              if (!window.confirm(`Deseja marcar todos os ${execs.length - doneCount} produto(s) desta categoria como concluídos?`)) return;
+                              try {
+                                for (const exec of execs) {
+                                  if (exec.status !== 'completed') {
+                                    await updateExec.mutateAsync({
+                                      id: exec.id,
+                                      status: 'completed',
+                                      checked: true,
+                                      qty_store: 0,
+                                      qty_stock: 0
+                                    });
+                                  }
                                 }
+                                // Removed toast per user request
+                                refetch();
+                              } catch (err: any) {
+                                toast.error('Erro ao concluir produtos: ' + err.message);
                               }
-                              // Removed toast per user request
-                              refetch();
-                            } catch (err: any) {
-                              toast.error('Erro ao concluir produtos: ' + err.message);
-                            }
+                            })();
                           }}
                           disabled={updateExec.isPending}
                         >
@@ -1168,6 +1176,7 @@ export default function PromotorRota() {
                         </Button>
                       )}
                       <Badge variant="outline" className="text-[10px]">{doneCount}/{execs.length}</Badge>
+                      {isCompletedCategory && (expandedCategories[accordionKey] ? <ChevronUp className="h-4 w-4 text-green-700" /> : <ChevronDown className="h-4 w-4 text-green-700" />)}
                     </div>
                   </div>
 
