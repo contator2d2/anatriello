@@ -236,8 +236,6 @@ function CategoryPreparation({ category, catId, routeBrandId, categoryName, rout
     setPhotos(prev => prev.filter((_, i) => i !== index));
   };
 
-  if (isUnlocked) return null;
-
   // Auto-set point type to 'natural' by default — extra points are added via the dedicated "Registrar Ponto Extra" flow
   useEffect(() => {
     if (!isUnlocked && !hasPointType && !setPointType.isPending) {
@@ -245,6 +243,8 @@ function CategoryPreparation({ category, catId, routeBrandId, categoryName, rout
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasPointType, isUnlocked]);
+
+  if (isUnlocked) return null;
 
   return (
     <Card className="border-primary/40 bg-primary/5">
@@ -1183,12 +1183,11 @@ export default function PromotorRota() {
                   {/* Photo-only mode: collapse products into accordion (only matters when stock/validity counting is OFF) */}
                   {(() => {
                     const photoOnlyMode = !requireStockCount && !requireValidityCheck;
-                    const accordionKey = `${catId}_${routeBrandId || 'null'}`;
-                    const isExpanded = photoOnlyMode ? !!expandedCategories[accordionKey] : true;
-                    const showProducts = !photoOnlyMode || isExpanded;
+                    const isExpanded = isCompletedCategory ? !!expandedCategories[accordionKey] : photoOnlyMode ? !!expandedCategories[accordionKey] : true;
+                    const showProducts = isCompletedCategory ? isExpanded : (!photoOnlyMode || isExpanded);
                     return (
                       <>
-                        {photoOnlyMode && !effectivelyLocked && (
+                        {photoOnlyMode && !isCompletedCategory && !effectivelyLocked && (
                           <button
                             type="button"
                             onClick={() => setExpandedCategories(prev => ({ ...prev, [accordionKey]: !prev[accordionKey] }))}
