@@ -1564,10 +1564,12 @@ export default function PromotorRota() {
                 // Save validity inline when checklist requires it
                 const saveValidityIfNeeded = async () => {
                   if (!requireValidityCheck || !expiryDate) return;
+                  const valStore = Number(actionForm.val_qty_store ?? 0) || 0;
+                  const valStock = Number(actionForm.val_qty_stock ?? 0) || 0;
                   const validityBody = {
                     expiry_date: expiryDate,
-                    qty_store: qtyStore,
-                    qty_stock: qtyStock,
+                    qty_store: valStore,
+                    qty_stock: valStock,
                     replace: true,
                   };
                   if (!isOnline) {
