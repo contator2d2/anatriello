@@ -138,6 +138,11 @@ const getScopedAuthToken = (endpoint: string) => {
     return localStorage.getItem('promotor_token') || localStorage.getItem('auth_token');
   }
 
+  // Shared merchandising config endpoints — fall back to promotor token when no main token
+  if (endpoint.startsWith('/api/merchandising/')) {
+    return localStorage.getItem('auth_token') || localStorage.getItem('promotor_token');
+  }
+
   // External promoter PWA token
   if (endpoint.startsWith('/api/promoter-app')) {
     return localStorage.getItem('promoter_app_token');
