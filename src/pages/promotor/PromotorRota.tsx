@@ -680,7 +680,8 @@ export default function PromotorRota() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groupedExecs, categoryStatusMap, extraGroupPhotos, requireStockCount, requireValidityCheck]);
 
-  const handleCheckin = useCallback(async () => {
+  const handleCheckin = useCallback(async (photoOverride?: string) => {
+    const effectivePhotoUrl = photoOverride || checkinPhotoUrl;
     if (!id) return;
     
     // Guarda contra múltiplos cliques (queueApiCall não expõe isPending)
