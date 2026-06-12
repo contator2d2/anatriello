@@ -757,7 +757,7 @@ export default function PromotorRota() {
         method: 'POST',
         body,
         headers: { 'Authorization': `Bearer ${localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}` },
-        dependsOnUploadId: checkinPhotoUrl?.startsWith('local-file://') ? checkinPhotoUrl.replace('local-file://', '') : undefined
+        dependsOnUploadId: effectivePhotoUrl?.startsWith('local-file://') ? effectivePhotoUrl.replace('local-file://', '') : undefined
       });
       // Removed toast per user request
 

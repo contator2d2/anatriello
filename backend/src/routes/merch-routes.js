@@ -1893,7 +1893,7 @@ router.post('/promotor/routes/:id/checkin', promotorAuth, async (req, res) => {
     let isFirstRouteAtPdv = false;
     try {
       const existingVisit = await query(
-        `SELECT id FROM pdv_visits WHERE promoter_id=$1 AND pdv_id=$2 AND visit_date=$3`,
+        `SELECT id, checkin_photo_url FROM pdv_visits WHERE promoter_id=$1 AND pdv_id=$2 AND visit_date=$3`,
         [req.employeeId, pdvId, todayStr]
       );
       if (existingVisit.rows.length) {
@@ -1945,18 +1945,27 @@ router.post('/promotor/routes/:id/checkin', promotorAuth, async (req, res) => {
       [req.params.id, latitude, longitude, device, effectivePhotoUrl]
     );
 
-    if (photo_url) {
+    if (all_routes_at_pdv) {
+      await query(
+        `UPDATE merch_routes SET status='in_progress', checkin_at=COALESCE(checkin_at, NOW()), checkin_latitude=$1,
+         checkin_longitude=$2, checkin_device=$3, checkin_photo_url=COALESCE(checkin_photo_url, $4), updated_at=NOW()
+         WHERE promoter_id=$5 AND pdv_id=$6 AND visit_date=$7 AND status IN ('scheduled','confirmed')`,
+        [latitude, longitude, device, effectivePhotoUrl, req.employeeId, pdvId, route.rows[0].visit_date]
+      );
+    }
+
+    if (effectivePhotoUrl) {
       await query(
         `INSERT INTO route_photos (route_id, photo_type, photo_url, latitude, longitude, upload_source, uploaded_by)
          VALUES ($1,'checkin',$2,$3,$4,'app',$5)`,
-        [req.params.id, photo_url, latitude, longitude, req.employeeId]
+        [req.params.id, effectivePhotoUrl, latitude, longitude, req.employeeId]
       );
     }
 
     await query(
       `INSERT INTO route_execution_logs (route_id, action, details, performed_by, source)
        VALUES ($1,'checkin',$2,$3,'app')`,
-      [req.params.id, JSON.stringify({ latitude, longitude, has_photo: !!photo_url, is_first_at_pdv: isFirstRouteAtPdv, visit_id: visitId }), req.employeeId]
+      [req.params.id, JSON.stringify({ latitude, longitude, has_photo: !!effectivePhotoUrl, is_first_at_pdv: isFirstRouteAtPdv, visit_id: visitId }), req.employeeId]
     );
 
     res.json({ ...result.rows[0], visit_id: visitId, is_first_at_pdv: isFirstRouteAtPdv });
