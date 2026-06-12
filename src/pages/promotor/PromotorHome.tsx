@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -68,6 +68,7 @@ export default function PromotorHome() {
   const [qrLoading, setQrLoading] = useState(false);
   const [isPreloading, setIsPreloading] = useState(false);
   const [preloadProgress, setPreloadProgress] = useState(0);
+  const pdvCheckinRunningRef = useRef(false);
   const queryClient = useQueryClient();
 
   // Fetch facial config for this promotor
@@ -137,11 +138,14 @@ export default function PromotorHome() {
   }, [todayRoutes, pdvVisits]);
 
   // PDV Check-in handler
-  const handlePdvCheckin = useCallback(async (pdvId: string) => {
-    if (!pdvCheckinPhoto) {
+  const handlePdvCheckin = useCallback(async (pdvId: string, photoOverride?: string) => {
+    const effectivePhoto = photoOverride || pdvCheckinPhoto;
+    if (pdvCheckinRunningRef.current) return;
+    if (!effectivePhoto) {
       toast({ title: 'Foto obrigatória', description: 'Tire uma foto da fachada da loja para o check-in.', variant: 'destructive' });
       return;
     }
+    pdvCheckinRunningRef.current = true;
     setPdvCheckinLoading(true);
     try {
       logger.info('[handlePdvCheckin] Iniciando check-in da loja', { pdvId });
@@ -174,7 +178,7 @@ export default function PromotorHome() {
       const body = {
         latitude: pos.coords.latitude,
         longitude: pos.coords.longitude,
-        photo_url: pdvCheckinPhoto,
+        photo_url: effectivePhoto,
         all_routes_at_pdv: true
       };
 
@@ -186,7 +190,7 @@ export default function PromotorHome() {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}`
           },
-          dependsOnUploadId: pdvCheckinPhoto.startsWith('local-file://') ? pdvCheckinPhoto.replace('local-file://', '') : undefined
+          dependsOnUploadId: effectivePhoto.startsWith('local-file://') ? effectivePhoto.replace('local-file://', '') : undefined
         });
 
         // toast({ title: 'Check-in salvo offline!', description: 'Será sincronizado automaticamente.' });
@@ -227,6 +231,7 @@ export default function PromotorHome() {
       // Limpa estados e navega
       setShowPdvCheckin(false);
       setPdvCheckinPhoto('');
+      queryClient.invalidateQueries({ queryKey: ['promotor-home'] });
       
       // Pequeno delay para garantir que o estado local foi limpo antes de navegar
       setTimeout(() => {
@@ -242,8 +247,9 @@ export default function PromotorHome() {
       });
     } finally {
       setPdvCheckinLoading(false);
+      pdvCheckinRunningRef.current = false;
     }
-  }, [pdvCheckinPhoto, todayRoutes, navigate, toast]);
+  }, [pdvCheckinPhoto, todayRoutes, navigate, toast, isOnline, queueApiCall, queryClient]);
 
   const handlePdvCheckout = useCallback(async (pdvId: string) => {
     setPdvCheckoutLoading(true);
