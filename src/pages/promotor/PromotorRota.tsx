@@ -978,46 +978,36 @@ export default function PromotorRota() {
         )}
 
         {/* Check-in photo requirement */}
-        {needsCheckin && route.require_checkin_photo && (
+        {needsCheckin && route.require_checkin_photo && !checkinPhotoUrl && (
           <Card className="border-primary/30">
             <CardContent className="p-4 space-y-3">
               <div className="flex items-center gap-2 text-sm font-medium">
                 <Camera className="h-4 w-4 text-primary" />
                 Foto obrigatória para check-in
               </div>
-              {checkinPhotoUrl ? (
-                <div className="space-y-2">
-                  <LocalImage src={checkinPhotoUrl} alt="Check-in" className="w-full rounded-lg border max-h-64 object-cover" />
-                  <p className="text-xs text-muted-foreground text-center">A foto ficou boa? Aprove para concluir o check-in.</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button
-                      variant="outline"
-                      className="h-12"
-                      onClick={() => setCheckinPhotoUrl('')}
-                      disabled={checkin.isPending || checkinSubmitted}
-                    >
-                      <Camera className="h-4 w-4 mr-1" /> Reprovar
-                    </Button>
-                    <Button
-                      className="h-12"
-                      onClick={handleCheckin}
-                      disabled={checkin.isPending || checkinSubmitted}
-                    >
-                      {isFacialActiveCheckin ? <ScanFace className="h-4 w-4 mr-1" /> : <Check className="h-4 w-4 mr-1" />}
-                      {checkin.isPending || checkinSubmitted ? 'Enviando...' : 'Aprovar'}
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <CameraCapture
-                  onCapture={setCheckinPhotoUrl}
-                  watermark={{ pdvName: route.pdv_name, brandName: route.brand_name || route.route_brands?.[0]?.brand_name, photoType: 'Check-in' }}
-                  customTokenGetter={() => localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}
-                  buttonLabel="Tirar foto de check-in"
-                  qualityConfig={photoQualityConfig}
-                  allowManualUpload={false}
-                />
-              )}
+              <CameraCapture
+                onCapture={(url) => {
+                  setCheckinPhotoUrl(url);
+                  // Auto-submit check-in assim que a foto for validada
+                  setTimeout(() => { void handleCheckin(url); }, 0);
+                }}
+                watermark={{ pdvName: route.pdv_name, brandName: route.brand_name || route.route_brands?.[0]?.brand_name, photoType: 'Check-in' }}
+                customTokenGetter={() => localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}
+                buttonLabel="Tirar foto de check-in"
+                qualityConfig={photoQualityConfig}
+                allowManualUpload={false}
+              />
+            </CardContent>
+          </Card>
+        )}
+
+        {needsCheckin && route.require_checkin_photo && checkinPhotoUrl && (
+          <Card className="border-primary/30">
+            <CardContent className="p-4 space-y-2">
+              <LocalImage src={checkinPhotoUrl} alt="Check-in" className="w-full rounded-lg border max-h-64 object-cover" />
+              <p className="text-xs text-muted-foreground text-center">
+                {checkin.isPending || checkinSubmitted ? 'Realizando check-in...' : 'Foto registrada. Concluindo check-in...'}
+              </p>
             </CardContent>
           </Card>
         )}
@@ -1029,13 +1019,14 @@ export default function PromotorRota() {
           </div>
         )}
 
-        {/* Botão de check-in padrão (sem foto obrigatória OU sem foto ainda) */}
-        {needsCheckin && !(route.require_checkin_photo && checkinPhotoUrl) && (
-          <Button className="w-full h-14 text-lg" onClick={handleCheckin} disabled={checkin.isPending || (route.require_checkin_photo && !checkinPhotoUrl)}>
+        {/* Botão de check-in padrão (sem foto obrigatória) */}
+        {needsCheckin && !route.require_checkin_photo && (
+          <Button className="w-full h-14 text-lg" onClick={() => handleCheckin()} disabled={checkin.isPending}>
             {isFacialActiveCheckin ? <ScanFace className="h-5 w-5 mr-2" /> : <MapPin className="h-5 w-5 mr-2" />}
-            {checkin.isPending ? 'Realizando check-in...' : route.require_checkin_photo ? 'Tire a foto para continuar' : 'Fazer Check-in'}
+            {checkin.isPending ? 'Realizando check-in...' : 'Fazer Check-in'}
           </Button>
         )}
+
 
         {isActive && filteredExecs.length === 0 && activeBrandId && (
           <Card>
