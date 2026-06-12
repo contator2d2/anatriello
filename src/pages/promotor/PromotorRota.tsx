@@ -662,10 +662,15 @@ export default function PromotorRota() {
     if (requireStockCount || requireValidityCheck) return;
     if (!route?.executions?.length) return;
     Object.values(groupedExecs).forEach(({ catId, execs, isExtraGroup }) => {
-      const catStatus = categoryStatusMap[catId];
+      const routeBrandId = execs[0]?.route_brand_id;
+      const categoryKey = `${catId}_${routeBrandId || 'null'}`;
+      const catStatus = categoryStatusMap[categoryKey] || categoryStatusMap[catId];
+      const rbConfig = isMultiBrand ? routeBrands.find((b: any) => b.id === routeBrandId) : null;
+      const requireCategoryPhotos = (rbConfig || route as any)?.require_category_photos !== false;
+      const photoMode = (rbConfig || route as any)?.category_photo_mode || 'both';
       const unlocked = isExtraGroup
         ? !!extraGroupPhotos[`extra_${catId}_${execs[0]?.route_brand_id || 'null'}`]
-        : !!catStatus?.products_unlocked;
+        : !requireCategoryPhotos || !!catStatus?.products_unlocked || !!catStatus?.category_before_photo || !!optimisticBeforeUnlock[categoryKey] || (photoMode === 'after' && !!catStatus?.point_type);
       if (!unlocked) return;
       execs.forEach((exec: any) => {
         if (exec.status !== 'completed' && !exec.has_rupture && !exec.has_damage) {
@@ -680,7 +685,7 @@ export default function PromotorRota() {
       });
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [groupedExecs, categoryStatusMap, extraGroupPhotos, requireStockCount, requireValidityCheck]);
+  }, [groupedExecs, categoryStatusMap, extraGroupPhotos, optimisticBeforeUnlock, requireStockCount, requireValidityCheck, isMultiBrand, routeBrands, route]);
 
   const handleCheckin = useCallback(async (photoOverride?: string) => {
     const effectivePhotoUrl = photoOverride || checkinPhotoUrl;
@@ -845,8 +850,10 @@ export default function PromotorRota() {
     // Check checklist settings for this brand
     const rb = isMultiBrand ? routeBrands.find((b: any) => b.id === routeBrandId) : null;
     const requireCategoryPhotos = (rb || route as any)?.require_category_photos !== false;
+    const photoMode = (rb || route as any)?.category_photo_mode || 'both';
+    const hasCategoryAccess = !!catStatus?.products_unlocked || !!catStatus?.category_before_photo || !!optimisticBeforeUnlock[categoryKey] || (photoMode === 'after' && !!catStatus?.point_type);
     
-    if (requireCategoryPhotos && !catStatus?.products_unlocked && !catStatus?.category_before_photo && !optimisticBeforeUnlock[categoryKey]) {
+    if (requireCategoryPhotos && !hasCategoryAccess) {
       toast.error('Finalize a etapa de preparação da categoria antes de executar produtos.');
       return;
     }
@@ -1073,9 +1080,12 @@ export default function PromotorRota() {
               const accordionKey = categoryKey;
               const isCompletedCategory = hasAfterPhoto;
               
-              // Show after photo gate when all products done AND mode is 'both' or 'after'
+              const photoOnlyMode = !requireStockCount && !requireValidityCheck;
+              const readyForAfterPhoto = allProductsDone || (photoOnlyMode && photoMode === 'after' && !effectivelyLocked);
+
+              // Show after photo gate when products are done OR photo-only checklist asks only after-photo
               const needsAfterPhoto = requireCategoryPhotos && 
-                allProductsDone && 
+                readyForAfterPhoto && 
                 !effectivelyLocked && 
                 !hasAfterPhoto && 
                 (photoMode === 'both' || photoMode === 'after');
