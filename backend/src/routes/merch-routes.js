@@ -1871,7 +1871,7 @@ router.get('/promotor/routes/:id', promotorAuth, async (req, res) => {
 // Promotor: Check-in (also handles PDV visit creation)
 router.post('/promotor/routes/:id/checkin', promotorAuth, async (req, res) => {
   try {
-    const { latitude, longitude, device, photo_url } = req.body;
+    const { latitude, longitude, device, photo_url, all_routes_at_pdv } = req.body;
     const route = await query(
       `SELECT r.*, bc.require_checkin_photo, r.pdv_id, r.visit_date
        FROM merch_routes r
@@ -1883,13 +1883,10 @@ router.post('/promotor/routes/:id/checkin', promotorAuth, async (req, res) => {
     if (route.rows[0].status !== 'scheduled' && route.rows[0].status !== 'confirmed') {
       return res.status(400).json({ error: 'Rota não pode receber check-in neste status' });
     }
-    if (route.rows[0].require_checkin_photo && !photo_url) {
-      return res.status(400).json({ error: 'Esta rota exige foto obrigatória no check-in' });
-    }
-
     const nowBR = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
     const todayStr = `${nowBR.getFullYear()}-${String(nowBR.getMonth()+1).padStart(2,'0')}-${String(nowBR.getDate()).padStart(2,'0')}`;
     const pdvId = route.rows[0].pdv_id;
+    let effectivePhotoUrl = photo_url || null;
 
     // Create or find PDV visit for this PDV + date
     let visitId = null;
@@ -1901,12 +1898,14 @@ router.post('/promotor/routes/:id/checkin', promotorAuth, async (req, res) => {
       );
       if (existingVisit.rows.length) {
         visitId = existingVisit.rows[0].id;
+        const existingPhoto = existingVisit.rows[0].checkin_photo_url;
+        if (!effectivePhotoUrl && existingPhoto) effectivePhotoUrl = existingPhoto;
       } else {
         isFirstRouteAtPdv = true;
         const visitRes = await query(
           `INSERT INTO pdv_visits (organization_id, promoter_id, pdv_id, visit_date, checkin_at, checkin_latitude, checkin_longitude, checkin_photo_url, checkin_device, status)
-           VALUES ($1,$2,$3,$4,NOW(),$5,$6,$7,$8,'active') RETURNING id`,
-          [req.orgId, req.employeeId, pdvId, todayStr, latitude, longitude, photo_url, device]
+            VALUES ($1,$2,$3,$4,NOW(),$5,$6,$7,$8,'active') RETURNING id`,
+          [req.orgId, req.employeeId, pdvId, todayStr, latitude, longitude, effectivePhotoUrl, device]
         );
         visitId = visitRes.rows[0].id;
 
@@ -1914,7 +1913,7 @@ router.post('/promotor/routes/:id/checkin', promotorAuth, async (req, res) => {
         await query(
           `INSERT INTO pdv_visit_timeline (visit_id, event_type, event_data, performed_by)
            VALUES ($1,'pdv_checkin',$2,$3)`,
-          [visitId, JSON.stringify({ latitude, longitude, has_photo: !!photo_url }), req.employeeId]
+          [visitId, JSON.stringify({ latitude, longitude, has_photo: !!effectivePhotoUrl }), req.employeeId]
         );
       }
 
@@ -1935,11 +1934,15 @@ router.post('/promotor/routes/:id/checkin', promotorAuth, async (req, res) => {
       if (e.code !== '42P01') logError('promotor.checkin.visit', e);
     }
 
+    if (route.rows[0].require_checkin_photo && !effectivePhotoUrl) {
+      return res.status(400).json({ error: 'Esta rota exige foto obrigatória no check-in' });
+    }
+
     const result = await query(
       `UPDATE merch_routes SET status='in_progress', checkin_at=NOW(), checkin_latitude=$2,
        checkin_longitude=$3, checkin_device=$4, checkin_photo_url=$5, updated_at=NOW()
        WHERE id=$1 RETURNING *`,
-      [req.params.id, latitude, longitude, device, photo_url || null]
+      [req.params.id, latitude, longitude, device, effectivePhotoUrl]
     );
 
     if (photo_url) {
