@@ -701,7 +701,7 @@ export default function PromotorRota() {
       return;
     }
 
-    if (route?.require_checkin_photo && !checkinPhotoUrl) {
+    if (route?.require_checkin_photo && !effectivePhotoUrl) {
       (handleCheckin as any)._running = false;
       toast.error('Esta rota exige foto obrigatória no check-in');
       return;
@@ -746,7 +746,7 @@ export default function PromotorRota() {
         latitude: pos?.coords.latitude,
         longitude: pos?.coords.longitude,
         device: navigator.userAgent || 'Unknown Device',
-        photo_url: checkinPhotoUrl || undefined,
+        photo_url: effectivePhotoUrl || undefined,
         facial_verified: isFacialActiveCheckin || undefined,
         all_routes_at_pdv: true,
       };
