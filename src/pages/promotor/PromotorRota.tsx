@@ -1134,39 +1134,7 @@ export default function PromotorRota() {
                       )}
                     </div>
                     <div className="flex items-center gap-2">
-                      {canQuickCheck && !allProductsDone && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-7 text-[10px] bg-green-50 text-green-700 hover:bg-green-100 border-green-200"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            (async () => {
-                              if (!window.confirm(`Deseja marcar todos os ${execs.length - doneCount} produto(s) desta categoria como concluídos?`)) return;
-                              try {
-                                for (const exec of execs) {
-                                  if (exec.status !== 'completed') {
-                                    await updateExec.mutateAsync({
-                                      id: exec.id,
-                                      status: 'completed',
-                                      checked: true,
-                                      qty_store: 0,
-                                      qty_stock: 0
-                                    });
-                                  }
-                                }
-                                // Removed toast per user request
-                                refetch();
-                              } catch (err: any) {
-                                toast.error('Erro ao concluir produtos: ' + err.message);
-                              }
-                            })();
-                          }}
-                          disabled={updateExec.isPending}
-                        >
-                          <CheckCircle2 className="h-3 w-3 mr-1" /> Marcar todos
-                        </Button>
-                      )}
+                      {/* Photo-only mode: products auto-complete on unlock; no manual "Marcar todos" needed */}
                       <Badge variant="outline" className="text-[10px]">{doneCount}/{execs.length}</Badge>
                       {isCompletedCategory && (expandedCategories[accordionKey] ? <ChevronUp className="h-4 w-4 text-green-700" /> : <ChevronDown className="h-4 w-4 text-green-700" />)}
                     </div>
