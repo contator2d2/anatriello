@@ -2364,13 +2364,24 @@ router.post('/promotor/routes/:routeId/categories/:catId/after-photo', promotorA
 router.post('/promotor/routes/:id/photos', promotorAuth, async (req, res) => {
   try {
     const { photo_type, category_id, product_id, exposure_point, photo_url, latitude, longitude,
+            route_brand_id,
             original_size_bytes, compressed_size_bytes, quality_score, quality_passed } = req.body;
+    const hasRouteBrandColumn = await hasColumn('route_photos', 'route_brand_id');
+    const insertSql = hasRouteBrandColumn
+      ? `INSERT INTO route_photos (route_id, photo_type, category_id, product_id, exposure_point, photo_url,
+        latitude, longitude, route_brand_id, original_size_bytes, compressed_size_bytes, quality_score, quality_passed,
+        upload_source, uploaded_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'app',$14) RETURNING *`
+      : `INSERT INTO route_photos (route_id, photo_type, category_id, product_id, exposure_point, photo_url,
+        latitude, longitude, original_size_bytes, compressed_size_bytes, quality_score, quality_passed,
+        upload_source, uploaded_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'app',$13) RETURNING *`;
+    const insertParams = hasRouteBrandColumn
+      ? [req.params.id, photo_type, category_id, product_id, exposure_point, photo_url,
+         latitude, longitude, route_brand_id || null, original_size_bytes, compressed_size_bytes, quality_score, quality_passed ?? true, req.employeeId]
+      : [req.params.id, photo_type, category_id, product_id, exposure_point, photo_url,
+         latitude, longitude, original_size_bytes, compressed_size_bytes, quality_score, quality_passed ?? true, req.employeeId];
     const result = await query(
-      `INSERT INTO route_photos (route_id, photo_type, category_id, product_id, exposure_point, photo_url,
-       latitude, longitude, original_size_bytes, compressed_size_bytes, quality_score, quality_passed,
-       upload_source, uploaded_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'app',$13) RETURNING *`,
-      [req.params.id, photo_type, category_id, product_id, exposure_point, photo_url,
-       latitude, longitude, original_size_bytes, compressed_size_bytes, quality_score, quality_passed ?? true, req.employeeId]
+      insertSql,
+      insertParams
     );
 
     await query(
