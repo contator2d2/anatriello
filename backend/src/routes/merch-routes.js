@@ -1901,6 +1901,9 @@ router.post('/promotor/routes/:id/checkin', promotorAuth, async (req, res) => {
         const existingPhoto = existingVisit.rows[0].checkin_photo_url;
         if (!effectivePhotoUrl && existingPhoto) effectivePhotoUrl = existingPhoto;
       } else {
+        if (route.rows[0].require_checkin_photo && !effectivePhotoUrl) {
+          return res.status(400).json({ error: 'Esta rota exige foto obrigatória no check-in' });
+        }
         isFirstRouteAtPdv = true;
         const visitRes = await query(
           `INSERT INTO pdv_visits (organization_id, promoter_id, pdv_id, visit_date, checkin_at, checkin_latitude, checkin_longitude, checkin_photo_url, checkin_device, status)
