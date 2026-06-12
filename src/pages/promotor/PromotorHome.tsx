@@ -188,7 +188,7 @@ export default function PromotorHome() {
             queryClient.setQueryData(['promotor-route', r.id], (old: any) => old ? {
               ...old,
               status: 'in_progress',
-              checkin_at: old.checkin_at || new Date().toISOString(),
+              checkin_at: old.checkin_at || new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }),
               checkin_photo_url: old.checkin_photo_url || effectivePhoto,
             } : old);
           });
