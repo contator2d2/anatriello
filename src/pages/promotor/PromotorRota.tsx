@@ -656,8 +656,9 @@ export default function PromotorRota() {
     return set;
   }, [route?.executions]);
 
-  // Photo-only mode: auto-complete all pending products once the category is unlocked
-  // (in this mode the checklist requires only category photos, no per-item check)
+  // Photo-only mode: auto-complete pending products ONLY after the required
+  // category photos (before/after according to checklist) have been registered.
+  // This keeps progress tied to actual photos taken.
   useEffect(() => {
     if (requireStockCount || requireValidityCheck) return;
     if (!route?.executions?.length) return;
@@ -668,10 +669,21 @@ export default function PromotorRota() {
       const rbConfig = isMultiBrand ? routeBrands.find((b: any) => b.id === routeBrandId) : null;
       const requireCategoryPhotos = (rbConfig || route as any)?.require_category_photos !== false;
       const photoMode = (rbConfig || route as any)?.category_photo_mode || 'both';
-      const unlocked = isExtraGroup
-        ? !!extraGroupPhotos[`extra_${catId}_${execs[0]?.route_brand_id || 'null'}`]
-        : !requireCategoryPhotos || !!catStatus?.products_unlocked || !!catStatus?.category_before_photo || !!optimisticBeforeUnlock[categoryKey] || (photoMode === 'after' && !!catStatus?.point_type);
-      if (!unlocked) return;
+
+      let photosSatisfied = false;
+      if (isExtraGroup) {
+        photosSatisfied = !!extraGroupPhotos[`extra_${catId}_${execs[0]?.route_brand_id || 'null'}`];
+      } else if (!requireCategoryPhotos) {
+        photosSatisfied = true;
+      } else {
+        const hasBefore = !!catStatus?.category_before_photo;
+        const hasAfter = !!catStatus?.category_after_photo || !!optimisticAfterPhoto[categoryKey];
+        if (photoMode === 'before') photosSatisfied = hasBefore;
+        else if (photoMode === 'after') photosSatisfied = hasAfter;
+        else photosSatisfied = hasBefore && hasAfter;
+      }
+      if (!photosSatisfied) return;
+
       execs.forEach((exec: any) => {
         if (exec.status !== 'completed' && !exec.has_rupture && !exec.has_damage) {
           updateExec.mutate({
@@ -685,7 +697,7 @@ export default function PromotorRota() {
       });
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [groupedExecs, categoryStatusMap, extraGroupPhotos, optimisticBeforeUnlock, requireStockCount, requireValidityCheck, isMultiBrand, routeBrands, route]);
+  }, [groupedExecs, categoryStatusMap, extraGroupPhotos, optimisticAfterPhoto, requireStockCount, requireValidityCheck, isMultiBrand, routeBrands, route]);
 
   const handleCheckin = useCallback(async (photoOverride?: string) => {
     const effectivePhotoUrl = photoOverride || checkinPhotoUrl;
