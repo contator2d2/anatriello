@@ -1099,6 +1099,7 @@ export default function PromotorRota() {
                       photoMode={photoMode}
                       minPhotos={Math.max(1, parseInt((rb || route as any)?.min_category_photos_before, 10) || 1)}
                       onUnlocked={() => { setOptimisticBeforeUnlock(prev => ({ ...prev, [categoryKey]: true })); refetch(); }}
+                      onPointTypeSet={() => { refetch(); }}
                     />
                   )}
 
