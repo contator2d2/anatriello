@@ -324,13 +324,12 @@ function CategoryPreparation({ category, catId, routeBrandId, categoryName, rout
 }
 
 // ===== Extra Point Photo Gate (no point type, only photo) =====
-function ExtraPointPhotoGate({ catId, categoryName, routeId, pdvName, brandName, promotorName, qualityConfig, onPhotoTaken }: {
-  catId: string; categoryName: string; routeId: string; pdvName: string; brandName: string; promotorName?: string; qualityConfig?: PhotoQualityConfig; onPhotoTaken: () => void;
+function ExtraPointPhotoGate({ catId, routeBrandId, categoryName, routeId, pdvName, brandName, promotorName, qualityConfig, onPhotoTaken }: {
+  catId: string; routeBrandId?: string; categoryName: string; routeId: string; pdvName: string; brandName: string; promotorName?: string; qualityConfig?: PhotoQualityConfig; onPhotoTaken: () => void;
 }) {
-  const setCategoryPhoto = usePromotorCategoryPhoto();
   const [photos, setPhotos] = useState<string[]>([]);
   const [isSending, setIsSending] = useState(false);
-  const { isOnline, queueApiCall } = useOfflineSync();
+  const { queueApiCall } = useOfflineSync();
 
 
   const handleUploadPhoto = async (submittedPhotos?: string[]) => {
@@ -343,15 +342,20 @@ function ExtraPointPhotoGate({ catId, categoryName, routeId, pdvName, brandName,
       ).catch(() => null);
 
       const body = {
-        routeId, catId, photo_url: effective[0], photos: effective,
+        photo_type: 'extra_point',
+        category_id: catId,
+        route_brand_id: routeBrandId,
+        exposure_point: 'extra',
+        photo_url: effective[0],
         latitude: pos?.coords.latitude, longitude: pos?.coords.longitude,
       };
 
       await queueApiCall({
-        url: `/api/merch/promotor/routes/${routeId}/categories/${catId}/photo`,
+        url: `/api/merch/promotor/routes/${routeId}/photos`,
         method: 'POST',
         body,
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}` }
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}` },
+        dependsOnUploadId: effective[0]?.startsWith('local-file://') ? effective[0].replace('local-file://', '') : undefined
       });
       
       setPhotos([]);
@@ -394,7 +398,7 @@ function ExtraPointPhotoGate({ catId, categoryName, routeId, pdvName, brandName,
           onPhotosChange={setPhotos}
           min={1}
           allowExtras={false}
-          isSending={isSending || setCategoryPhoto.isPending}
+          isSending={isSending}
           onSubmit={handleUploadPhoto}
           cameraProps={{
             watermark: { pdvName, brandName, photoType: 'Ponto Extra' },
