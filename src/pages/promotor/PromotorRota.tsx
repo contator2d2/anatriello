@@ -660,6 +660,16 @@ export default function PromotorRota() {
     return set;
   }, [route?.executions]);
 
+  const persistedExtraPointPhotoKeys = useMemo(() => {
+    const set = new Set<string>();
+    route?.photos?.forEach((photo: any) => {
+      const isExtraPointPhoto = photo.photo_type === 'extra_point' || photo.exposure_point === 'extra';
+      if (!isExtraPointPhoto) return;
+      set.add(`extra_${photo.category_id || 'null'}_${photo.route_brand_id || 'null'}`);
+    });
+    return set;
+  }, [route?.photos]);
+
   // Photo-only mode: auto-complete pending products ONLY after the required
   // category photos (before/after according to checklist) have been registered.
   // This keeps progress tied to actual photos taken.
@@ -682,7 +692,8 @@ export default function PromotorRota() {
 
       let photosSatisfied = false;
       if (isExtraGroup) {
-        photosSatisfied = !!extraGroupPhotos[`extra_${catId}_${execs[0]?.route_brand_id || 'null'}`];
+        const extraKey = `extra_${catId || 'null'}_${execs[0]?.route_brand_id || 'null'}`;
+        photosSatisfied = !!extraGroupPhotos[extraKey] || persistedExtraPointPhotoKeys.has(extraKey);
       } else if (!requireCategoryPhotos) {
         photosSatisfied = true;
       } else {
@@ -707,7 +718,7 @@ export default function PromotorRota() {
       });
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [groupedExecs, categoryStatusMap, extraGroupPhotos, optimisticAfterPhoto, isMultiBrand, routeBrands, route]);
+  }, [groupedExecs, categoryStatusMap, extraGroupPhotos, persistedExtraPointPhotoKeys, optimisticAfterPhoto, isMultiBrand, routeBrands, route]);
 
   const handleCheckin = useCallback(async (photoOverride?: string) => {
     const effectivePhotoUrl = photoOverride || checkinPhotoUrl;
