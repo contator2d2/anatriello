@@ -6,6 +6,14 @@ import { logInfo, logError, logWarn } from '../logger.js';
 const router = express.Router();
 router.use(authenticate);
 
+async function hasColumn(tableName, columnName) {
+  const result = await query(
+    `SELECT 1 FROM information_schema.columns WHERE table_name=$1 AND column_name=$2 LIMIT 1`,
+    [tableName, columnName]
+  );
+  return result.rows.length > 0;
+}
+
 // ===== ADMIN ROUTES =====
 
 // List routes with filters
