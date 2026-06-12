@@ -160,6 +160,10 @@ function CategoryPreparation({ category, catId, routeBrandId, categoryName, rout
     
     // Se o modo for "after" (Somente Depois), já desbloqueamos os produtos imediatamente após escolher o tipo de ponto
     const shouldUnlockImmediately = photoMode === 'after';
+    const notifySuccess = () => {
+      if (shouldUnlockImmediately) onUnlocked();
+      else onPointTypeSet?.();
+    };
 
     if (!isOnline) {
       queueApiCall({
@@ -172,8 +176,7 @@ function CategoryPreparation({ category, catId, routeBrandId, categoryName, rout
         },
         headers: { 'Authorization': `Bearer ${localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}` }
       });
-      // Removed offline toast per user request
-      onUnlocked();
+      notifySuccess();
       return;
     }
     setPointType.mutate({ 
@@ -184,8 +187,7 @@ function CategoryPreparation({ category, catId, routeBrandId, categoryName, rout
       products_unlocked: shouldUnlockImmediately 
     }, {
       onSuccess: () => { 
-        // toast.success(`Ponto ${type === 'natural' ? 'Natural' : 'Extra'} selecionado`); 
-        onUnlocked(); 
+        notifySuccess();
       },
       onError: (err: any) => {
         logger.error(`Erro ao selecionar tipo de ponto: ${type}`, { error: err.message, routeId, catId }, err);
