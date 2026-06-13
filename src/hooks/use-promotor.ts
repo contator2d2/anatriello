@@ -404,3 +404,20 @@ export function useImportPDVs() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['rh-pdvs'] }),
   });
 }
+
+// ===== PROMOTOR APP: BIOMETRIA FACIAL (self-enroll) =====
+export function usePromotorFaceEnrollment() {
+  return useQuery<{ enrolled: boolean; face_photo_url: string | null; face_enrolled_at: string | null }>({
+    queryKey: ['promotor-face-enrollment'],
+    queryFn: () => promotorApi('/api/promotor/face-enrollment'),
+  });
+}
+
+export function usePromotorSaveFaceEnrollment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { descriptor: number[]; landmarks?: number[][]; imageDataUrl?: string; geometricProfile?: any; selfTestScore?: number }) =>
+      promotorApi<any>('/api/promotor/face-enrollment', { method: 'POST', body: data }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['promotor-face-enrollment'] }),
+  });
+}
