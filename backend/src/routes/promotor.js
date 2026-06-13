@@ -822,6 +822,79 @@ router.put('/settings', authenticatePromotor, async (req, res) => {
 });
 
 // =============================================
+// PROMOTOR: BIOMETRIA FACIAL (auto-cadastro pelo colaborador)
+// =============================================
+async function ensurePromotorFaceColumns() {
+  try {
+    await query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS face_descriptor JSONB`);
+    await query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS face_photo_url TEXT`);
+    await query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS face_enrolled_at TIMESTAMPTZ`);
+  } catch {}
+}
+
+router.get('/face-enrollment', authenticatePromotor, async (req, res) => {
+  try {
+    await ensurePromotorFaceColumns();
+    const r = await query(
+      `SELECT face_enrolled_at, face_photo_url, (face_descriptor IS NOT NULL) AS enrolled
+         FROM employees WHERE id = $1`,
+      [req.employeeId]
+    );
+    const row = r.rows[0] || {};
+    res.json({
+      enrolled: !!row.enrolled,
+      face_photo_url: row.face_photo_url || null,
+      face_enrolled_at: row.face_enrolled_at || null,
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao carregar status da biometria' });
+  }
+});
+
+router.post('/face-enrollment', authenticatePromotor, async (req, res) => {
+  try {
+    await ensurePromotorFaceColumns();
+    const { descriptor, landmarks, imageDataUrl, geometricProfile, selfTestScore } = req.body || {};
+
+    if (!Array.isArray(descriptor) || descriptor.length < 64) {
+      return res.status(400).json({ error: 'Descriptor facial inválido' });
+    }
+    if (typeof selfTestScore === 'number' && selfTestScore < 70) {
+      return res.status(400).json({ error: 'Validação facial não atingiu a pontuação mínima' });
+    }
+
+    // Bloqueio: não permitir troca após cadastro aprovado
+    const existing = await query(
+      `SELECT face_descriptor, face_enrolled_at, organization_id FROM employees WHERE id = $1`,
+      [req.employeeId]
+    );
+    if (!existing.rows[0]) return res.status(404).json({ error: 'Colaborador não encontrado' });
+    if (existing.rows[0].face_descriptor && existing.rows[0].face_enrolled_at) {
+      return res.status(403).json({ error: 'Biometria já cadastrada. Procure o RH para alterar.' });
+    }
+
+    const faceData = { descriptor, landmarks: landmarks || [], geometricProfile: geometricProfile || {} };
+    await query(
+      `UPDATE employees SET face_descriptor = $1, face_photo_url = $2, face_enrolled_at = NOW() WHERE id = $3`,
+      [JSON.stringify(faceData), imageDataUrl || null, req.employeeId]
+    );
+
+    try {
+      await query(
+        `INSERT INTO face_verification_logs
+           (organization_id, employee_id, verification_context, confidence_score, result, captured_image_url)
+         VALUES ($1, $2, 'self_enrollment', $3, 'approved', $4)`,
+        [existing.rows[0].organization_id, req.employeeId, selfTestScore || 100, imageDataUrl || null]
+      );
+    } catch {}
+
+    res.json({ success: true, enrolled: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Erro ao salvar biometria' });
+  }
+});
+
+// =============================================
 // PROMOTOR: SYNC OFFLINE QUEUE
 // =============================================
 router.post('/sync', authenticatePromotor, async (req, res) => {
