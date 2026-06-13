@@ -248,6 +248,61 @@ export default function PromotorConfig() {
           </CardContent>
         </Card>
 
+
+        {/* Biometria Facial */}
+        <Card className={faceStatus?.enrolled ? "border-green-500/40 bg-green-500/5" : "border-primary/30 bg-primary/5"}>
+          <CardHeader className="p-3 pb-1">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <ScanFace className="h-4 w-4" /> Biometria Facial
+              {faceStatus?.enrolled && <CheckCircle2 className="h-4 w-4 text-green-600 ml-auto" />}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-3 pt-0 space-y-3">
+            {faceStatus?.enrolled ? (
+              <>
+                <div className="flex items-center gap-3">
+                  {faceStatus.face_photo_url && (
+                    <img
+                      src={resolveMediaUrl(faceStatus.face_photo_url) || faceStatus.face_photo_url}
+                      alt="Foto facial"
+                      className="h-16 w-16 rounded-full object-cover border-2 border-green-500"
+                    />
+                  )}
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-green-700 dark:text-green-400 flex items-center gap-1">
+                      <ShieldCheck className="h-4 w-4" /> Aprovada
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">
+                      Cadastrada em {faceStatus.face_enrolled_at ? new Date(faceStatus.face_enrolled_at).toLocaleString('pt-BR') : '-'}
+                    </p>
+                  </div>
+                </div>
+                <div className="rounded-md bg-muted/50 p-2 text-[11px] text-muted-foreground">
+                  🔒 Foto bloqueada. Para alterar, procure o RH da sua agência.
+                </div>
+                <Button size="sm" className="w-full" variant="outline" disabled>
+                  <Lock className="h-4 w-4 mr-1" /> Cadastro travado
+                </Button>
+              </>
+            ) : (
+              <>
+                <p className="text-xs text-muted-foreground">
+                  Cadastre sua biometria facial para liberar entradas em PDVs com reconhecimento. O sistema vai validar automaticamente a qualidade da foto.
+                </p>
+                <Button
+                  size="sm"
+                  className="w-full gap-2"
+                  onClick={() => setFaceCaptureOpen(true)}
+                  disabled={saveFace.isPending}
+                >
+                  {saveFace.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanFace className="h-4 w-4" />}
+                  {saveFace.isPending ? 'Salvando...' : 'Capturar foto facial'}
+                </Button>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
         {/* Change Password */}
         <Card>
           <CardHeader className="p-3 pb-1"><CardTitle className="text-sm flex items-center gap-2"><Lock className="h-4 w-4" /> Alterar Senha</CardTitle></CardHeader>
