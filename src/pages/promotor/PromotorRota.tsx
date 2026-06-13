@@ -1127,9 +1127,25 @@ export default function PromotorRota() {
                 (photoMode === 'both' || photoMode === 'after');
 
 
+              // Visual state: active = unlocked & not completed; locked = needs photo; done = after photo taken
+              const isActiveCategory = !effectivelyLocked && !isCompletedCategory && (isExtraGroup ? hasExtraPhoto : hasBeforeUnlock);
+              const wrapperClass = isCompletedCategory
+                ? 'border-green-500/30 bg-green-500/5'
+                : isActiveCategory
+                  ? 'border-primary ring-2 ring-primary/40 bg-primary/5 shadow-md shadow-primary/10'
+                  : effectivelyLocked
+                    ? 'border-dashed border-muted-foreground/30 bg-muted/30 opacity-70'
+                    : 'border-border bg-card';
+
               return (
 
-                <div key={category}>
+                <div key={category} className={`rounded-xl border p-3 transition-all ${wrapperClass}`}>
+                  {isActiveCategory && (
+                    <div className="flex items-center gap-1.5 mb-2 text-[10px] font-bold uppercase tracking-wider text-primary">
+                      <span className="inline-block h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
+                      Categoria em andamento
+                    </div>
+                  )}
                   {/* Category preparation for normal groups */}
                   {effectivelyLocked && !isExtraGroup && (
                     <CategoryPreparation
@@ -1166,12 +1182,12 @@ export default function PromotorRota() {
 
                   {/* Category header */}
                   <div
-                    className={`flex items-center justify-between mb-2 mt-3 rounded-md border px-3 py-2 transition-colors ${isCompletedCategory ? 'cursor-pointer border-green-500/30 bg-green-500/10 text-green-800' : 'border-transparent'}`}
+                    className={`flex items-center justify-between mb-2 rounded-md px-2 py-1.5 transition-colors ${isCompletedCategory ? 'cursor-pointer' : ''}`}
                     onClick={isCompletedCategory ? () => setExpandedCategories(prev => ({ ...prev, [accordionKey]: !prev[accordionKey] })) : undefined}
                   >
                     <div className="flex items-center gap-2">
-                      {hasAfterPhoto ? <CheckCircle2 className="h-4 w-4 text-green-600" /> : isExtraGroup ? <Target className="h-4 w-4 text-orange-600" /> : (requireCategoryPhotos && effectivelyLocked) ? <Lock className="h-4 w-4 text-muted-foreground" /> : <Unlock className="h-4 w-4 text-green-600" />}
-                      <h3 className="text-sm font-bold">{category}</h3>
+                      {hasAfterPhoto ? <CheckCircle2 className="h-4 w-4 text-green-600" /> : isExtraGroup ? <Target className="h-4 w-4 text-orange-600" /> : (requireCategoryPhotos && effectivelyLocked) ? <Lock className="h-4 w-4 text-muted-foreground" /> : <Unlock className="h-4 w-4 text-primary" />}
+                      <h3 className={`text-sm font-bold ${isActiveCategory ? 'text-primary' : ''}`}>{category}</h3>
                       {hasAfterPhoto && (
                         <Badge variant="secondary" className="text-[9px] bg-green-100 text-green-700">✅ OK</Badge>
                       )}
@@ -1184,8 +1200,7 @@ export default function PromotorRota() {
                       )}
                     </div>
                     <div className="flex items-center gap-2">
-                      {/* Photo-only mode: products auto-complete on unlock; no manual "Marcar todos" needed */}
-                      <Badge variant="outline" className="text-[10px]">{doneCount}/{execs.length}</Badge>
+                      <Badge variant={isActiveCategory ? 'default' : 'outline'} className="text-[10px]">{doneCount}/{execs.length}</Badge>
                       {isCompletedCategory && (expandedCategories[accordionKey] ? <ChevronUp className="h-4 w-4 text-green-700" /> : <ChevronDown className="h-4 w-4 text-green-700" />)}
                     </div>
                   </div>
