@@ -1144,3 +1144,142 @@ function PromotorAccessToggle({ employeeId }: { employeeId: string }) {
     </div>
   );
 }
+
+// ============ Employee Documents Manager (drag & drop + naming) ============
+function EmployeeDocumentsManager({ employeeId }: { employeeId: string }) {
+  const { data: docs = [], isLoading } = useRhDocuments({ employee_id: employeeId });
+  const createDoc = useCreateRhDocument();
+  const deleteDoc = useDeleteRhDocument();
+  const { toast } = useToast();
+  const [isDragging, setIsDragging] = React.useState(false);
+  const [pending, setPending] = React.useState<{ file: File; title: string; doc_type: string }[]>([]);
+  const [uploading, setUploading] = React.useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const DOC_TYPES = ["RG", "CPF", "CNH", "Comprovante de Residência", "CTPS", "PIS", "Título de Eleitor", "Certificado de Reservista", "Contrato", "Atestado", "Certificado", "Exame Admissional", "Outro"];
+
+  const addFiles = (files: FileList | File[]) => {
+    const arr = Array.from(files).map(f => ({
+      file: f,
+      title: f.name.replace(/\.[^.]+$/, ""),
+      doc_type: "Outro",
+    }));
+    setPending(prev => [...prev, ...arr]);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (e.dataTransfer.files?.length) addFiles(e.dataTransfer.files);
+  };
+
+  const { uploadFile } = useUpload();
+
+  const handleUploadAll = async () => {
+    if (!pending.length) return;
+    setUploading(true);
+    try {
+      for (const item of pending) {
+        const url = await uploadFile(item.file);
+        if (!url) throw new Error("Falha no upload");
+        await createDoc.mutateAsync({
+          employee_id: employeeId,
+          doc_type: item.doc_type,
+          title: item.title || item.file.name,
+          file_url: url,
+          status: "aprovado",
+        });
+      }
+      setPending([]);
+      toast({ title: "Documentos enviados!" });
+    } catch (err: any) {
+      toast({ title: "Erro ao enviar documentos", description: err?.message, variant: "destructive" });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <div
+        onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
+        onDragLeave={() => setIsDragging(false)}
+        onDrop={handleDrop}
+        onClick={() => fileInputRef.current?.click()}
+        className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
+          isDragging ? "border-primary bg-primary/5" : "border-border hover:border-primary/50 bg-muted/30"
+        }`}
+      >
+        <FileText className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+        <p className="text-sm font-medium">Arraste arquivos aqui ou clique para selecionar</p>
+        <p className="text-xs text-muted-foreground mt-1">PDF, imagens, DOC, XLS (até 100MB)</p>
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          className="hidden"
+          onChange={e => { if (e.target.files) addFiles(e.target.files); e.target.value = ""; }}
+        />
+      </div>
+
+      {pending.length > 0 && (
+        <div className="space-y-2 p-3 rounded-lg border bg-card">
+          <p className="text-xs font-semibold text-muted-foreground uppercase">Pendentes de envio</p>
+          {pending.map((item, idx) => (
+            <div key={idx} className="grid grid-cols-1 md:grid-cols-[1fr_180px_auto] gap-2 items-center p-2 border rounded-md">
+              <Input
+                value={item.title}
+                onChange={e => setPending(prev => prev.map((p, i) => i === idx ? { ...p, title: e.target.value } : p))}
+                placeholder="Nome do documento"
+              />
+              <Select value={item.doc_type} onValueChange={v => setPending(prev => prev.map((p, i) => i === idx ? { ...p, doc_type: v } : p))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {DOC_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <div className="flex items-center gap-1">
+                <span className="text-xs text-muted-foreground truncate max-w-[100px]">{item.file.name}</span>
+                <Button type="button" variant="ghost" size="icon" className="h-7 w-7"
+                  onClick={() => setPending(prev => prev.filter((_, i) => i !== idx))}>
+                  <X className="h-3 w-3" />
+                </Button>
+              </div>
+            </div>
+          ))}
+          <Button type="button" size="sm" onClick={handleUploadAll} disabled={uploading} className="w-full">
+            {uploading ? <><Loader2 className="h-3 w-3 mr-2 animate-spin" /> Enviando...</> : <>Enviar {pending.length} arquivo(s)</>}
+          </Button>
+        </div>
+      )}
+
+      <div className="space-y-2">
+        <p className="text-xs font-semibold text-muted-foreground uppercase">Documentos salvos ({docs.length})</p>
+        {isLoading ? (
+          <p className="text-sm text-muted-foreground text-center py-3">Carregando...</p>
+        ) : docs.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-3">Nenhum documento anexado.</p>
+        ) : (
+          docs.map((doc: any) => (
+            <div key={doc.id} className="flex items-center gap-2 p-2 border rounded-md bg-card">
+              <FileText className="h-4 w-4 text-primary flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{doc.title}</p>
+                <p className="text-xs text-muted-foreground">{doc.doc_type} • {new Date(doc.created_at).toLocaleDateString('pt-BR')}</p>
+              </div>
+              {doc.file_url && (
+                <Button type="button" variant="ghost" size="sm" asChild>
+                  <a href={doc.file_url} target="_blank" rel="noreferrer">Abrir</a>
+                </Button>
+              )}
+              <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-destructive"
+                onClick={() => { if (confirm("Excluir este documento?")) deleteDoc.mutate(doc.id); }}>
+                <Trash2 className="h-3 w-3" />
+              </Button>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
