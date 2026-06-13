@@ -146,6 +146,41 @@ export default function PromotorConfig() {
     }
   };
 
+  const handleFaceCaptured = (data: { descriptor: number[]; landmarks: number[][]; imageDataUrl: string; geometricProfile: Record<string, number> }) => {
+    setPendingFace(data);
+    setFaceCaptureOpen(false);
+    // dispara teste de verificação automaticamente
+    setTimeout(() => setFaceVerifyOpen(true), 200);
+  };
+
+  const handleFaceVerified = async (result: { match: boolean; score: number; imageDataUrl: string }) => {
+    setFaceVerifyOpen(false);
+    if (!pendingFace) return;
+    if (!result.match || result.score < 70) {
+      toast({
+        title: '❌ Teste falhou',
+        description: `Pontuação ${result.score.toFixed(0)}%. Recapture a foto com melhor iluminação e enquadramento.`,
+        variant: 'destructive',
+      });
+      setPendingFace(null);
+      return;
+    }
+    try {
+      await saveFace.mutateAsync({
+        descriptor: pendingFace.descriptor,
+        landmarks: pendingFace.landmarks,
+        imageDataUrl: pendingFace.imageDataUrl,
+        geometricProfile: pendingFace.geometricProfile,
+        selfTestScore: result.score,
+      });
+      toast({ title: '✅ Biometria cadastrada!', description: `Validação aprovada com ${result.score.toFixed(0)}%.` });
+      setPendingFace(null);
+      refetchFace();
+    } catch (err: any) {
+      toast({ title: 'Erro ao salvar', description: err.message, variant: 'destructive' });
+    }
+  };
+
   return (
     <PromotorLayout>
       <div className="p-4 max-w-lg mx-auto space-y-4">
