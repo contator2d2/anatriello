@@ -1543,8 +1543,9 @@ export default function PromotorRota() {
               {/* Action buttons */}
               <div className="space-y-2">
                 <Label className="text-xs font-semibold">Registrar ocorrência</Label>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-4 gap-2">
                   {[
+                    { key: 'validity', label: 'Validade', icon: CalendarIcon, color: 'text-blue-600', show: !requireValidityCheck },
                     { key: 'rupture', label: 'Ruptura', icon: AlertTriangle, color: 'text-red-600', show: true },
                     { key: 'damage', label: 'Avaria', icon: Archive, color: 'text-orange-600', show: true },
                     { key: 'discard', label: 'Descarte', icon: Trash2, color: 'text-purple-600', show: true },
