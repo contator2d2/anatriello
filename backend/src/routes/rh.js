@@ -1363,6 +1363,15 @@ router.put('/documents/:id/validate', async (req, res) => {
   } catch (err) { logError('rh.documents.validate', err); res.status(500).json({ error: 'Erro' }); }
 });
 
+router.delete('/documents/:id', async (req, res) => {
+  try {
+    await query(`DELETE FROM employee_documents WHERE id = $1`, [req.params.id]);
+    res.json({ success: true });
+  } catch (err) { logError('rh.documents.delete', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+
+
 router.get('/audit-log', async (req, res) => {
   try {
     const orgId = req.query.org_id || await getUserOrgId(req.userId);
