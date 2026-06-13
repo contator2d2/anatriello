@@ -2126,27 +2126,7 @@ router.put('/promotor/executions/:id', promotorAuth, async (req, res) => {
       const brandIdInRoute = exec.route_brand_id;
       
       try {
-        // Update Brand Progress if applicable
-        if (brandIdInRoute) {
-          const brandProgress = await query(
-            `SELECT COUNT(*)::int as total, COUNT(*) FILTER (WHERE status='completed')::int as done
-             FROM route_product_executions WHERE route_brand_id=$1`, [brandIdInRoute]
-          );
-          const brandPct = brandProgress.rows[0].total > 0 ? (brandProgress.rows[0].done / brandProgress.rows[0].total * 100) : 0;
-          const brandStatus = brandPct >= 100 ? 'completed' : brandPct > 0 ? 'in_progress' : 'pending';
-          await query(
-            'UPDATE route_brands SET progress_pct=$2, status=$3, updated_at=NOW() WHERE id=$1', 
-            [brandIdInRoute, brandPct, brandStatus]
-          );
-        }
-
-        // Update Global Route Progress
-        const progress = await query(
-          `SELECT COUNT(*)::int as total, COUNT(*) FILTER (WHERE status='completed')::int as done
-           FROM route_product_executions WHERE route_id=$1`, [routeId]
-        );
-        const pct = progress.rows[0].total > 0 ? (progress.rows[0].done / progress.rows[0].total * 100) : 0;
-        await query('UPDATE merch_routes SET progress_pct=$2, updated_at=NOW() WHERE id=$1', [routeId, pct]);
+        await refreshRouteProgress(routeId, brandIdInRoute);
       } catch (progressErr) {
         logWarn('promotor.exec_update.progress_failed', { routeId, error: progressErr?.message });
       }
