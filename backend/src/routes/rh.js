@@ -335,6 +335,8 @@ function normalizeEmployeePayload(body = {}) {
     bank_agency: emptyToNull(body.bank_agency),
     bank_account: emptyToNull(body.bank_account),
     bank_account_type: emptyToNull(body.bank_account_type),
+    pix_key: emptyToNull(body.pix_key),
+    pix_key_type: emptyToNull(body.pix_key_type),
     ctps_number: emptyToNull(body.ctps_number),
     ctps_series: emptyToNull(body.ctps_series),
     pis_pasep: emptyToNull(body.pis_pasep),
