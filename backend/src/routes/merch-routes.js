@@ -2386,6 +2386,10 @@ router.post('/promotor/routes/:routeId/categories/:catId/photo', promotorAuth, a
       [req.params.routeId, JSON.stringify({ category_id: req.params.catId, count: photoList.length, total: totalAfterUpload, min: minBefore, unlocked: unlocks }), req.employeeId]
     );
 
+    await refreshRouteProgress(req.params.routeId, route_brand_id || null).catch((e) => {
+      logWarn('promotor.cat_photo.progress_failed', { routeId: req.params.routeId, error: e?.message });
+    });
+
     res.json({ ...result.rows[0], total_before_photos: totalAfterUpload, min_before: minBefore, unlocked: unlocks });
   } catch (err) { logError('promotor.cat_photo', err); res.status(500).json({ error: 'Erro' }); }
 });
@@ -2467,6 +2471,10 @@ router.post('/promotor/routes/:routeId/categories/:catId/after-photo', promotorA
        VALUES ($1,'category_after_photo',$2,$3,'app')`,
       [req.params.routeId, JSON.stringify({ category_id: req.params.catId, count: photoList.length, total: totalAfterUpload, min: minAfter, completed: completes }), req.employeeId]
     );
+
+    await refreshRouteProgress(req.params.routeId, route_brand_id || null).catch((e) => {
+      logWarn('promotor.cat_after_photo.progress_failed', { routeId: req.params.routeId, error: e?.message });
+    });
 
     res.json({ ...result.rows[0], total_after_photos: totalAfterUpload, min_after: minAfter, completed: completes });
   } catch (err) { logError('promotor.cat_after_photo', err); res.status(500).json({ error: 'Erro' }); }
