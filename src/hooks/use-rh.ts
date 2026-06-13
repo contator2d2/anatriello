@@ -365,6 +365,14 @@ export function useValidateRhDocument() {
   });
 }
 
+export function useDeleteRhDocument() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api<any>(`/api/rh/documents/${id}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['rh-documents'] }),
+  });
+}
+
 export function useRhAuditLog(entityType?: string, entityId?: string) {
   const params = new URLSearchParams();
   if (entityType) params.set('entity_type', entityType);
