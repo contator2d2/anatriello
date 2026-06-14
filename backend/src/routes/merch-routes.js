@@ -2743,7 +2743,8 @@ router.get('/promotor/damages', promotorAuth, async (req, res) => {
   try {
     await ensurePerdasSchema();
     const { status, kind } = req.query;
-    let sql = `SELECT pd.*, COALESCE(pd.kind,'damage') AS kind, pr.name as product_name, p.name as pdv_name, b.name as brand_name
+    let sql = `SELECT pd.*, COALESCE(pd.kind,'damage') AS kind, pr.name as product_name, p.name as pdv_name, b.name as brand_name,
+                      (SELECT dri.request_id FROM damage_return_items dri WHERE dri.damage_id=pd.id ORDER BY dri.created_at DESC LIMIT 1) AS request_id
                FROM product_damages pd
                JOIN merch_products pr ON pr.id=pd.product_id
                JOIN pdvs p ON p.id=pd.pdv_id
