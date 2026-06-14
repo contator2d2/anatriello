@@ -91,7 +91,7 @@ export function PromotorLayout({ children }: PromotorLayoutProps) {
     { path: '/promotor/home', icon: Home, label: 'Início' },
     { path: '/promotor/agenda', icon: Clock, label: 'Agenda' },
     ...(isSupervisor ? [{ path: '/promotor/equipe', icon: Users, label: 'Equipe' }] : []),
-    { path: '/promotor/avarias', icon: FileText, label: 'Avarias' },
+    { path: '/promotor/avarias', icon: FileText, label: 'Perdas' },
     { path: '/promotor/ponto', icon: Clock, label: 'Ponto' },
     { path: '/promotor/configuracoes', icon: Settings, label: 'Config' },
   ];
