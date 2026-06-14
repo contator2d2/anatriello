@@ -3369,4 +3369,203 @@ router.put('/report-branding', authenticate, async (req, res) => {
   }
 });
 
+// ============================================================
+// PERDAS (Avarias + Descartes) - Conference & Brand Notification
+// ============================================================
+
+let _perdasSchemaReady = false;
+async function ensurePerdasSchema() {
+  if (_perdasSchemaReady) return;
+  try {
+    await query(`ALTER TABLE product_damages ADD COLUMN IF NOT EXISTS kind VARCHAR(20) DEFAULT 'damage'`);
+    await query(`ALTER TABLE return_invoices ADD COLUMN IF NOT EXISTS invoice_total_qty INTEGER DEFAULT 0`);
+    await query(`ALTER TABLE return_invoices ADD COLUMN IF NOT EXISTS total_registered_qty INTEGER DEFAULT 0`);
+    await query(`ALTER TABLE return_invoices ADD COLUMN IF NOT EXISTS divergence_qty INTEGER DEFAULT 0`);
+    await query(`ALTER TABLE return_invoices ADD COLUMN IF NOT EXISTS observation TEXT`);
+    await query(`ALTER TABLE return_invoices ADD COLUMN IF NOT EXISTS review_status VARCHAR(20) DEFAULT 'pending'`);
+    await query(`ALTER TABLE return_invoices ADD COLUMN IF NOT EXISTS reviewed_by UUID`);
+    await query(`ALTER TABLE return_invoices ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMPTZ`);
+    await query(`ALTER TABLE return_invoices ADD COLUMN IF NOT EXISTS review_notes TEXT`);
+    await query(`ALTER TABLE return_invoices ADD COLUMN IF NOT EXISTS sent_to_brand_at TIMESTAMPTZ`);
+    await query(`ALTER TABLE return_invoices ADD COLUMN IF NOT EXISTS sent_channels JSONB DEFAULT '[]'`);
+    await query(`CREATE TABLE IF NOT EXISTS pdv_extra_discards (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id UUID NOT NULL,
+      request_id UUID,
+      invoice_id UUID,
+      pdv_id UUID NOT NULL,
+      brand_id UUID NOT NULL,
+      qty INTEGER NOT NULL DEFAULT 0,
+      source VARCHAR(40) DEFAULT 'invoice_divergence',
+      recorded_by UUID,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+    await query(`CREATE TABLE IF NOT EXISTS brand_perdas_notifications (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id UUID NOT NULL,
+      brand_id UUID NOT NULL,
+      invoice_id UUID,
+      request_id UUID,
+      pdv_id UUID,
+      channel VARCHAR(20) NOT NULL,
+      recipient TEXT,
+      status VARCHAR(20) DEFAULT 'sent',
+      error TEXT,
+      payload JSONB,
+      sent_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+    _perdasSchemaReady = true;
+  } catch (e) { logError('perdas.schema', e); }
+}
+
+// Admin: list pending invoices for supervisor conference
+router.get('/perdas/pending-review', authenticate, async (req, res) => {
+  try {
+    await ensurePerdasSchema();
+    const orgRes = await query('SELECT organization_id FROM organization_members WHERE user_id=$1 LIMIT 1', [req.userId]);
+    const orgId = orgRes.rows[0]?.organization_id;
+    if (!orgId) return res.json([]);
+    const { status } = req.query;
+    const reviewFilter = status || 'pending';
+    const result = await query(
+      `SELECT ri.*, drr.pdv_id, drr.brand_id, drr.promoter_id, drr.notes AS request_notes,
+              p.name AS pdv_name, b.name AS brand_name, b.email AS brand_email, b.phone AS brand_phone,
+              e.full_name AS promoter_name,
+              (SELECT COALESCE(SUM(qty),0)::int FROM pdv_extra_discards WHERE invoice_id=ri.id) AS pdv_discard_qty,
+              (SELECT json_agg(json_build_object(
+                 'damage_id', pd.id, 'kind', COALESCE(pd.kind,'damage'),
+                 'product_name', pr.name, 'qty_store', pd.qty_store, 'qty_stock', pd.qty_stock,
+                 'qty_total', pd.qty_store + pd.qty_stock, 'reason', pd.reason, 'photo_url', pd.photo_url
+               ))
+                 FROM damage_return_items dri
+                 JOIN product_damages pd ON pd.id = dri.damage_id
+                 JOIN merch_products pr ON pr.id = pd.product_id
+                WHERE dri.request_id = drr.id) AS items
+         FROM return_invoices ri
+         JOIN damage_return_requests drr ON drr.id = ri.request_id
+         JOIN pdvs p ON p.id = drr.pdv_id
+         JOIN merch_brands b ON b.id = drr.brand_id
+         JOIN employees e ON e.id = drr.promoter_id
+        WHERE drr.organization_id = $1 AND COALESCE(ri.review_status,'pending') = $2
+        ORDER BY ri.created_at DESC`,
+      [orgId, reviewFilter]
+    );
+    res.json(result.rows);
+  } catch (err) { logError('perdas.pending', err); res.status(500).json({ error: err?.message || 'Erro' }); }
+});
+
+// Admin: review (approve/reject) an invoice
+router.post('/perdas/invoices/:id/review', authenticate, async (req, res) => {
+  try {
+    await ensurePerdasSchema();
+    const { decision, notes } = req.body; // 'approved' | 'rejected'
+    if (!['approved','rejected'].includes(decision)) return res.status(400).json({ error: 'Decisão inválida' });
+
+    const inv = await query(
+      `SELECT ri.*, drr.id AS request_id, drr.organization_id, drr.brand_id, drr.pdv_id
+         FROM return_invoices ri
+         JOIN damage_return_requests drr ON drr.id = ri.request_id
+        WHERE ri.id=$1`, [req.params.id]
+    );
+    if (!inv.rows.length) return res.status(404).json({ error: 'Nota não encontrada' });
+    const i = inv.rows[0];
+
+    await query(
+      `UPDATE return_invoices SET review_status=$1, reviewed_by=$2, reviewed_at=NOW(), review_notes=$3 WHERE id=$4`,
+      [decision, req.userId, notes || null, req.params.id]
+    );
+
+    const newStatus = decision === 'approved' ? 'completed' : 'rejected';
+    await query(`UPDATE damage_return_requests SET status=$1, updated_at=NOW() WHERE id=$2`, [newStatus, i.request_id]);
+    const items = await query('SELECT damage_id FROM damage_return_items WHERE request_id=$1', [i.request_id]);
+    for (const it of items.rows) {
+      await query(`UPDATE product_damages SET status=$1, updated_at=NOW() WHERE id=$2`, [newStatus, it.damage_id]);
+    }
+
+    // On approval -> notify brand via panel + email + whatsapp
+    if (decision === 'approved') {
+      try {
+        const brand = await query('SELECT id, name, email, phone FROM merch_brands WHERE id=$1', [i.brand_id]);
+        const pdv = await query('SELECT name FROM pdvs WHERE id=$1', [i.pdv_id]);
+        const b = brand.rows[0] || {};
+        const channels = [];
+
+        // Panel: always recorded
+        await query(
+          `INSERT INTO brand_perdas_notifications (organization_id, brand_id, invoice_id, request_id, pdv_id, channel, recipient, status, payload)
+           VALUES ($1,$2,$3,$4,$5,'panel',$6,'sent',$7)`,
+          [i.organization_id, i.brand_id, i.id, i.request_id, i.pdv_id, b.name || null,
+           JSON.stringify({ invoice_number: i.invoice_number, total_nf: i.invoice_total_qty, registered: i.total_registered_qty, divergence: i.divergence_qty, pdv: pdv.rows[0]?.name })]
+        );
+        channels.push('panel');
+
+        // Email (best-effort: just records intent if no provider configured)
+        if (b.email) {
+          await query(
+            `INSERT INTO brand_perdas_notifications (organization_id, brand_id, invoice_id, request_id, pdv_id, channel, recipient, status, payload)
+             VALUES ($1,$2,$3,$4,$5,'email',$6,'queued',$7)`,
+            [i.organization_id, i.brand_id, i.id, i.request_id, i.pdv_id, b.email,
+             JSON.stringify({ subject: `Perdas aprovadas - ${pdv.rows[0]?.name || ''} - NF ${i.invoice_number || ''}` })]
+          );
+          channels.push('email');
+        }
+
+        // WhatsApp via W-API if brand has phone and org has an active connection
+        if (b.phone) {
+          try {
+            const { sendMessage } = await import('../lib/whatsapp-provider.js');
+            const conn = await query(
+              `SELECT * FROM connections WHERE user_id IN (SELECT user_id FROM organization_members WHERE organization_id=$1) AND status='connected' LIMIT 1`,
+              [i.organization_id]
+            );
+            if (conn.rows.length) {
+              const msg = `*Perdas aprovadas*\nMarca: ${b.name}\nPDV: ${pdv.rows[0]?.name || ''}\nNF: ${i.invoice_number || '-'}\nTotal NF: ${i.invoice_total_qty}\nRegistrado: ${i.total_registered_qty}\nDescarte PDV: ${i.divergence_qty}`;
+              await sendMessage(conn.rows[0], b.phone, msg, 'text').catch(() => null);
+              await query(
+                `INSERT INTO brand_perdas_notifications (organization_id, brand_id, invoice_id, request_id, pdv_id, channel, recipient, status)
+                 VALUES ($1,$2,$3,$4,$5,'whatsapp',$6,'sent')`,
+                [i.organization_id, i.brand_id, i.id, i.request_id, i.pdv_id, b.phone]
+              );
+              channels.push('whatsapp');
+            }
+          } catch (waErr) { logWarn('perdas.whatsapp', { error: waErr?.message }); }
+        }
+
+        await query(`UPDATE return_invoices SET sent_to_brand_at=NOW(), sent_channels=$1 WHERE id=$2`, [JSON.stringify(channels), i.id]);
+      } catch (notifyErr) { logError('perdas.notify', notifyErr); }
+    }
+
+    res.json({ success: true, decision });
+  } catch (err) { logError('perdas.review', err); res.status(500).json({ error: err?.message || 'Erro' }); }
+});
+
+// Brand feed: list approved perdas for a brand
+router.get('/perdas/brand-feed', authenticate, async (req, res) => {
+  try {
+    await ensurePerdasSchema();
+    const { brand_id } = req.query;
+    const orgRes = await query('SELECT organization_id FROM organization_members WHERE user_id=$1 LIMIT 1', [req.userId]);
+    const orgId = orgRes.rows[0]?.organization_id;
+    if (!orgId) return res.json([]);
+    const params = [orgId];
+    let where = `drr.organization_id=$1 AND ri.review_status='approved'`;
+    if (brand_id) { params.push(brand_id); where += ` AND drr.brand_id=$${params.length}`; }
+    const result = await query(
+      `SELECT ri.id, ri.invoice_number, ri.invoice_date, ri.invoice_total_qty, ri.total_registered_qty, ri.divergence_qty,
+              ri.photo_url, ri.pdf_url, ri.sent_to_brand_at, ri.sent_channels,
+              drr.brand_id, b.name AS brand_name, drr.pdv_id, p.name AS pdv_name, e.full_name AS promoter_name
+         FROM return_invoices ri
+         JOIN damage_return_requests drr ON drr.id = ri.request_id
+         JOIN merch_brands b ON b.id = drr.brand_id
+         JOIN pdvs p ON p.id = drr.pdv_id
+         JOIN employees e ON e.id = drr.promoter_id
+        WHERE ${where}
+        ORDER BY ri.reviewed_at DESC NULLS LAST`,
+      params
+    );
+    res.json(result.rows);
+  } catch (err) { logError('perdas.feed', err); res.status(500).json({ error: 'Erro' }); }
+});
+
 export default router;
+
