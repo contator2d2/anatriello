@@ -2220,20 +2220,31 @@ router.post('/promotor/executions/:id/damage', promotorAuth, async (req, res) =>
   } catch (err) { res.status(500).json({ error: 'Erro' }); }
 });
 
-// Promotor: Report discard
+// Promotor: Report discard (now ALSO writes to product_damages with kind='discard' for unified Perdas workflow)
 router.post('/promotor/executions/:id/discard', promotorAuth, async (req, res) => {
   try {
-    const exec = await query('SELECT * FROM route_product_executions WHERE id=$1', [req.params.id]);
+    await ensurePerdasSchema();
+    const exec = await query('SELECT rpe.*, r.pdv_id, r.brand_id, r.organization_id FROM route_product_executions rpe JOIN merch_routes r ON r.id=rpe.route_id WHERE rpe.id=$1', [req.params.id]);
     if (!exec.rows.length) return res.status(404).json({ error: 'Execução não encontrada' });
-    const { qty_store, qty_stock, reason, photo_url, observation } = req.body;
+    const e = exec.rows[0];
+    const { qty_store, qty_stock, reason, photo_url, observation, location } = req.body;
     await query('UPDATE route_product_executions SET has_discard=true WHERE id=$1', [req.params.id]);
-    const result = await query(
+    // Legacy table (kept for analytics)
+    await query(
       `INSERT INTO product_discards (route_id, product_id, execution_id, qty_store, qty_stock, reason, photo_url, observation, recorded_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
-      [exec.rows[0].route_id, exec.rows[0].product_id, req.params.id, qty_store||0, qty_stock||0, reason, photo_url, observation, req.employeeId]
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      [e.route_id, e.product_id, req.params.id, qty_store||0, qty_stock||0, reason, photo_url, observation, req.employeeId]
+    );
+    // Unified: also create a product_damages row with kind='discard' so it enters the Perdas workflow
+    const result = await query(
+      `INSERT INTO product_damages (organization_id, route_id, product_id, pdv_id, brand_id, execution_id, promoter_id,
+        location, qty_store, qty_stock, reason, description, photo_url, kind)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'discard') RETURNING *`,
+      [e.organization_id, e.route_id, e.product_id, e.pdv_id, e.brand_id, req.params.id, req.employeeId,
+       location||'store', qty_store||0, qty_stock||0, reason, observation, photo_url]
     );
     res.json(result.rows[0]);
-  } catch (err) { res.status(500).json({ error: 'Erro' }); }
+  } catch (err) { logError('promotor.discard', err); res.status(500).json({ error: err?.message || 'Erro' }); }
 });
 
 // Promotor: Set category point type
