@@ -89,6 +89,7 @@ import MerchBookFotos from "./pages/MerchBookFotos";
 import PublicPhotoBook from "./pages/PublicPhotoBook";
 import MerchContratos from "./pages/MerchContratos";
 import MerchAuditoria from "./pages/MerchAuditoria";
+import MerchPerdas from "./pages/MerchPerdas";
 import MerchEquipe from "./pages/MerchEquipe";
 import MerchPesquisaPrecos from "./pages/MerchPesquisaPrecos";
 import MerchPesquisaDashboard from "./pages/MerchPesquisaDashboard";
