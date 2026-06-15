@@ -643,6 +643,7 @@ function CategoryExtraPhotosPanel({
             customTokenGetter={() => localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}
             qualityConfig={qualityConfig}
             allowManualUpload={false}
+            autoOpen={newPhotos.length === 0}
             onCapture={handleCapture}
             buttonLabel={newPhotos.length === 0 ? 'Tirar foto' : `Tirar foto ${newPhotos.length + 1}`}
           />
