@@ -96,6 +96,7 @@ const EMPTY_FORM = {
   work_schedule: { ...DEFAULT_SCHEDULE, days: { ...DEFAULT_SCHEDULE.days } },
   bank_name: "", bank_agency: "", bank_account: "", bank_account_type: "", pix_key: "", pix_key_type: "",
   ctps_number: "", pis_pasep: "", cnpj: "", company_name: "", status: "ativo",
+  facial_required: null as boolean | null,
   salary_items: [] as { type: string; description: string; value: string }[],
   benefits: [] as { type: string; description: string; value: string; employer_cost: string }[],
 };
