@@ -510,6 +510,155 @@ function CategoryAfterPhotoGate({ catId, routeBrandId, categoryName, routeId, pd
   );
 }
 
+// ===== Painel de fotos extras da categoria (visualizar + adicionar mais) =====
+function CategoryExtraPhotosPanel({
+  routeId, catId, routeBrandId, photos, hasAnyAfter, hasAnyBefore, completed,
+  pdvName, brandName, promotorName, qualityConfig, onUploaded,
+}: {
+  routeId: string; catId: string; routeBrandId?: string;
+  photos: any[]; hasAnyAfter: boolean; hasAnyBefore: boolean; completed: boolean;
+  pdvName: string; brandName: string; promotorName?: string;
+  qualityConfig?: PhotoQualityConfig;
+  onUploaded: () => void;
+}) {
+  const { queueApiCall } = useOfflineSync();
+  const [mode, setMode] = useState<'before' | 'after' | null>(null);
+  const [newPhotos, setNewPhotos] = useState<string[]>([]);
+  const [sending, setSending] = useState(false);
+
+  const beforePhotos = photos.filter((p: any) => p.photo_type === 'category_before');
+  const afterPhotos = photos.filter((p: any) => p.photo_type === 'category_after');
+
+  // Regra: só pode adicionar mais ANTES se ainda NÃO começou fotos DEPOIS
+  const canAddBefore = !hasAnyAfter && !completed;
+  // Adicionar mais DEPOIS: enquanto a categoria não estiver finalizada (after concluído)
+  const canAddAfter = hasAnyBefore && !completed && hasAnyAfter;
+
+  const handleCapture = (url: string) => setNewPhotos((prev) => [...prev, url]);
+  const handleRemove = (i: number) => setNewPhotos((prev) => prev.filter((_, idx) => idx !== i));
+
+  const handleSubmit = async () => {
+    if (!newPhotos.length || !mode) return;
+    setSending(true);
+    try {
+      const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
+        navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 5000 })
+      ).catch(() => null);
+      const endpoint = mode === 'before' ? 'photo' : 'after-photo';
+      await queueApiCall({
+        url: `/api/merch/promotor/routes/${routeId}/categories/${catId}/${endpoint}`,
+        method: 'POST',
+        body: {
+          route_brand_id: routeBrandId,
+          photo_url: newPhotos[0],
+          photos: newPhotos,
+          latitude: pos?.coords.latitude,
+          longitude: pos?.coords.longitude,
+          routeId, catId,
+        },
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}` },
+      });
+      toast.success(`${newPhotos.length} foto(s) adicionada(s)`);
+      setNewPhotos([]);
+      setMode(null);
+      onUploaded();
+    } catch {
+      toast.error('Erro ao enviar fotos');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="mt-2 p-3 rounded-lg border border-dashed border-muted-foreground/30 bg-muted/20 space-y-3">
+      <div className="space-y-2">
+        {beforePhotos.length > 0 && (
+          <div>
+            <div className="text-[10px] font-semibold uppercase text-muted-foreground mb-1">📷 Antes ({beforePhotos.length})</div>
+            <div className="grid grid-cols-4 gap-1.5">
+              {beforePhotos.map((p: any, i: number) => (
+                <LocalImage key={p.id || i} src={p.photo_url} alt={`Antes ${i+1}`} className="w-full h-16 rounded border object-cover" />
+              ))}
+            </div>
+          </div>
+        )}
+        {afterPhotos.length > 0 && (
+          <div>
+            <div className="text-[10px] font-semibold uppercase text-green-700 mb-1">✅ Depois ({afterPhotos.length})</div>
+            <div className="grid grid-cols-4 gap-1.5">
+              {afterPhotos.map((p: any, i: number) => (
+                <LocalImage key={p.id || i} src={p.photo_url} alt={`Depois ${i+1}`} className="w-full h-16 rounded border border-green-500/40 object-cover" />
+              ))}
+            </div>
+          </div>
+        )}
+        {beforePhotos.length === 0 && afterPhotos.length === 0 && (
+          <p className="text-xs text-muted-foreground text-center">Nenhuma foto registrada ainda.</p>
+        )}
+      </div>
+
+      {mode === null ? (
+        <div className="flex flex-col gap-1.5">
+          {canAddBefore && (
+            <Button size="sm" variant="outline" onClick={() => setMode('before')} className="justify-start h-8">
+              <ImagePlus className="h-3.5 w-3.5 mr-1.5" /> Adicionar mais fotos ANTES
+            </Button>
+          )}
+          {canAddAfter && (
+            <Button size="sm" variant="outline" onClick={() => setMode('after')} className="justify-start h-8 border-green-500/40 text-green-700 hover:bg-green-50">
+              <ImagePlus className="h-3.5 w-3.5 mr-1.5" /> Adicionar mais fotos DEPOIS
+            </Button>
+          )}
+          {!canAddBefore && hasAnyAfter && !completed && (
+            <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+              <Lock className="h-3 w-3" /> Não é possível adicionar fotos ANTES após iniciar as fotos DEPOIS.
+            </p>
+          )}
+          {completed && (
+            <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+              <Lock className="h-3 w-3" /> Categoria finalizada — fotos travadas.
+            </p>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <Label className="text-xs font-semibold">
+              Novas fotos {mode === 'before' ? 'ANTES' : 'DEPOIS'} ({newPhotos.length})
+            </Label>
+            <Button size="sm" variant="ghost" onClick={() => { setMode(null); setNewPhotos([]); }} disabled={sending} className="h-7 text-[11px]">Cancelar</Button>
+          </div>
+          {newPhotos.length > 0 && (
+            <div className="grid grid-cols-3 gap-2">
+              {newPhotos.map((url, i) => (
+                <div key={i} className="relative">
+                  <LocalImage src={url} alt={`Nova ${i+1}`} className="w-full h-20 rounded border-2 border-green-500/40 object-cover" />
+                  <button
+                    onClick={() => handleRemove(i)}
+                    disabled={sending}
+                    className="absolute top-1 right-1 bg-destructive text-destructive-foreground rounded-full w-5 h-5 flex items-center justify-center text-[10px]"
+                  >✕</button>
+                </div>
+              ))}
+            </div>
+          )}
+          <CameraCapture
+            watermark={{ pdvName, brandName, promotorName, photoType: mode === 'before' ? 'Categoria (antes - extra)' : 'Categoria (depois - extra)' }}
+            customTokenGetter={() => localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}
+            qualityConfig={qualityConfig}
+            allowManualUpload={false}
+            onCapture={handleCapture}
+            buttonLabel={newPhotos.length === 0 ? 'Tirar foto' : `Tirar foto ${newPhotos.length + 1}`}
+          />
+          <Button size="sm" className="w-full" onClick={handleSubmit} disabled={!newPhotos.length || sending}>
+            {sending ? 'Enviando...' : `Salvar ${newPhotos.length} foto(s)`}
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function PromotorRota() {
   const { id } = useParams();
   const navigate = useNavigate();
