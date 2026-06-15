@@ -73,11 +73,12 @@ export function useOfflineSync() {
       calls: pendingCalls.length 
     });
 
-    // 1. Process Uploads first
-    for (const upload of pendingUploads) {
+    // 1. Process Uploads (concorrência limitada — #5)
+    const UPLOAD_CONCURRENCY = 3;
+    const processOneUpload = async (upload: typeof pendingUploads[number]) => {
       try {
         await db.pending_uploads.update(upload.id!, { status: 'uploading' });
-        
+
         const formData = new FormData();
         formData.append('file', upload.file, upload.fileName);
 
@@ -88,7 +89,7 @@ export function useOfflineSync() {
         });
 
         if (!response.ok) throw new Error(`Upload failed with status ${response.status}`);
-        
+
         const result = await response.json();
         let fileUrl = result.file.url;
         if (fileUrl.startsWith('/') && API_URL) {
@@ -96,17 +97,17 @@ export function useOfflineSync() {
         }
 
         logger.info('[OfflineSync] Upload concluído, salvando mapeamento', { localId: upload.localId, url: fileUrl });
-        
+
         // Save to persistent mapping so future API calls can resolve it
         await db.upload_mappings.put({ localId: upload.localId, serverUrl: fileUrl, timestamp: Date.now() });
 
         // CRITICAL: Update all currently pending API calls that might use this localId
         const callsToUpdate = await db.pending_api_calls.toArray();
         const fullLocalRef = `local-file://${upload.localId}`;
-        
+
         for (const call of callsToUpdate) {
           let bodyChanged = false;
-          
+
           const updateBodyRefs = (obj: any): any => {
             if (typeof obj === 'string') {
               if (obj === fullLocalRef || obj === upload.localId) {
@@ -137,7 +138,14 @@ export function useOfflineSync() {
         logger.error('[OfflineSync] Erro no upload', { id: upload.id, error: err.message });
         await db.pending_uploads.update(upload.id!, { status: 'failed', error: err.message });
       }
+    };
+
+    // Processa em "lotes" do tamanho de UPLOAD_CONCURRENCY
+    for (let i = 0; i < pendingUploads.length; i += UPLOAD_CONCURRENCY) {
+      const slice = pendingUploads.slice(i, i + UPLOAD_CONCURRENCY);
+      await Promise.all(slice.map(processOneUpload));
     }
+
 
     // Refresh pending calls list since we might have updated them
     const updatedPendingCalls = await db.pending_api_calls.where('status').equals('pending').toArray();
