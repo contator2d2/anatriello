@@ -519,7 +519,7 @@ router.put('/employees/:id', async (req, res) => {
       'bank_account','bank_account_type','pix_key','pix_key_type','ctps_number','ctps_series','pis_pasep',
       'voter_id','voter_zone','voter_section','skin_color','cnpj',
       'company_name','status','photo_url','salary_items','benefits',
-      'home_latitude','home_longitude'
+      'home_latitude','home_longitude','facial_required'
     ]);
 
     const sentKeys = Object.keys(req.body).filter(k => allowedCols.has(k));
