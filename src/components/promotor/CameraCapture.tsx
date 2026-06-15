@@ -297,7 +297,48 @@ export function CameraCapture({
     setIsOpen(false);
   };
 
-  const handleCapture = () => {
+  const processAndUpload = async (canvas: HTMLCanvasElement) => {
+    setIsProcessing(true);
+    // Fecha o diálogo imediatamente — upload segue em background (fila offline).
+    stopCamera();
+    setIsOpen(false);
+
+    try {
+      // #2 — Geolocalização cacheada (sem bloquear; usa cache de 90s e timeout curto)
+      const { lat, lng } = await getCachedGeolocation({ timeoutMs: 1500 });
+
+      // Aplica watermark
+      const wmData: WatermarkData = { ...watermark, latitude: lat, longitude: lng };
+      applyWatermark(canvas, wmData);
+
+      // #3 — Compressão em Web Worker (com fallback main-thread)
+      const blob = await compressWebP(
+        canvas,
+        config.compression_quality,
+        config.max_file_size_kb,
+      );
+      if (!blob) {
+        toast.error("Erro ao comprimir imagem");
+        return;
+      }
+
+      const file = new File([blob], `photo_${Date.now()}.webp`, { type: "image/webp" });
+      const token = (customTokenGetter ? customTokenGetter() : null)
+        || localStorage.getItem('promotor_token')
+        || localStorage.getItem('auth_token');
+
+      // #1 — Upload OTIMISTA em background
+      const localRef = await queueUpload(file, token);
+      onCapture(localRef);
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao processar foto");
+    } finally {
+      setIsProcessing(false);
+      setCapturedImage(null);
+    }
+  };
+
+  const handleCapture = async () => {
     if (!videoRef.current || !canvasRef.current) return;
 
     const video = videoRef.current;
@@ -318,9 +359,8 @@ export function CameraCapture({
     }
 
     setValidationError(null);
-    setCapturedImage(canvas.toDataURL("image/jpeg", 0.95));
-    stopCamera();
-    // Aguarda o usuário aprovar ou refazer manualmente.
+    // Auto-aprovar: processa e envia imediatamente (sem etapa extra de "Salvar").
+    await processAndUpload(canvas);
   };
 
   const handleRetake = () => {
@@ -336,45 +376,7 @@ export function CameraCapture({
 
   const handleAccept = async () => {
     if (!canvasRef.current) return;
-    setIsProcessing(true);
-
-    try {
-      // #2 — Geolocalização cacheada (sem bloquear; usa cache de 90s e timeout curto)
-      const { lat, lng } = await getCachedGeolocation({ timeoutMs: 1500 });
-
-      // Aplica watermark
-      const wmData: WatermarkData = { ...watermark, latitude: lat, longitude: lng };
-      applyWatermark(canvasRef.current, wmData);
-
-      // #3 — Compressão em Web Worker (com fallback main-thread)
-      const blob = await compressWebP(
-        canvasRef.current,
-        config.compression_quality,
-        config.max_file_size_kb,
-      );
-      if (!blob) {
-        toast.error("Erro ao comprimir imagem");
-        setIsProcessing(false);
-        return;
-      }
-
-      const file = new File([blob], `photo_${Date.now()}.webp`, { type: "image/webp" });
-      const token = (customTokenGetter ? customTokenGetter() : null)
-        || localStorage.getItem('promotor_token')
-        || localStorage.getItem('auth_token');
-
-      // #1 — Upload OTIMISTA em background:
-      // Enfileiramos imediatamente e devolvemos `local-file://<id>` pro chamador.
-      // A fila (`useOfflineSync`) substituirá a referência pela URL real do servidor
-      // assim que o upload terminar — sem bloquear o promotor.
-      const localRef = await queueUpload(file, token);
-      onCapture(localRef);
-      handleClose();
-    } catch (err: any) {
-      toast.error(err.message || "Erro ao processar foto");
-    } finally {
-      setIsProcessing(false);
-    }
+    await processAndUpload(canvasRef.current);
   };
 
 
