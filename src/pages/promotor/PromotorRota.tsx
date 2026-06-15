@@ -530,9 +530,10 @@ function CategoryExtraPhotosPanel({
   const afterPhotos = photos.filter((p: any) => p.photo_type === 'category_after');
 
   // Regra: só pode adicionar mais ANTES se ainda NÃO começou fotos DEPOIS
-  const canAddBefore = !hasAnyAfter && !completed;
-  // Adicionar mais DEPOIS: enquanto a categoria não estiver finalizada (after concluído)
-  const canAddAfter = hasAnyBefore && !completed && hasAnyAfter;
+  const canAddBefore = !hasAnyAfter;
+  // Adicionar mais DEPOIS: sempre permitido (mesmo após 100%, o promotor pode
+  // querer registrar fotos adicionais da execução)
+  const canAddAfter = true;
 
   const handleCapture = (url: string) => setNewPhotos((prev) => [...prev, url]);
   const handleRemove = (i: number) => setNewPhotos((prev) => prev.filter((_, idx) => idx !== i));
@@ -609,14 +610,9 @@ function CategoryExtraPhotosPanel({
               <ImagePlus className="h-3.5 w-3.5 mr-1.5" /> Adicionar mais fotos DEPOIS
             </Button>
           )}
-          {!canAddBefore && hasAnyAfter && !completed && (
+          {!canAddBefore && hasAnyAfter && (
             <p className="text-[10px] text-muted-foreground flex items-center gap-1">
               <Lock className="h-3 w-3" /> Não é possível adicionar fotos ANTES após iniciar as fotos DEPOIS.
-            </p>
-          )}
-          {completed && (
-            <p className="text-[10px] text-muted-foreground flex items-center gap-1">
-              <Lock className="h-3 w-3" /> Categoria finalizada — fotos travadas.
             </p>
           )}
         </div>
