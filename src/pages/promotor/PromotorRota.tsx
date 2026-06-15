@@ -1350,10 +1350,40 @@ export default function PromotorRota() {
                       )}
                     </div>
                     <div className="flex items-center gap-2">
+                      {hasBeforeUnlock && !isExtraGroup && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2 text-[10px]"
+                          onClick={(e) => { e.stopPropagation(); setExtraPhotosOpen(prev => ({ ...prev, [accordionKey]: !prev[accordionKey] })); }}
+                          title="Ver fotos / adicionar mais"
+                        >
+                          <Camera className="h-3.5 w-3.5 mr-1" />
+                          Fotos
+                        </Button>
+                      )}
                       <Badge variant={isActiveCategory ? 'default' : 'outline'} className="text-[10px]">{doneCount}/{execs.length}</Badge>
                       {isCompletedCategory && (expandedCategories[accordionKey] ? <ChevronUp className="h-4 w-4 text-green-700" /> : <ChevronDown className="h-4 w-4 text-green-700" />)}
                     </div>
                   </div>
+
+                  {/* Painel de fotos extras da categoria */}
+                  {extraPhotosOpen[accordionKey] && hasBeforeUnlock && !isExtraGroup && (
+                    <CategoryExtraPhotosPanel
+                      routeId={id!}
+                      catId={catId}
+                      routeBrandId={routeBrandId}
+                      photos={(route?.photos || []).filter((p: any) => (p.category_id || null) === (catId || null) && (p.photo_type === 'category_before' || p.photo_type === 'category_after'))}
+                      hasAnyBefore={!!catStatus?.category_before_photo || (route?.photos || []).some((p: any) => (p.category_id || null) === (catId || null) && p.photo_type === 'category_before')}
+                      hasAnyAfter={!!catStatus?.category_after_photo || (route?.photos || []).some((p: any) => (p.category_id || null) === (catId || null) && p.photo_type === 'category_after')}
+                      completed={isCompletedCategory}
+                      pdvName={route.pdv_name}
+                      brandName={currentBrand?.brand_name || route.brand_name}
+                      promotorName={route.promotor_name}
+                      qualityConfig={photoQualityConfig}
+                      onUploaded={() => refetch()}
+                    />
+                  )}
 
                   {/* Photo-only mode: collapse products into accordion (only matters when stock/validity counting is OFF) */}
                   {(() => {
