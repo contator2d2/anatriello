@@ -9,6 +9,12 @@ import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { logger } from "@/lib/logger";
+import {
+  compressWebP,
+  getCachedGeolocation,
+  warmGeolocation,
+  prewarmUploadConnection,
+} from "@/lib/photo-perf";
 
 interface WatermarkData {
   pdvName?: string;
@@ -177,37 +183,8 @@ function applyWatermark(
   ctx.fillText(ts, w - tsWidth - padding, padding);
 }
 
-async function compressToWebP(
-  canvas: HTMLCanvasElement,
-  quality: number,
-  maxSizeKb: number
-): Promise<Blob | null> {
-  return new Promise((resolve) => {
-    let q = quality;
-    
-    const attempt = (currentQuality: number, attemptsLeft: number) => {
-      // Use WebP for better compression and faster uploads
-      canvas.toBlob(
-        (blob) => {
-          if (!blob) {
-            resolve(null);
-            return;
-          }
-          
-          if (blob.size / 1024 <= maxSizeKb || attemptsLeft <= 0) {
-            resolve(blob);
-          } else {
-            attempt(currentQuality - 0.1, attemptsLeft - 1);
-          }
-        },
-        "image/webp",
-        currentQuality
-      );
-    };
-
-    attempt(q, 5);
-  });
-}
+// Compressão WebP delegada a Web Worker (com fallback main-thread).
+// Implementação em src/lib/photo-perf.ts
 
 export function CameraCapture({
   onCapture,
