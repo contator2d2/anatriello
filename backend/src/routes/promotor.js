@@ -436,6 +436,7 @@ router.post('/punch', authenticatePromotor, async (req, res) => {
       );
 
       const cfg = facialCfg.rows[0];
+      const empOverride = empRes.rows[0]?.facial_required; // true|false|null
       const rawDescriptor = empRes.rows[0]?.face_descriptor;
       const parsedDescriptor = typeof rawDescriptor === 'string'
         ? JSON.parse(rawDescriptor)
@@ -446,14 +447,19 @@ router.post('/punch', authenticatePromotor, async (req, res) => {
           ? parsedDescriptor.descriptor.length > 0
           : false;
 
-      if (cfg?.enabled && cfg?.use_for_attendance && !hasEnrollment && cfg.allow_manual_fallback === false) {
+      // Override por colaborador: false => dispensado; true => sempre exigir
+      // null => segue config da organização
+      const orgRequires = !!(cfg?.enabled && cfg?.use_for_attendance);
+      const facialRequired = empOverride === false ? false : (empOverride === true ? true : orgRequires);
+
+      if (facialRequired && !hasEnrollment && cfg?.allow_manual_fallback === false) {
         return res.status(403).json({
           error: 'Biometria facial obrigatória, mas este colaborador ainda não possui cadastro facial.',
           code: 'FACIAL_ENROLLMENT_REQUIRED'
         });
       }
 
-      if (cfg?.enabled && cfg?.use_for_attendance && hasEnrollment && !facial_verified) {
+      if (facialRequired && hasEnrollment && !facial_verified) {
         return res.status(403).json({
           error: 'Confirmação facial obrigatória para registrar o ponto.',
           code: 'FACIAL_REQUIRED'
