@@ -321,50 +321,36 @@ export function CameraCapture({
     setIsProcessing(true);
 
     try {
-      // Get geolocation for watermark
-      let lat: number | undefined;
-      let lng: number | undefined;
-      try {
-        const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
-          navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 5000 })
-        );
-        lat = pos.coords.latitude;
-        lng = pos.coords.longitude;
-      } catch { /* silent */ }
+      // #2 — Geolocalização cacheada (sem bloquear; usa cache de 90s e timeout curto)
+      const { lat, lng } = await getCachedGeolocation({ timeoutMs: 1500 });
 
-      // Apply watermark
+      // Aplica watermark
       const wmData: WatermarkData = { ...watermark, latitude: lat, longitude: lng };
       applyWatermark(canvasRef.current, wmData);
 
-      // Compress (now using WebP for faster background uploads)
-      const blob = await compressToWebP(canvasRef.current, config.compression_quality, config.max_file_size_kb);
+      // #3 — Compressão em Web Worker (com fallback main-thread)
+      const blob = await compressWebP(
+        canvasRef.current,
+        config.compression_quality,
+        config.max_file_size_kb,
+      );
       if (!blob) {
         toast.error("Erro ao comprimir imagem");
         setIsProcessing(false);
         return;
       }
 
-      // Prefer immediate upload when online so the server URL is available
-      // right away. This avoids storing local-file:// references that fail
-      // to render in the book/feed when the queue can't resolve them.
       const file = new File([blob], `photo_${Date.now()}.webp`, { type: "image/webp" });
-      const token = (customTokenGetter ? customTokenGetter() : null) || localStorage.getItem('promotor_token') || localStorage.getItem('auth_token');
+      const token = (customTokenGetter ? customTokenGetter() : null)
+        || localStorage.getItem('promotor_token')
+        || localStorage.getItem('auth_token');
 
-      let finalUrl: string | null = null;
-      if (isOnline) {
-        try {
-          finalUrl = await uploadFile(file);
-        } catch (err: any) {
-          logger.warn('[CameraCapture] Upload imediato falhou, usando fila offline', { error: err?.message });
-        }
-      }
-      if (!finalUrl) {
-        finalUrl = await queueUpload(file, token);
-        logger.info("Foto enfileirada para sincronização posterior.");
-      }
-
-      onCapture(finalUrl);
-
+      // #1 — Upload OTIMISTA em background:
+      // Enfileiramos imediatamente e devolvemos `local-file://<id>` pro chamador.
+      // A fila (`useOfflineSync`) substituirá a referência pela URL real do servidor
+      // assim que o upload terminar — sem bloquear o promotor.
+      const localRef = await queueUpload(file, token);
+      onCapture(localRef);
       handleClose();
     } catch (err: any) {
       toast.error(err.message || "Erro ao processar foto");
@@ -372,6 +358,7 @@ export function CameraCapture({
       setIsProcessing(false);
     }
   };
+
 
   const handleManualFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
