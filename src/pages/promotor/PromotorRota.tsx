@@ -1043,177 +1043,7 @@ export default function PromotorRota() {
   // Multi-brand: show brand selection screen after check-in
   const showBrandSelector = isMultiBrand && isActive && !activeBrandId;
 
-  return (
-    <PromotorLayout>
-      <div className="max-w-lg mx-auto p-4 space-y-4">
-        <div className="flex justify-end">
-          <SyncStatusIndicator />
-        </div>
-        {/* Route header card */}
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-start justify-between mb-2">
-              <div>
-                <h2 className="font-bold text-lg">{route.pdv_name}</h2>
-                {isMultiBrand ? (
-                  <div className="flex items-center gap-2 mt-1">
-                    <Badge className="bg-primary/20 text-primary text-[10px]">🏷️ Multi-marca</Badge>
-                    <span className="text-xs text-muted-foreground">{routeBrands.length} marcas</span>
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">{route.brand_name}</p>
-                )}
-                {!isMultiBrand && route.checklist_name && <p className="text-xs text-muted-foreground mt-1">Checklist: {route.checklist_name}</p>}
-              </div>
-              <Badge className={route.status === 'in_progress' ? 'bg-orange-500/20 text-orange-700' : route.status === 'completed' ? 'bg-green-500/20 text-green-700' : 'bg-blue-500/20 text-blue-700'}>
-                {route.status === 'in_progress' ? 'Em Andamento' : route.status === 'completed' ? 'Concluída' : 'Agendada'}
-              </Badge>
-            </div>
-            <div className="flex items-center gap-3 text-xs text-muted-foreground">
-              <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{route.pdv_address || route.pdv_city}</span>
-              <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{route.scheduled_time?.slice(0, 5)}</span>
-            </div>
-            {isActive && (
-              <div className="mt-3">
-                <div className="flex justify-between text-xs mb-1">
-                  <span>Progresso Geral</span>
-                  <span className="font-mono font-bold">{Math.round(route.progress_pct || 0)}%</span>
-                </div>
-                <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
-                  <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${route.progress_pct || 0}%` }} />
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Multi-brand progress overview (always visible when multi-brand & active) */}
-        {isMultiBrand && isActive && (
-          <div className="space-y-1.5">
-            {routeBrands.map((rb: any) => {
-              const isSelected = activeBrandId === rb.brand_id;
-              return (
-                <Card key={rb.brand_id}
-                  className={`cursor-pointer transition-all ${isSelected ? 'border-primary ring-1 ring-primary/30' : 'hover:border-primary/40'} ${rb.status === 'completed' ? 'bg-green-500/5' : ''}`}
-                  onClick={() => setActiveBrandId(rb.brand_id)}>
-                  <CardContent className="p-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        {rb.status === 'completed' ? (
-                          <CheckCircle2 className="h-5 w-5 text-green-500" />
-                        ) : rb.status === 'in_progress' ? (
-                          <Clock className="h-5 w-5 text-orange-500" />
-                        ) : (
-                          <Circle className="h-5 w-5 text-muted-foreground" />
-                        )}
-                        <div>
-                          <div className="text-sm font-semibold">{rb.brand_name}</div>
-                          {rb.checklist_name && <div className="text-[10px] text-muted-foreground">{rb.checklist_name}</div>}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-mono font-bold">{Math.round(rb.progress_pct || 0)}%</span>
-                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                      </div>
-                    </div>
-                    <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden mt-2">
-                      <div className={`h-full rounded-full transition-all ${rb.status === 'completed' ? 'bg-green-500' : 'bg-primary'}`}
-                        style={{ width: `${rb.progress_pct || 0}%` }} />
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Brand selector prompt */}
-        {showBrandSelector && (
-          <Card className="border-primary/30 bg-primary/5">
-            <CardContent className="p-4 text-center">
-              <Store className="h-8 w-8 mx-auto text-primary mb-2" />
-              <p className="text-sm font-medium mb-1">Selecione uma marca para iniciar</p>
-              <p className="text-[10px] text-muted-foreground mb-3">
-                Escolha por qual marca deseja começar. Você poderá alternar entre elas a qualquer momento.
-              </p>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Active brand indicator */}
-        {isMultiBrand && activeBrandId && isActive && (
-          <div className="flex items-center justify-between p-2 rounded-lg bg-primary/10 border border-primary/20">
-            <div className="flex items-center gap-2 text-sm">
-              <Package className="h-4 w-4 text-primary" />
-              <span className="font-medium">{currentBrand?.brand_name || 'Marca'}</span>
-            </div>
-            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setActiveBrandId(null)}>
-              Trocar marca
-            </Button>
-          </div>
-        )}
-
-        {/* Check-in photo requirement */}
-        {needsCheckin && route.require_checkin_photo && !checkinPhotoUrl && (
-          <Card className="border-primary/30">
-            <CardContent className="p-4 space-y-3">
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <Camera className="h-4 w-4 text-primary" />
-                Foto obrigatória para check-in
-              </div>
-              <CameraCapture
-                onCapture={(url) => {
-                  setCheckinPhotoUrl(url);
-                  // Auto-submit check-in assim que a foto for validada
-                  setTimeout(() => { void handleCheckin(url); }, 0);
-                }}
-                watermark={{ pdvName: route.pdv_name, brandName: route.brand_name || route.route_brands?.[0]?.brand_name, photoType: 'Check-in' }}
-                customTokenGetter={() => localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}
-                buttonLabel="Tirar foto de check-in"
-                qualityConfig={photoQualityConfig}
-                allowManualUpload={false}
-              />
-            </CardContent>
-          </Card>
-        )}
-
-        {needsCheckin && route.require_checkin_photo && checkinPhotoUrl && (
-          <Card className="border-primary/30">
-            <CardContent className="p-4 space-y-2">
-              <LocalImage src={checkinPhotoUrl} alt="Check-in" className="w-full rounded-lg border max-h-64 object-cover" />
-              <p className="text-xs text-muted-foreground text-center">
-                {checkin.isPending || checkinSubmitted ? 'Realizando check-in...' : 'Foto registrada. Concluindo check-in...'}
-              </p>
-            </CardContent>
-          </Card>
-        )}
-
-        {needsCheckin && isFacialActiveCheckin && (
-          <div className="flex items-center gap-2 px-3 py-2 bg-primary/10 rounded-lg text-xs text-primary">
-            <ScanFace className="h-4 w-4" />
-            <span className="font-medium">Verificação facial obrigatória para check-in</span>
-          </div>
-        )}
-
-        {/* Botão de check-in padrão (sem foto obrigatória) */}
-        {needsCheckin && !route.require_checkin_photo && (
-          <Button className="w-full h-14 text-lg" onClick={() => handleCheckin()} disabled={checkin.isPending}>
-            {isFacialActiveCheckin ? <ScanFace className="h-5 w-5 mr-2" /> : <MapPin className="h-5 w-5 mr-2" />}
-            {checkin.isPending ? 'Realizando check-in...' : 'Fazer Check-in'}
-          </Button>
-        )}
-
-
-        {isActive && filteredExecs.length === 0 && activeBrandId && (
-          <Card>
-            <CardContent className="p-6 text-center text-sm text-muted-foreground">
-              Nenhum produto foi carregado para esta {isMultiBrand ? 'marca' : 'rota'}.
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Active route: categories with step-by-step flow */}
-        {isActive && (!isMultiBrand || activeBrandId) && (
+  const categoriesBlock = (isActive && (!isMultiBrand || activeBrandId)) ? (
           <div className="space-y-4">
             {Object.entries(groupedExecs).map(([category, { catId, execs, isExtraGroup }]) => {
               const routeBrandId = execs[0]?.route_brand_id;
@@ -1580,7 +1410,179 @@ export default function PromotorRota() {
                 : 'Concluir a rota finaliza o checklist desta marca. O checkout da loja só será feito na última rota do PDV.'}
             </p>
           </div>
+  ) : null;
+
+  return (
+    <PromotorLayout>
+      <div className="max-w-lg mx-auto p-4 space-y-4">
+        <div className="flex justify-end">
+          <SyncStatusIndicator />
+        </div>
+        {/* Route header card */}
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-start justify-between mb-2">
+              <div>
+                <h2 className="font-bold text-lg">{route.pdv_name}</h2>
+                {isMultiBrand ? (
+                  <div className="flex items-center gap-2 mt-1">
+                    <Badge className="bg-primary/20 text-primary text-[10px]">🏷️ Multi-marca</Badge>
+                    <span className="text-xs text-muted-foreground">{routeBrands.length} marcas</span>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">{route.brand_name}</p>
+                )}
+                {!isMultiBrand && route.checklist_name && <p className="text-xs text-muted-foreground mt-1">Checklist: {route.checklist_name}</p>}
+              </div>
+              <Badge className={route.status === 'in_progress' ? 'bg-orange-500/20 text-orange-700' : route.status === 'completed' ? 'bg-green-500/20 text-green-700' : 'bg-blue-500/20 text-blue-700'}>
+                {route.status === 'in_progress' ? 'Em Andamento' : route.status === 'completed' ? 'Concluída' : 'Agendada'}
+              </Badge>
+            </div>
+            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{route.pdv_address || route.pdv_city}</span>
+              <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{route.scheduled_time?.slice(0, 5)}</span>
+            </div>
+            {isActive && (
+              <div className="mt-3">
+                <div className="flex justify-between text-xs mb-1">
+                  <span>Progresso Geral</span>
+                  <span className="font-mono font-bold">{Math.round(route.progress_pct || 0)}%</span>
+                </div>
+                <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+                  <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${route.progress_pct || 0}%` }} />
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Multi-brand progress overview (always visible when multi-brand & active) */}
+        {isMultiBrand && isActive && (
+          <div className="space-y-1.5">
+            {routeBrands.map((rb: any) => {
+              const isSelected = activeBrandId === rb.brand_id;
+              return (
+                <Card key={rb.brand_id}
+                  className={`cursor-pointer transition-all ${isSelected ? 'border-primary ring-1 ring-primary/30' : 'hover:border-primary/40'} ${rb.status === 'completed' ? 'bg-green-500/5' : ''}`}
+                  onClick={() => setActiveBrandId(rb.brand_id)}>
+                  <CardContent className="p-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        {rb.status === 'completed' ? (
+                          <CheckCircle2 className="h-5 w-5 text-green-500" />
+                        ) : rb.status === 'in_progress' ? (
+                          <Clock className="h-5 w-5 text-orange-500" />
+                        ) : (
+                          <Circle className="h-5 w-5 text-muted-foreground" />
+                        )}
+                        <div>
+                          <div className="text-sm font-semibold">{rb.brand_name}</div>
+                          {rb.checklist_name && <div className="text-[10px] text-muted-foreground">{rb.checklist_name}</div>}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-mono font-bold">{Math.round(rb.progress_pct || 0)}%</span>
+                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                    </div>
+                    <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden mt-2">
+                      <div className={`h-full rounded-full transition-all ${rb.status === 'completed' ? 'bg-green-500' : 'bg-primary'}`}
+                        style={{ width: `${rb.progress_pct || 0}%` }} />
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
         )}
+
+        {/* Brand selector prompt */}
+        {showBrandSelector && (
+          <Card className="border-primary/30 bg-primary/5">
+            <CardContent className="p-4 text-center">
+              <Store className="h-8 w-8 mx-auto text-primary mb-2" />
+              <p className="text-sm font-medium mb-1">Selecione uma marca para iniciar</p>
+              <p className="text-[10px] text-muted-foreground mb-3">
+                Escolha por qual marca deseja começar. Você poderá alternar entre elas a qualquer momento.
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Active brand indicator */}
+        {isMultiBrand && activeBrandId && isActive && (
+          <div className="flex items-center justify-between p-2 rounded-lg bg-primary/10 border border-primary/20">
+            <div className="flex items-center gap-2 text-sm">
+              <Package className="h-4 w-4 text-primary" />
+              <span className="font-medium">{currentBrand?.brand_name || 'Marca'}</span>
+            </div>
+            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setActiveBrandId(null)}>
+              Trocar marca
+            </Button>
+          </div>
+        )}
+
+        {/* Check-in photo requirement */}
+        {needsCheckin && route.require_checkin_photo && !checkinPhotoUrl && (
+          <Card className="border-primary/30">
+            <CardContent className="p-4 space-y-3">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Camera className="h-4 w-4 text-primary" />
+                Foto obrigatória para check-in
+              </div>
+              <CameraCapture
+                onCapture={(url) => {
+                  setCheckinPhotoUrl(url);
+                  // Auto-submit check-in assim que a foto for validada
+                  setTimeout(() => { void handleCheckin(url); }, 0);
+                }}
+                watermark={{ pdvName: route.pdv_name, brandName: route.brand_name || route.route_brands?.[0]?.brand_name, photoType: 'Check-in' }}
+                customTokenGetter={() => localStorage.getItem('promotor_token') || localStorage.getItem('auth_token')}
+                buttonLabel="Tirar foto de check-in"
+                qualityConfig={photoQualityConfig}
+                allowManualUpload={false}
+              />
+            </CardContent>
+          </Card>
+        )}
+
+        {needsCheckin && route.require_checkin_photo && checkinPhotoUrl && (
+          <Card className="border-primary/30">
+            <CardContent className="p-4 space-y-2">
+              <LocalImage src={checkinPhotoUrl} alt="Check-in" className="w-full rounded-lg border max-h-64 object-cover" />
+              <p className="text-xs text-muted-foreground text-center">
+                {checkin.isPending || checkinSubmitted ? 'Realizando check-in...' : 'Foto registrada. Concluindo check-in...'}
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
+        {needsCheckin && isFacialActiveCheckin && (
+          <div className="flex items-center gap-2 px-3 py-2 bg-primary/10 rounded-lg text-xs text-primary">
+            <ScanFace className="h-4 w-4" />
+            <span className="font-medium">Verificação facial obrigatória para check-in</span>
+          </div>
+        )}
+
+        {/* Botão de check-in padrão (sem foto obrigatória) */}
+        {needsCheckin && !route.require_checkin_photo && (
+          <Button className="w-full h-14 text-lg" onClick={() => handleCheckin()} disabled={checkin.isPending}>
+            {isFacialActiveCheckin ? <ScanFace className="h-5 w-5 mr-2" /> : <MapPin className="h-5 w-5 mr-2" />}
+            {checkin.isPending ? 'Realizando check-in...' : 'Fazer Check-in'}
+          </Button>
+        )}
+
+
+        {isActive && filteredExecs.length === 0 && activeBrandId && (
+          <Card>
+            <CardContent className="p-6 text-center text-sm text-muted-foreground">
+              Nenhum produto foi carregado para esta {isMultiBrand ? 'marca' : 'rota'}.
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Active route: categories with step-by-step flow */}
+        {!isMultiBrand && categoriesBlock}
 
         {isCompleted && (
           <div className="text-center py-6">
