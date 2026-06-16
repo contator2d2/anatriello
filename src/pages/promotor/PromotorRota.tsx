@@ -1456,65 +1456,92 @@ export default function PromotorRota() {
           </CardContent>
         </Card>
 
-        {/* Multi-brand: accordion of brands with categories nested inside */}
-        {isMultiBrand && isActive && (
+        {/* Multi-brand: list of brands (drill-down) */}
+        {isMultiBrand && isActive && !activeBrandId && (
           <div className="space-y-2">
+            <p className="text-xs text-muted-foreground px-1">
+              Toque numa marca para abrir suas categorias.
+            </p>
             {routeBrands.map((rb: any) => {
-              const isSelected = activeBrandId === rb.brand_id;
+              const isDone = rb.status === 'completed';
+              const isInProgress = rb.status === 'in_progress' || ((rb.progress_pct || 0) > 0 && !isDone);
+              const cardCls = isDone
+                ? 'border-green-500/60 bg-green-500/10 hover:bg-green-500/15'
+                : isInProgress
+                  ? 'border-yellow-500/60 bg-yellow-500/10 hover:bg-yellow-500/15'
+                  : 'hover:border-primary/40';
+              const barCls = isDone ? 'bg-green-500' : isInProgress ? 'bg-yellow-500' : 'bg-primary';
               return (
-                <div key={rb.brand_id} className="space-y-2">
-                  <Card
-                    className={`cursor-pointer transition-all ${isSelected ? 'border-primary ring-1 ring-primary/30' : 'hover:border-primary/40'} ${rb.status === 'completed' ? 'bg-green-500/5' : ''}`}
-                    onClick={() => setActiveBrandId(isSelected ? null : rb.brand_id)}>
-                    <CardContent className="p-3">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          {rb.status === 'completed' ? (
-                            <CheckCircle2 className="h-5 w-5 text-green-500" />
-                          ) : rb.status === 'in_progress' ? (
-                            <Clock className="h-5 w-5 text-orange-500" />
-                          ) : (
-                            <Circle className="h-5 w-5 text-muted-foreground" />
-                          )}
-                          <div>
-                            <div className="text-sm font-semibold">{rb.brand_name}</div>
-                            {rb.checklist_name && <div className="text-[10px] text-muted-foreground">{rb.checklist_name}</div>}
+                <Card key={rb.brand_id}
+                  className={`cursor-pointer transition-all ${cardCls}`}
+                  onClick={() => setActiveBrandId(rb.brand_id)}>
+                  <CardContent className="p-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        {isDone ? (
+                          <CheckCircle2 className="h-5 w-5 text-green-600" />
+                        ) : isInProgress ? (
+                          <Clock className="h-5 w-5 text-yellow-600" />
+                        ) : (
+                          <Circle className="h-5 w-5 text-muted-foreground" />
+                        )}
+                        <div>
+                          <div className="text-sm font-semibold">{rb.brand_name}</div>
+                          <div className="text-[10px] text-muted-foreground">
+                            {isDone ? 'Concluída' : isInProgress ? 'Em andamento' : 'Pendente'}
+                            {rb.checklist_name ? ` • ${rb.checklist_name}` : ''}
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-mono font-bold">{Math.round(rb.progress_pct || 0)}%</span>
-                          <ChevronRight className={`h-4 w-4 text-muted-foreground transition-transform ${isSelected ? 'rotate-90' : ''}`} />
-                        </div>
                       </div>
-                      <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden mt-2">
-                        <div className={`h-full rounded-full transition-all ${rb.status === 'completed' ? 'bg-green-500' : 'bg-primary'}`}
-                          style={{ width: `${rb.progress_pct || 0}%` }} />
+                      <div className="flex items-center gap-2">
+                        <span className={`text-sm font-mono font-bold ${isDone ? 'text-green-700' : isInProgress ? 'text-yellow-700' : ''}`}>
+                          {Math.round(rb.progress_pct || 0)}%
+                        </span>
+                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
                       </div>
-                    </CardContent>
-                  </Card>
-                  {isSelected && (
-                    <div className="pl-2 border-l-2 border-primary/30 ml-2">
-                      {categoriesBlock}
                     </div>
-                  )}
-                </div>
+                    <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden mt-2">
+                      <div className={`h-full rounded-full transition-all ${barCls}`}
+                        style={{ width: `${rb.progress_pct || 0}%` }} />
+                    </div>
+                  </CardContent>
+                </Card>
               );
             })}
           </div>
         )}
 
-        {/* Brand selector prompt */}
-        {showBrandSelector && (
-          <Card className="border-primary/30 bg-primary/5">
-            <CardContent className="p-4 text-center">
-              <Store className="h-8 w-8 mx-auto text-primary mb-2" />
-              <p className="text-sm font-medium mb-1">Selecione uma marca para abrir as categorias</p>
-              <p className="text-[10px] text-muted-foreground mb-3">
-                Toque na marca acima para expandir suas categorias. Toque novamente para recolher.
-              </p>
-            </CardContent>
-          </Card>
+        {/* Multi-brand: selected brand detail (only this brand's categories) */}
+        {isMultiBrand && isActive && activeBrandId && (
+          <div className="space-y-3">
+            <Button variant="ghost" size="sm" className="h-8 -ml-2" onClick={() => setActiveBrandId(null)}>
+              <ChevronRight className="h-4 w-4 rotate-180 mr-1" />
+              Voltar para marcas
+            </Button>
+            <Card className="border-primary/40 bg-primary/5">
+              <CardContent className="p-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Package className="h-5 w-5 text-primary" />
+                    <div>
+                      <div className="text-sm font-semibold">{currentBrand?.brand_name || 'Marca'}</div>
+                      {currentBrand?.checklist_name && (
+                        <div className="text-[10px] text-muted-foreground">{currentBrand.checklist_name}</div>
+                      )}
+                    </div>
+                  </div>
+                  <span className="text-sm font-mono font-bold">{Math.round(currentBrand?.progress_pct || 0)}%</span>
+                </div>
+                <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden mt-2">
+                  <div className={`h-full rounded-full transition-all ${currentBrand?.status === 'completed' ? 'bg-green-500' : 'bg-primary'}`}
+                    style={{ width: `${currentBrand?.progress_pct || 0}%` }} />
+                </div>
+              </CardContent>
+            </Card>
+            {categoriesBlock}
+          </div>
         )}
+
 
 
         {/* Check-in photo requirement */}
