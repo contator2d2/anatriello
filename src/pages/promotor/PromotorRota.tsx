@@ -569,30 +569,45 @@ function CategoryExtraPhotosPanel({
   };
 
 
+  // Mescla as fotos confirmadas pelo servidor com as recém-tiradas (otimista)
+  // evitando duplicar caso o refetch já tenha trazido a mesma URL.
+  const serverBeforeUrls = new Set(beforePhotos.map((p: any) => p.photo_url));
+  const serverAfterUrls = new Set(afterPhotos.map((p: any) => p.photo_url));
+  const optimisticBefore = mode === 'before' ? newPhotos.filter((u) => !serverBeforeUrls.has(u)) : [];
+  const optimisticAfter = mode === 'after' ? newPhotos.filter((u) => !serverAfterUrls.has(u)) : [];
+  const totalBefore = beforePhotos.length + optimisticBefore.length;
+  const totalAfter = afterPhotos.length + optimisticAfter.length;
+
   return (
     <div className="mt-2 p-3 rounded-lg border border-dashed border-muted-foreground/30 bg-muted/20 space-y-3">
       <div className="space-y-2">
-        {beforePhotos.length > 0 && (
+        {totalBefore > 0 && (
           <div>
-            <div className="text-[10px] font-semibold uppercase text-muted-foreground mb-1">📷 Antes ({beforePhotos.length})</div>
+            <div className="text-[10px] font-semibold uppercase text-muted-foreground mb-1">📷 Antes ({totalBefore})</div>
             <div className="grid grid-cols-4 gap-1.5">
               {beforePhotos.map((p: any, i: number) => (
-                <LocalImage key={p.id || i} src={p.photo_url} alt={`Antes ${i+1}`} className="w-full h-16 rounded border object-cover" />
+                <LocalImage key={p.id || `b-${i}`} src={p.photo_url} alt={`Antes ${i+1}`} className="w-full h-16 rounded border object-cover" />
+              ))}
+              {optimisticBefore.map((u, i) => (
+                <LocalImage key={`ob-${i}`} src={u} alt={`Antes nova ${i+1}`} className="w-full h-16 rounded border border-primary/40 object-cover ring-1 ring-primary/30" />
               ))}
             </div>
           </div>
         )}
-        {afterPhotos.length > 0 && (
+        {totalAfter > 0 && (
           <div>
-            <div className="text-[10px] font-semibold uppercase text-green-700 mb-1">✅ Depois ({afterPhotos.length})</div>
+            <div className="text-[10px] font-semibold uppercase text-green-700 mb-1">✅ Depois ({totalAfter})</div>
             <div className="grid grid-cols-4 gap-1.5">
               {afterPhotos.map((p: any, i: number) => (
-                <LocalImage key={p.id || i} src={p.photo_url} alt={`Depois ${i+1}`} className="w-full h-16 rounded border border-green-500/40 object-cover" />
+                <LocalImage key={p.id || `a-${i}`} src={p.photo_url} alt={`Depois ${i+1}`} className="w-full h-16 rounded border border-green-500/40 object-cover" />
+              ))}
+              {optimisticAfter.map((u, i) => (
+                <LocalImage key={`oa-${i}`} src={u} alt={`Depois nova ${i+1}`} className="w-full h-16 rounded border border-green-500/60 object-cover ring-1 ring-green-500/40" />
               ))}
             </div>
           </div>
         )}
-        {beforePhotos.length === 0 && afterPhotos.length === 0 && (
+        {totalBefore === 0 && totalAfter === 0 && (
           <p className="text-xs text-muted-foreground text-center">Nenhuma foto registrada ainda.</p>
         )}
       </div>
