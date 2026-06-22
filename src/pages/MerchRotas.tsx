@@ -542,7 +542,7 @@ export default function MerchRotas() {
 // Route Form Dialog
 function RouteFormDialog({ open, route, onClose, pdvs, employees, onSave, onDelete, onDuplicate }: any) {
   const [form, setForm] = useState<any>({});
-  const [multiBrands, setMultiBrands] = useState<{ brand_id: string; checklist_id?: string }[]>([]);
+  const [multiBrands, setMultiBrands] = useState<{ brand_id: string; checklist_id?: string; weekdays?: number[] }[]>([]);
   const [configuringBrandId, setConfiguringBrandId] = useState<string | null>(null);
   const [pdvOpen, setPdvOpen] = useState(false);
   const { data: brands = [] } = useBrands();
