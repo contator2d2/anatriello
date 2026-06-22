@@ -81,6 +81,8 @@ import { log, logError } from './logger.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+let databaseReady = false;
+let databaseInitError = null;
 
 // Add CORS headers to EVERY response (must be absolute first)
 app.use((req, res, next) => {
@@ -458,7 +460,12 @@ app.use('/api/promoter-leaves', promoterLeavesRoutes);
 app.use('/api/access-control-dashboard', accessControlDashboardRoutes);
 
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.json({
+    status: databaseReady ? 'ok' : 'starting',
+    databaseReady,
+    databaseInitError,
+    timestamp: new Date().toISOString(),
+  });
 });
 
 // Diagnostic endpoint to check Google Calendar env vars
@@ -490,15 +497,19 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Initialize database and start server
-initDatabase().then((ok) => {
-  if (!ok) {
-    console.error('🛑 Server not started because database initialization failed (critical step).');
-    process.exit(1);
-  }
+// Start the HTTP server immediately, then initialize the database in the background.
+// This prevents deploy-time 502 responses while long non-critical migrations run.
+app.listen(PORT, () => {
+  console.log(`🚀 Whatsale API running on port ${PORT}`);
 
-  app.listen(PORT, () => {
-    console.log(`🚀 Whatsale API running on port ${PORT}`);
+  initDatabase().then((ok) => {
+    if (!ok) {
+      databaseInitError = 'Database initialization failed in a critical step';
+      console.error('🛑 Database initialization failed (critical step). API remains online in degraded mode.');
+      return;
+    }
+
+    databaseReady = true;
 
     // Schedule billing notifications - runs every hour to check rules with matching send_time
     // Each rule has its own send_time, the scheduler only executes rules matching current hour
