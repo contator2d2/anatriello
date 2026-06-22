@@ -557,33 +557,48 @@ router.post('/routes/bulk-delete', async (req, res) => {
     const { ids = [], include_future = false } = req.body || {};
     if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'ids requerido' });
 
-    const orgRes = await query('SELECT organization_id FROM organization_members WHERE user_id=$1 LIMIT 1', [req.userId]);
-    const orgId = orgRes.rows[0]?.organization_id;
-    if (!orgId) return res.status(403).json({ error: 'Sem organização' });
-
+    // Superadmin: NÃO filtrar por organização — pode apagar rotas de qualquer org
     let futureDeleted = 0;
+    let futureIds = [];
     if (include_future) {
       const rows = await query(
-        `SELECT promoter_id, pdv_id, brand_id, visit_date FROM merch_routes WHERE id = ANY($1::uuid[]) AND organization_id=$2`,
-        [ids, orgId]
+        `SELECT organization_id, promoter_id, pdv_id, brand_id, visit_date FROM merch_routes WHERE id = ANY($1::uuid[])`,
+        [ids]
       );
       for (const r of rows.rows) {
-        const f = await query(
-          `DELETE FROM merch_routes
+        const sel = await query(
+          `SELECT id FROM merch_routes
            WHERE organization_id=$1 AND promoter_id IS NOT DISTINCT FROM $2
              AND pdv_id IS NOT DISTINCT FROM $3 AND brand_id IS NOT DISTINCT FROM $4
              AND visit_date > $5 AND status IN ('scheduled','confirmed')`,
-          [orgId, r.promoter_id, r.pdv_id, r.brand_id, r.visit_date]
+          [r.organization_id, r.promoter_id, r.pdv_id, r.brand_id, r.visit_date]
         );
-        futureDeleted += f.rowCount || 0;
+        for (const f of sel.rows) futureIds.push(f.id);
       }
     }
+    const allIds = Array.from(new Set([...ids, ...futureIds]));
+
+    // Apagar dependências conhecidas antes (FKs sem cascade)
+    const tryDel = async (sql, params) => { try { return await query(sql, params); } catch (e) { return { rowCount: 0 }; } };
+    await tryDel(`DELETE FROM merch_route_executions WHERE route_id = ANY($1::uuid[])`, [allIds]);
+    await tryDel(`DELETE FROM merch_route_products WHERE route_id = ANY($1::uuid[])`, [allIds]);
+    await tryDel(`DELETE FROM merch_route_brands WHERE route_id = ANY($1::uuid[])`, [allIds]);
+    await tryDel(`DELETE FROM merch_route_audit WHERE route_id = ANY($1::uuid[])`, [allIds]);
+    await tryDel(`DELETE FROM merch_route_authors WHERE route_id = ANY($1::uuid[])`, [allIds]);
+    await tryDel(`DELETE FROM merch_route_assignment_history WHERE route_id = ANY($1::uuid[])`, [allIds]);
+    await tryDel(`DELETE FROM merch_route_photos WHERE route_id = ANY($1::uuid[])`, [allIds]);
+    await tryDel(`DELETE FROM merch_route_categories WHERE route_id = ANY($1::uuid[])`, [allIds]);
+
     const del = await query(
-      `DELETE FROM merch_routes WHERE id = ANY($1::uuid[]) AND organization_id=$2`,
-      [ids, orgId]
+      `DELETE FROM merch_routes WHERE id = ANY($1::uuid[])`,
+      [allIds]
     );
+    futureDeleted = Math.max(0, (del.rowCount || 0) - ids.length);
     res.json({ ok: true, deleted: del.rowCount, future_deleted: futureDeleted });
-  } catch (err) { logError('routes.bulk_delete', err); res.status(500).json({ error: 'Erro' }); }
+  } catch (err) {
+    logError('routes.bulk_delete', err);
+    res.status(500).json({ error: 'Erro ao excluir rotas', detail: err.message });
+  }
 });
 
 router.delete('/routes/:id', async (req, res) => {
