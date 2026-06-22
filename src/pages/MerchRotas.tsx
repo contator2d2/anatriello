@@ -631,12 +631,14 @@ function RouteFormDialog({ open, route, onClose, pdvs, employees, onSave, onDele
         if (Array.isArray(rawBrands) && rawBrands.length > 0) {
           setMultiBrands(rawBrands.map((rb: any) => ({ 
             brand_id: rb.brand_id || rb.id || rb, 
-            checklist_id: rb.checklist_id || null
+            checklist_id: rb.checklist_id || null,
+            weekdays: Array.isArray(rb.weekdays) ? rb.weekdays : [],
           })));
         } else if (route.brand_id) {
           setMultiBrands([{ 
             brand_id: route.brand_id, 
-            checklist_id: route.checklist_id || null
+            checklist_id: route.checklist_id || null,
+            weekdays: [],
           }]);
         } else {
           setMultiBrands([]);
