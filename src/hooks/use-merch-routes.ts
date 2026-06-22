@@ -110,6 +110,9 @@ export function useBulkDeleteMerchRoutes() {
       api<any>(`/api/merch/routes/bulk-delete`, { method: 'POST', body: { ids, include_future: !!include_future } }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['merch-routes'] }),
   });
+}
+
+
 
 export function useDuplicateMerchRoute() {
   const qc = useQueryClient();
