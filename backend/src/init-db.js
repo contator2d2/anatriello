@@ -926,43 +926,105 @@ ON CONFLICT (key) DO NOTHING;
 // STEP 11: INDEXES (last step, non-critical)
 // ============================================
 const step11Indexes = `
-CREATE INDEX IF NOT EXISTS idx_connections_user_id ON connections(user_id);
-CREATE INDEX IF NOT EXISTS idx_connections_org ON connections(organization_id);
-CREATE INDEX IF NOT EXISTS idx_contact_lists_user_id ON contact_lists(user_id);
-CREATE INDEX IF NOT EXISTS idx_contact_lists_conn ON contact_lists(connection_id);
-CREATE INDEX IF NOT EXISTS idx_contacts_list_id ON contacts(list_id);
-CREATE INDEX IF NOT EXISTS idx_contacts_jid ON contacts(jid);
-CREATE INDEX IF NOT EXISTS idx_message_templates_user_id ON message_templates(user_id);
-CREATE INDEX IF NOT EXISTS idx_campaigns_user_id ON campaigns(user_id);
-CREATE INDEX IF NOT EXISTS idx_campaign_messages_campaign_id ON campaign_messages(campaign_id);
-CREATE INDEX IF NOT EXISTS idx_campaign_messages_status ON campaign_messages(status);
-CREATE INDEX IF NOT EXISTS idx_org_members_org ON organization_members(organization_id);
-CREATE INDEX IF NOT EXISTS idx_org_members_user ON organization_members(user_id);
-CREATE INDEX IF NOT EXISTS idx_connection_members_conn ON connection_members(connection_id);
-CREATE INDEX IF NOT EXISTS idx_connection_members_user ON connection_members(user_id);
-CREATE INDEX IF NOT EXISTS idx_asaas_integrations_org ON asaas_integrations(organization_id);
-CREATE INDEX IF NOT EXISTS idx_asaas_customers_org ON asaas_customers(organization_id);
-CREATE INDEX IF NOT EXISTS idx_asaas_payments_org ON asaas_payments(organization_id);
-CREATE INDEX IF NOT EXISTS idx_asaas_payments_status ON asaas_payments(status);
-CREATE INDEX IF NOT EXISTS idx_asaas_payments_due_date ON asaas_payments(due_date);
-CREATE INDEX IF NOT EXISTS idx_billing_notifications_payment ON billing_notifications(payment_id);
+DO $$
+BEGIN
+  IF to_regclass('public.connections') IS NOT NULL THEN
+    CREATE INDEX IF NOT EXISTS idx_connections_user_id ON connections(user_id);
+    CREATE INDEX IF NOT EXISTS idx_connections_org ON connections(organization_id);
+  END IF;
 
-CREATE INDEX IF NOT EXISTS idx_billing_alerts_org ON billing_alerts(organization_id);
-CREATE INDEX IF NOT EXISTS idx_billing_alerts_unresolved ON billing_alerts(organization_id, is_resolved) WHERE is_resolved = false;
-CREATE INDEX IF NOT EXISTS idx_billing_daily_msg_customer_day ON billing_daily_message_count(customer_id, day);
+  IF to_regclass('public.contact_lists') IS NOT NULL THEN
+    CREATE INDEX IF NOT EXISTS idx_contact_lists_user_id ON contact_lists(user_id);
+    CREATE INDEX IF NOT EXISTS idx_contact_lists_conn ON contact_lists(connection_id);
+  END IF;
 
-CREATE INDEX IF NOT EXISTS idx_conversations_conn ON conversations(connection_id);
-CREATE INDEX IF NOT EXISTS idx_conversations_assigned ON conversations(assigned_to);
-CREATE INDEX IF NOT EXISTS idx_chat_messages_conv ON chat_messages(conversation_id);
-CREATE INDEX IF NOT EXISTS idx_chat_messages_timestamp ON chat_messages(timestamp);
+  IF to_regclass('public.contacts') IS NOT NULL THEN
+    CREATE INDEX IF NOT EXISTS idx_contacts_list_id ON contacts(list_id);
+    CREATE INDEX IF NOT EXISTS idx_contacts_jid ON contacts(jid);
+  END IF;
 
-CREATE INDEX IF NOT EXISTS idx_conversation_notes_conv ON conversation_notes(conversation_id);
-CREATE INDEX IF NOT EXISTS idx_scheduled_messages_status_time ON scheduled_messages(status, scheduled_at);
-CREATE INDEX IF NOT EXISTS idx_quick_replies_org ON quick_replies(organization_id);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_quick_replies_shortcut_org ON quick_replies(organization_id, shortcut) WHERE shortcut IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_user_alerts_user_unread ON user_alerts(user_id, is_read) WHERE is_read = false;
-CREATE INDEX IF NOT EXISTS idx_chat_contacts_conn ON chat_contacts(connection_id);
-CREATE INDEX IF NOT EXISTS idx_chat_contacts_phone ON chat_contacts(phone);
+  IF to_regclass('public.message_templates') IS NOT NULL THEN
+    CREATE INDEX IF NOT EXISTS idx_message_templates_user_id ON message_templates(user_id);
+  END IF;
+
+  IF to_regclass('public.campaigns') IS NOT NULL THEN
+    CREATE INDEX IF NOT EXISTS idx_campaigns_user_id ON campaigns(user_id);
+  END IF;
+
+  IF to_regclass('public.campaign_messages') IS NOT NULL THEN
+    CREATE INDEX IF NOT EXISTS idx_campaign_messages_campaign_id ON campaign_messages(campaign_id);
+    CREATE INDEX IF NOT EXISTS idx_campaign_messages_status ON campaign_messages(status);
+  END IF;
+
+  IF to_regclass('public.organization_members') IS NOT NULL THEN
+    CREATE INDEX IF NOT EXISTS idx_org_members_org ON organization_members(organization_id);
+    CREATE INDEX IF NOT EXISTS idx_org_members_user ON organization_members(user_id);
+  END IF;
+
+  IF to_regclass('public.connection_members') IS NOT NULL THEN
+    CREATE INDEX IF NOT EXISTS idx_connection_members_conn ON connection_members(connection_id);
+    CREATE INDEX IF NOT EXISTS idx_connection_members_user ON connection_members(user_id);
+  END IF;
+
+  IF to_regclass('public.asaas_integrations') IS NOT NULL THEN
+    CREATE INDEX IF NOT EXISTS idx_asaas_integrations_org ON asaas_integrations(organization_id);
+  END IF;
+
+  IF to_regclass('public.asaas_customers') IS NOT NULL THEN
+    CREATE INDEX IF NOT EXISTS idx_asaas_customers_org ON asaas_customers(organization_id);
+  END IF;
+
+  IF to_regclass('public.asaas_payments') IS NOT NULL THEN
+    CREATE INDEX IF NOT EXISTS idx_asaas_payments_org ON asaas_payments(organization_id);
+    CREATE INDEX IF NOT EXISTS idx_asaas_payments_status ON asaas_payments(status);
+    CREATE INDEX IF NOT EXISTS idx_asaas_payments_due_date ON asaas_payments(due_date);
+  END IF;
+
+  IF to_regclass('public.billing_notifications') IS NOT NULL THEN
+    CREATE INDEX IF NOT EXISTS idx_billing_notifications_payment ON billing_notifications(payment_id);
+  END IF;
+
+  IF to_regclass('public.billing_alerts') IS NOT NULL THEN
+    CREATE INDEX IF NOT EXISTS idx_billing_alerts_org ON billing_alerts(organization_id);
+    CREATE INDEX IF NOT EXISTS idx_billing_alerts_unresolved ON billing_alerts(organization_id, is_resolved) WHERE is_resolved = false;
+  END IF;
+
+  IF to_regclass('public.billing_daily_message_count') IS NOT NULL THEN
+    CREATE INDEX IF NOT EXISTS idx_billing_daily_msg_customer_day ON billing_daily_message_count(customer_id, day);
+  END IF;
+
+  IF to_regclass('public.conversations') IS NOT NULL THEN
+    CREATE INDEX IF NOT EXISTS idx_conversations_conn ON conversations(connection_id);
+    CREATE INDEX IF NOT EXISTS idx_conversations_assigned ON conversations(assigned_to);
+  END IF;
+
+  IF to_regclass('public.chat_messages') IS NOT NULL THEN
+    CREATE INDEX IF NOT EXISTS idx_chat_messages_conv ON chat_messages(conversation_id);
+    CREATE INDEX IF NOT EXISTS idx_chat_messages_timestamp ON chat_messages(timestamp);
+  END IF;
+
+  IF to_regclass('public.conversation_notes') IS NOT NULL THEN
+    CREATE INDEX IF NOT EXISTS idx_conversation_notes_conv ON conversation_notes(conversation_id);
+  END IF;
+
+  IF to_regclass('public.scheduled_messages') IS NOT NULL THEN
+    CREATE INDEX IF NOT EXISTS idx_scheduled_messages_status_time ON scheduled_messages(status, scheduled_at);
+  END IF;
+
+  IF to_regclass('public.quick_replies') IS NOT NULL THEN
+    CREATE INDEX IF NOT EXISTS idx_quick_replies_org ON quick_replies(organization_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_quick_replies_shortcut_org ON quick_replies(organization_id, shortcut) WHERE shortcut IS NOT NULL;
+  END IF;
+
+  IF to_regclass('public.user_alerts') IS NOT NULL THEN
+    CREATE INDEX IF NOT EXISTS idx_user_alerts_user_unread ON user_alerts(user_id, is_read) WHERE is_read = false;
+  END IF;
+
+  IF to_regclass('public.chat_contacts') IS NOT NULL THEN
+    CREATE INDEX IF NOT EXISTS idx_chat_contacts_conn ON chat_contacts(connection_id);
+    CREATE INDEX IF NOT EXISTS idx_chat_contacts_phone ON chat_contacts(phone);
+  END IF;
+END $$;
 `;
 
 // Step 12: Attendance Status
