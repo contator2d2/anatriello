@@ -103,6 +103,14 @@ export function useDeleteMerchRoute() {
   });
 }
 
+export function useBulkDeleteMerchRoutes() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ ids, include_future }: { ids: string[]; include_future?: boolean }) =>
+      api<any>(`/api/merch/routes/bulk-delete`, { method: 'POST', body: { ids, include_future: !!include_future } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['merch-routes'] }),
+  });
+
 export function useDuplicateMerchRoute() {
   const qc = useQueryClient();
   return useMutation({
