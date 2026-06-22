@@ -51,13 +51,12 @@ router.get('/routes', async (req, res) => {
       : `0 as total_products,
                 0 as completed_products`;
     const productCountJoin = hasProductExecutions
-      ? `LEFT JOIN (
-                 SELECT route_id,
-                        COUNT(*)::int as total_products,
+      ? `LEFT JOIN LATERAL (
+                 SELECT COUNT(*)::int as total_products,
                         COUNT(*) FILTER (WHERE status = 'completed')::int as completed_products
-                 FROM route_product_executions
-                 GROUP BY route_id
-               ) pc ON pc.route_id = r.id`
+                 FROM route_product_executions rpe
+                 WHERE rpe.route_id = r.id
+               ) pc ON true`
       : '';
 
     let sql = `SELECT r.*, e.full_name as promoter_name, p.name as pdv_name, p.city as pdv_city, b.name as brand_name,
