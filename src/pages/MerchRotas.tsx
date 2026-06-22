@@ -747,11 +747,6 @@ function RouteFormDialog({ open, route, onClose, pdvs, employees, onSave, onDele
     }
   }, [route, open]);
 
-  const toggleWeekday = (wd: number) => {
-    const current = form.recurrence_weekdays || [];
-    setForm({ ...form, recurrence_weekdays: current.includes(wd) ? current.filter((d: number) => d !== wd) : [...current, wd] });
-  };
-
   const handleAddMixProduct = (product: any) => {
     if (route?.id) {
       addProduct.mutate({ routeId: route.id, product_id: product.product_id, category_id: product.category_id }, {
