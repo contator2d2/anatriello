@@ -77,12 +77,18 @@ export default function MerchRotas() {
   const duplicateRoute = useDuplicateMerchRoute();
   const bulkDelete = useBulkDeleteMerchRoutes();
 
-  // Superadmin check for bulk maintenance
+  // Admin/Superadmin check for bulk maintenance
   const { checkSuperadmin } = useSuperadmin();
+  const { user } = useAuth();
   const [isSuperadmin, setIsSuperadmin] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkConfirm, setBulkConfirm] = useState<null | { includeFuture: boolean }>(null);
-  useEffect(() => { checkSuperadmin().then(setIsSuperadmin); }, [checkSuperadmin]);
+  useEffect(() => {
+    checkSuperadmin().then((su) => {
+      const isAdmin = ['owner', 'admin'].includes((user as any)?.role || '');
+      setIsSuperadmin(!!su || isAdmin);
+    });
+  }, [checkSuperadmin, user]);
   useEffect(() => { setSelectedIds(new Set()); }, [viewMode, currentDate, filterPromoter, filterBrand, filterStatus]);
 
   const toggleSelect = (id: string) => {
