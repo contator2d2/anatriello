@@ -42,7 +42,7 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 export default function MerchRotas() {
-  const [viewMode, setViewMode] = useState<'month' | 'week' | 'day'>('month');
+  const [viewMode, setViewMode] = useState<'month' | 'week' | 'day'>('day');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [showCreate, setShowCreate] = useState(false);
   const [selectedRoute, setSelectedRoute] = useState<any>(null);
