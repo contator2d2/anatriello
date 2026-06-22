@@ -12,6 +12,16 @@ export interface BrandingSettings {
   theme_custom_colors: string | null;
 }
 
+const DEFAULT_BRANDING: BrandingSettings = {
+  logo_login: null,
+  logo_sidebar: null,
+  logo_topbar: null,
+  favicon: null,
+  company_name: null,
+  theme_preset: null,
+  theme_custom_colors: null,
+};
+
 export interface ThemeModeColors {
   primary: string;
   secondary: string;
@@ -195,15 +205,7 @@ export function applyThemeColors(preset: string | null, customColors: string | n
 }
 
 export function useBranding() {
-  const [branding, setBranding] = useState<BrandingSettings>({
-    logo_login: null,
-    logo_sidebar: null,
-    logo_topbar: null,
-    favicon: null,
-    company_name: null,
-    theme_preset: null,
-    theme_custom_colors: null,
-  });
+  const [branding, setBranding] = useState<BrandingSettings>(DEFAULT_BRANDING);
   const [loading, setLoading] = useState(true);
 
   const fetchBranding = useCallback(async () => {
@@ -218,6 +220,7 @@ export function useBranding() {
       if (response.ok) {
         const data = await response.json();
         setBranding({
+          ...DEFAULT_BRANDING,
           ...data,
           logo_login: resolveMediaUrl(data.logo_login),
           logo_sidebar: resolveMediaUrl(data.logo_sidebar),
@@ -233,6 +236,9 @@ export function useBranding() {
         }
         
         applyThemeColors(data.theme_preset, data.theme_custom_colors);
+      } else if (response.status === 502 || response.status === 503 || response.status === 504) {
+        setBranding(DEFAULT_BRANDING);
+        applyThemeColors(null, null);
       }
     } catch (error) {
       console.error('Error fetching branding:', error);
