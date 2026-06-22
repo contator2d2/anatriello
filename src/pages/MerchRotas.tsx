@@ -902,15 +902,54 @@ function RouteFormDialog({ open, route, onClose, pdvs, employees, onSave, onDele
               </Select>
 
               {form.recurrence_type && form.recurrence_type !== 'none' && (
-                <div className="grid grid-cols-2 gap-3 pt-1">
-                  <div>
-                    <Label className="text-xs">Intervalo</Label>
-                    <Input type="number" min={1} value={form.recurrence_interval || 1} onChange={e => setForm({ ...form, recurrence_interval: parseInt(e.target.value) || 1 })} />
+                <div className="space-y-3 pt-1">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label className="text-xs">Intervalo</Label>
+                      <Input type="number" min={1} value={form.recurrence_interval || 1} onChange={e => setForm({ ...form, recurrence_interval: parseInt(e.target.value) || 1 })} />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Até (data fim)</Label>
+                      <Input type="date" value={form.recurrence_until || ''} onChange={e => setForm({ ...form, recurrence_until: e.target.value })} />
+                    </div>
                   </div>
-                  <div>
-                    <Label className="text-xs">Até (data fim)</Label>
-                    <Input type="date" value={form.recurrence_until || ''} onChange={e => setForm({ ...form, recurrence_until: e.target.value })} />
-                  </div>
+
+                  {form.recurrence_type === 'weekly' && (
+                    <div>
+                      <Label className="text-xs">Dias da semana</Label>
+                      <div className="flex flex-wrap gap-1.5 mt-1">
+                        {WEEKDAY_LABELS.map((lbl, idx) => {
+                          // WEEKDAY_LABELS: Seg..Dom. ISO weekday: Dom=0, Seg=1..Sab=6
+                          const wd = idx === 6 ? 0 : idx + 1;
+                          const active = (form.recurrence_weekdays || []).includes(wd);
+                          return (
+                            <button
+                              key={wd}
+                              type="button"
+                              onClick={() => {
+                                const cur: number[] = form.recurrence_weekdays || [];
+                                setForm({
+                                  ...form,
+                                  recurrence_weekdays: cur.includes(wd) ? cur.filter(d => d !== wd) : [...cur, wd],
+                                });
+                              }}
+                              className={cn(
+                                'h-8 px-3 rounded-md border text-xs font-medium transition-colors',
+                                active
+                                  ? 'bg-primary text-primary-foreground border-primary'
+                                  : 'bg-background text-muted-foreground border-border hover:bg-muted'
+                              )}
+                            >
+                              {lbl}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <p className="text-[10px] text-muted-foreground mt-1">
+                        Selecione os dias em que a rota se repete. Sem seleção, usa o dia da data de início.
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
