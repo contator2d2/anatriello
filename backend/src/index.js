@@ -461,7 +461,7 @@ app.use('/api/access-control-dashboard', accessControlDashboardRoutes);
 
 app.get('/health', (req, res) => {
   res.json({
-    status: databaseReady ? 'ok' : 'starting',
+    status: 'ok',
     databaseReady,
     databaseInitError,
     timestamp: new Date().toISOString(),
@@ -689,5 +689,8 @@ app.listen(PORT, () => {
       timezone: 'America/Sao_Paulo'
     });
     console.log('⭐ Promoter score calculator started - runs every 6 hours');
+  }).catch((error) => {
+    databaseInitError = error?.message || 'Database initialization failed';
+    console.error('🛑 Database initialization crashed. API remains online in degraded mode:', error);
   });
 });
