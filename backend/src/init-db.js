@@ -659,10 +659,13 @@ DO $$ BEGIN
     ALTER TABLE conversations ADD COLUMN IF NOT EXISTS is_pinned BOOLEAN DEFAULT false;
     ALTER TABLE conversations ADD COLUMN IF NOT EXISTS is_group BOOLEAN DEFAULT false;
     ALTER TABLE conversations ADD COLUMN IF NOT EXISTS group_name VARCHAR(255);
-    ALTER TABLE conversations ADD COLUMN IF NOT EXISTS pinned_message_id UUID REFERENCES chat_messages(id) ON DELETE SET NULL;
+    -- chat_messages is created later in this same step, so add only the column here.
+    -- The foreign key is attached after chat_messages exists.
+    ALTER TABLE conversations ADD COLUMN IF NOT EXISTS pinned_message_id UUID;
     ALTER TABLE conversations ADD COLUMN IF NOT EXISTS is_favorite BOOLEAN DEFAULT false;
 EXCEPTION
     WHEN duplicate_column THEN null;
+    WHEN others THEN null;
 END $$;
 
 -- Allow NULL connection_id on conversations (preserve conversations when connection is deleted)
@@ -773,6 +776,15 @@ END $$;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_chat_messages_message_id 
   ON chat_messages (message_id) 
   WHERE message_id IS NOT NULL AND message_id NOT LIKE 'temp_%';
+
+DO $$ BEGIN
+    ALTER TABLE conversations
+      ADD CONSTRAINT conversations_pinned_message_id_fkey
+      FOREIGN KEY (pinned_message_id) REFERENCES chat_messages(id) ON DELETE SET NULL;
+EXCEPTION
+    WHEN duplicate_object THEN null;
+    WHEN others THEN null;
+END $$;
 
 -- Backward compatibility: if older DB has quoted_message_id as VARCHAR, convert to UUID
 DO $$
