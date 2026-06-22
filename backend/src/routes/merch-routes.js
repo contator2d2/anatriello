@@ -549,6 +549,43 @@ router.post('/routes/:id/complete', async (req, res) => {
 });
 
 // Delete route (supports scope: 'single' | 'future')
+// Bulk delete (superadmin only) - delete selected routes and optionally all future scheduled siblings
+router.post('/routes/bulk-delete', async (req, res) => {
+  try {
+    const su = await query('SELECT is_superadmin FROM users WHERE id=$1', [req.userId]);
+    if (!su.rows[0]?.is_superadmin) return res.status(403).json({ error: 'Apenas superadmin' });
+    const { ids = [], include_future = false } = req.body || {};
+    if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'ids requerido' });
+
+    const orgRes = await query('SELECT organization_id FROM organization_members WHERE user_id=$1 LIMIT 1', [req.userId]);
+    const orgId = orgRes.rows[0]?.organization_id;
+    if (!orgId) return res.status(403).json({ error: 'Sem organização' });
+
+    let futureDeleted = 0;
+    if (include_future) {
+      const rows = await query(
+        `SELECT promoter_id, pdv_id, brand_id, visit_date FROM merch_routes WHERE id = ANY($1::uuid[]) AND organization_id=$2`,
+        [ids, orgId]
+      );
+      for (const r of rows.rows) {
+        const f = await query(
+          `DELETE FROM merch_routes
+           WHERE organization_id=$1 AND promoter_id IS NOT DISTINCT FROM $2
+             AND pdv_id IS NOT DISTINCT FROM $3 AND brand_id IS NOT DISTINCT FROM $4
+             AND visit_date > $5 AND status IN ('scheduled','confirmed')`,
+          [orgId, r.promoter_id, r.pdv_id, r.brand_id, r.visit_date]
+        );
+        futureDeleted += f.rowCount || 0;
+      }
+    }
+    const del = await query(
+      `DELETE FROM merch_routes WHERE id = ANY($1::uuid[]) AND organization_id=$2`,
+      [ids, orgId]
+    );
+    res.json({ ok: true, deleted: del.rowCount, future_deleted: futureDeleted });
+  } catch (err) { logError('routes.bulk_delete', err); res.status(500).json({ error: 'Erro' }); }
+});
+
 router.delete('/routes/:id', async (req, res) => {
   try {
     const orgRes = await query('SELECT organization_id FROM organization_members WHERE user_id=$1 LIMIT 1', [req.userId]);
