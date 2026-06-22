@@ -151,6 +151,32 @@ router.post('/routes', async (req, res) => {
       } catch (e) { logError('checklist resolve fail', e); }
     }
 
+    // Per-brand weekdays (for multi-brand weekly recurrence)
+    // Encoding: Sun=0, Mon=1..Sat=6 (matches JS getUTCDay)
+    const brandWeekdays = {}; // brand_id -> Set<number> (empty set = applies to all dates)
+    if (isMultiBrand && recurrence_type === 'weekly') {
+      for (const mb of multiBrands) {
+        const wds = (Array.isArray(mb.weekdays) && mb.weekdays.length > 0) ? mb.weekdays : [];
+        brandWeekdays[mb.brand_id] = new Set(wds);
+      }
+    }
+
+    // Effective weekdays for date generation = union of brand weekdays (fallback to recurrence_weekdays)
+    let effectiveWeekdays = recurrence_weekdays;
+    if (isMultiBrand && recurrence_type === 'weekly') {
+      const union = new Set();
+      let anyBrandWithoutWeekdays = false;
+      for (const mb of multiBrands) {
+        const set = brandWeekdays[mb.brand_id];
+        if (!set || set.size === 0) { anyBrandWithoutWeekdays = true; }
+        else { for (const w of set) union.add(w); }
+      }
+      if (anyBrandWithoutWeekdays && Array.isArray(recurrence_weekdays)) {
+        for (const w of recurrence_weekdays) union.add(w);
+      }
+      if (union.size > 0) effectiveWeekdays = [...union];
+    }
+
     // Build list of dates to create
     const dates = [];
     const startDate = new Date(visit_date + 'T12:00:00Z');
@@ -168,12 +194,13 @@ router.post('/routes', async (req, res) => {
           dates.push(current.toISOString().split('T')[0]);
           current.setDate(current.getDate() + interval);
         } else if (recurrence_type === 'weekly') {
-          if (recurrence_weekdays && recurrence_weekdays.length > 0) {
+          if (effectiveWeekdays && effectiveWeekdays.length > 0) {
             const weekStart = new Date(current);
-            weekStart.setDate(weekStart.getDate() - weekStart.getUTCDay() + 1);
-            for (const wd of recurrence_weekdays) {
+            weekStart.setUTCDate(weekStart.getUTCDate() - weekStart.getUTCDay() + 1);
+            for (const wd of effectiveWeekdays) {
+              const offset = wd === 0 ? 6 : wd - 1; // Mon=0..Sun=6
               const d = new Date(weekStart);
-              d.setDate(d.getDate() + (wd - 1));
+              d.setUTCDate(d.getUTCDate() + offset);
               if (d >= startDate && d <= endDate) {
                 dates.push(d.toISOString().split('T')[0]);
               }
@@ -199,6 +226,21 @@ router.post('/routes', async (req, res) => {
 
     const created = [];
     for (const d of dates) {
+      // For multi-brand weekly: determine which brands apply on this date
+      let applicableBrands = isMultiBrand ? multiBrands : null;
+      if (isMultiBrand && recurrence_type === 'weekly') {
+        const dWeekday = new Date(d + 'T12:00:00Z').getUTCDay(); // 0=Sun..6=Sat
+        applicableBrands = multiBrands.filter(mb => {
+          const set = brandWeekdays[mb.brand_id];
+          if (!set || set.size === 0) {
+            // No per-brand weekdays -> applies on all generated dates (already filtered by global)
+            return true;
+          }
+          return set.has(dWeekday);
+        });
+        if (applicableBrands.length === 0) continue; // skip date if no brand applies
+      }
+
       const result = await query(
         `INSERT INTO merch_routes (organization_id, promoter_id, supervisor_id, pdv_id, brand_id, checklist_id,
          visit_date, scheduled_time, window_start, window_end, estimated_duration_min, priority, visit_type,
@@ -212,8 +254,9 @@ router.post('/routes', async (req, res) => {
       const routeId = result.rows[0].id;
 
       if (isMultiBrand) {
-        for (let i = 0; i < multiBrands.length; i++) {
-          const mb = multiBrands[i];
+        const brandsForThisDate = applicableBrands || multiBrands;
+        for (let i = 0; i < brandsForThisDate.length; i++) {
+          const mb = brandsForThisDate[i];
           let mbChecklistId = mb.checklist_id || null;
           if (!mbChecklistId && mb.brand_id) {
             try {
@@ -227,7 +270,7 @@ router.post('/routes', async (req, res) => {
           );
           if (rbRes.rows[0]) await hydrateRouteBrandProducts(routeId, rbRes.rows[0].id, pdv_id, mb.brand_id);
         }
-        logInfo('routes.multi_brand_created', { route_id: routeId, brand_count: multiBrands.length });
+        logInfo('routes.multi_brand_created', { route_id: routeId, brand_count: brandsForThisDate.length, date: d });
       } else {
         try {
           const mixProducts = await query(
