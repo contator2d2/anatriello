@@ -26,6 +26,7 @@ interface User {
   id: string;
   email: string;
   name: string;
+  is_superadmin?: boolean;
   role?: string;
   organization_id?: string;
   modules_enabled?: ModulesEnabled;

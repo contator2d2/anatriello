@@ -25,6 +25,21 @@ export const PAGE_PERMISSIONS = [
   { key: 'modulo_fantasma', label: 'Módulo Fantasma', section: 'CRM', icon: 'Ghost' },
   { key: 'crm_configuracoes', label: 'Configurações CRM', section: 'CRM', icon: 'Settings' },
   
+  // RH
+  { key: 'rh_holding', label: 'Holding', section: 'RH', icon: 'Building2' },
+  { key: 'rh_empresas', label: 'Empresas', section: 'RH', icon: 'Building2' },
+  { key: 'rh_dashboard', label: 'Dashboard', section: 'RH', icon: 'LayoutDashboard' },
+  { key: 'rh_colaboradores', label: 'Colaboradores', section: 'RH', icon: 'UserPlus' },
+  { key: 'rh_ponto', label: 'Ponto', section: 'RH', icon: 'Clock' },
+  { key: 'rh_holerite', label: 'Holerite', section: 'RH', icon: 'DollarSign' },
+  { key: 'rh_documentos', label: 'Documentos', section: 'RH', icon: 'FileText' },
+  { key: 'rh_feriados', label: 'Feriados', section: 'RH', icon: 'CalendarDays' },
+  { key: 'rh_mapa', label: 'Mapa', section: 'RH', icon: 'MapPin' },
+  { key: 'rh_acessos', label: 'Acessos App', section: 'RH', icon: 'Shield' },
+  { key: 'rh_biometria', label: 'Biometria Facial', section: 'RH', icon: 'ScanFace' },
+  { key: 'rh_rastreamento', label: 'Rastreamento', section: 'RH', icon: 'Navigation' },
+  { key: 'rh_logs', label: 'Logs & Erros', section: 'RH', icon: 'Code' },
+  
   // Disparos
   { key: 'listas', label: 'Listas', section: 'Disparos', icon: 'Users' },
   { key: 'mensagens', label: 'Mensagens', section: 'Disparos', icon: 'MessageSquare' },

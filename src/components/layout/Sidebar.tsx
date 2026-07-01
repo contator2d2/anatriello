@@ -200,10 +200,12 @@ function SidebarContentComponent({ isExpanded, isSuperadmin, onNavigate }: Sideb
   const [openSections, setOpenSections] = useState<string[]>([]);
 
   // Helper to check if user has admin-level role
-  const isAdminRole = (role?: string) => ['owner', 'admin', 'manager'].includes(role || '');
-  const isOwnerRole = (role?: string) => role === 'owner';
-  const userIsAdmin = isSuperadmin || isAdminRole(user?.role);
-  const userIsOwner = isSuperadmin || isOwnerRole(user?.role);
+  const normalizedRole = (user?.role || '').toLowerCase();
+  const userIsSuperadmin = isSuperadmin || user?.is_superadmin === true || normalizedRole === 'superadmin';
+  const isAdminRole = (role?: string) => ['owner', 'admin', 'manager', 'superadmin'].includes((role || '').toLowerCase());
+  const isOwnerRole = (role?: string) => ['owner', 'superadmin'].includes((role || '').toLowerCase());
+  const userIsAdmin = userIsSuperadmin || isAdminRole(user?.role);
+  const userIsOwner = userIsSuperadmin || isOwnerRole(user?.role);
   const hasConnections = user?.has_connections !== false; // default true if undefined
   const hasTemplate = !!pagePermissions; // User has a permission template assigned
 
@@ -213,7 +215,7 @@ function SidebarContentComponent({ isExpanded, isSuperadmin, onNavigate }: Sideb
   const filteredSections = navSections
     .filter(section => {
       // Check module access
-      if (section.moduleKey && !modulesEnabled[section.moduleKey] && !isSuperadmin) return false;
+      if (section.moduleKey && !modulesEnabled[section.moduleKey] && !userIsSuperadmin) return false;
       // If user has a permission template, don't filter by adminOnly for sections
       if (!hasTemplate) {
         if (section.adminOnly && !userIsAdmin) return false;
@@ -224,13 +226,16 @@ function SidebarContentComponent({ isExpanded, isSuperadmin, onNavigate }: Sideb
       ...section,
       items: section.items.filter(item => {
         // Check module access
-        if (item.moduleKey && !modulesEnabled[item.moduleKey] && !isSuperadmin) return false;
+        if (item.moduleKey && !modulesEnabled[item.moduleKey] && !userIsSuperadmin) return false;
         // Check superadmin-only item (always requires superadmin)
-        if (item.superadminOnly && !isSuperadmin) return false;
+        if (item.superadminOnly && !userIsSuperadmin) return false;
         
+        // Admin-only items must remain visible to admins even when a permission template exists.
+        if (item.adminOnly && userIsAdmin) return true;
+
         // If user has a permission template, use it instead of role-based checks
         // Superadmin always sees everything, template only applies to non-superadmin users
-        if (hasTemplate && item.pageKey && !isSuperadmin) {
+        if (hasTemplate && item.pageKey && !userIsSuperadmin) {
           // Template explicitly controls access - if key exists, use its value; if not in template, deny
           return pagePermissions[item.pageKey] === true;
         }
@@ -378,7 +383,7 @@ function SidebarContentComponent({ isExpanded, isSuperadmin, onNavigate }: Sideb
         })}
 
         {/* Superadmin Link */}
-        {isSuperadmin && (
+        {userIsSuperadmin && (
           <>
             {!isExpanded ? (
               <Tooltip delayDuration={0}>
