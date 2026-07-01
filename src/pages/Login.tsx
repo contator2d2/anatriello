@@ -98,8 +98,9 @@ const Login = () => {
               </div>
               
               <CardDescription>
-                Plataforma completa de gestão de promotores, merchandising e comunicação via WhatsApp
+                Plataforma de gestão corporativa Anatriello
               </CardDescription>
+
             </CardHeader>
             <form onSubmit={handleSubmit}>
               <CardContent className="space-y-4">
