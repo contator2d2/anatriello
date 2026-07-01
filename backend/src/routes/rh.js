@@ -553,12 +553,16 @@ async function getUserOrgId(userId) {
 
 // Helper: audit log
 async function auditLog(orgId, entityType, entityId, action, changes, userId) {
-  for (const ch of changes) {
-    await query(
-      `INSERT INTO rh_audit_log (organization_id, entity_type, entity_id, action, field_name, old_value, new_value, changed_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-      [orgId, entityType, entityId, action, ch.field, ch.oldVal, ch.newVal, userId]
-    );
+  try {
+    for (const ch of changes) {
+      await query(
+        `INSERT INTO rh_audit_log (organization_id, entity_type, entity_id, action, field_name, old_value, new_value, changed_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [orgId, entityType, entityId, action, ch.field, ch.oldVal, ch.newVal, userId]
+      );
+    }
+  } catch (err) {
+    logError('rh.auditLog.safeSkip', err, { orgId, entityType, entityId, action });
   }
 }
 
@@ -658,8 +662,12 @@ router.post('/employees', async (req, res) => {
 
     // Auto-geocode home address if no coordinates provided
     if (!d.home_latitude && !d.home_longitude && (d.address || d.city)) {
-      const geo = await autoGeocodeAddress(d.address, d.city, d.state, d.zip_code, d.neighborhood, d.address_number, d.complement);
-      if (geo) { d.home_latitude = geo.lat; d.home_longitude = geo.lng; }
+      try {
+        const geo = await autoGeocodeAddress(d.address, d.city, d.state, d.zip_code, d.neighborhood, d.address_number, d.complement);
+        if (geo) { d.home_latitude = geo.lat; d.home_longitude = geo.lng; }
+      } catch (geoErr) {
+        logError('rh.employees.create.geocodeSafeSkip', geoErr, { full_name: d.full_name });
+      }
     }
 
     const result = await query(
@@ -685,8 +693,12 @@ router.post('/employees', async (req, res) => {
         JSON.stringify(d.salary_items), JSON.stringify(d.benefits), d.home_latitude, d.home_longitude]
     );
     if (req.body.facial_required === true || req.body.facial_required === false) {
-      await query(`UPDATE employees SET facial_required = $1 WHERE id = $2`, [req.body.facial_required, result.rows[0].id]);
-      result.rows[0].facial_required = req.body.facial_required;
+      try {
+        await query(`UPDATE employees SET facial_required = $1 WHERE id = $2`, [req.body.facial_required, result.rows[0].id]);
+        result.rows[0].facial_required = req.body.facial_required;
+      } catch (facialErr) {
+        logError('rh.employees.create.facialRequiredSafeSkip', facialErr, { employee_id: result.rows[0].id });
+      }
     }
     await applyExtendedEmployeeCols(result.rows[0].id, req.body);
     await auditLog(orgId, 'employee', result.rows[0].id, 'create', [{ field: 'full_name', oldVal: null, newVal: d.full_name }], req.userId);
