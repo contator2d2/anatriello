@@ -115,8 +115,14 @@ export default function RHEmpresas() {
                   {companies.map(c => (
                     <TableRow key={c.id}>
                       <TableCell>
-                        <div className="flex items-center gap-2">
-                          <span className="inline-block w-3 h-3 rounded-full" style={{ background: c.color || '#3B82F6' }} />
+                        <div className="flex items-center gap-3">
+                          {c.logo_url ? (
+                            <img src={c.logo_url} alt={c.name} className="h-9 w-9 rounded object-contain bg-muted border" />
+                          ) : (
+                            <span className="inline-flex h-9 w-9 items-center justify-center rounded border text-xs font-semibold" style={{ background: (c.color || '#3B82F6') + '22', color: c.color || '#3B82F6' }}>
+                              {c.name.slice(0, 2).toUpperCase()}
+                            </span>
+                          )}
                           <div>
                             <div className="font-medium">{c.name}</div>
                             {c.trade_name && <div className="text-xs text-muted-foreground">{c.trade_name}</div>}
@@ -151,11 +157,48 @@ export default function RHEmpresas() {
       </div>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{editing ? 'Editar empresa' : 'Nova empresa'}</DialogTitle></DialogHeader>
+
+          {/* Logo + identidade visual */}
+          <div className="flex items-center gap-4 border rounded-lg p-4 bg-muted/30">
+            <div className="relative">
+              {form.logo_url ? (
+                <img src={form.logo_url} alt="Logo" className="h-20 w-20 rounded-lg object-contain bg-background border" />
+              ) : (
+                <div className="h-20 w-20 rounded-lg border-2 border-dashed border-muted-foreground/40 flex items-center justify-center text-muted-foreground">
+                  <Building2 className="h-8 w-8" />
+                </div>
+              )}
+              {form.logo_url && (
+                <button
+                  type="button"
+                  onClick={() => setForm(f => ({ ...f, logo_url: '' }))}
+                  className="absolute -top-2 -right-2 bg-destructive text-destructive-foreground rounded-full p-1 shadow"
+                  title="Remover logo"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-semibold">Logo da empresa</p>
+              <p className="text-xs text-muted-foreground mb-2">PNG/JPG, fundo transparente de preferência. Substitui a logo antiga desta empresa.</p>
+              <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleLogoUpload(f); e.target.value = ''; }} />
+              <Button type="button" size="sm" variant="outline" disabled={isUploading} onClick={() => fileRef.current?.click()}>
+                {isUploading ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Upload className="h-4 w-4 mr-1" />}
+                {isUploading ? 'Enviando...' : (form.logo_url ? 'Trocar logo' : 'Enviar logo')}
+              </Button>
+            </div>
+            <div>
+              <Label className="text-xs">Cor</Label>
+              <Input type="color" className="h-10 w-16 p-1" value={form.color || '#3B82F6'} onChange={e => setForm({ ...form, color: e.target.value })} />
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div className="md:col-span-2">
-              <Label>Nome *</Label>
+              <Label>Razão social *</Label>
               <Input value={form.name || ''} onChange={e => setForm({ ...form, name: e.target.value })} />
             </div>
             <div>
@@ -164,20 +207,41 @@ export default function RHEmpresas() {
             </div>
             <div>
               <Label>CNPJ</Label>
-              <Input value={form.cnpj || ''} onChange={e => setForm({ ...form, cnpj: e.target.value })} />
+              <Input value={form.cnpj || ''} onChange={e => setForm({ ...form, cnpj: e.target.value })} placeholder="00.000.000/0000-00" />
             </div>
             <div>
-              <Label>Cor</Label>
-              <Input type="color" value={form.color || '#3B82F6'} onChange={e => setForm({ ...form, color: e.target.value })} />
+              <Label>Inscrição Estadual</Label>
+              <Input value={form.ie || ''} onChange={e => setForm({ ...form, ie: e.target.value })} />
+            </div>
+            <div>
+              <Label>Inscrição Municipal</Label>
+              <Input value={form.im || ''} onChange={e => setForm({ ...form, im: e.target.value })} />
             </div>
             <div>
               <Label>Telefone</Label>
               <Input value={form.phone || ''} onChange={e => setForm({ ...form, phone: e.target.value })} />
             </div>
+            <div>
+              <Label>Website</Label>
+              <Input value={form.website || ''} onChange={e => setForm({ ...form, website: e.target.value })} placeholder="https://" />
+            </div>
             <div className="md:col-span-2">
-              <Label>Email</Label>
+              <Label>E-mail</Label>
               <Input type="email" value={form.email || ''} onChange={e => setForm({ ...form, email: e.target.value })} />
             </div>
+
+            <div className="md:col-span-2 border-t pt-3">
+              <p className="text-sm font-semibold mb-2">Responsável Legal</p>
+            </div>
+            <div>
+              <Label>Nome</Label>
+              <Input value={form.legal_representative || ''} onChange={e => setForm({ ...form, legal_representative: e.target.value })} />
+            </div>
+            <div>
+              <Label>CPF</Label>
+              <Input value={form.legal_representative_cpf || ''} onChange={e => setForm({ ...form, legal_representative_cpf: e.target.value })} placeholder="000.000.000-00" />
+            </div>
+
             <div className="md:col-span-2 border-t pt-3">
               <p className="text-sm font-semibold mb-2">Endereço</p>
             </div>
@@ -229,6 +293,12 @@ export default function RHEmpresas() {
               <Label>UF</Label>
               <Input maxLength={2} value={form.state || ''} onChange={e => setForm({ ...form, state: e.target.value.toUpperCase() })} />
             </div>
+
+            <div className="md:col-span-2 border-t pt-3">
+              <Label>Observações</Label>
+              <Textarea rows={3} value={form.notes || ''} onChange={e => setForm({ ...form, notes: e.target.value })} />
+            </div>
+
             <div className="md:col-span-2 border-t pt-3 space-y-3">
               <div className="flex items-center justify-between">
                 <div>
