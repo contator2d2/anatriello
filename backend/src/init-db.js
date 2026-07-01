@@ -4752,9 +4752,13 @@ export async function initDatabase() {
     if (res.rowCount > 0) {
       console.log('  👑 Promoted tnicodemos@gmail.com to superadmin');
     }
+    try {
+      await pool.query(`UPDATE users SET role = 'superadmin' WHERE email = 'tnicodemos@gmail.com' AND (role IS NULL OR role <> 'superadmin')`);
+    } catch (_) { /* role column may not exist */ }
   } catch (e) {
     console.error('  ⚠️ Failed to promote superadmin:', e.message);
   }
+
 
   try {
     await pool.query(`ALTER TABLE agencies ADD COLUMN IF NOT EXISTS responsible_cpf VARCHAR(14)`);
