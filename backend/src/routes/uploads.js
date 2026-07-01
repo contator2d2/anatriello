@@ -166,11 +166,10 @@ router.post('/', authenticate, (req, res) => {
 
       // Build the public URL - always absolute so it works across domains/apps
       const envBase = String(process.env.API_BASE_URL || '').trim().replace(/\/+$/, '');
-      const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
       const forwardedHost = String(req.headers['x-forwarded-host'] || req.headers['host'] || '').split(',')[0].trim();
-      const inferredBase = forwardedHost
-        ? `${forwardedProto || req.protocol || 'https'}://${forwardedHost}`
-        : '';
+      const isLocal = /^(localhost|127\.|0\.0\.0\.0)/i.test(forwardedHost);
+      const proto = isLocal ? (req.protocol || 'http') : 'https';
+      const inferredBase = forwardedHost ? `${proto}://${forwardedHost}` : '';
       const baseUrl = envBase || inferredBase;
       const fileUrl = baseUrl
         ? `${baseUrl}/uploads/${req.file.filename}`
