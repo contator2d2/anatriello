@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAdminSettings, applyThemeColors } from '@/hooks/use-branding';
 import { useUpload } from '@/hooks/use-upload';
+import { resolveMediaUrl } from '@/lib/media';
 import { toast } from 'sonner';
 import { Upload, Loader2, Trash2, Image, Layout, Star, Save, Building2 } from 'lucide-react';
 import { ThemeCustomizer } from './ThemeCustomizer';
@@ -205,7 +206,7 @@ export function BrandingTab() {
             label="Logo da Barra Superior"
             description="Exibida ao lado do nome da empresa"
             settingKey="logo_topbar"
-            currentValue={getSetting('logo_topbar')}
+            currentValue={resolveMediaUrl(getSetting('logo_topbar'))}
             onUpdate={handleUpdate}
             aspectHint="Recomendado: 32x32px"
           />
@@ -220,7 +221,7 @@ export function BrandingTab() {
             label="Logo do Login"
             description="Exibida na tela de login"
             settingKey="logo_login"
-            currentValue={getSetting('logo_login')}
+            currentValue={resolveMediaUrl(getSetting('logo_login'))}
             onUpdate={handleUpdate}
             aspectHint="Recomendado: 200x60px"
           />
@@ -229,7 +230,7 @@ export function BrandingTab() {
             label="Ícone da Sidebar"
             description="Exibido no topo da barra lateral"
             settingKey="logo_sidebar"
-            currentValue={getSetting('logo_sidebar')}
+            currentValue={resolveMediaUrl(getSetting('logo_sidebar'))}
             onUpdate={handleUpdate}
             aspectHint="Recomendado: 40x40px"
           />
@@ -238,7 +239,7 @@ export function BrandingTab() {
             label="Favicon"
             description="Ícone da aba do navegador"
             settingKey="favicon"
-            currentValue={getSetting('favicon')}
+            currentValue={resolveMediaUrl(getSetting('favicon'))}
             onUpdate={handleUpdate}
             aspectHint="Recomendado: 32x32px ICO/PNG"
           />

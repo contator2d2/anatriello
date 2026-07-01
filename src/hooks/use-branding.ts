@@ -228,10 +228,11 @@ export function useBranding() {
           favicon: resolveMediaUrl(data.favicon),
         });
         
-        if (data.favicon) {
+        const resolvedFavicon = resolveMediaUrl(data.favicon);
+        if (resolvedFavicon) {
           const link = document.querySelector("link[rel~='icon']") as HTMLLinkElement;
           if (link) {
-            link.href = data.favicon;
+            link.href = resolvedFavicon;
           }
         }
         

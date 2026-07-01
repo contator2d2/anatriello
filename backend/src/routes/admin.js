@@ -18,6 +18,40 @@ const DEFAULT_BRANDING = {
   theme_custom_colors: null,
 };
 
+const BRANDING_MEDIA_KEYS = new Set(['logo_login', 'logo_sidebar', 'logo_topbar', 'favicon']);
+
+function getRequestBaseUrl(req) {
+  const envBase = String(process.env.API_BASE_URL || '').trim().replace(/\/+$/, '');
+  if (envBase) return envBase;
+
+  const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
+  const forwardedHost = String(req.headers['x-forwarded-host'] || req.headers['host'] || '').split(',')[0].trim();
+  if (!forwardedHost) return '';
+  return `${forwardedProto || req.protocol || 'https'}://${forwardedHost}`;
+}
+
+function resolveBrandingMediaUrl(value, req) {
+  if (!value || typeof value !== 'string') return value || null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (/^(https?:|data:|blob:)/i.test(trimmed)) return trimmed;
+  if (trimmed.startsWith('//')) return `https:${trimmed}`;
+
+  const baseUrl = getRequestBaseUrl(req);
+  if (!baseUrl) return trimmed;
+  if (trimmed.startsWith('/')) return `${baseUrl}${trimmed}`;
+  if (trimmed.startsWith('uploads/')) return `${baseUrl}/${trimmed}`;
+  return trimmed;
+}
+
+function resolveBrandingPayload(payload, req) {
+  const resolved = { ...payload };
+  for (const key of BRANDING_MEDIA_KEYS) {
+    resolved[key] = resolveBrandingMediaUrl(resolved[key], req);
+  }
+  return resolved;
+}
+
 // Ensure has_projects column exists on plans table
 (async () => {
   try {
@@ -69,7 +103,7 @@ router.get('/branding', async (req, res) => {
       }
     }
 
-    res.json(branding);
+    res.json(resolveBrandingPayload(branding, req));
   } catch (error) {
     console.error('Get branding error:', error);
     res.json({ ...DEFAULT_BRANDING });
