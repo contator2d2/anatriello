@@ -230,15 +230,14 @@ function SidebarContentComponent({ isExpanded, isSuperadmin, onNavigate }: Sideb
         // Check superadmin-only item (always requires superadmin)
         if (item.superadminOnly && !userIsSuperadmin) return false;
         
-        // Admin-only items must remain visible to admins even when a permission template exists.
-        if (item.adminOnly && userIsAdmin) return true;
-
-        // If user has a permission template, use it instead of role-based checks
-        // Superadmin always sees everything, template only applies to non-superadmin users
+        // If user has a permission template, it takes precedence for non-superadmins
+        // (including admins) — the template is the source of truth.
         if (hasTemplate && item.pageKey && !userIsSuperadmin) {
-          // Template explicitly controls access - if key exists, use its value; if not in template, deny
           return pagePermissions[item.pageKey] === true;
         }
+
+        // Admin-only items visible to admins when no template exists
+        if (item.adminOnly && userIsAdmin) return true;
         
         // Fallback to role-based checks when no template
         if (item.adminOnly && !userIsAdmin) return false;
