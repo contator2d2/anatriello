@@ -411,17 +411,37 @@ function coerceEmployeeExtValue(col, v) {
   return v;
 }
 
+let _employeeColsCache = null;
+let _employeeColsCacheAt = 0;
+async function getEmployeeColumns() {
+  const now = Date.now();
+  if (_employeeColsCache && (now - _employeeColsCacheAt) < 60_000) return _employeeColsCache;
+  try {
+    const r = await query(`SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='employees'`);
+    _employeeColsCache = new Set(r.rows.map(x => x.column_name));
+    _employeeColsCacheAt = now;
+  } catch { _employeeColsCache = _employeeColsCache || new Set(); }
+  return _employeeColsCache;
+}
+
 async function applyExtendedEmployeeCols(employeeId, body) {
+  const existing = await getEmployeeColumns();
   const sets = []; const vals = []; let i = 1;
   for (const col of EXTENDED_EMPLOYEE_COLS) {
     if (!(col in body)) continue;
+    if (existing.size && !existing.has(col)) continue; // skip unknown cols instead of throwing
     const v = coerceEmployeeExtValue(col, body[col]);
     sets.push(`${col} = $${i++}`);
     vals.push(v);
   }
   if (!sets.length) return;
   vals.push(employeeId);
-  await query(`UPDATE employees SET ${sets.join(', ')}, updated_at = NOW() WHERE id = $${i}`, vals);
+  try {
+    await query(`UPDATE employees SET ${sets.join(', ')}, updated_at = NOW() WHERE id = $${i}`, vals);
+  } catch (err) {
+    logError('rh.employees.applyExtendedCols', err, { employeeId, cols: sets.length });
+    // do not throw — main INSERT already succeeded
+  }
 }
 
 
