@@ -51,9 +51,12 @@ export default function PromotorLogin() {
     <div className="min-h-screen bg-gradient-to-br from-primary/10 via-background to-accent/10 flex items-center justify-center p-4">
       <Card className="w-full max-w-sm shadow-xl">
         <CardHeader className="text-center space-y-3">
-          {branding.logo && (
-            <img src={branding.logo} alt="Logo" className="h-12 mx-auto object-contain" />
-          )}
+          <img
+            src={branding.logo || anatrielloLogo.url}
+            alt="Anatriello"
+            className="h-24 w-24 mx-auto object-contain rounded-2xl"
+          />
+
           <CardTitle className="text-xl font-bold">App do Colaborador</CardTitle>
           <p className="text-sm text-muted-foreground">Acesse com CPF ou e-mail</p>
         </CardHeader>
