@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Smartphone, MapPin } from "lucide-react";
 import { useBranding } from "@/hooks/use-branding";
+import anatrielloLogo from "@/assets/anatriello-logo.png.asset.json";
 
 export default function PromotorLogin() {
   const [login, setLogin] = useState("");
