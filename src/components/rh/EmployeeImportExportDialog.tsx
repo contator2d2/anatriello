@@ -382,14 +382,48 @@ export function EmployeeImportExportDialog({ open, onOpenChange, employees, depa
       const batch: Record<string, any>[] = [];
       for (const row of selected) {
         const emp: Record<string, any> = { ...row.mapped };
-        ["birth_date", "admission_date"].forEach(dk => {
+        const DATE_KEYS = [
+          "birth_date","admission_date","rg_issue_date","pis_issue_date",
+          "ctps_issue_date","cnh_issue_date","cnh_expiry","cnh_first_date",
+          "ric_issue_date","class_body_issue_date","class_body_expiry",
+          "civil_registry_date","registration_date","service_time_start_date",
+          "probation_end_date","probation_extension_end","contract_end_date",
+          "retirement_date","termination_date","reinstatement_date",
+          "transfer_date","esocial_integration_date",
+        ];
+        DATE_KEYS.forEach(dk => {
           if (emp[dk]) {
             const parsed = parseFlexDate(emp[dk]);
             emp[dk] = parsed || "";
           }
         });
-        if (emp.salary) emp.salary = String(emp.salary).replace(/[^\d.,]/g, "").replace(",", ".");
+        const NUM_KEYS = [
+          "salary","current_salary","monthly_hours","weekly_hours","daily_hours",
+          "insalubrity_percent","periculosity_percent","night_shift_percent",
+          "private_pension_value","private_pension_13","commission_percent","advance_percent",
+        ];
+        NUM_KEYS.forEach(nk => {
+          if (emp[nk]) emp[nk] = String(emp[nk]).replace(/[^\d.,-]/g, "").replace(",", ".");
+        });
+        const BOOL_KEYS = [
+          "transfer_with_onus","syndicalized","syndicate_discount",
+          "receives_vr","receives_va","receives_vt","receives_advance",
+          "partial_time_regime","unemployment_benefit",
+        ];
+        BOOL_KEYS.forEach(bk => {
+          if (emp[bk] !== undefined && emp[bk] !== "") {
+            const s = String(emp[bk]).trim().toLowerCase();
+            if (["sim","yes","1","true","s","y"].includes(s)) emp[bk] = true;
+            else if (["nao","não","no","0","false","n"].includes(s)) emp[bk] = false;
+            else delete emp[bk];
+          } else {
+            delete emp[bk];
+          }
+        });
         if (emp.state) emp.state = normalizeUF(emp.state);
+        if (emp.rg_uf) emp.rg_uf = normalizeUF(emp.rg_uf);
+        if (emp.ctps_uf) emp.ctps_uf = normalizeUF(emp.ctps_uf);
+        if (emp.cnh_uf) emp.cnh_uf = normalizeUF(emp.cnh_uf);
         if (emp.gender) emp.gender = emp.gender.substring(0, 20);
         if (emp.zip_code) emp.zip_code = String(emp.zip_code).replace(/[^\d-]/g, "").substring(0, 10);
         if (!emp.status) emp.status = "ativo";
