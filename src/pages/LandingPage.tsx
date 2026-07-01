@@ -80,7 +80,7 @@ function Hero({ onCta }: { onCta: () => void }) {
       <div className="mx-auto max-w-6xl px-6 text-center relative z-10">
         <Reveal>
           <div className="flex justify-center mb-8">
-            <img src={ayratechLogo} alt="Ayratech" className="h-28 md:h-36 rounded-2xl shadow-2xl shadow-violet-500/20" />
+            <img src={ayratechLogo} alt="Anatriello Gestão" className="h-28 md:h-36 rounded-2xl shadow-2xl shadow-violet-500/20" />
           </div>
         </Reveal>
 
@@ -102,7 +102,7 @@ function Hero({ onCta }: { onCta: () => void }) {
 
         <Reveal delay={3}>
           <p className="mt-6 text-lg md:text-xl text-gray-400 max-w-3xl mx-auto leading-relaxed">
-            O Ayratech organiza, automatiza e monitora toda a operação com promotores,
+            O Anatriello Gestão organiza, automatiza e monitora toda a operação com promotores,
             supervisores e agências, usando IA, WhatsApp, CRM e controle completo de execução.
           </p>
         </Reveal>
@@ -240,7 +240,7 @@ function SolutionSection() {
           <div className="text-center mb-12">
             <span className="text-sm font-semibold text-violet-400 uppercase tracking-wider">A solução</span>
             <h2 className="text-3xl md:text-4xl font-bold text-white max-w-3xl mx-auto mt-3">
-              O Ayratech centraliza, valida e acompanha toda a operação{" "}
+              O Anatriello Gestão centraliza, valida e acompanha toda a operação{" "}
               <span className="bg-gradient-to-r from-violet-400 to-orange-400 bg-clip-text text-transparent">em tempo real</span>
             </h2>
           </div>
@@ -407,7 +407,7 @@ function PositioningSection({ onCta }: { onCta: () => void }) {
             Um sistema completo para quem quer crescer com operação organizada
           </h2>
           <p className="text-lg text-gray-400 mb-4 max-w-2xl mx-auto">
-            O Ayratech não é só uma ferramenta.
+            O Anatriello Gestão não é só uma ferramenta.
             É a base para estruturar uma operação profissional de merchandising.
           </p>
           <p className="text-xl font-semibold text-gray-300 italic mb-10">
@@ -418,7 +418,7 @@ function PositioningSection({ onCta }: { onCta: () => void }) {
             onClick={onCta}
             className="bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white text-lg px-10 h-14 rounded-xl shadow-lg shadow-violet-500/25 font-semibold transition-all hover:scale-105 border border-violet-500/30"
           >
-            Quero implementar o Ayratech na minha agência <ArrowRight className="ml-2 h-5 w-5" />
+            Quero implementar o Anatriello Gestão na minha agência <ArrowRight className="ml-2 h-5 w-5" />
           </Button>
         </Reveal>
       </div>
@@ -430,7 +430,7 @@ function PositioningSection({ onCta }: { onCta: () => void }) {
 function FAQSection() {
   const [open, setOpen] = useState<number | null>(null);
   const faqs = [
-    { q: "O sistema funciona para qualquer tamanho de agência?", a: "Sim, o Ayratech atende desde agências com 5 promotores até operações com centenas de profissionais em campo, com escalabilidade total." },
+    { q: "O sistema funciona para qualquer tamanho de agência?", a: "Sim, o Anatriello Gestão atende desde agências com 5 promotores até operações com centenas de profissionais em campo, com escalabilidade total." },
     { q: "Como funciona a contratação?", a: "Os valores e a implantação são sob consulta, variando de acordo com o tamanho da equipe e as necessidades de treinamento. Entre em contato para uma proposta personalizada." },
     { q: "Precisa instalar algo no supermercado?", a: "O totem de acesso roda em qualquer tablet comum com navegador. Não exige hardware especial." },
     { q: "O promotor precisa de um celular especial?", a: "Não. O app funciona como PWA em qualquer smartphone Android ou iOS com câmera e GPS." },
@@ -487,7 +487,7 @@ function ContactSection() {
     <section id="contato" className="py-20">
       <div className="mx-auto max-w-xl px-6">
         <Reveal>
-          <h2 className="text-3xl font-bold text-center text-white mb-3">Quero implementar o Ayratech</h2>
+          <h2 className="text-3xl font-bold text-center text-white mb-3">Quero implementar o Anatriello Gestão</h2>
           <p className="text-center text-gray-500 mb-10">Preencha e nossa equipe entra em contato</p>
         </Reveal>
 
@@ -534,7 +534,7 @@ function Navbar({ onCta }: { onCta: () => void }) {
     <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled ? "bg-gray-950/95 backdrop-blur-lg shadow-lg shadow-black/20 border-b border-gray-800" : "bg-transparent"}`}>
       <div className="mx-auto max-w-6xl px-6 flex items-center justify-between h-16">
         <Link to="/" className="text-xl font-extrabold bg-gradient-to-r from-violet-400 to-orange-400 bg-clip-text text-transparent">
-          Ayratech
+          Anatriello Gestão
         </Link>
 
         <div className="hidden md:flex items-center gap-6 text-sm text-gray-400">
@@ -583,7 +583,7 @@ function Footer() {
       <div className="mx-auto max-w-6xl px-6">
         <div className="flex flex-col md:flex-row justify-between items-center gap-6">
           <div>
-            <span className="text-xl font-extrabold bg-gradient-to-r from-violet-400 to-orange-400 bg-clip-text text-transparent">Ayratech</span>
+            <span className="text-xl font-extrabold bg-gradient-to-r from-violet-400 to-orange-400 bg-clip-text text-transparent">Anatriello Gestão</span>
             <p className="text-sm mt-1 text-gray-500">Sistema completo para agências de merchandising</p>
           </div>
           <div className="flex gap-6 text-sm">
@@ -593,7 +593,7 @@ function Footer() {
           </div>
         </div>
         <div className="mt-8 pt-6 border-t border-gray-800 text-center text-xs text-gray-600">
-          © {new Date().getFullYear()} Ayratech. Todos os direitos reservados.
+          © {new Date().getFullYear()} Anatriello Gestão. Todos os direitos reservados.
         </div>
       </div>
     </footer>

@@ -311,11 +311,11 @@ function SidebarContentComponent({ isExpanded, isSuperadmin, onNavigate }: Sideb
             className="h-10 w-10 object-contain shrink-0 rounded-xl"
           />
         ) : (
-          <img src={ayratechLogo} alt="Ayratech" className="h-10 w-10 object-contain shrink-0 rounded-xl" />
+          <img src={ayratechLogo} alt="Anatriello Gestão" className="h-10 w-10 object-contain shrink-0 rounded-xl" />
         )}
         {isExpanded && (
           <div className="overflow-hidden">
-            <h1 className="text-lg font-bold text-foreground whitespace-nowrap">Ayratech</h1>
+            <h1 className="text-lg font-bold text-foreground whitespace-nowrap">Anatriello Gestão</h1>
             <p className="text-xs text-muted-foreground whitespace-nowrap">Gestão de Promotores</p>
           </div>
         )}
