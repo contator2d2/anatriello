@@ -466,7 +466,7 @@ function SidebarContentComponent({ isExpanded, isSuperadmin, onNavigate }: Sideb
         {isExpanded && (
           <div className="text-center space-y-0.5">
             <p className="text-xs font-medium text-primary">Anatriello Gestão</p>
-            <p className="text-xs text-muted-foreground">Versão 1.0.0</p>
+            <p className="text-xs text-muted-foreground font-mono">v{APP_VERSION}</p>
           </div>
         )}
       </div>

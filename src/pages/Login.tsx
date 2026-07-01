@@ -182,7 +182,7 @@ const Login = () => {
             </Link>
           </div>
           <p className="text-xs text-muted-foreground">
-            © {new Date().getFullYear()} Anatriello Gestão. Todos os direitos reservados.
+            © {new Date().getFullYear()} Anatriello Gestão. Todos os direitos reservados. <span className="font-mono ml-1 opacity-70">v{APP_VERSION}</span>
           </p>
         </div>
       </footer>
