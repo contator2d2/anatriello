@@ -375,28 +375,40 @@ function normalizeEmployeeStatus(value) {
   return 'ativo';
 }
 
+function limitText(value, max) {
+  const v = emptyToNull(value);
+  if (v === null) return null;
+  return String(v).trim().slice(0, max);
+}
+
+function digitsText(value, max) {
+  const v = emptyToNull(value);
+  if (v === null) return null;
+  return String(v).replace(/\D/g, '').slice(0, max) || null;
+}
+
 function normalizeEmployeePayload(body = {}) {
   const workSchedule = body.work_schedule
     ? (typeof body.work_schedule === 'object' ? JSON.stringify(body.work_schedule) : String(body.work_schedule))
     : '08:00-17:00';
 
   return {
-    full_name: typeof body.full_name === 'string' ? body.full_name.trim() : body.full_name,
-    social_name: emptyToNull(body.social_name),
-    cpf: emptyToNull(body.cpf),
-    rg: emptyToNull(body.rg),
-    rg_issuer: emptyToNull(body.rg_issuer),
+    full_name: limitText(body.full_name, 255),
+    social_name: limitText(body.social_name, 255),
+    cpf: digitsText(body.cpf, 11),
+    rg: limitText(body.rg, 20),
+    rg_issuer: limitText(body.rg_issuer, 20),
     birth_date: normalizeDateValue(body.birth_date),
-    gender: emptyToNull(body.gender),
-    marital_status: emptyToNull(body.marital_status),
-    email: emptyToNull(body.email),
-    phone: emptyToNull(body.phone),
-    phone2: emptyToNull(body.phone2),
+    gender: limitText(body.gender, 20),
+    marital_status: limitText(body.marital_status, 30),
+    email: limitText(body.email, 255),
+    phone: limitText(body.phone, 20),
+    phone2: limitText(body.phone2, 20),
     address: emptyToNull(body.address),
-    address_number: emptyToNull(body.address_number),
-    complement: emptyToNull(body.complement),
-    neighborhood: emptyToNull(body.neighborhood),
-    city: emptyToNull(body.city),
+    address_number: limitText(body.address_number, 10),
+    complement: limitText(body.complement, 100),
+    neighborhood: limitText(body.neighborhood, 100),
+    city: limitText(body.city, 100),
     state: (() => {
       const raw = emptyToNull(body.state);
       if (!raw) return null;
@@ -415,12 +427,12 @@ function normalizeEmployeePayload(body = {}) {
       const normalized = s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
       return UF_MAP[normalized] || s.substring(0, 2);
     })(),
-    zip_code: emptyToNull(body.zip_code),
-    registration_number: emptyToNull(body.registration_number),
+    zip_code: limitText(body.zip_code, 10),
+    registration_number: limitText(body.registration_number, 50),
     worker_profile: normalizeWorkerProfile(body.worker_profile),
     employment_type: normalizeEmploymentType(body.employment_type),
-    position: emptyToNull(body.position),
-    role_level: emptyToNull(body.role_level),
+    position: limitText(body.position, 255),
+    role_level: limitText(body.role_level, 100),
     branch_id: emptyToNull(body.branch_id),
     company_id: emptyToNull(body.company_id),
     department_id: emptyToNull(body.department_id),
@@ -430,21 +442,21 @@ function normalizeEmployeePayload(body = {}) {
     contract_end_date: normalizeDateValue(body.contract_end_date),
     salary: parseBrazilianNumber(body.salary, 0),
     work_schedule: workSchedule,
-    bank_name: emptyToNull(body.bank_name),
-    bank_agency: emptyToNull(body.bank_agency),
-    bank_account: emptyToNull(body.bank_account),
-    bank_account_type: emptyToNull(body.bank_account_type),
-    pix_key: emptyToNull(body.pix_key),
-    pix_key_type: emptyToNull(body.pix_key_type),
-    ctps_number: emptyToNull(body.ctps_number),
-    ctps_series: emptyToNull(body.ctps_series),
-    pis_pasep: emptyToNull(body.pis_pasep),
-    voter_id: emptyToNull(body.voter_id),
-    voter_zone: emptyToNull(body.voter_zone),
-    voter_section: emptyToNull(body.voter_section),
-    skin_color: emptyToNull(body.skin_color),
-    cnpj: emptyToNull(body.cnpj),
-    company_name: emptyToNull(body.company_name),
+    bank_name: limitText(body.bank_name, 100),
+    bank_agency: limitText(body.bank_agency, 20),
+    bank_account: limitText(body.bank_account, 30),
+    bank_account_type: limitText(body.bank_account_type, 20),
+    pix_key: limitText(body.pix_key, 255),
+    pix_key_type: limitText(body.pix_key_type, 20),
+    ctps_number: limitText(body.ctps_number, 30),
+    ctps_series: limitText(body.ctps_series, 10),
+    pis_pasep: digitsText(body.pis_pasep, 20),
+    voter_id: limitText(body.voter_id, 20),
+    voter_zone: limitText(body.voter_zone, 20),
+    voter_section: limitText(body.voter_section, 20),
+    skin_color: limitText(body.skin_color, 50),
+    cnpj: digitsText(body.cnpj, 14),
+    company_name: limitText(body.company_name, 255),
     status: normalizeEmployeeStatus(body.status),
     photo_url: emptyToNull(body.photo_url),
     salary_items: Array.isArray(body.salary_items) ? body.salary_items : [],
