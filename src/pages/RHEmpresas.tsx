@@ -156,6 +156,49 @@ export default function RHEmpresas() {
               <Label>Email</Label>
               <Input type="email" value={form.email || ''} onChange={e => setForm({ ...form, email: e.target.value })} />
             </div>
+            <div className="md:col-span-2 border-t pt-3">
+              <p className="text-sm font-semibold mb-2">Endereço</p>
+            </div>
+            <div>
+              <Label>CEP</Label>
+              <Input
+                value={form.cep || ''}
+                onChange={e => setForm({ ...form, cep: e.target.value })}
+                onBlur={async (e) => {
+                  const cep = e.target.value.replace(/\D/g, '');
+                  if (cep.length !== 8) return;
+                  try {
+                    const r = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+                    const d = await r.json();
+                    if (!d.erro) setForm(f => ({
+                      ...f,
+                      address: f.address || d.logradouro || '',
+                      neighborhood: f.neighborhood || d.bairro || '',
+                      city: f.city || d.localidade || '',
+                      state: f.state || d.uf || '',
+                    }));
+                  } catch {}
+                }}
+                placeholder="00000-000"
+              />
+            </div>
+            <div className="md:col-span-1" />
+            <div className="md:col-span-2">
+              <Label>Logradouro</Label>
+              <Input value={form.address || ''} onChange={e => setForm({ ...form, address: e.target.value })} />
+            </div>
+            <div>
+              <Label>Número</Label>
+              <Input value={form.address_number || ''} onChange={e => setForm({ ...form, address_number: e.target.value })} />
+            </div>
+            <div>
+              <Label>Complemento</Label>
+              <Input value={form.complement || ''} onChange={e => setForm({ ...form, complement: e.target.value })} />
+            </div>
+            <div className="md:col-span-2">
+              <Label>Bairro</Label>
+              <Input value={form.neighborhood || ''} onChange={e => setForm({ ...form, neighborhood: e.target.value })} />
+            </div>
             <div>
               <Label>Cidade</Label>
               <Input value={form.city || ''} onChange={e => setForm({ ...form, city: e.target.value })} />
