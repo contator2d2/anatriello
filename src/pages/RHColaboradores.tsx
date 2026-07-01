@@ -365,6 +365,13 @@ export default function RHColaboradores() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input placeholder="Buscar por nome, CPF ou e-mail..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
           </div>
+          <Select value={companyFilter} onValueChange={setCompanyFilter}>
+            <SelectTrigger className="w-48"><SelectValue placeholder="Empresa" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas Empresas</SelectItem>
+              {companies.map((c: any) => <SelectItem key={c.id} value={c.id}>{c.trade_name || c.legal_name || c.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
             <SelectContent>
