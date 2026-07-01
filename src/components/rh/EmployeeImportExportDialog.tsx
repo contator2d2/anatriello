@@ -433,16 +433,26 @@ export function EmployeeImportExportDialog({ open, onOpenChange, employees, depa
         batch.push(emp);
       }
 
-      const chunkSize = 10;
       let imported = 0;
+      const failures: string[] = [];
       for (let i = 0; i < batch.length; i++) {
         try {
           await onImport([batch[i]]);
-        } catch {
-          // skip individual failures, continue importing
+        } catch (error: any) {
+          const name = batch[i]?.full_name || `Linha ${i + 1}`;
+          failures.push(`${name}: ${error?.message || "erro ao salvar"}`);
         }
         imported++;
         setImportProgress(Math.round((imported / batch.length) * 100));
+      }
+      if (failures.length) {
+        setImportError(
+          failures.length === batch.length
+            ? `Nenhum colaborador foi importado. ${failures.slice(0, 3).join(" | ")}`
+            : `${batch.length - failures.length} importados e ${failures.length} com erro. ${failures.slice(0, 3).join(" | ")}`
+        );
+        setMode("import-preview");
+        return;
       }
       setImportProgress(100);
       setTimeout(() => handleClose(false), 1500);
