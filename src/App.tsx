@@ -62,6 +62,8 @@ import ModeloContrato from "./pages/ModeloContrato";
 import AssinarDocumento from "./pages/AssinarDocumento";
 import VerificarDocumento from "./pages/VerificarDocumento";
 import RHColaboradores from "./pages/RHColaboradores";
+import RHEmpresas from "./pages/RHEmpresas";
+import RHHolding from "./pages/RHHolding";
 import RHPonto from "./pages/RHPonto";
 import RHHolerite from "./pages/RHHolerite";
 import RHDashboard from "./pages/RHDashboard";
