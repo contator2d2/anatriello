@@ -86,6 +86,7 @@ const getNavSections = (hasConnections: boolean): NavSection[] => [
   {
     title: "Atendimento",
     icon: MessagesSquare,
+    moduleKey: 'chat',
     items: [
       ...(hasConnections ? [{ name: "Chat", href: "/chat", icon: MessagesSquare, pageKey: 'chat', moduleKey: 'chat' as const }] : []),
       ...(hasConnections ? [{ name: "Secretária IA", href: "/secretaria-grupos", icon: Bot, pageKey: 'secretaria_ia', moduleKey: 'group_secretary' as const, adminOnly: true }] : []),
