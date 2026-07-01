@@ -679,6 +679,16 @@ export default function RHColaboradores() {
                   )}
                 </div>
                 <div>
+                  <Label>Empresa (Holding)</Label>
+                  <Select value={form.company_id || ""} onValueChange={v => setField("company_id", v)}>
+                    <SelectTrigger><SelectValue placeholder="Selecionar empresa" /></SelectTrigger>
+                    <SelectContent>
+                      {companies.map((c: any) => <SelectItem key={c.id} value={c.id}>{c.trade_name || c.legal_name || c.name}</SelectItem>)}
+                      {companies.length === 0 && <p className="text-xs text-muted-foreground text-center py-2">Nenhuma empresa cadastrada</p>}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
                   <div className="flex items-center justify-between">
                     <Label>Filial</Label>
                     <Button type="button" variant="ghost" size="sm" className="h-6 px-2 text-xs gap-1" onClick={() => setShowBranchManager(!showBranchManager)}>
