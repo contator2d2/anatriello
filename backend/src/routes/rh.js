@@ -532,6 +532,7 @@ router.post('/employees', async (req, res) => {
             updateValues.push(empId);
             await query(`UPDATE employees SET ${updateFields.join(', ')}, updated_at = NOW() WHERE id = $${pi}`, updateValues);
           }
+          await applyExtendedEmployeeCols(empId, req.body);
           const updated = await query(`SELECT * FROM employees WHERE id = $1`, [empId]);
           return res.json(updated.rows[0]);
         }
