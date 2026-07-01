@@ -164,7 +164,9 @@ export default function RHColaboradores() {
   const { data: rawEmployees = [], isLoading } = useEmployees({
     search: search || undefined,
     status: statusFilter !== "all" ? statusFilter : undefined,
+    company_id: companyFilter !== "all" ? companyFilter : undefined,
   });
+  const { companies } = useCompanies();
 
   const employees = useMemo(() => {
     if (profileFilter === "all") return rawEmployees;
