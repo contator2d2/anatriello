@@ -93,7 +93,7 @@ const EMPTY_FORM = {
   address: "", address_number: "", complement: "", neighborhood: "", city: "", state: "", zip_code: "",
   registration_number: "",
   worker_profile: "operacional", employment_type: "clt", position: "", salary: "",
-  admission_date: "", department_id: "", branch_id: "", direct_manager_id: "",
+  admission_date: "", company_id: "", department_id: "", branch_id: "", direct_manager_id: "",
   work_schedule: { ...DEFAULT_SCHEDULE, days: { ...DEFAULT_SCHEDULE.days } },
   bank_name: "", bank_agency: "", bank_account: "", bank_account_type: "", pix_key: "", pix_key_type: "",
   ctps_number: "", pis_pasep: "", cnpj: "", company_name: "", status: "ativo",
