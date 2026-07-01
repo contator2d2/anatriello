@@ -1,5 +1,3 @@
-import { supabase } from "@/integrations/supabase/client";
-
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'fatal';
 
 interface LogData {
@@ -41,6 +39,35 @@ const getDeviceInfo = () => ({
   online: navigator.onLine,
 });
 
+const ENV_API_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+
+const getAuthToken = (): string | null => {
+  try {
+    return localStorage.getItem('auth_token')
+      || localStorage.getItem('promotor_token')
+      || localStorage.getItem('agency_auth_token')
+      || localStorage.getItem('supermarket_auth_token')
+      || localStorage.getItem('network_auth_token')
+      || localStorage.getItem('promoter_app_token');
+  } catch {
+    return null;
+  }
+};
+
+const sendLogToBackend = async (payload: Record<string, unknown>) => {
+  const url = `${ENV_API_URL}/api/app-logs`;
+  const token = getAuthToken();
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(payload),
+    keepalive: true,
+  });
+};
+
 export const logger = {
   async log({ message, level = 'info', context = {}, stack_trace }: LogData) {
     try {
@@ -58,12 +85,7 @@ export const logger = {
         stack_trace: stack_trace || (level === 'error' || level === 'fatal' ? new Error().stack : null),
       };
 
-      // Insert directly into Supabase – bypasses the (missing) custom backend route.
-      const { error } = await (supabase.from as any)('app_logs').insert(payload);
-      if (error) {
-        // eslint-disable-next-line no-console
-        console.warn('[logger] supabase insert failed', error.message);
-      }
+      await sendLogToBackend(payload);
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error('Failed to process log:', err);

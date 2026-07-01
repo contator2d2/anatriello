@@ -61,6 +61,7 @@ import agencyNetworkRequestsRoutes from './routes/agency-network-requests.js';
 import promoterAccessRoutes from './routes/promoter-access.js';
 import promoterLeavesRoutes from './routes/promoter-leaves.js';
 import accessControlDashboardRoutes from './routes/access-control-dashboard.js';
+import appLogsRoutes from './routes/app-logs.js';
 import { initDatabase } from './init-db.js';
 import { executeNotifications } from './scheduler.js';
 import { executeCampaignMessages } from './campaign-scheduler.js';
@@ -458,6 +459,7 @@ app.use('/api', agencyNetworkRequestsRoutes);
 
 app.use('/api/promoter-leaves', promoterLeavesRoutes);
 app.use('/api/access-control-dashboard', accessControlDashboardRoutes);
+app.use('/api/app-logs', appLogsRoutes);
 
 app.get('/health', (req, res) => {
   res.json({
