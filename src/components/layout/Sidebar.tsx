@@ -229,7 +229,8 @@ function SidebarContentComponent({ isExpanded, isSuperadmin, onNavigate }: Sideb
         if (item.superadminOnly && !isSuperadmin) return false;
         
         // If user has a permission template, use it instead of role-based checks
-        if (hasTemplate && item.pageKey) {
+        // Superadmin always sees everything, template only applies to non-superadmin users
+        if (hasTemplate && item.pageKey && !isSuperadmin) {
           // Template explicitly controls access - if key exists, use its value; if not in template, deny
           return pagePermissions[item.pageKey] === true;
         }
