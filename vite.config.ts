@@ -17,23 +17,16 @@ export default defineConfig(() => ({
         maximumFileSizeToCacheInBytes: 10 * 1024 * 1024, // 10 MB
       },
       manifest: {
-        name: "Promotor Ayratech",
-        short_name: "Promotor Ayratech",
-        description: "Plataforma de Gestão e Merchandising",
-        theme_color: "#000000",
-        background_color: "#000000",
+        name: "Anatriello Gestão",
+        short_name: "Anatriello",
+        description: "Plataforma corporativa Anatriello — gestão, RH e colaboradores.",
+        theme_color: "#f59e0b",
+        background_color: "#faf4e8",
         display: "standalone",
         icons: [
-          {
-            src: "/icons/pwa-192.png",
-            sizes: "192x192",
-            type: "image/png",
-          },
-          {
-            src: "/icons/pwa-512.png",
-            sizes: "512x512",
-            type: "image/png",
-          },
+          { src: "/icons/pwa-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+          { src: "/icons/pwa-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+          { src: "/icons/maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
         ],
       },
     }),
