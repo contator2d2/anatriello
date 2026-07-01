@@ -42,6 +42,8 @@ const emptyForm: Partial<Company> = {
 
 export default function RHEmpresas() {
   const { companies, loading, create, update, remove, refresh } = useCompanies();
+  const { uploadFile, isUploading } = useUpload();
+  const fileRef = useRef<HTMLInputElement>(null);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Company | null>(null);
   const [form, setForm] = useState<Partial<Company>>(emptyForm);
@@ -49,6 +51,17 @@ export default function RHEmpresas() {
 
   const openNew = () => { setEditing(null); setForm(emptyForm); setOpen(true); };
   const openEdit = (c: Company) => { setEditing(c); setForm(c); setOpen(true); };
+
+  const handleLogoUpload = async (file: File) => {
+    if (!file.type.startsWith('image/')) { toast.error('Envie uma imagem'); return; }
+    try {
+      const url = await uploadFile(file);
+      if (url) {
+        setForm(f => ({ ...f, logo_url: url }));
+        toast.success('Logo enviada');
+      }
+    } catch (e: any) { toast.error(e.message || 'Erro no upload'); }
+  };
 
   const save = async () => {
     if (!form.name?.trim()) { toast.error('Informe o nome'); return; }
