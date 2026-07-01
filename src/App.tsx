@@ -62,6 +62,8 @@ import ModeloContrato from "./pages/ModeloContrato";
 import AssinarDocumento from "./pages/AssinarDocumento";
 import VerificarDocumento from "./pages/VerificarDocumento";
 import RHColaboradores from "./pages/RHColaboradores";
+import RHEmpresas from "./pages/RHEmpresas";
+import RHHolding from "./pages/RHHolding";
 import RHPonto from "./pages/RHPonto";
 import RHHolerite from "./pages/RHHolerite";
 import RHDashboard from "./pages/RHDashboard";
@@ -271,6 +273,8 @@ const App = () => (
             <Route path="/assinaturas" element={<ProtectedRoute><Assinaturas /></ProtectedRoute>} />
             <Route path="/modelo-contrato" element={<ProtectedRoute><ModeloContrato /></ProtectedRoute>} />
             <Route path="/rh/colaboradores" element={<ProtectedRoute><RHColaboradores /></ProtectedRoute>} />
+            <Route path="/rh/empresas" element={<ProtectedRoute><RHEmpresas /></ProtectedRoute>} />
+            <Route path="/rh/holding" element={<ProtectedRoute><RHHolding /></ProtectedRoute>} />
             <Route path="/rh/dashboard" element={<ProtectedRoute><RHDashboard /></ProtectedRoute>} />
             <Route path="/rh/ponto" element={<ProtectedRoute><RHPonto /></ProtectedRoute>} />
             <Route path="/rh/holerite" element={<ProtectedRoute><RHHolerite /></ProtectedRoute>} />

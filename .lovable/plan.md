@@ -1,97 +1,94 @@
-## Visão geral
+# Multi-empresa (Holding) + App do Colaborador
 
-Construir dois fluxos novos para empresas **externas** (sem Ayratech):
+Reestruturar RH para operar como holding com N empresas. Renomear o app do promotor para "App do Colaborador" removendo rotas/merchandising. Ponto por facial controlado por empresa e por colaborador. Dashboard central consolidado.
 
-1. **Auto-cadastro de agência** — público, vai pra fila de aprovação da Rede.
-2. **PWA do promotor** — só controle de acesso ao PDV (NÃO é ponto), via leitura de QR fixo impresso no PDV, com validações de GPS, documentos e janela de escala.
-
----
-
-## 1. Backend (Express + Postgres) — `backend/src/routes/promoter-access.js`
-
-Um único arquivo com `ensureSchema()` (padrão do projeto). Cria/usa:
-
-- `agency_signup_requests` — CNPJ, razão social, responsável, e-mail/senha provisórios, redes pretendidas, status (`pending|approved|rejected`), notas.
-- `pdv_access_qrcodes` — `supermarket_unit_id`, `token` (UUID secreto), `active`, `printed_at`. Um QR por PDV.
-- `promoter_app_users` — login do promotor (CPF + senha), vínculo `agency_promoters.id`.
-- `promoter_schedules` — escala: `agency_promoter_id`, `supermarket_unit_id`, `scheduled_date`, `start_time`, `end_time`, `tolerance_min` (default 30).
-- `promoter_visits` — check-in/check-out: ids, `qr_token`, `checkin_at`, `checkout_at`, GPS lat/lng + accuracy + distance_to_pdv, `validations_snapshot` jsonb (docs ok? schedule ok? gps ok?), `status` (`open|closed|denied`), `denied_reason`.
-
-Endpoints:
-
-| Método | Rota | Quem |
-|---|---|---|
-| POST | `/api/agency/signup` | público — cria signup_request |
-| GET | `/api/network/agency-signups` | rede |
-| POST | `/api/network/agency-signups/:id/approve` | rede — cria `agencies` + `agency_users` + envia senha |
-| POST | `/api/network/agency-signups/:id/reject` | rede |
-| POST | `/api/network/pdvs/:unitId/qrcode/generate` | rede — gera token novo |
-| GET | `/api/network/pdvs/:unitId/qrcode/print` | rede — retorna payload p/ imprimir |
-| POST | `/api/promoter-app/login` | público — CPF + senha |
-| GET | `/api/promoter-app/me` | promotor — dados + escalas do dia |
-| POST | `/api/promoter-app/checkin` | promotor — body `{ qr_token, lat, lng, accuracy }` → roda as 3 validações |
-| POST | `/api/promoter-app/checkout` | promotor — fecha visita aberta |
-| GET | `/api/promoter-app/visits` | promotor — histórico |
-
-Lógica de validação no check-in (rejeita com motivo claro):
-
-```text
-1. QR token existe e está ativo → resolve supermarket_unit_id
-2. Documentos do promotor aprovados pela Rede (consulta tabelas já existentes)
-3. Escala hoje para esse PDV dentro da janela [start - tol, end + tol]
-4. GPS dentro do raio do PDV (haversine vs unit.latitude/longitude, unit.radius_meters)
-5. Se OK → cria promoter_visits status=open; se falhar → status=denied + denied_reason
-```
-
-Wire em `backend/src/index.js`.
+Obs: banco é Postgres do backend (Easypanel via `apianatriello.r2d2.agency`), não Supabase. Tudo passa por schemas SQL do backend + rotas REST.
 
 ---
 
-## 2. Frontend Web — Portal público & Rede
+## 1. Backend — Schema (novo `schema-holding.sql`)
 
-- `src/pages/agency/AgencySignup.tsx` (rota pública `/agencia/cadastro`) — form com CNPJ, dados do responsável, e-mail/senha, seleção de redes pretendidas. Botão "Já tenho conta" → `/agencia/login`. Link da home do agencia/login.
-- `src/pages/network/NetworkAgencySignups.tsx` (rota `/rede/agencias-pendentes`) — lista, aprovar/rejeitar com observação.
-- `src/pages/network/NetworkQRCodes.tsx` (rota `/rede/qrcodes`) — lista de PDVs com botão "Gerar QR" e "Imprimir" (gera PNG via lib `qrcode` já no backend, abre view A4 com nome do PDV + endereço + QR).
-- Itens novos no `NetworkLayout` sidebar.
+Tabela nova `companies` (empresas da holding):
+- `id`, `organization_id` (holding), `name`, `cnpj`, `trade_name`, `logo_url`, `color`, `address`, `phone`, `email`, `is_active`, `punch_facial_required` (bool default true), `punch_facial_tolerance_days` (fallback), `created_at`, `updated_at`
+- Índice único: `(organization_id, cnpj)`
+- Seed automático: uma company "Anatriello" por organization ao iniciar
+
+Alterações em tabelas existentes de RH:
+- `employees`: adicionar `company_id` (FK companies, NOT NULL após migração), `facial_required` já existe (usar como override do que a company exige)
+- `time_punches` / `ponto`: adicionar `company_id` (denormalizado a partir do employee no insert)
+- `employee_documents`: adicionar `company_id`
+- `punch_adjustments` (nova ou existente): `id`, `employee_id`, `company_id`, `punch_id?`, `type` (falta/atraso/esquecimento), `requested_at`, `requested_by`, `justification`, `attachment_url?`, `status` (pending/approved/rejected), `reviewed_by?`, `reviewed_at?`, `review_note?`
+- `document_deliveries` (nova): `id`, `document_id`, `employee_id`, `company_id`, `sent_at`, `read_at?`, `signed_at?`, `signature_hash?`, `status`
+
+GRANTs e índices em tudo. Início zerado — colaboradores/pontos existentes não migram (usuário confirmou "começar do zero").
+
+## 2. Backend — Rotas REST
+
+Arquivos novos em `backend/src/routes/`:
+- `companies.js` — CRUD `/api/companies` (listar/criar/editar/desativar; escopo = organization_id do usuário)
+- `punch-adjustments.js` — `/api/punch-adjustments` (colaborador cria; RH lista/aprova/rejeita; filtro por company)
+- `document-deliveries.js` — `/api/document-deliveries` (RH envia; colaborador confirma leitura/assina)
+- `holding-dashboard.js` — `/api/holding/dashboard` agregando:
+  - colaboradores ativos por empresa
+  - batidas do dia por empresa (in/out/breaks)
+  - contadores de alertas (atrasos hoje, faltas, docs vencendo em 30d, ajustes pendentes)
+
+Ajustar rotas existentes para receber/filtrar `company_id`:
+- `/api/employees` (create/list aceitam `company_id`)
+- `/api/rh/ponto` (batida grava `company_id`)
+- `/api/rh/documentos` (upload vinculado a `company_id`; envio dispara `document_deliveries`)
+
+Regra facial de ponto (no endpoint de batida):
+1. Se `employees.facial_required` for `true`/`false` → prevalece.
+2. Senão → usa `companies.punch_facial_required`.
+3. Se exigido e falhar → 403 com motivo; grava tentativa em `app_logs`.
+
+## 3. Frontend Admin
+
+- Nova página `/rh/empresas` (CRUD empresas + toggle "Exigir facial no ponto" por empresa).
+- Novo dashboard `/rh/holding` (padrão do RH):
+  - Cards por empresa: ativos, presentes hoje, atrasos, ajustes pendentes
+  - Gráfico consolidado de batidas do dia
+  - Feed de alertas com filtro por empresa
+  - Aba "Ajustes de ponto" com aprovação (aprovar/rejeitar + nota)
+  - Aba "Envios de documentos" (status leitura/assinatura)
+- Ajustes em telas existentes (`RHColaboradores`, `RHPonto`, `RHDocumentos`, `RHBiometria`):
+  - Seletor "Empresa" no topo (persistido em localStorage)
+  - Campo `company_id` obrigatório no cadastro do colaborador
+  - Coluna "Empresa" nas listagens
+  - Em `RHColaboradores`, substituir o seletor 3-state genérico por: "Facial: Herdar da empresa | Sempre exigir | Nunca exigir"
+
+## 4. App do Colaborador (renomear `/promotor` → `/colaborador`)
+
+Manter a rota `/promotor` como alias temporário (redirect) para não quebrar quem já tem PWA instalado, mas nova identidade em `/colaborador`.
+
+Remover do menu/rotas do app:
+- Rota (`PromotorRota`), Marcas, Categorias, Perdas, Fotos, Book, Merchandising, Pesquisa de preço, Auditoria, Solicitações de visita.
+
+Manter/adaptar:
+- Login (mesmo AuthContext)
+- Home: cards "Bater ponto" + "Meus documentos" + "Meus ajustes"
+- `/colaborador/ponto`: câmera facial → chama `/api/rh/ponto` (backend valida facial conforme regra). Mostra empresa atual (se colaborador tem `company_id` só uma).
+- `/colaborador/documentos`: lista `document_deliveries` do colaborador, permite confirmar leitura/assinar; permite enviar documentos pessoais para o RH.
+- `/colaborador/ajustes`: histórico de ajustes solicitados + botão "Solicitar ajuste".
+- `/colaborador/config`: só facial enrollment + tema + sair.
+
+Renomear referências textuais "Promotor" → "Colaborador" nos labels e no manifest `promoter-app-manifest.webmanifest`.
+
+## 5. Início zerado
+
+Script no `init-db.js`:
+- Cria tabela `companies` e adiciona colunas em employees/ponto/documentos (idempotente, `IF NOT EXISTS`).
+- Insere company padrão "Anatriello" por organização.
+- **Não faz TRUNCATE**. "Começar do zero" = as tabelas novas nascem vazias; se o usuário quiser limpar employees/pontos existentes, faço em passo separado após confirmação explícita (destrutivo).
 
 ---
 
-## 3. PWA do promotor — `/p/*`
+## Ordem de entrega
 
-Rota separada, layout mobile-first.
+1. Backend: `schema-holding.sql` + init-db + rotas novas + patches nas rotas de RH.
+2. Frontend admin: página empresas, dashboard holding, ajustes nas telas RH.
+3. App do Colaborador: remover módulos merchandising, adaptar telas, renomear.
+4. QA rápido: seed empresa Anatriello, criar colaborador, bater ponto, enviar documento, aprovar ajuste.
 
-- `src/pages/promoter-app/PromoterLogin.tsx` — CPF + senha.
-- `src/pages/promoter-app/PromoterHome.tsx` — saudação, lista de escalas de hoje, status documental, botão grande "Escanear QR do PDV".
-- `src/pages/promoter-app/PromoterScanner.tsx` — usa `@zxing/browser` (camera) para ler o QR; ao ler, pede geolocalização e dispara check-in. Mostra resultado (entrou / negado com motivo).
-- `src/pages/promoter-app/PromoterVisit.tsx` — visita aberta em andamento + botão "Registrar saída".
-- `src/pages/promoter-app/PromoterHistory.tsx` — histórico.
-- `src/contexts/PromoterAppAuthContext.tsx` — JWT em localStorage.
-- `src/hooks/use-promoter-app.ts` — fetch wrappers.
-
-**PWA instalável** (só manifesto, sem service worker — conforme regra do projeto para promoter app):
-- `public/promoter-app-manifest.webmanifest` com `start_url: /p`, `display: standalone`, ícones.
-- `<link rel="manifest">` injetado só nas rotas `/p/*` via `useEffect`.
-
----
-
-## 4. Migração SQL & rotas
-
-- Cria as 5 tabelas via `ensureSchema()` na primeira chamada (padrão do backend, não usa migration Supabase).
-- Adiciona dependências: `bun add @zxing/browser @zxing/library` no frontend. `qrcode` já existe no backend.
-
----
-
-## Fora do escopo desta entrega
-
-- Reconhecimento facial no PWA (você não pediu — já existe no totem).
-- Push notifications.
-- App nativo (Capacitor) — fica para fase posterior.
-
----
-
-## Resumo de arquivos
-
-**Criados:** 1 backend route, 1 contexto, 1 hook, 7 páginas frontend, 1 manifest, 1 SQL schema file (opcional, espelho).
-**Editados:** `backend/src/index.js`, `src/App.tsx`, `src/pages/network/NetworkLayout.tsx`, `src/pages/agency/AgencyLogin.tsx` (link cadastro), `index.html` (manifest link condicional via JS).
-
-Confirma que posso seguir com essa implementação?
+Confirma para eu executar? Se quiser priorizar (ex: só backend + dashboard antes do app), me diz.

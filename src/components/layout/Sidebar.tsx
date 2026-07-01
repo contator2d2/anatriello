@@ -124,6 +124,8 @@ const getNavSections = (hasConnections: boolean): NavSection[] => [
     icon: Users,
     moduleKey: 'rh',
     items: [
+      { name: "Holding", href: "/rh/holding", icon: Building2, pageKey: 'rh_holding', moduleKey: 'rh' },
+      { name: "Empresas", href: "/rh/empresas", icon: Building2, pageKey: 'rh_empresas', moduleKey: 'rh' },
       { name: "Dashboard", href: "/rh/dashboard", icon: LayoutDashboard, pageKey: 'rh_dashboard', moduleKey: 'rh' },
       { name: "Colaboradores", href: "/rh/colaboradores", icon: UserPlus, pageKey: 'rh_colaboradores', moduleKey: 'rh' },
       { name: "Ponto", href: "/rh/ponto", icon: Clock, pageKey: 'rh_ponto', moduleKey: 'rh' },

@@ -4784,7 +4784,104 @@ export async function initDatabase() {
   } catch (e) {
     console.error('  ⚠️ Failed to expand agency_promoters:', e.message);
   }
-  
+
+  // ============================================================
+  // HOLDING / MULTI-EMPRESA (RH)
+  // ============================================================
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS companies (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        name VARCHAR(255) NOT NULL,
+        trade_name VARCHAR(255),
+        cnpj VARCHAR(20),
+        logo_url TEXT,
+        color VARCHAR(20) DEFAULT '#3B82F6',
+        address TEXT,
+        city VARCHAR(100),
+        state VARCHAR(2),
+        phone VARCHAR(30),
+        email VARCHAR(255),
+        is_active BOOLEAN DEFAULT true,
+        punch_facial_required BOOLEAN DEFAULT true,
+        punch_gps_required BOOLEAN DEFAULT false,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_companies_org ON companies(organization_id);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_companies_org_cnpj ON companies(organization_id, cnpj) WHERE cnpj IS NOT NULL;
+
+      ALTER TABLE employees ADD COLUMN IF NOT EXISTS company_id UUID REFERENCES companies(id) ON DELETE SET NULL;
+      CREATE INDEX IF NOT EXISTS idx_employees_company ON employees(company_id);
+
+      CREATE TABLE IF NOT EXISTS punch_adjustments (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        company_id UUID REFERENCES companies(id) ON DELETE SET NULL,
+        employee_id UUID NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+        punch_date DATE NOT NULL,
+        type VARCHAR(30) NOT NULL,
+        justification TEXT NOT NULL,
+        attachment_url TEXT,
+        status VARCHAR(20) NOT NULL DEFAULT 'pending',
+        reviewed_by UUID REFERENCES users(id) ON DELETE SET NULL,
+        reviewed_at TIMESTAMPTZ,
+        review_note TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_punch_adjustments_org ON punch_adjustments(organization_id);
+      CREATE INDEX IF NOT EXISTS idx_punch_adjustments_company ON punch_adjustments(company_id);
+      CREATE INDEX IF NOT EXISTS idx_punch_adjustments_employee ON punch_adjustments(employee_id);
+      CREATE INDEX IF NOT EXISTS idx_punch_adjustments_status ON punch_adjustments(status);
+
+      CREATE TABLE IF NOT EXISTS document_deliveries (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        company_id UUID REFERENCES companies(id) ON DELETE SET NULL,
+        employee_id UUID NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+        title VARCHAR(255) NOT NULL,
+        description TEXT,
+        file_url TEXT NOT NULL,
+        require_signature BOOLEAN DEFAULT false,
+        require_read BOOLEAN DEFAULT true,
+        sent_by UUID REFERENCES users(id) ON DELETE SET NULL,
+        sent_at TIMESTAMPTZ DEFAULT NOW(),
+        read_at TIMESTAMPTZ,
+        signed_at TIMESTAMPTZ,
+        signature_hash VARCHAR(128),
+        status VARCHAR(20) NOT NULL DEFAULT 'sent',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_doc_deliveries_org ON document_deliveries(organization_id);
+      CREATE INDEX IF NOT EXISTS idx_doc_deliveries_company ON document_deliveries(company_id);
+      CREATE INDEX IF NOT EXISTS idx_doc_deliveries_employee ON document_deliveries(employee_id);
+      CREATE INDEX IF NOT EXISTS idx_doc_deliveries_status ON document_deliveries(status);
+    `);
+
+    // Seed: uma company padrão "Anatriello" por organização que não tenha nenhuma
+    await pool.query(`
+      INSERT INTO companies (organization_id, name, trade_name, is_active, punch_facial_required)
+      SELECT o.id, 'Anatriello', 'Anatriello Gestão', true, true
+      FROM organizations o
+      WHERE NOT EXISTS (SELECT 1 FROM companies c WHERE c.organization_id = o.id)
+    `);
+
+    // Migração leve: vincular employees sem company_id à primeira company da org
+    await pool.query(`
+      UPDATE employees e
+      SET company_id = (SELECT id FROM companies c WHERE c.organization_id = e.organization_id ORDER BY created_at LIMIT 1)
+      WHERE e.company_id IS NULL
+    `);
+
+    console.log('  🏢 Holding/companies schema ready');
+  } catch (e) {
+    console.error('  ⚠️ Failed to ensure holding schema:', e.message);
+  }
+
   return true;
 }
+
 
