@@ -56,11 +56,9 @@ export function TopBar() {
             <Building2 className="h-4 w-4 text-primary" />
           </div>
         )}
-        {branding.company_name && (
-          <span className="text-base font-semibold text-foreground">
-            {branding.company_name}
-          </span>
-        )}
+        <span className="text-base font-semibold text-foreground">
+          Anatriello Gestão
+        </span>
       </div>
 
       {/* Right Side Controls */}
