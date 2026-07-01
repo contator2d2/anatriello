@@ -381,7 +381,6 @@ function normalizeEmployeePayload(body = {}) {
     : '08:00-17:00';
 
   return {
-    ...body,
     full_name: typeof body.full_name === 'string' ? body.full_name.trim() : body.full_name,
     social_name: emptyToNull(body.social_name),
     cpf: emptyToNull(body.cpf),
