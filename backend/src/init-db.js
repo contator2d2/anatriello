@@ -4816,6 +4816,12 @@ export async function initDatabase() {
       ALTER TABLE companies ADD COLUMN IF NOT EXISTS address_number VARCHAR(20);
       ALTER TABLE companies ADD COLUMN IF NOT EXISTS complement VARCHAR(120);
       ALTER TABLE companies ADD COLUMN IF NOT EXISTS neighborhood VARCHAR(120);
+      ALTER TABLE companies ADD COLUMN IF NOT EXISTS ie VARCHAR(30);
+      ALTER TABLE companies ADD COLUMN IF NOT EXISTS im VARCHAR(30);
+      ALTER TABLE companies ADD COLUMN IF NOT EXISTS website VARCHAR(255);
+      ALTER TABLE companies ADD COLUMN IF NOT EXISTS legal_representative VARCHAR(255);
+      ALTER TABLE companies ADD COLUMN IF NOT EXISTS legal_representative_cpf VARCHAR(20);
+      ALTER TABLE companies ADD COLUMN IF NOT EXISTS notes TEXT;
 
       ALTER TABLE employees ADD COLUMN IF NOT EXISTS company_id UUID REFERENCES companies(id) ON DELETE SET NULL;
       CREATE INDEX IF NOT EXISTS idx_employees_company ON employees(company_id);

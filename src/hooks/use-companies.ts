@@ -19,6 +19,12 @@ export interface Company {
   state?: string | null;
   phone?: string | null;
   email?: string | null;
+  ie?: string | null;
+  im?: string | null;
+  website?: string | null;
+  legal_representative?: string | null;
+  legal_representative_cpf?: string | null;
+  notes?: string | null;
   is_active: boolean;
   punch_facial_required: boolean;
   punch_gps_required: boolean;
