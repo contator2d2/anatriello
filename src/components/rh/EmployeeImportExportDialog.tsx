@@ -133,8 +133,10 @@ export function EmployeeImportExportDialog({ open, onOpenChange, employees, depa
       // Add department and branch names
       const dept = departments.find((d: any) => d.id === emp.department_id);
       const branch = branches.find((b: any) => b.id === emp.branch_id);
+      const company = companies.find((c: any) => c.id === emp.company_id);
       row["Departamento"] = dept?.name || "";
       row["Filial"] = branch?.name || "";
+      row["Empresa"] = company?.name || "";
       return row;
     });
 
@@ -142,12 +144,27 @@ export function EmployeeImportExportDialog({ open, onOpenChange, employees, depa
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Colaboradores");
 
-    // Auto column width
-    const colWidths = [...headers, "Departamento", "Filial"].map(h => ({ wch: Math.max(h.length + 2, 15) }));
+    const colWidths = [...headers, "Departamento", "Filial", "Empresa"].map(h => ({ wch: Math.max(h.length + 2, 15) }));
     ws["!cols"] = colWidths;
 
     XLSX.writeFile(wb, `colaboradores_${new Date().toISOString().slice(0, 10)}.xlsx`);
     handleClose(false);
+  };
+
+  const handleDownloadTemplate = () => {
+    const headers = EMPLOYEE_FIELDS.map(f => f.label);
+    const example: Record<string, any> = {};
+    headers.forEach(h => { example[h] = ""; });
+    example["Nome Completo"] = "João da Silva";
+    example["CPF"] = "000.000.000-00";
+    example["E-mail"] = "joao@exemplo.com";
+    example["Telefone"] = "(11) 90000-0000";
+    example["Data Admissão"] = "01/01/2025";
+    const ws = XLSX.utils.json_to_sheet([example]);
+    ws["!cols"] = headers.map(h => ({ wch: Math.max(h.length + 2, 15) }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Modelo");
+    XLSX.writeFile(wb, "modelo_colaboradores.xlsx");
   };
 
   // ========== IMPORT ==========
