@@ -17,10 +17,13 @@ import {
   useTimeBankSummary, useTimeBankEntries, useAddTimeBankManual,
   useHolidays, useCreateHoliday, useDeleteHoliday, useImportNationalHolidays,
   useAdjustmentRequests, useReviewAdjustmentRequest,
+  useReportSummary, useReportAbsencesLates, useTimeBankStatement, downloadTimeclockCsv,
 } from '@/hooks/use-timeclock';
+import { n as useCompanies } from '@/hooks/use-companies';
 import { WorkSchedulesTab } from '@/components/rh/WorkSchedulesTab';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
-import { Calendar, Clock, TrendingUp, TrendingDown, CheckCircle2, XCircle, Pencil, History, Trash2, Plus } from 'lucide-react';
+import { Calendar, Clock, TrendingUp, TrendingDown, CheckCircle2, XCircle, Pencil, History, Trash2, Plus, Download, FileText, AlertCircle } from 'lucide-react';
+
 
 const STATUS_COLORS: Record<string, string> = {
   normal: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
