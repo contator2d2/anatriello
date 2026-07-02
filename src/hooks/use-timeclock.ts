@@ -122,6 +122,14 @@ export function useCreateClosing() {
   });
 }
 
+export function useDeleteClosing() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api(`/api/timeclock/closings/${id}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['timeclock'] }),
+  });
+}
+
 // ---------- JORNADAS DE TRABALHO (Fase 3) ----------
 export function useWorkSchedules() {
   return useQuery({
