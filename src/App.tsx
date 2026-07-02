@@ -65,6 +65,7 @@ import RHColaboradores from "./pages/RHColaboradores";
 import RHEmpresas from "./pages/RHEmpresas";
 import RHHolding from "./pages/RHHolding";
 import RHPonto from "./pages/RHPonto";
+import RHPontoV2 from "./pages/RHPontoV2";
 import RHHolerite from "./pages/RHHolerite";
 import RHDashboard from "./pages/RHDashboard";
 import RHDocumentos from "./pages/RHDocumentos";
@@ -284,7 +285,8 @@ const App = () => (
             <Route path="/rh/empresas" element={<ProtectedRoute><RHEmpresas /></ProtectedRoute>} />
             <Route path="/rh/holding" element={<ProtectedRoute><RHHolding /></ProtectedRoute>} />
             <Route path="/rh/dashboard" element={<ProtectedRoute><RHDashboard /></ProtectedRoute>} />
-            <Route path="/rh/ponto" element={<ProtectedRoute><RHPonto /></ProtectedRoute>} />
+            <Route path="/rh/ponto" element={<ProtectedRoute><RHPontoV2 /></ProtectedRoute>} />
+            <Route path="/rh/ponto-legacy" element={<ProtectedRoute><RHPonto /></ProtectedRoute>} />
             <Route path="/rh/holerite" element={<ProtectedRoute><RHHolerite /></ProtectedRoute>} />
             <Route path="/rh/documentos" element={<ProtectedRoute><RHDocumentos /></ProtectedRoute>} />
             <Route path="/rh/ponto-monitor" element={<ProtectedRoute><RHPontoMonitor /></ProtectedRoute>} />
