@@ -50,6 +50,7 @@ router.post('/', async (req, res) => {
       phone, email, punch_facial_required = true, punch_gps_required = false,
       cep, address_number, complement, neighborhood,
       ie, im, website, legal_representative, legal_representative_cpf, notes,
+      latitude, longitude, default_radius_meters, geofence_strict, geofence_require_photo,
     } = req.body;
     if (!name || !String(name).trim()) return res.status(400).json({ error: 'Nome obrigatório' });
 
@@ -57,15 +58,18 @@ router.post('/', async (req, res) => {
       `INSERT INTO companies (organization_id, name, trade_name, cnpj, logo_url, color,
         address, city, state, phone, email, punch_facial_required, punch_gps_required,
         cep, address_number, complement, neighborhood,
-        ie, im, website, legal_representative, legal_representative_cpf, notes)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23) RETURNING *`,
+        ie, im, website, legal_representative, legal_representative_cpf, notes,
+        latitude, longitude, default_radius_meters, geofence_strict, geofence_require_photo)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28) RETURNING *`,
       [req.user.organization_id, name.trim(), trade_name || null, cnpj || null,
         logo_url || null, color || '#3B82F6', address || null, city || null,
         state || null, phone || null, email || null,
         !!punch_facial_required, !!punch_gps_required,
         cep || null, address_number || null, complement || null, neighborhood || null,
         ie || null, im || null, website || null, legal_representative || null,
-        legal_representative_cpf || null, notes || null]
+        legal_representative_cpf || null, notes || null,
+        latitude ?? null, longitude ?? null, default_radius_meters ?? 200,
+        !!geofence_strict, !!geofence_require_photo]
     );
     res.status(201).json(rows[0]);
   } catch (err) {
