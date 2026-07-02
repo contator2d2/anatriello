@@ -339,10 +339,18 @@ router.get('/me', async (req, res) => {
     const token = authHeader.replace('Bearer ', '');
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     
-    const result = await query(
-      'SELECT id, email, name, is_superadmin, created_at FROM users WHERE id = $1',
-      [decoded.userId]
-    );
+    let result;
+    try {
+      result = await query(
+        'SELECT id, email, name, is_superadmin, created_at, COALESCE(must_change_password, false) AS must_change_password FROM users WHERE id = $1',
+        [decoded.userId]
+      );
+    } catch (_) {
+      result = await query(
+        'SELECT id, email, name, is_superadmin, created_at, false AS must_change_password FROM users WHERE id = $1',
+        [decoded.userId]
+      );
+    }
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Usuário não encontrado' });
