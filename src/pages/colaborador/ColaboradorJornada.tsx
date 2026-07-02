@@ -135,6 +135,15 @@ export default function ColaboradorJornada() {
           <p className="text-green-600 font-bold">+10:30</p>
         </div>
 
+        <button
+          onClick={() => dlMirror.mutate({ start: format(startOfMonth(date), "yyyy-MM-dd"), end: format(endOfMonth(date), "yyyy-MM-dd") })}
+          disabled={dlMirror.isPending}
+          className="w-full mt-4 bg-[#f97316] hover:bg-[#ea6a0a] text-white rounded-2xl py-3 flex items-center justify-center gap-2 font-semibold shadow-sm disabled:opacity-60"
+        >
+          {dlMirror.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+          Espelho de ponto do mês
+        </button>
+
         {isLoading && <Loader2 className="h-5 w-5 animate-spin mx-auto text-slate-400 mt-4" />}
       </div>
     </ColaboradorLayout>
