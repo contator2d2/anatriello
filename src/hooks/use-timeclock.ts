@@ -165,3 +165,45 @@ export function useAssignWorkSchedule() {
     },
   });
 }
+
+// ---------- RELATÓRIOS ----------
+export function useReportSummary(params: { start?: string; end?: string; company_id?: string; employee_id?: string }) {
+  const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v) as [string, string][]).toString();
+  return useQuery({
+    queryKey: ['timeclock', 'report-summary', qs],
+    queryFn: () => api<{ start: string; end: string; rows: any[] }>(`/api/timeclock/reports/summary?${qs}`),
+    enabled: !!(params.start && params.end),
+  });
+}
+
+export function useReportAbsencesLates(params: { start?: string; end?: string; company_id?: string; employee_id?: string }) {
+  const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v) as [string, string][]).toString();
+  return useQuery({
+    queryKey: ['timeclock', 'report-abslates', qs],
+    queryFn: () => api<{ start: string; end: string; items: any[] }>(`/api/timeclock/reports/absences-lates?${qs}`),
+    enabled: !!(params.start && params.end),
+  });
+}
+
+export function useTimeBankStatement(employee_id?: string, start?: string, end?: string) {
+  return useQuery({
+    queryKey: ['timeclock', 'tb-statement', employee_id, start, end],
+    queryFn: () => api<{ opening_min: number; entries: any[] }>(
+      `/api/timeclock/reports/time-bank-statement?employee_id=${employee_id}&start=${start}&end=${end}`
+    ),
+    enabled: !!(employee_id && start && end),
+  });
+}
+
+export async function downloadTimeclockCsv(endpoint: string, filename: string) {
+  const token = localStorage.getItem('auth_token') || localStorage.getItem('promotor_token');
+  const url = `${(import.meta.env.VITE_API_URL || '').replace(/\/$/, '')}${endpoint}`;
+  const r = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  if (!r.ok) throw new Error('Falha ao gerar CSV');
+  const blob = await r.blob();
+  const objUrl = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = objUrl; a.download = filename; document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(objUrl); a.remove(); }, 500);
+}
+
