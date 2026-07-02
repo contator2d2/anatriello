@@ -194,13 +194,19 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'Email e senha são obrigatórios' });
     }
 
-    // Find user
-    const result = await query(
-      `SELECT id, email, name, password_hash, is_superadmin,
-              COALESCE((SELECT must_change_password FROM users WHERE id = u.id), false) AS must_change_password
-       FROM users u WHERE lower(trim(email)) = lower(trim($1)) LIMIT 1`,
-      [email]
-    );
+    // Find user (must_change_password column may not exist yet — fall back)
+    let result;
+    try {
+      result = await query(
+        'SELECT id, email, name, password_hash, is_superadmin, COALESCE(must_change_password, false) AS must_change_password FROM users WHERE lower(trim(email)) = lower(trim($1)) LIMIT 1',
+        [email]
+      );
+    } catch (_) {
+      result = await query(
+        'SELECT id, email, name, password_hash, is_superadmin, false AS must_change_password FROM users WHERE lower(trim(email)) = lower(trim($1)) LIMIT 1',
+        [email]
+      );
+    }
 
     if (result.rows.length === 0) {
       return res.status(401).json({ error: 'Credenciais inválidas' });
