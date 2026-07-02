@@ -28,6 +28,10 @@ export function ColaboradorLayout({ children, title, showBack, rightSlot, bg = "
   const { branding } = useBranding() as any;
   const { isOnline, isSyncing } = useOfflineSync();
   const logo = branding?.logo_topbar || branding?.logo || anatrielloLogo.url;
+  useColabCapabilitiesSync();
+  const caps = useCaps();
+  const visibleTabs = tabs.filter(t => !t.cap || caps.includes(t.cap));
+  const cols = visibleTabs.length || 1;
 
   return (
     <div className={cn("min-h-screen flex flex-col", bg === "navy" ? "bg-[#0a1128] text-white" : "bg-[#f4f6fb] text-[#0f172a]")}>
