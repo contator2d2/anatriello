@@ -71,7 +71,7 @@ export default function ManagerApp() {
     finally { setLoading(false); }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { if (!mustChange) load(); }, [mustChange]);
 
   const submit = async () => {
     if (!action) return;
