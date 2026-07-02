@@ -168,12 +168,12 @@ export default function ColaboradorHome() {
         {isLoading && <Loader2 className="h-5 w-5 animate-spin mx-auto text-slate-400" />}
       </div>
 
-      {showFace && (
+      {showFace && employee?.face_descriptor && (
         <FaceVerifyDialog
           open={showFace}
           onOpenChange={setShowFace}
-          onVerified={() => { setShowFace(false); doPunch(true); }}
-          storedDescriptor={employee?.face_descriptor}
+          storedDescriptor={employee.face_descriptor}
+          onResult={(r) => { setShowFace(false); if (r.match) doPunch(true); else toast({ title: "Falha na validação facial", variant: "destructive" }); }}
         />
       )}
     </ColaboradorLayout>
