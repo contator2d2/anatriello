@@ -17,10 +17,13 @@ import {
   useTimeBankSummary, useTimeBankEntries, useAddTimeBankManual,
   useHolidays, useCreateHoliday, useDeleteHoliday, useImportNationalHolidays,
   useAdjustmentRequests, useReviewAdjustmentRequest,
+  useReportSummary, useReportAbsencesLates, useTimeBankStatement, downloadTimeclockCsv,
 } from '@/hooks/use-timeclock';
+import { useCompanies } from '@/hooks/use-companies';
 import { WorkSchedulesTab } from '@/components/rh/WorkSchedulesTab';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
-import { Calendar, Clock, TrendingUp, TrendingDown, CheckCircle2, XCircle, Pencil, History, Trash2, Plus } from 'lucide-react';
+import { Calendar, Clock, TrendingUp, TrendingDown, CheckCircle2, XCircle, Pencil, History, Trash2, Plus, Download, FileText, AlertCircle } from 'lucide-react';
+
 
 const STATUS_COLORS: Record<string, string> = {
   normal: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
@@ -568,6 +571,256 @@ function SolicitacoesTab() {
   );
 }
 
+// ============ RELATÓRIOS TAB ============
+function RelatoriosTab() {
+  const { toast } = useToast();
+  const { companies } = useCompanies();
+  const { data: employees = [] } = useEmployees({ status: 'ativo' });
+  const [companyId, setCompanyId] = useState<string>('all');
+  const [employeeId, setEmployeeId] = useState<string>('all');
+  const [start, setStart] = useState(() => format(startOfMonth(new Date()), 'yyyy-MM-dd'));
+  const [end, setEnd] = useState(() => format(endOfMonth(new Date()), 'yyyy-MM-dd'));
+  const [sub, setSub] = useState<'consolidado' | 'faltas' | 'banco'>('consolidado');
+
+  const filters = {
+    start, end,
+    company_id: companyId !== 'all' ? companyId : undefined,
+    employee_id: employeeId !== 'all' ? employeeId : undefined,
+  };
+
+  const { data: summary, isLoading: loadSum } = useReportSummary(sub === 'consolidado' ? filters : {});
+  const { data: absLates, isLoading: loadAbs } = useReportAbsencesLates(sub === 'faltas' ? filters : {});
+  const { data: tbStmt, isLoading: loadTb } = useTimeBankStatement(
+    sub === 'banco' && employeeId !== 'all' ? employeeId : undefined, start, end
+  );
+
+  const filteredEmployees = useMemo(
+    () => employees.filter((e: any) => companyId === 'all' || e.company_id === companyId),
+    [employees, companyId]
+  );
+
+  const runCsv = async (endpoint: string, fname: string) => {
+    try { await downloadTimeclockCsv(endpoint, fname); }
+    catch (e: any) { toast({ title: 'Erro', description: e?.message || 'Falha ao baixar', variant: 'destructive' }); }
+  };
+
+  const buildQs = () => new URLSearchParams(
+    Object.entries(filters).filter(([, v]) => v) as [string, string][]
+  ).toString();
+
+  const totals = useMemo(() => {
+    if (!summary?.rows) return null;
+    const acc = { worked: 0, expected: 0, overtime: 0, night: 0, absences: 0, lates: 0, tb: 0 };
+    for (const r of summary.rows) {
+      acc.worked += r.worked_min; acc.expected += r.expected_min;
+      acc.overtime += r.overtime_min; acc.night += r.night_bonus_min;
+      acc.absences += r.absences; acc.lates += r.lates; acc.tb += r.tb_balance_min;
+    }
+    return acc;
+  }, [summary]);
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2"><FileText className="h-5 w-5" /> Relatórios Operacionais</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+            <div>
+              <Label className="text-xs">Empresa</Label>
+              <Select value={companyId} onValueChange={(v) => { setCompanyId(v); setEmployeeId('all'); }}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas</SelectItem>
+                  {companies.map((c: any) => <SelectItem key={c.id} value={c.id}>{c.trade_name || c.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs">Colaborador</Label>
+              <Select value={employeeId} onValueChange={setEmployeeId}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  {filteredEmployees.map((e: any) => <SelectItem key={e.id} value={e.id}>{e.full_name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs">Início</Label>
+              <Input type="date" value={start} onChange={(e) => setStart(e.target.value)} />
+            </div>
+            <div>
+              <Label className="text-xs">Fim</Label>
+              <Input type="date" value={end} onChange={(e) => setEnd(e.target.value)} />
+            </div>
+            <div className="flex items-end">
+              <Button className="w-full" variant="outline" onClick={() => runCsv(`/api/timeclock/reports/payroll.csv?${buildQs()}`, `folha-${start}_${end}.csv`)}>
+                <Download className="h-4 w-4 mr-1" /> CSV Folha
+              </Button>
+            </div>
+          </div>
+
+          <Tabs value={sub} onValueChange={(v) => setSub(v as any)}>
+            <TabsList>
+              <TabsTrigger value="consolidado">Consolidado</TabsTrigger>
+              <TabsTrigger value="faltas">Faltas e Atrasos</TabsTrigger>
+              <TabsTrigger value="banco">Extrato Banco de Horas</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="consolidado" className="mt-4 space-y-3">
+              {totals && (
+                <div className="grid grid-cols-2 md:grid-cols-7 gap-2 text-sm">
+                  <div className="rounded border p-2"><div className="text-xs text-muted-foreground">Trabalhado</div><div className="font-semibold">{fmtMin(totals.worked)}</div></div>
+                  <div className="rounded border p-2"><div className="text-xs text-muted-foreground">Previsto</div><div className="font-semibold">{fmtMin(totals.expected)}</div></div>
+                  <div className="rounded border p-2"><div className="text-xs text-muted-foreground">Extras</div><div className="font-semibold text-blue-600">{fmtMin(totals.overtime)}</div></div>
+                  <div className="rounded border p-2"><div className="text-xs text-muted-foreground">Adic. Noturno</div><div className="font-semibold">{fmtMin(totals.night)}</div></div>
+                  <div className="rounded border p-2"><div className="text-xs text-muted-foreground">Faltas</div><div className="font-semibold text-red-600">{totals.absences}</div></div>
+                  <div className="rounded border p-2"><div className="text-xs text-muted-foreground">Atrasos</div><div className="font-semibold text-amber-600">{totals.lates}</div></div>
+                  <div className="rounded border p-2"><div className="text-xs text-muted-foreground">Saldo BH</div><div className="font-semibold">{fmtMin(totals.tb)}</div></div>
+                </div>
+              )}
+              <div className="border rounded overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Colaborador</TableHead>
+                      <TableHead className="text-right">Trab.</TableHead>
+                      <TableHead className="text-right">Prev.</TableHead>
+                      <TableHead className="text-right">Extras</TableHead>
+                      <TableHead className="text-right">Adic. Not.</TableHead>
+                      <TableHead className="text-right">Faltas</TableHead>
+                      <TableHead className="text-right">Atrasos</TableHead>
+                      <TableHead className="text-right">Saldo</TableHead>
+                      <TableHead className="text-right">BH</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {loadSum && <TableRow><TableCell colSpan={9} className="text-center py-6 text-muted-foreground">Calculando...</TableCell></TableRow>}
+                    {!loadSum && summary?.rows?.length === 0 && (
+                      <TableRow><TableCell colSpan={9} className="text-center py-6 text-muted-foreground">Nenhum colaborador no filtro.</TableCell></TableRow>
+                    )}
+                    {summary?.rows?.map((r: any) => (
+                      <TableRow key={r.employee_id}>
+                        <TableCell className="font-medium">{r.full_name}</TableCell>
+                        <TableCell className="text-right tabular-nums">{fmtMin(r.worked_min)}</TableCell>
+                        <TableCell className="text-right tabular-nums">{fmtMin(r.expected_min)}</TableCell>
+                        <TableCell className="text-right tabular-nums text-blue-600">{fmtMin(r.overtime_min)}</TableCell>
+                        <TableCell className="text-right tabular-nums">{fmtMin(r.night_bonus_min)}</TableCell>
+                        <TableCell className="text-right"><Badge variant={r.absences > 0 ? 'destructive' : 'secondary'}>{r.absences}</Badge></TableCell>
+                        <TableCell className="text-right"><Badge variant={r.lates > 0 ? 'outline' : 'secondary'}>{r.lates}</Badge></TableCell>
+                        <TableCell className={`text-right tabular-nums ${r.balance_min < 0 ? 'text-red-600' : r.balance_min > 0 ? 'text-emerald-600' : ''}`}>{fmtMin(r.balance_min)}</TableCell>
+                        <TableCell className={`text-right tabular-nums ${r.tb_balance_min < 0 ? 'text-red-600' : 'text-emerald-600'}`}>{fmtMin(r.tb_balance_min)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="faltas" className="mt-4 space-y-3">
+              <div className="flex justify-end">
+                <Button variant="outline" size="sm" onClick={() => runCsv(`/api/timeclock/reports/absences-lates.csv?${buildQs()}`, `faltas-atrasos-${start}_${end}.csv`)}>
+                  <Download className="h-4 w-4 mr-1" /> Exportar CSV
+                </Button>
+              </div>
+              <div className="border rounded overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Data</TableHead>
+                      <TableHead>Colaborador</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Trabalhado</TableHead>
+                      <TableHead className="text-right">Previsto</TableHead>
+                      <TableHead className="text-right">Saldo</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {loadAbs && <TableRow><TableCell colSpan={6} className="text-center py-6 text-muted-foreground">Calculando...</TableCell></TableRow>}
+                    {!loadAbs && absLates?.items?.length === 0 && (
+                      <TableRow><TableCell colSpan={6} className="text-center py-6 text-muted-foreground">Nenhuma ocorrência.</TableCell></TableRow>
+                    )}
+                    {absLates?.items?.map((it: any, i: number) => (
+                      <TableRow key={`${it.employee_id}-${it.date}-${i}`}>
+                        <TableCell className="tabular-nums">{format(new Date(it.date + 'T00:00:00'), 'dd/MM/yyyy')}</TableCell>
+                        <TableCell className="font-medium">{it.full_name}</TableCell>
+                        <TableCell>
+                          <Badge className={STATUS_COLORS[it.status] || ''}>
+                            {it.odd_punch && <AlertCircle className="h-3 w-3 mr-1 inline" />}
+                            {it.status}{it.odd_punch ? ' (batidas ímpares)' : ''}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">{fmtMin(it.worked_min)}</TableCell>
+                        <TableCell className="text-right tabular-nums">{fmtMin(it.expected_min)}</TableCell>
+                        <TableCell className={`text-right tabular-nums ${it.balance_min < 0 ? 'text-red-600' : ''}`}>{fmtMin(it.balance_min)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="banco" className="mt-4 space-y-3">
+              {employeeId === 'all' && (
+                <div className="text-sm text-muted-foreground border rounded p-3 bg-muted/30">
+                  Selecione um colaborador para ver o extrato do banco de horas.
+                </div>
+              )}
+              {employeeId !== 'all' && (
+                <>
+                  <div className="text-sm">
+                    Saldo anterior ao período: <span className="font-semibold tabular-nums">{fmtMin(tbStmt?.opening_min || 0)}</span>
+                  </div>
+                  <div className="border rounded overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Data</TableHead>
+                          <TableHead>Tipo</TableHead>
+                          <TableHead>Origem</TableHead>
+                          <TableHead>Descrição</TableHead>
+                          <TableHead>Por</TableHead>
+                          <TableHead className="text-right">Minutos</TableHead>
+                          <TableHead className="text-right">Saldo</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {loadTb && <TableRow><TableCell colSpan={7} className="text-center py-6 text-muted-foreground">Carregando...</TableCell></TableRow>}
+                        {!loadTb && tbStmt?.entries?.length === 0 && (
+                          <TableRow><TableCell colSpan={7} className="text-center py-6 text-muted-foreground">Sem movimentações no período.</TableCell></TableRow>
+                        )}
+                        {(() => {
+                          let running = tbStmt?.opening_min || 0;
+                          return tbStmt?.entries?.map((e: any) => {
+                            running += e.minutes;
+                            return (
+                              <TableRow key={e.id}>
+                                <TableCell className="tabular-nums">{format(new Date(e.entry_date + 'T00:00:00'), 'dd/MM/yyyy')}</TableCell>
+                                <TableCell><Badge variant={e.kind === 'credit' ? 'default' : 'destructive'}>{e.kind === 'credit' ? 'Crédito' : 'Débito'}</Badge></TableCell>
+                                <TableCell><Badge variant="outline">{e.source}</Badge></TableCell>
+                                <TableCell className="max-w-xs truncate">{e.description || '-'}</TableCell>
+                                <TableCell className="text-xs text-muted-foreground">{e.created_by_name || '-'}</TableCell>
+                                <TableCell className={`text-right tabular-nums ${e.minutes < 0 ? 'text-red-600' : 'text-emerald-600'}`}>{fmtMin(e.minutes)}</TableCell>
+                                <TableCell className="text-right tabular-nums font-semibold">{fmtMin(running)}</TableCell>
+                              </TableRow>
+                            );
+                          });
+                        })()}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </>
+              )}
+            </TabsContent>
+          </Tabs>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 // ============ PÁGINA PRINCIPAL ============
 export default function RHPontoV2() {
   return (
@@ -575,7 +828,7 @@ export default function RHPontoV2() {
       <div className="p-4 md:p-6 space-y-4">
         <div>
           <h1 className="text-2xl font-bold">Ponto Eletrônico</h1>
-          <p className="text-muted-foreground text-sm">Cartão ponto, banco de horas 1:1, feriados e ajustes.</p>
+          <p className="text-muted-foreground text-sm">Cartão ponto, banco de horas 1:1, feriados, ajustes e relatórios.</p>
         </div>
 
         <Tabs defaultValue="cartao">
@@ -585,14 +838,17 @@ export default function RHPontoV2() {
             <TabsTrigger value="jornadas">Jornadas</TabsTrigger>
             <TabsTrigger value="feriados">Feriados</TabsTrigger>
             <TabsTrigger value="ajustes">Solicitações</TabsTrigger>
+            <TabsTrigger value="relatorios">Relatórios</TabsTrigger>
           </TabsList>
           <TabsContent value="cartao" className="mt-4"><CartaoPontoTab /></TabsContent>
           <TabsContent value="banco" className="mt-4"><BancoHorasTab /></TabsContent>
           <TabsContent value="jornadas" className="mt-4"><WorkSchedulesTab /></TabsContent>
           <TabsContent value="feriados" className="mt-4"><FeriadosTab /></TabsContent>
           <TabsContent value="ajustes" className="mt-4"><SolicitacoesTab /></TabsContent>
+          <TabsContent value="relatorios" className="mt-4"><RelatoriosTab /></TabsContent>
         </Tabs>
       </div>
     </MainLayout>
   );
 }
+

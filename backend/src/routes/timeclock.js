@@ -593,6 +593,193 @@ router.post('/closings', async (req, res) => {
   } catch (err) { logError('timeclock.closings.post', err); res.status(500).json({ error: 'Erro' }); }
 });
 
+// ============================================
+// RELATÓRIOS OPERACIONAIS
+// ============================================
+async function buildEmployeesReport({ orgId, companyId, start, end, employeeId }) {
+  const params = [orgId];
+  let sql = `SELECT id, full_name, cpf, registration_number, company_id
+             FROM employees WHERE organization_id = $1 AND status = 'ativo'`;
+  let i = 2;
+  if (companyId) { sql += ` AND company_id = $${i++}`; params.push(companyId); }
+  if (employeeId) { sql += ` AND id = $${i++}`; params.push(employeeId); }
+  sql += ` ORDER BY full_name`;
+  const emps = (await query(sql, params)).rows;
+
+  const rows = [];
+  for (const emp of emps) {
+    let result = { days: [] };
+    try {
+      result = await recalcEmployeePeriod({ organizationId: orgId, employeeId: emp.id, startDate: start, endDate: end });
+    } catch (err) { logError('reports.recalc', err); }
+
+    let workedMin = 0, expectedMin = 0, overtimeMin = 0, overtimeBonusMin = 0;
+    let nightMin = 0, nightBonusMin = 0, creditMin = 0, debitMin = 0;
+    let absences = 0, lates = 0, incomplete = 0, holidaysWorked = 0, sundaysWorked = 0, dsrLost = 0;
+    const detail = [];
+
+    for (const d of result.days || []) {
+      workedMin += d.total_worked_min || 0;
+      expectedMin += d.expected_min || 0;
+      overtimeMin += d.overtime_min || 0;
+      overtimeBonusMin += d.overtime_bonus_min || 0;
+      nightMin += d.night_min || 0;
+      nightBonusMin += d.night_bonus_min || 0;
+      creditMin += d.credit_min || 0;
+      debitMin += d.debit_min || 0;
+      if (d.status === 'falta') absences++;
+      if (d.status === 'atraso') lates++;
+      if (d.odd_punch) incomplete++;
+      if (d.is_holiday && (d.total_worked_min || 0) > 0) holidaysWorked++;
+      if (d.is_sunday && (d.total_worked_min || 0) > 0) sundaysWorked++;
+      if (d.dsr_lost) dsrLost++;
+      if (['falta', 'atraso'].includes(d.status) || d.odd_punch) {
+        detail.push({
+          date: d.date, status: d.status, odd_punch: !!d.odd_punch,
+          worked_min: d.total_worked_min || 0, expected_min: d.expected_min || 0,
+          balance_min: d.balance_min || 0,
+        });
+      }
+    }
+
+    const tbBal = await query(
+      `SELECT COALESCE(SUM(minutes),0)::int AS bal FROM time_bank_entries WHERE employee_id = $1`,
+      [emp.id]
+    );
+
+    rows.push({
+      employee_id: emp.id, full_name: emp.full_name, cpf: emp.cpf,
+      registration_number: emp.registration_number,
+      worked_min: workedMin, expected_min: expectedMin,
+      overtime_min: overtimeMin, overtime_bonus_min: overtimeBonusMin,
+      night_min: nightMin, night_bonus_min: nightBonusMin,
+      credit_min: creditMin, debit_min: debitMin,
+      balance_min: workedMin - expectedMin,
+      tb_balance_min: tbBal.rows[0]?.bal || 0,
+      absences, lates, incomplete, holidays_worked: holidaysWorked,
+      sundays_worked: sundaysWorked, dsr_lost: dsrLost,
+      detail,
+    });
+  }
+  return rows;
+}
+
+// Extrato consolidado (banco de horas + horas do período)
+router.get('/reports/summary', async (req, res) => {
+  try {
+    const orgId = await resolveOrgId(req);
+    const { start, end, company_id, employee_id } = req.query;
+    if (!start || !end) return res.status(400).json({ error: 'Período obrigatório' });
+    const rows = await buildEmployeesReport({ orgId, companyId: company_id, start, end, employeeId: employee_id });
+    res.json({ start, end, rows });
+  } catch (err) { logError('reports.summary', err); res.status(500).json({ error: 'Erro ao gerar relatório' }); }
+});
+
+// Faltas e atrasos detalhado
+router.get('/reports/absences-lates', async (req, res) => {
+  try {
+    const orgId = await resolveOrgId(req);
+    const { start, end, company_id, employee_id } = req.query;
+    if (!start || !end) return res.status(400).json({ error: 'Período obrigatório' });
+    const rows = await buildEmployeesReport({ orgId, companyId: company_id, start, end, employeeId: employee_id });
+    const items = [];
+    for (const r of rows) {
+      for (const d of r.detail) {
+        items.push({
+          employee_id: r.employee_id, full_name: r.full_name, cpf: r.cpf,
+          registration_number: r.registration_number, ...d,
+        });
+      }
+    }
+    items.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.full_name.localeCompare(b.full_name)));
+    res.json({ start, end, items });
+  } catch (err) { logError('reports.abslates', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// Extrato banco de horas por colaborador (movimentações)
+router.get('/reports/time-bank-statement', async (req, res) => {
+  try {
+    const orgId = await resolveOrgId(req);
+    const { employee_id, start, end } = req.query;
+    if (!employee_id || !start || !end) return res.status(400).json({ error: 'Parâmetros obrigatórios' });
+    const r = await query(
+      `SELECT tb.*, u.name AS created_by_name
+       FROM time_bank_entries tb
+       LEFT JOIN users u ON u.id = tb.created_by
+       WHERE tb.organization_id = $1 AND tb.employee_id = $2 AND tb.entry_date BETWEEN $3 AND $4
+       ORDER BY tb.entry_date, tb.created_at`,
+      [orgId, employee_id, start, end]
+    );
+    const prev = await query(
+      `SELECT COALESCE(SUM(minutes),0)::int AS bal FROM time_bank_entries
+       WHERE employee_id = $1 AND entry_date < $2`,
+      [employee_id, start]
+    );
+    res.json({ opening_min: prev.rows[0]?.bal || 0, entries: r.rows });
+  } catch (err) { logError('reports.tb.statement', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+function toCsv(headers, rows) {
+  const esc = (v) => {
+    if (v == null) return '';
+    const s = String(v);
+    return /[",;\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  return [headers.join(';'), ...rows.map(r => r.map(esc).join(';'))].join('\r\n');
+}
+const minToHours = (min) => (Math.round((min || 0) / 60 * 100) / 100).toFixed(2).replace('.', ',');
+
+// Export CSV para folha
+router.get('/reports/payroll.csv', async (req, res) => {
+  try {
+    const orgId = await resolveOrgId(req);
+    const { start, end, company_id } = req.query;
+    if (!start || !end) return res.status(400).json({ error: 'Período obrigatório' });
+    const rows = await buildEmployeesReport({ orgId, companyId: company_id, start, end });
+    const headers = [
+      'Matricula', 'CPF', 'Colaborador', 'Horas Trabalhadas', 'Horas Previstas',
+      'HE 50%', 'Adic. HE 50%', 'Adic. Noturno', 'Horas Noturnas',
+      'Domingos Trab.', 'Feriados Trab.', 'DSR Perdidos',
+      'Faltas', 'Atrasos', 'Incompletos', 'Saldo Periodo', 'Saldo Banco Horas'
+    ];
+    const csvRows = rows.map(r => [
+      r.registration_number || '', r.cpf || '', r.full_name,
+      minToHours(r.worked_min), minToHours(r.expected_min),
+      minToHours(r.overtime_min), minToHours(r.overtime_bonus_min),
+      minToHours(r.night_bonus_min), minToHours(r.night_min),
+      r.sundays_worked, r.holidays_worked, r.dsr_lost,
+      r.absences, r.lates, r.incomplete,
+      minToHours(r.balance_min), minToHours(r.tb_balance_min),
+    ]);
+    const csv = '\uFEFF' + toCsv(headers, csvRows);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="folha-${start}_${end}.csv"`);
+    res.send(csv);
+  } catch (err) { logError('reports.payroll.csv', err); res.status(500).json({ error: 'Erro ao gerar CSV' }); }
+});
+
+// Export CSV faltas/atrasos
+router.get('/reports/absences-lates.csv', async (req, res) => {
+  try {
+    const orgId = await resolveOrgId(req);
+    const { start, end, company_id, employee_id } = req.query;
+    if (!start || !end) return res.status(400).json({ error: 'Período obrigatório' });
+    const rows = await buildEmployeesReport({ orgId, companyId: company_id, start, end, employeeId: employee_id });
+    const items = [];
+    for (const r of rows) for (const d of r.detail) items.push({ ...r, ...d });
+    const headers = ['Data', 'Matricula', 'CPF', 'Colaborador', 'Status', 'Batidas Impares', 'Trabalhado', 'Previsto', 'Saldo'];
+    const csvRows = items.map(it => [
+      it.date, it.registration_number || '', it.cpf || '', it.full_name,
+      it.status, it.odd_punch ? 'Sim' : 'Nao',
+      minToHours(it.worked_min), minToHours(it.expected_min), minToHours(it.balance_min),
+    ]);
+    const csv = '\uFEFF' + toCsv(headers, csvRows);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="faltas-atrasos-${start}_${end}.csv"`);
+    res.send(csv);
+  } catch (err) { logError('reports.abslates.csv', err); res.status(500).json({ error: 'Erro' }); }
+});
+
 // ==== ESPELHO DE PONTO (PDF) - RH ====
 import { generateMirrorPDF, generateReceiptPDF } from '../services/receipt-pdf.js';
 
