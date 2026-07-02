@@ -16,8 +16,13 @@ function logError(scope, err) {
 router.get('/pending', async (req, res) => {
   try {
     const orgId = req.user.organization_id;
-    const supervisorFilter = req.query.mine === '1'
-      ? `AND (e.supervisor_id IN (SELECT id FROM employees WHERE user_id = $2) OR e.supervisor_id IS NULL)`
+    const role = String(req.user?.role || '').toLowerCase();
+    const shouldLimitToOwnTeam = req.query.mine === '1' || role === 'manager';
+    const supervisorFilter = shouldLimitToOwnTeam
+      ? `AND (
+           e.direct_manager_id IN (SELECT id FROM employees WHERE user_id = $2)
+           OR e.supervisor_id IN (SELECT id FROM employees WHERE user_id = $2)
+         )`
       : '';
     const params = supervisorFilter ? [orgId, req.userId] : [orgId];
 

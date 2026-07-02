@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
-import { useEmployees } from "@/hooks/use-rh";
+import { useEmployees, useGrantManagerAccess } from "@/hooks/use-rh";
 import { useGrantAppAccess, useBlockAppAccess, useResetAppPassword } from "@/hooks/use-promotor";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Search, Shield, ShieldOff, KeyRound, Copy, Smartphone, UserCheck, UserX, RefreshCw, Loader2 } from "lucide-react";
+import { Search, Shield, ShieldOff, KeyRound, Copy, Smartphone, UserCheck, UserX, RefreshCw, Loader2, BriefcaseBusiness } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -34,11 +34,14 @@ export default function RHAcessos() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("todos");
   const [grantDialog, setGrantDialog] = useState<any>(null);
+  const [managerDialog, setManagerDialog] = useState<any>(null);
   const [tempPassword, setTempPassword] = useState("");
+  const [managerPassword, setManagerPassword] = useState("");
   const { toast } = useToast();
 
   const { data: employees = [], isLoading } = useEmployees();
   const grantAccess = useGrantAppAccess();
+  const grantManagerAccess = useGrantManagerAccess();
   const blockAccess = useBlockAppAccess();
   const resetPassword = useResetAppPassword();
 
@@ -71,6 +74,12 @@ export default function RHAcessos() {
     setGrantDialog(emp);
   };
 
+  const handleManagerGrant = (emp: any) => {
+    const pw = generateTempPassword();
+    setManagerPassword(pw);
+    setManagerDialog(emp);
+  };
+
   const confirmGrant = async () => {
     if (!grantDialog) return;
     try {
@@ -96,6 +105,17 @@ export default function RHAcessos() {
     try {
       await resetPassword.mutateAsync({ employee_id: emp.id, new_password: pw });
       toast({ title: "Senha resetada!", description: `Nova senha: ${pw}` });
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+    }
+  };
+
+  const confirmManagerGrant = async () => {
+    if (!managerDialog) return;
+    try {
+      await grantManagerAccess.mutateAsync({ employee_id: managerDialog.id, email: managerDialog.email, password: managerPassword });
+      toast({ title: "Acesso de gestor liberado!", description: `Login: ${managerDialog.email} · Senha: ${managerPassword}` });
+      setManagerDialog(null);
     } catch (err: any) {
       toast({ title: "Erro", description: err.message, variant: "destructive" });
     }
@@ -184,6 +204,7 @@ export default function RHAcessos() {
                       <TableHead>CPF</TableHead>
                       <TableHead>Status RH</TableHead>
                       <TableHead>Status App</TableHead>
+                      <TableHead>Acesso Gestor</TableHead>
                       <TableHead>Último Login</TableHead>
                       <TableHead className="text-right">Ações</TableHead>
                     </TableRow>
@@ -213,11 +234,19 @@ export default function RHAcessos() {
                               {statusInfo.label}
                             </Badge>
                           </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className={`text-[10px] ${emp.user_id ? 'bg-green-500/10 text-green-700 border-green-200' : 'bg-muted text-muted-foreground'}`}>
+                              {emp.user_id ? 'Liberado' : 'Sem acesso'}
+                            </Badge>
+                          </TableCell>
                           <TableCell className="text-xs text-muted-foreground">
                             {emp.app_last_login ? format(new Date(emp.app_last_login), "dd/MM/yy HH:mm", { locale: ptBR }) : "—"}
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center justify-end gap-1">
+                              <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => handleManagerGrant(emp)} disabled={!emp.email}>
+                                <BriefcaseBusiness className="h-3 w-3" /> {emp.user_id ? 'Reset gestor' : 'Gestor'}
+                              </Button>
                               {!isActive ? (
                                 <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => handleGrant(emp)}>
                                   <Shield className="h-3 w-3" /> Liberar
@@ -239,7 +268,7 @@ export default function RHAcessos() {
                     })}
                     {filtered.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                        <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                           Nenhum colaborador encontrado
                         </TableCell>
                       </TableRow>
@@ -281,6 +310,40 @@ export default function RHAcessos() {
               <Button onClick={confirmGrant} disabled={grantAccess.isPending}>
                 {grantAccess.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
                 Liberar Acesso
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!managerDialog} onOpenChange={v => !v && setManagerDialog(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{managerDialog?.user_id ? 'Resetar Acesso do Gestor' : 'Liberar Acesso de Gestor'}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <p className="text-sm text-foreground font-medium">{managerDialog?.full_name}</p>
+              <p className="text-xs text-muted-foreground">Login: {managerDialog?.email || 'cadastre um e-mail primeiro'}</p>
+            </div>
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">Senha temporária gerada:</p>
+              <div className="flex items-center gap-2">
+                <Input value={managerPassword} readOnly className="font-mono text-base" />
+                <Button variant="outline" size="icon" onClick={() => { navigator.clipboard.writeText(managerPassword); toast({ title: "Copiado!" }); }}>
+                  <Copy className="h-4 w-4" />
+                </Button>
+                <Button variant="outline" size="icon" onClick={() => setManagerPassword(generateTempPassword())}>
+                  <RefreshCw className="h-4 w-4" />
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">O gestor entra em /gestor/login ou /gestor com este e-mail e senha. Este acesso é separado do App do Colaborador.</p>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setManagerDialog(null)}>Cancelar</Button>
+              <Button onClick={confirmManagerGrant} disabled={grantManagerAccess.isPending || !managerDialog?.email}>
+                {grantManagerAccess.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                Liberar Gestor
               </Button>
             </div>
           </div>

@@ -4,9 +4,10 @@ import { Loader2 } from 'lucide-react';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
+  loginPath?: string;
 }
 
-const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
+const ProtectedRoute = ({ children, loginPath = '/login' }: ProtectedRouteProps) => {
   const { isAuthenticated, isLoading } = useAuth();
 
   if (isLoading) {
@@ -18,7 +19,7 @@ const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
   }
 
   if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to={loginPath} replace />;
   }
 
   return <>{children}</>;

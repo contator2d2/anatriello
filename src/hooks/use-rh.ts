@@ -71,6 +71,14 @@ export function useDeleteEmployee() {
   });
 }
 
+export function useGrantManagerAccess() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ employee_id, ...data }: any) => api<any>(`/api/rh/employees/${employee_id}/manager-access`, { method: 'POST', body: data }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['rh-employees'] }),
+  });
+}
+
 // ===== TIME RECORDS =====
 export function useTimeRecords(filters?: { employee_id?: string; start_date?: string; end_date?: string }) {
   const params = new URLSearchParams();

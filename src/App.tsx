@@ -78,6 +78,7 @@ import RHBiometria from "./pages/RHBiometria";
 import RHMapaOperacional from "./pages/RHMapaOperacional";
 import RHLogs from "./pages/RHLogs";
 import ManagerApp from "./pages/ManagerApp";
+import ManagerLogin from "./pages/ManagerLogin";
 import LiveMaps from "./pages/LiveMaps";
   import MerchDashboard from "./pages/MerchDashboard";
 import MerchMarcas from "./pages/MerchMarcas";
@@ -239,6 +240,7 @@ const App = () => (
         <AuthProvider>
           <Routes>
             <Route path="/login" element={<Login />} />
+            <Route path="/gestor/login" element={<ManagerLogin />} />
             <Route path="/cadastro" element={<Cadastro />} />
             <Route path="/" element={<SmartRedirect />} />
             <Route path="/landing" element={<LandingPage />} />
@@ -291,7 +293,7 @@ const App = () => (
             <Route path="/rh/holding" element={<ProtectedRoute><RHHolding /></ProtectedRoute>} />
             <Route path="/rh/dashboard" element={<ProtectedRoute><RHDashboard /></ProtectedRoute>} />
             <Route path="/rh/ponto" element={<ProtectedRoute><RHPontoV2 /></ProtectedRoute>} />
-            <Route path="/gestor" element={<ProtectedRoute><ManagerApp /></ProtectedRoute>} />
+            <Route path="/gestor/*" element={<ProtectedRoute loginPath="/gestor/login"><ManagerApp /></ProtectedRoute>} />
             <Route path="/rh/ponto-legacy" element={<ProtectedRoute><RHPonto /></ProtectedRoute>} />
             <Route path="/rh/holerite" element={<ProtectedRoute><RHHolerite /></ProtectedRoute>} />
             <Route path="/rh/documentos" element={<ProtectedRoute><RHDocumentos /></ProtectedRoute>} />
