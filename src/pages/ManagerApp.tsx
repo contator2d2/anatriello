@@ -26,7 +26,7 @@ const KIND_META: Record<string, { label: string; icon: any; endpoint: string }> 
 };
 
 export default function ManagerApp() {
-  const { logout } = useAuth();
+  const { logout, user, refreshUser } = useAuth();
   const navigate = useNavigate();
   const [data, setData] = useState<Pending | null>(null);
   const [loading, setLoading] = useState(true);
@@ -34,6 +34,33 @@ export default function ManagerApp() {
   const [action, setAction] = useState<null | { kind: string; id: string; type: 'approve' | 'reject'; label: string }>(null);
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
+
+  // Forced password change on first login (temporary password)
+  const mustChange = !!user?.must_change_password;
+  const [pwCurrent, setPwCurrent] = useState('');
+  const [pwNew, setPwNew] = useState('');
+  const [pwConfirm, setPwConfirm] = useState('');
+  const [pwBusy, setPwBusy] = useState(false);
+
+  const submitPasswordChange = async () => {
+    if (pwNew.length < 6) { toast.error('A nova senha precisa ter pelo menos 6 caracteres'); return; }
+    if (pwNew !== pwConfirm) { toast.error('A confirmação não confere'); return; }
+    setPwBusy(true);
+    try {
+      await api('/api/auth/password', {
+        method: 'PUT',
+        body: JSON.stringify({ currentPassword: pwCurrent, newPassword: pwNew }),
+        auth: true,
+      });
+      toast.success('Senha alterada com sucesso');
+      setPwCurrent(''); setPwNew(''); setPwConfirm('');
+      await refreshUser();
+    } catch (e: any) {
+      toast.error(e?.message || 'Não foi possível alterar a senha');
+    } finally {
+      setPwBusy(false);
+    }
+  };
 
   const load = async () => {
     setLoading(true);
