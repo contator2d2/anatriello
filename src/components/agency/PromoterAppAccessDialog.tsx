@@ -14,13 +14,13 @@ interface Props {
   promoter: { id: string; name: string; cpf: string; whatsapp?: string } | null;
 }
 
-// Padrão de senha: "ayra" + 3 números + 2 letras
+// Padrão de senha: "anatri" + 3 números + 2 letras
 function generateDefaultPassword() {
   const nums = Math.floor(100 + Math.random() * 900).toString();
   const letters = Array.from({ length: 2 }, () =>
     String.fromCharCode(97 + Math.floor(Math.random() * 26))
   ).join('');
-  return `ayra${nums}${letters}`;
+  return `anatri${nums}${letters}`;
 }
 
 export default function PromoterAppAccessDialog({ open, onOpenChange, promoter }: Props) {
@@ -115,7 +115,7 @@ export default function PromoterAppAccessDialog({ open, onOpenChange, promoter }
                 </Button>
               </div>
               <p className="text-[11px] text-muted-foreground mt-1">
-                Padrão sugerido: <span className="font-mono">ayra</span> + 3 números + 2 letras.
+                Padrão sugerido: <span className="font-mono">anatri</span> + 3 números + 2 letras.
               </p>
             </div>
 

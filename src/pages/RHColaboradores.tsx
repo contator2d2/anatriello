@@ -1175,7 +1175,7 @@ function generateTempPassword() {
   const nums = String(Math.floor(Math.random() * 900 + 100));
   const chars = 'abcdefghijklmnopqrstuvwxyz';
   const letters = chars[Math.floor(Math.random() * 26)] + chars[Math.floor(Math.random() * 26)];
-  return `ayra${nums}${letters}`;
+  return `anatri${nums}${letters}`;
 }
 
 function PromotorAccessToggle({ employeeId }: { employeeId: string }) {

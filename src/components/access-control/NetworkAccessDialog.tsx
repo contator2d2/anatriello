@@ -31,7 +31,7 @@ function genPassword() {
   const nums = "23456789";
   const n = Array.from({ length: 3 }, () => nums[Math.floor(Math.random() * nums.length)]).join("");
   const l = Array.from({ length: 2 }, () => letters[Math.floor(Math.random() * letters.length)]).join("");
-  return `ayra${n}${l}`;
+  return `anatri${n}${l}`;
 }
 
 export function NetworkAccessDialog({ open, onOpenChange, networkId, networkName, defaultEmail }: Props) {

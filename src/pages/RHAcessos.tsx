@@ -27,7 +27,7 @@ function generateTempPassword() {
   const nums = Array.from({ length: 3 }, () => Math.floor(Math.random() * 10)).join('');
   const chars = 'abcdefghijklmnopqrstuvwxyz';
   const letters = Array.from({ length: 2 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
-  return `ayra${nums}${letters}`;
+  return `anatri${nums}${letters}`;
 }
 
 export default function RHAcessos() {
