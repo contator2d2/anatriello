@@ -351,7 +351,9 @@ export default function RHAcessos() {
               <p className="text-[11px] text-muted-foreground">
                 Define o que o colaborador pode fazer dentro do app (ponto, holerite, férias etc.).
               </p>
+            </div>
             <div className="flex gap-2 justify-end">
+
               <Button variant="outline" onClick={() => setGrantDialog(null)}>Cancelar</Button>
               <Button onClick={confirmGrant} disabled={grantAccess.isPending}>
                 {grantAccess.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
