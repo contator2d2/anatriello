@@ -466,6 +466,7 @@ export default function RHColaboradores() {
                     <TableCell><Badge className={STATUS_COLORS[emp.status] || ""}>{emp.status}</Badge></TableCell>
                     <TableCell>
                       <div className="flex gap-1">
+                        <Button variant="ghost" size="icon" title="Histórico de notificações" onClick={e => { e.stopPropagation(); setNotifEmployee({ id: emp.id, name: emp.full_name }); setNotifOpen(true); }}><Bell className="h-4 w-4" /></Button>
                         <Button variant="ghost" size="icon" onClick={e => { e.stopPropagation(); openEdit(emp); }}><Edit className="h-4 w-4" /></Button>
                         <Button variant="ghost" size="icon" onClick={e => { e.stopPropagation(); handleDelete(emp.id); }}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                       </div>
