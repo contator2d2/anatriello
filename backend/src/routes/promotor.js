@@ -188,6 +188,7 @@ router.post('/login', async (req, res) => {
         profile: employee.worker_profile,
         organization_id: employee.organization_id,
         force_password_change: employee.force_password_change && employee.temp_password,
+        capabilities: await getEmployeeCapabilities(query, employee.id).catch(() => []),
       },
     });
   } catch (err) {
