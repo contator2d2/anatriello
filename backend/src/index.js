@@ -46,6 +46,7 @@ import globalAgentsRoutes from './routes/global-agents.js';
 import metaTemplatesRoutes from './routes/meta-templates.js';
 import docSignaturesRoutes from './routes/doc-signatures.js';
 import rhRoutes from './routes/rh.js';
+import appAccessTemplatesRoutes from './routes/app-access-templates.js';
 import timeclockRoutes from './routes/timeclock.js';
 import companiesRoutes from './routes/companies.js';
 import holdingRoutes from './routes/holding.js';
