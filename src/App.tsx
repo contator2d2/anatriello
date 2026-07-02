@@ -214,7 +214,10 @@ function SmartRedirect() {
   if (isPromotorDomain) return <Navigate to="/promotor/login" replace />;
   if (isAccessPromotorDomain) return <Navigate to="/acesso/promotor/login" replace />;
   if (isSupermarketDomain) return <Navigate to="/acesso-supermercado" replace />;
-  if (isColaboradorDomain) return <Navigate to="/app/home" replace />;
+  if (isColaboradorDomain) {
+    const hasColabToken = typeof window !== 'undefined' && !!localStorage.getItem('promotor_token');
+    return <Navigate to={hasColabToken ? '/app/home' : '/app/login'} replace />;
+  }
   if (isGestorDomain) return <Navigate to="/gestor" replace />;
   
   if (isLoading) {
