@@ -43,6 +43,14 @@ export function useUpdateEmployee() {
   });
 }
 
+export function useEmployeeNotifications(id?: string) {
+  return useQuery({
+    queryKey: ['rh-employee-notifications', id],
+    queryFn: () => api<any[]>(`/api/rh/employees/${id}/notifications`),
+    enabled: !!id,
+  });
+}
+
 export function useFacialAlerts() {
   return useQuery({
     queryKey: ['rh-facial-alerts'],
