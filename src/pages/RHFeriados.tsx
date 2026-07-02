@@ -227,8 +227,12 @@ export default function RHFeriados() {
                       <TableCell className="hidden md:table-cell">{h.city || '—'}</TableCell>
                       <TableCell className="hidden md:table-cell">{h.recurring ? '✓ Sim' : 'Não'}</TableCell>
                       <TableCell className="text-right">
-                        <Button variant="ghost" size="sm" onClick={() => handleDelete(h.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                        <div className="flex justify-end gap-1">
+                          <Button variant="ghost" size="sm" onClick={() => openEdit(h)}><Pencil className="h-4 w-4" /></Button>
+                          <Button variant="ghost" size="sm" onClick={() => handleDelete(h.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                        </div>
                       </TableCell>
+
                     </TableRow>
                   );
                 })}
