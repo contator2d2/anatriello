@@ -115,7 +115,7 @@ export default function PromoterAppAccessDialog({ open, onOpenChange, promoter }
                 </Button>
               </div>
               <p className="text-[11px] text-muted-foreground mt-1">
-                Padrão sugerido: <span className="font-mono">ayra</span> + 3 números + 2 letras.
+                Padrão sugerido: <span className="font-mono">anatri</span> + 3 números + 2 letras.
               </p>
             </div>
 
