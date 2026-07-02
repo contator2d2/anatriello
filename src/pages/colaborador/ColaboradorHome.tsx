@@ -99,53 +99,65 @@ export default function ColaboradorHome() {
       </div>
 
       <div className="px-4 -mt-6 space-y-4">
-        {/* Ponto card */}
-        <div className="bg-gradient-to-br from-[#f97316] to-[#ea580c] rounded-2xl p-4 text-white shadow-lg shadow-orange-500/30">
-          <div className="flex items-center justify-between text-xs uppercase font-bold mb-3">
-            <span>Ponto</span>
-            <span className="opacity-90">Situação</span>
-          </div>
-          <div className="flex justify-between items-start mb-4">
-            <div>
-              <p className="text-xs opacity-90">Horário atual</p>
-              <p className="text-3xl font-bold tracking-tight">{format(now, "HH:mm")}</p>
-              <p className="text-xs opacity-80 mt-1">{format(now, "dd/MM/yyyy")}</p>
+        {/* Ponto card — só aparece com capability punch.register */}
+        {canPunch ? (
+          <div className="bg-gradient-to-br from-[#f97316] to-[#ea580c] rounded-2xl p-4 text-white shadow-lg shadow-orange-500/30">
+            <div className="flex items-center justify-between text-xs uppercase font-bold mb-3">
+              <span>Ponto</span>
+              <span className="opacity-90">Situação</span>
             </div>
-            <div className="text-right">
-              <p className="text-sm font-semibold">{situacao}</p>
-              <p className="text-xs opacity-90 mt-1">Entrada: {entradaHora ? format(new Date(entradaHora), "HH:mm") : "—:—"}</p>
-              <p className="text-xs opacity-90">Almoço: {almocoHora ? format(new Date(almocoHora), "HH:mm") : "—:—"}</p>
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <p className="text-xs opacity-90">Horário atual</p>
+                <p className="text-3xl font-bold tracking-tight">{format(now, "HH:mm")}</p>
+                <p className="text-xs opacity-80 mt-1">{format(now, "dd/MM/yyyy")}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-sm font-semibold">{situacao}</p>
+                <p className="text-xs opacity-90 mt-1">Entrada: {entradaHora ? format(new Date(entradaHora), "HH:mm") : "—:—"}</p>
+                <p className="text-xs opacity-90">Almoço: {almocoHora ? format(new Date(almocoHora), "HH:mm") : "—:—"}</p>
+              </div>
+            </div>
+            <button
+              onClick={handlePunchClick}
+              disabled={punch.isPending || punches.length >= 4}
+              className="w-full bg-white text-[#ea580c] font-bold text-sm py-3 rounded-xl active:scale-[.98] transition disabled:opacity-60 flex items-center justify-center gap-2"
+            >
+              {punch.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : facialRequired ? <Camera className="h-4 w-4" /> : <MapPin className="h-4 w-4" />}
+              {punches.length >= 4 ? "JORNADA ENCERRADA" : `REGISTRAR ${PUNCH_LABEL[nextType]?.toUpperCase() || "PONTO"}`}
+            </button>
+            {gps ? (
+              <p className="text-[10px] opacity-80 mt-2 text-center">GPS ativo · precisão {Math.round(gps.acc)}m</p>
+            ) : (
+              <p className="text-[10px] opacity-80 mt-2 text-center">Aguardando GPS…</p>
+            )}
+          </div>
+        ) : (
+          <div className="bg-white border border-slate-100 rounded-2xl p-4 flex items-start gap-3 shadow-sm">
+            <div className="h-10 w-10 rounded-xl bg-slate-100 flex items-center justify-center flex-shrink-0">
+              <ShieldOff className="h-5 w-5 text-slate-500" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-slate-700">Seu perfil não bate ponto pelo app</p>
+              <p className="text-xs text-slate-500 mt-0.5">Registre a entrada na portaria ou fale com seu gestor.</p>
             </div>
           </div>
-          <button
-            onClick={handlePunchClick}
-            disabled={punch.isPending || punches.length >= 4}
-            className="w-full bg-white text-[#ea580c] font-bold text-sm py-3 rounded-xl active:scale-[.98] transition disabled:opacity-60 flex items-center justify-center gap-2"
-          >
-            {punch.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : facialRequired ? <Camera className="h-4 w-4" /> : <MapPin className="h-4 w-4" />}
-            {punches.length >= 4 ? "JORNADA ENCERRADA" : `REGISTRAR ${PUNCH_LABEL[nextType]?.toUpperCase() || "PONTO"}`}
-          </button>
-          {gps ? (
-            <p className="text-[10px] opacity-80 mt-2 text-center">GPS ativo · precisão {Math.round(gps.acc)}m</p>
-          ) : (
-            <p className="text-[10px] opacity-80 mt-2 text-center">Aguardando GPS…</p>
-          )}
-        </div>
+        )}
 
-        {/* Acesso rápido */}
+        {/* Acesso rápido — filtrado por capability */}
         <div>
           <p className="text-sm font-bold mb-3">Acesso rápido</p>
           <div className="grid grid-cols-4 gap-3">
-            <QuickAction icon={FileText} label="Holerite" color="#3b82f6" onClick={() => nav("/app/holerite")} />
-            <QuickAction icon={Umbrella} label="Férias" color="#06b6d4" onClick={() => nav("/app/ferias")} />
-            <QuickAction icon={Gift} label="Benefícios" color="#f43f5e" onClick={() => nav("/app/beneficios")} />
-            <QuickAction icon={FolderOpen} label="Documentos" color="#8b5cf6" onClick={() => nav("/app/documentos")} />
-            <QuickAction icon={Edit3} label="Solicitações" color="#f59e0b" onClick={() => nav("/app/solicitacoes")} />
-            <QuickAction icon={Clock} label="Jornada" color="#10b981" onClick={() => nav("/app/jornada")} />
-            <QuickAction icon={Bell} label="Comunicados" color="#ef4444" onClick={() => nav("/app/perfil")} />
-            <QuickAction icon={MessageSquare} label="Pesquisa" color="#6366f1" onClick={() => {}} />
+            {can("payslip.view") && <QuickAction icon={FileText} label="Holerite" color="#3b82f6" onClick={() => nav("/app/holerite")} />}
+            {can("vacations.view") && <QuickAction icon={Umbrella} label="Férias" color="#06b6d4" onClick={() => nav("/app/ferias")} />}
+            {can("benefits.view") && <QuickAction icon={Gift} label="Benefícios" color="#f43f5e" onClick={() => nav("/app/beneficios")} />}
+            {can("documents.view") && <QuickAction icon={FolderOpen} label="Documentos" color="#8b5cf6" onClick={() => nav("/app/documentos")} />}
+            {can("requests.view") && <QuickAction icon={Edit3} label="Solicitações" color="#f59e0b" onClick={() => nav("/app/solicitacoes")} />}
+            {can("journey.view") && <QuickAction icon={Clock} label="Jornada" color="#10b981" onClick={() => nav("/app/jornada")} />}
+            {can("announcements.view") && <QuickAction icon={Bell} label="Comunicados" color="#ef4444" onClick={() => nav("/app/perfil")} />}
           </div>
         </div>
+
 
         {/* Comunicados */}
         <div className="bg-white rounded-2xl p-4 shadow-sm">
