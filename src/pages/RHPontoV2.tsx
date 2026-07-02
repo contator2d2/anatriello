@@ -18,6 +18,7 @@ import {
   useHolidays, useCreateHoliday, useDeleteHoliday, useImportNationalHolidays,
   useAdjustmentRequests, useReviewAdjustmentRequest,
 } from '@/hooks/use-timeclock';
+import { WorkSchedulesTab } from '@/components/rh/WorkSchedulesTab';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { Calendar, Clock, TrendingUp, TrendingDown, CheckCircle2, XCircle, Pencil, History, Trash2, Plus } from 'lucide-react';
 
