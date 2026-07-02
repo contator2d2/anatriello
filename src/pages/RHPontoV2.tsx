@@ -75,7 +75,7 @@ function CartaoPontoTab() {
             <Label>Fim</Label>
             <Input type="date" value={end} onChange={e => setEnd(e.target.value)} />
           </div>
-          <div className="flex items-end">
+          <div className="flex items-end gap-2">
             <Button
               variant="outline"
               onClick={() => {
@@ -84,6 +84,22 @@ function CartaoPontoTab() {
               }}
             >
               Mês atual
+            </Button>
+            <Button
+              variant="default"
+              disabled={!employeeId}
+              onClick={async () => {
+                const token = localStorage.getItem('token');
+                const url = `${(import.meta.env.VITE_API_URL || '').replace(/\/$/, '')}/api/timeclock/mirror.pdf?employee_id=${employeeId}&start=${start}&end=${end}`;
+                const r = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+                if (!r.ok) return;
+                const blob = await r.blob();
+                const o = URL.createObjectURL(blob);
+                const a = document.createElement('a'); a.href = o; a.download = `espelho-${start}_${end}.pdf`; a.click();
+                setTimeout(() => URL.revokeObjectURL(o), 500);
+              }}
+            >
+              Espelho PDF
             </Button>
           </div>
         </CardContent>
