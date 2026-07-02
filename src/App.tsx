@@ -287,6 +287,7 @@ const App = () => (
             <Route path="/rh/holding" element={<ProtectedRoute><RHHolding /></ProtectedRoute>} />
             <Route path="/rh/dashboard" element={<ProtectedRoute><RHDashboard /></ProtectedRoute>} />
             <Route path="/rh/ponto" element={<ProtectedRoute><RHPontoV2 /></ProtectedRoute>} />
+            <Route path="/gestor" element={<ProtectedRoute><ManagerApp /></ProtectedRoute>} />
             <Route path="/rh/ponto-legacy" element={<ProtectedRoute><RHPonto /></ProtectedRoute>} />
             <Route path="/rh/holerite" element={<ProtectedRoute><RHHolerite /></ProtectedRoute>} />
             <Route path="/rh/documentos" element={<ProtectedRoute><RHDocumentos /></ProtectedRoute>} />
