@@ -277,9 +277,10 @@ export default function RHFeriados() {
           </div>
           <div className="flex justify-end gap-2 mt-4">
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={handleSave} disabled={createHoliday.isPending}>
-              {createHoliday.isPending ? 'Salvando...' : 'Salvar'}
+            <Button onClick={handleSave} disabled={createHoliday.isPending || updateHoliday.isPending}>
+              {(createHoliday.isPending || updateHoliday.isPending) ? 'Salvando...' : 'Salvar'}
             </Button>
+
           </div>
         </DialogContent>
       </Dialog>
