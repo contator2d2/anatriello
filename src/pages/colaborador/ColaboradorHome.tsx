@@ -32,6 +32,8 @@ export default function ColaboradorHome() {
   const { data: notifications } = usePromotorNotifications();
   const markRead = usePromotorMarkRead();
   const punch = usePromotorPunch();
+  const caps = useCaps();
+  const can = (c: string) => caps.includes(c);
   const [now, setNow] = useState(new Date());
   const [showFace, setShowFace] = useState(false);
   const [gps, setGps] = useState<{ lat: number; lng: number; acc: number } | null>(null);
