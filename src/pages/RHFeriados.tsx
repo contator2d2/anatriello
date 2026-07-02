@@ -10,8 +10,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { useHolidays, useCreateHoliday, useBulkImportHolidays, useDeleteHoliday } from "@/hooks/use-rh";
-import { CalendarDays, Plus, Upload, Trash2, FileSpreadsheet, Loader2 } from "lucide-react";
+import { useHolidays, useCreateHoliday, useBulkImportHolidays, useDeleteHoliday, useUpdateHoliday } from "@/hooks/use-rh";
+import { CalendarDays, Plus, Upload, Trash2, FileSpreadsheet, Loader2, Pencil } from "lucide-react";
+
 import { format } from "date-fns";
 import * as XLSX from "xlsx";
 
