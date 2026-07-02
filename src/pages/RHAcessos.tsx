@@ -261,6 +261,34 @@ export default function RHAcessos() {
                             </Badge>
                           </TableCell>
                           <TableCell>
+                            <Select
+                              value={emp.app_access_template_id || "__none__"}
+                              onValueChange={async (v) => {
+                                try {
+                                  await assignTemplate.mutateAsync({
+                                    employee_id: emp.id,
+                                    template_id: v === "__none__" ? null : v,
+                                  });
+                                  toast({ title: "Perfil atualizado", description: emp.full_name });
+                                } catch (err: any) {
+                                  toast({ title: "Erro", description: err.message, variant: "destructive" });
+                                }
+                              }}
+                            >
+                              <SelectTrigger className="h-7 text-xs min-w-[140px]">
+                                <SelectValue placeholder="Sem perfil" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__none__">Sem perfil (padrão)</SelectItem>
+                                {templates.map((t: any) => (
+                                  <SelectItem key={t.id} value={t.id}>
+                                    {t.name}{t.is_default ? " (padrão)" : ""}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
+                          <TableCell>
                             <Badge variant="outline" className={`text-[10px] ${emp.user_id ? 'bg-green-500/10 text-green-700 border-green-200' : 'bg-muted text-muted-foreground'}`}>
                               {emp.user_id ? 'Liberado' : 'Sem acesso'}
                             </Badge>
