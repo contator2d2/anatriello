@@ -32,6 +32,7 @@ interface User {
   modules_enabled?: ModulesEnabled;
   has_connections?: boolean;
   page_permissions?: PagePermissions;
+  must_change_password?: boolean;
 }
 
 interface AuthContextType {
