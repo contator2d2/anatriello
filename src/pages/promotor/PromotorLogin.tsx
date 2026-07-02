@@ -15,6 +15,10 @@ export default function PromotorLogin() {
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
+  const location = useLocation();
+  const isColabContext =
+    location.pathname.startsWith("/app") ||
+    (typeof window !== "undefined" && window.location.hostname.startsWith("colaborador."));
   const { branding } = useBranding() as any;
 
   const handleLogin = async (e: React.FormEvent) => {
