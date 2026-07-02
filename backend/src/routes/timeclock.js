@@ -98,6 +98,9 @@ async function ensureSchema() {
     ALTER TABLE time_punches ADD COLUMN IF NOT EXISTS edited_by UUID;
     ALTER TABLE time_punches ADD COLUMN IF NOT EXISTS edited_at TIMESTAMPTZ;
     ALTER TABLE time_punches ADD COLUMN IF NOT EXISTS original_time TIMESTAMPTZ;
+    ALTER TABLE time_punches ADD COLUMN IF NOT EXISTS nsr BIGINT;
+    ALTER TABLE time_punches ADD COLUMN IF NOT EXISTS signature_hash VARCHAR(128);
+    CREATE INDEX IF NOT EXISTS idx_tp_org_nsr ON time_punches(organization_id, nsr);
 
     CREATE TABLE IF NOT EXISTS time_records (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -590,4 +593,29 @@ router.post('/closings', async (req, res) => {
   } catch (err) { logError('timeclock.closings.post', err); res.status(500).json({ error: 'Erro' }); }
 });
 
+// ==== ESPELHO DE PONTO (PDF) - RH ====
+import { generateMirrorPDF, generateReceiptPDF } from '../services/receipt-pdf.js';
+
+router.get('/mirror.pdf', async (req, res) => {
+  try {
+    const orgId = await resolveOrgId(req);
+    const { employee_id, start, end } = req.query;
+    if (!employee_id || !start || !end) return res.status(400).json({ error: 'Parâmetros obrigatórios' });
+    const bytes = await generateMirrorPDF({ organizationId: orgId, employeeId: employee_id, startDate: start, endDate: end });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="espelho-${employee_id}-${start}_${end}.pdf"`);
+    res.send(Buffer.from(bytes));
+  } catch (err) { logError('timeclock.mirror.pdf', err); res.status(500).json({ error: err.message || 'Erro ao gerar espelho' }); }
+});
+
+router.get('/receipt/:punchId.pdf', async (req, res) => {
+  try {
+    const bytes = await generateReceiptPDF(req.params.punchId);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="comprovante-${req.params.punchId}.pdf"`);
+    res.send(Buffer.from(bytes));
+  } catch (err) { logError('timeclock.receipt.pdf', err); res.status(500).json({ error: err.message || 'Erro' }); }
+});
+
 export default router;
+

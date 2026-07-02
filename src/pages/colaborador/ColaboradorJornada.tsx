@@ -1,9 +1,9 @@
 import { useState, useMemo } from "react";
 import { ColaboradorLayout } from "./ColaboradorLayout";
-import { usePromotorPunches } from "@/hooks/use-promotor";
+import { usePromotorPunches, useDownloadPunchReceipt, useDownloadMirror } from "@/hooks/use-promotor";
 import { format, subDays, addDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2, Download, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type Tab = "dia" | "semana" | "mes";
@@ -18,6 +18,8 @@ const STAGES: { key: string; label: string; color: string }[] = [
 export default function ColaboradorJornada() {
   const [tab, setTab] = useState<Tab>("dia");
   const [date, setDate] = useState(new Date());
+  const dlReceipt = useDownloadPunchReceipt();
+  const dlMirror = useDownloadMirror();
 
   const range = useMemo(() => {
     if (tab === "dia") return { start: date, end: date };
@@ -98,9 +100,20 @@ export default function ColaboradorJornada() {
                       <p className={cn("text-sm font-semibold", done ? "text-slate-800" : "text-slate-400")}>{time}</p>
                       <p className="text-xs text-slate-500">{s.label}</p>
                     </div>
-                    <span className={cn("text-[10px] px-2 py-0.5 rounded-full font-medium", done ? "bg-green-50 text-green-700" : "bg-slate-100 text-slate-400")}>
-                      {done ? "No horário" : "Pendente"}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      {done && (
+                        <button
+                          onClick={() => dlReceipt.mutate(p.id)}
+                          className="text-[10px] px-2 py-1 rounded-full bg-orange-50 text-orange-600 font-medium flex items-center gap-1 hover:bg-orange-100"
+                          title="Baixar comprovante"
+                        >
+                          <Download className="h-3 w-3" /> Comprovante
+                        </button>
+                      )}
+                      <span className={cn("text-[10px] px-2 py-0.5 rounded-full font-medium", done ? "bg-green-50 text-green-700" : "bg-slate-100 text-slate-400")}>
+                        {done ? "No horário" : "Pendente"}
+                      </span>
+                    </div>
                   </div>
                 </div>
               );
@@ -121,6 +134,15 @@ export default function ColaboradorJornada() {
           <p className="text-sm font-bold">Banco de horas</p>
           <p className="text-green-600 font-bold">+10:30</p>
         </div>
+
+        <button
+          onClick={() => dlMirror.mutate({ start: format(startOfMonth(date), "yyyy-MM-dd"), end: format(endOfMonth(date), "yyyy-MM-dd") })}
+          disabled={dlMirror.isPending}
+          className="w-full mt-4 bg-[#f97316] hover:bg-[#ea6a0a] text-white rounded-2xl py-3 flex items-center justify-center gap-2 font-semibold shadow-sm disabled:opacity-60"
+        >
+          {dlMirror.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+          Espelho de ponto do mês
+        </button>
 
         {isLoading && <Loader2 className="h-5 w-5 animate-spin mx-auto text-slate-400 mt-4" />}
       </div>

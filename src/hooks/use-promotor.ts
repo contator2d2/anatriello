@@ -158,6 +158,31 @@ export function usePromotorPunches(filters?: { start_date?: string; end_date?: s
   });
 }
 
+async function promotorDownloadPDF(endpoint: string, filename: string) {
+  const token = localStorage.getItem('promotor_token');
+  const url = `${(import.meta.env.VITE_API_URL || '').replace(/\/$/, '')}${endpoint}`;
+  const r = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  if (!r.ok) throw new Error('Falha ao gerar PDF');
+  const blob = await r.blob();
+  const objUrl = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = objUrl; a.download = filename; document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(objUrl); a.remove(); }, 500);
+}
+
+export function useDownloadPunchReceipt() {
+  return useMutation({
+    mutationFn: (punchId: string) => promotorDownloadPDF(`/api/promotor/punch/${punchId}/receipt.pdf`, `comprovante-${punchId}.pdf`),
+  });
+}
+
+export function useDownloadMirror() {
+  return useMutation({
+    mutationFn: ({ start, end }: { start: string; end: string }) =>
+      promotorDownloadPDF(`/api/promotor/mirror.pdf?start=${start}&end=${end}`, `espelho-${start}_${end}.pdf`),
+  });
+}
+
 export function usePromotorDocuments(status?: string) {
   const qs = status ? `?status=${status}` : '';
   return useQuery({

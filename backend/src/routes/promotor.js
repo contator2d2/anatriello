@@ -24,6 +24,7 @@ router.use((req, res, next) => {
                           req.path.startsWith('/change-password') ||
                           req.path.startsWith('/face-enrollment') ||
                           req.path.startsWith('/punch-adjustment') ||
+                          req.path.startsWith('/mirror') ||
                           req.path.startsWith('/sync');
 
   if (isPromotorRoute) {
@@ -516,6 +517,13 @@ router.post('/punch', authenticatePromotor, async (req, res) => {
         [req.organizationId, req.employeeId, new Date().toISOString().slice(0,10), `Ponto registrado ${Math.round(distance)}m do PDV (${geo_status})`]
       );
     }
+
+    // NSR + assinatura digital (Portaria MTP 671/2021)
+    try {
+      const { ensurePunchSignature } = await import('../services/receipt-pdf.js');
+      const signed = await ensurePunchSignature(result.rows[0].id);
+      if (signed) { result.rows[0].nsr = signed.nsr; result.rows[0].signature_hash = signed.signature_hash; }
+    } catch (e) { logError('promotor.punch.signature', e); }
 
     res.json(result.rows[0]);
   } catch (err) {
@@ -2126,7 +2134,34 @@ router.get('/benefits', authenticatePromotor, async (req, res) => {
   } catch (e) { res.json([]); }
 });
 
+// ==== COMPROVANTE DE PONTO (PDF) ====
+router.get('/punch/:id/receipt.pdf', authenticatePromotor, async (req, res) => {
+  try {
+    const own = await query(`SELECT id FROM time_punches WHERE id = $1 AND employee_id = $2`, [req.params.id, req.employeeId]);
+    if (!own.rows[0]) return res.status(404).json({ error: 'Batida não encontrada' });
+    const { generateReceiptPDF } = await import('../services/receipt-pdf.js');
+    const bytes = await generateReceiptPDF(req.params.id);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="comprovante-${req.params.id}.pdf"`);
+    res.send(Buffer.from(bytes));
+  } catch (e) { logError('promotor.receipt.pdf', e); res.status(500).json({ error: 'Erro ao gerar comprovante' }); }
+});
+
+// ==== ESPELHO DE PONTO MENSAL (PDF) ====
+router.get('/mirror.pdf', authenticatePromotor, async (req, res) => {
+  try {
+    const { start, end } = req.query;
+    if (!start || !end) return res.status(400).json({ error: 'Informe start e end' });
+    const { generateMirrorPDF } = await import('../services/receipt-pdf.js');
+    const bytes = await generateMirrorPDF({ organizationId: req.organizationId, employeeId: req.employeeId, startDate: start, endDate: end });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="espelho-${start}_${end}.pdf"`);
+    res.send(Buffer.from(bytes));
+  } catch (e) { logError('promotor.mirror.pdf', e); res.status(500).json({ error: 'Erro ao gerar espelho' }); }
+});
+
 export default router;
+
 
 
 // ============================================
