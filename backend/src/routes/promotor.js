@@ -1983,4 +1983,147 @@ router.post('/supervisor/send-to-rh', authenticatePromotor, requireSupervisor, a
   }
 });
 
+// =============================================
+// COLABORADOR APP — Solicitações / Férias / Atestados / Comunicados / Benefícios
+// =============================================
+let colabAppSchemaReady = null;
+async function ensureColabAppSchema() {
+  if (colabAppSchemaReady) return colabAppSchemaReady;
+  colabAppSchemaReady = (async () => {
+    await query(`CREATE TABLE IF NOT EXISTS employee_requests (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id UUID, employee_id UUID NOT NULL,
+      kind VARCHAR(40) NOT NULL, payload JSONB DEFAULT '{}',
+      status VARCHAR(20) DEFAULT 'pendente', notes TEXT,
+      resolved_by UUID, resolved_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_emp_req_emp ON employee_requests(employee_id, created_at DESC)`);
+    await query(`CREATE TABLE IF NOT EXISTS company_announcements (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id UUID, company_id UUID,
+      title VARCHAR(255) NOT NULL, body TEXT,
+      published_at TIMESTAMPTZ DEFAULT NOW(),
+      active BOOLEAN DEFAULT true, created_by UUID
+    )`);
+    await query(`CREATE TABLE IF NOT EXISTS employee_benefits (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      employee_id UUID NOT NULL, kind VARCHAR(40) NOT NULL,
+      label VARCHAR(120) NOT NULL, provider VARCHAR(120),
+      value_cents INTEGER, unit VARCHAR(20),
+      status VARCHAR(20) DEFAULT 'ativo',
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_emp_ben_emp ON employee_benefits(employee_id)`);
+  })();
+  try { await colabAppSchemaReady; } catch (e) { colabAppSchemaReady = null; throw e; }
+  return colabAppSchemaReady;
+}
+
+router.get('/me/full', authenticatePromotor, async (req, res) => {
+  try {
+    const empRes = await query(
+      `SELECT e.*, c.trade_name as company_name, c.cnpj as company_cnpj
+         FROM employees e LEFT JOIN companies c ON c.id = e.company_id
+        WHERE e.id = $1`, [req.employeeId]
+    ).catch(async () => await query(`SELECT * FROM employees WHERE id = $1`, [req.employeeId]));
+    const dependents = await query(`SELECT * FROM employee_dependents WHERE employee_id = $1`, [req.employeeId]).catch(() => ({ rows: [] }));
+    res.json({ employee: empRes.rows[0], dependents: dependents.rows });
+  } catch (e) { logError('promotor.me.full', e); res.status(500).json({ error: e.message }); }
+});
+
+router.get('/vacations', authenticatePromotor, async (req, res) => {
+  try {
+    const r = await query(`SELECT * FROM rh_vacations WHERE employee_id = $1 ORDER BY start_date DESC LIMIT 100`, [req.employeeId]).catch(() => ({ rows: [] }));
+    res.json(r.rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/vacations/request', authenticatePromotor, async (req, res) => {
+  try {
+    await ensureColabAppSchema();
+    const { start_date, end_date, days_total, abono_pecuniario, abono_days, notes } = req.body;
+    if (!start_date || !end_date) return res.status(400).json({ error: 'Datas obrigatórias' });
+    const r = await query(
+      `INSERT INTO employee_requests (organization_id, employee_id, kind, payload) VALUES ($1,$2,'ferias',$3) RETURNING *`,
+      [req.organizationId, req.employeeId, JSON.stringify({ start_date, end_date, days_total, abono_pecuniario, abono_days, notes })]
+    );
+    res.json(r.rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/absences', authenticatePromotor, async (req, res) => {
+  try {
+    const r = await query(`SELECT * FROM employee_absences WHERE employee_id = $1 ORDER BY start_date DESC LIMIT 100`, [req.employeeId]).catch(() => ({ rows: [] }));
+    res.json(r.rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/medical-certificates', authenticatePromotor, async (req, res) => {
+  try {
+    const r = await query(`SELECT * FROM rh_medical_certificates WHERE employee_id = $1 ORDER BY absence_start DESC LIMIT 100`, [req.employeeId]).catch(() => ({ rows: [] }));
+    res.json(r.rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/medical-certificates', authenticatePromotor, async (req, res) => {
+  try {
+    const { doctor_name, doctor_crm, cid_code, absence_start, absence_end, absence_days, document_url, notes } = req.body;
+    if (!absence_start || !absence_end) return res.status(400).json({ error: 'Datas obrigatórias' });
+    const r = await query(
+      `INSERT INTO rh_medical_certificates (organization_id, employee_id, doctor_name, doctor_crm, cid_code, absence_start, absence_end, absence_days, document_url, notes, uploaded_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$2) RETURNING *`,
+      [req.organizationId, req.employeeId, doctor_name || null, doctor_crm || null, cid_code || null, absence_start, absence_end, absence_days || null, document_url || null, notes || null]
+    );
+    res.json(r.rows[0]);
+  } catch (e) { logError('promotor.medcert.create', e); res.status(500).json({ error: e.message }); }
+});
+
+router.get('/requests', authenticatePromotor, async (req, res) => {
+  try {
+    await ensureColabAppSchema();
+    const r = await query(`SELECT * FROM employee_requests WHERE employee_id = $1 ORDER BY created_at DESC LIMIT 200`, [req.employeeId]);
+    res.json(r.rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/requests', authenticatePromotor, async (req, res) => {
+  try {
+    await ensureColabAppSchema();
+    const { kind, payload } = req.body;
+    if (!kind) return res.status(400).json({ error: 'Tipo obrigatório' });
+    const r = await query(
+      `INSERT INTO employee_requests (organization_id, employee_id, kind, payload) VALUES ($1,$2,$3,$4) RETURNING *`,
+      [req.organizationId, req.employeeId, String(kind).slice(0, 40), JSON.stringify(payload || {})]
+    );
+    res.json(r.rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/announcements', authenticatePromotor, async (req, res) => {
+  try {
+    await ensureColabAppSchema();
+    const emp = await query(`SELECT organization_id, company_id FROM employees WHERE id = $1`, [req.employeeId]).catch(() => ({ rows: [{}] }));
+    const orgId = emp.rows[0]?.organization_id || req.organizationId;
+    const companyId = emp.rows[0]?.company_id || null;
+    const r = await query(
+      `SELECT * FROM company_announcements
+        WHERE active = true AND (organization_id = $1 OR organization_id IS NULL)
+          AND (company_id = $2 OR company_id IS NULL)
+        ORDER BY published_at DESC LIMIT 20`,
+      [orgId, companyId]
+    );
+    res.json(r.rows);
+  } catch (e) { res.json([]); }
+});
+
+router.get('/benefits', authenticatePromotor, async (req, res) => {
+  try {
+    await ensureColabAppSchema();
+    const r = await query(`SELECT * FROM employee_benefits WHERE employee_id = $1 AND status = 'ativo' ORDER BY kind`, [req.employeeId]);
+    res.json(r.rows);
+  } catch (e) { res.json([]); }
+});
+
 export default router;
+

@@ -1,94 +1,97 @@
-# Multi-empresa (Holding) + App do Colaborador
+# App do Colaborador — Anatriello
 
-Reestruturar RH para operar como holding com N empresas. Renomear o app do promotor para "App do Colaborador" removendo rotas/merchandising. Ponto por facial controlado por empresa e por colaborador. Dashboard central consolidado.
+App mobile web (PWA já existente) para o colaborador registrar ponto, acompanhar jornada, fazer solicitações e acessar seus dados. Visual fiel ao mockup enviado (dark navy + laranja, cards arredondados, bottom tabs).
 
-Obs: banco é Postgres do backend (Easypanel via `apianatriello.r2d2.agency`), não Supabase. Tudo passa por schemas SQL do backend + rotas REST.
+## Escopo desta entrega
 
----
+1. **Ponto e Jornada**
+   - Home com card "PONTO": horário atual, situação (fora/em jornada/almoço), horário previsto de entrada e almoço.
+   - Botão "REGISTRAR PONTO" em fluxo único: detecta o próximo tipo (entrada → saída almoço → retorno → saída → extra).
+   - Captura GPS (obrigatório). Bloqueia se fora do raio da empresa vinculada.
+   - Se `facial_required = true` no cadastro do colaborador → exige validação facial (usa `facial-recognition.ts` já existente). Caso contrário, dispensa.
+   - Empresa vinculada é lida automaticamente de `employees.company_id` (sem seletor).
+   - Modo offline: persiste em IndexedDB e sincroniza quando online (reaproveita `use-offline-sync`).
+   - Tela "Minha Jornada": abas Dia / Semana / Mês, timeline dos batidos (Entrada, Início Almoço, Fim Almoço, Saída Prevista/Saída) com status "No horário / Atraso / Pendente", resumo do dia (Trabalhado, Almoço, Total, Saldo) e Banco de Horas.
 
-## 1. Backend — Schema (novo `schema-holding.sql`)
+2. **Solicitações**
+   - Lista abas Minhas / Histórico, cards por tipo: Férias, Afastamento, Vale-transporte, 2ª via de holerite, **Horas extras**, **Ajuste de ponto**, **Atestado médico**.
+   - FAB "+" abre modal para nova solicitação com formulário por tipo (datas, motivo, anexo).
+   - Status: Pendente / Aprovado / Recusado / Concluído.
+   - Backend reaproveita tabelas existentes: `vacations`, `absences`, `medical_certificates`, `punch_adjustments`. Cria tabela nova `employee_requests` para tipos genéricos (vale-transporte, 2ª via, horas extras).
 
-Tabela nova `companies` (empresas da holding):
-- `id`, `organization_id` (holding), `name`, `cnpj`, `trade_name`, `logo_url`, `color`, `address`, `phone`, `email`, `is_active`, `punch_facial_required` (bool default true), `punch_facial_tolerance_days` (fallback), `created_at`, `updated_at`
-- Índice único: `(organization_id, cnpj)`
-- Seed automático: uma company "Anatriello" por organization ao iniciar
+3. **Férias (tela dedicada)**
+   - Período aquisitivo, cards "Dias totais / gozados / restantes", botão "SOLICITAR FÉRIAS", próximas férias, histórico. Usa `vacations`.
 
-Alterações em tabelas existentes de RH:
-- `employees`: adicionar `company_id` (FK companies, NOT NULL após migração), `facial_required` já existe (usar como override do que a company exige)
-- `time_punches` / `ponto`: adicionar `company_id` (denormalizado a partir do employee no insert)
-- `employee_documents`: adicionar `company_id`
-- `punch_adjustments` (nova ou existente): `id`, `employee_id`, `company_id`, `punch_id?`, `type` (falta/atraso/esquecimento), `requested_at`, `requested_by`, `justification`, `attachment_url?`, `status` (pending/approved/rejected), `reviewed_by?`, `reviewed_at?`, `review_note?`
-- `document_deliveries` (nova): `id`, `document_id`, `employee_id`, `company_id`, `sent_at`, `read_at?`, `signed_at?`, `signature_hash?`, `status`
+4. **Holerite**
+   - Lista mensal com valor bruto e data de pagamento; download PDF. Usa `payslips`.
 
-GRANTs e índices em tudo. Início zerado — colaboradores/pontos existentes não migram (usuário confirmou "começar do zero").
+5. **Documentos**
+   - Pastas: Admissão, Contratuais, Pessoais, Holerites, Férias, Avaliações, Treinamentos.
+   - Visualiza documentos enviados pelo RH (`rh_documents`) e permite upload/entrega pelo colaborador (`document_deliveries`).
 
-## 2. Backend — Rotas REST
+6. **Benefícios e Comunicados**
+   - Card na home com últimos comunicados (paginado).
+   - Tela Benefícios: lista de benefícios ativos do colaborador (VA/VR, plano saúde, odonto, seguro).
 
-Arquivos novos em `backend/src/routes/`:
-- `companies.js` — CRUD `/api/companies` (listar/criar/editar/desativar; escopo = organization_id do usuário)
-- `punch-adjustments.js` — `/api/punch-adjustments` (colaborador cria; RH lista/aprova/rejeita; filtro por company)
-- `document-deliveries.js` — `/api/document-deliveries` (RH envia; colaborador confirma leitura/assina)
-- `holding-dashboard.js` — `/api/holding/dashboard` agregando:
-  - colaboradores ativos por empresa
-  - batidas do dia por empresa (in/out/breaks)
-  - contadores de alertas (atrasos hoje, faltas, docs vencendo em 30d, ajustes pendentes)
+7. **Perfil**
+   - Dados pessoais, contato, dependentes, dados bancários (com PIX), endereço, configurações, privacidade — todos em modo leitura + solicitar alteração (gera `employee_requests`).
+   - Foto do colaborador (usa foto facial cadastrada).
 
-Ajustar rotas existentes para receber/filtrar `company_id`:
-- `/api/employees` (create/list aceitam `company_id`)
-- `/api/rh/ponto` (batida grava `company_id`)
-- `/api/rh/documentos` (upload vinculado a `company_id`; envio dispara `document_deliveries`)
+## Arquitetura técnica
 
-Regra facial de ponto (no endpoint de batida):
-1. Se `employees.facial_required` for `true`/`false` → prevalece.
-2. Senão → usa `companies.punch_facial_required`.
-3. Se exigido e falhar → 403 com motivo; grava tentativa em `app_logs`.
+- **Rotas** (novas em `src/pages/promotor/` — reaproveita `PromotorLayout` renomeado visualmente para "Colaborador"):
+  - `/app/home` (novo `ColaboradorHome.tsx`)
+  - `/app/jornada`
+  - `/app/solicitacoes`
+  - `/app/ferias`
+  - `/app/holerite`
+  - `/app/documentos`
+  - `/app/beneficios`
+  - `/app/perfil`
+  - Reaproveita `PromoterAppAuthContext` para autenticação do colaborador.
 
-## 3. Frontend Admin
+- **Design tokens** (`src/index.css` — novo tema "colaborador-app" escopado por rota):
+  - `--bg`: `220 40% 8%` (navy escuro)
+  - `--card`: `0 0% 100%`
+  - `--brand`: `18 95% 55%` (laranja Anatriello)
+  - Tipografia: manter Inter (já em uso), pesos 600/700 para títulos.
 
-- Nova página `/rh/empresas` (CRUD empresas + toggle "Exigir facial no ponto" por empresa).
-- Novo dashboard `/rh/holding` (padrão do RH):
-  - Cards por empresa: ativos, presentes hoje, atrasos, ajustes pendentes
-  - Gráfico consolidado de batidas do dia
-  - Feed de alertas com filtro por empresa
-  - Aba "Ajustes de ponto" com aprovação (aprovar/rejeitar + nota)
-  - Aba "Envios de documentos" (status leitura/assinatura)
-- Ajustes em telas existentes (`RHColaboradores`, `RHPonto`, `RHDocumentos`, `RHBiometria`):
-  - Seletor "Empresa" no topo (persistido em localStorage)
-  - Campo `company_id` obrigatório no cadastro do colaborador
-  - Coluna "Empresa" nas listagens
-  - Em `RHColaboradores`, substituir o seletor 3-state genérico por: "Facial: Herdar da empresa | Sempre exigir | Nunca exigir"
+- **Bottom tabs** (novo `ColaboradorTabs.tsx`): Início / Jornada / Solicitações / Perfil.
 
-## 4. App do Colaborador (renomear `/promotor` → `/colaborador`)
+- **Backend** (novos endpoints em `backend/src/routes/colaborador-app.js`):
+  - `GET /api/colab/me` — dados do colaborador + empresa + config facial/gps.
+  - `POST /api/colab/punch` — registra ponto com validação de raio da empresa (`companies.lat/lng/radius`) e match facial opcional.
+  - `GET /api/colab/journey?date=` — jornada do dia consolidada.
+  - `GET /api/colab/journey/summary?period=week|month` — resumo com banco de horas.
+  - `GET/POST /api/colab/requests` — CRUD de `employee_requests` + adapters para férias/afastamento/atestado.
+  - `GET /api/colab/payslips`, `GET /api/colab/documents`, `POST /api/colab/documents` (upload), `GET /api/colab/benefits`, `GET /api/colab/announcements`.
 
-Manter a rota `/promotor` como alias temporário (redirect) para não quebrar quem já tem PWA instalado, mas nova identidade em `/colaborador`.
+- **Migrations** (`backend/src/init-db.js` — ensureTables):
+  - `employee_requests(id, employee_id, company_id, kind, payload jsonb, status, requested_at, resolved_at, resolved_by, notes)`.
+  - `company_announcements(id, company_id, title, body, published_at, created_by)`.
+  - `employee_benefits(id, employee_id, kind, label, value_cents, provider, status)`.
+  - Garante colunas em `companies`: `lat`, `lng`, `punch_radius_m default 150`.
 
-Remover do menu/rotas do app:
-- Rota (`PromotorRota`), Marcas, Categorias, Perdas, Fotos, Book, Merchandising, Pesquisa de preço, Auditoria, Solicitações de visita.
+- **Validação de ponto**:
+  - Facial: `facial-recognition.ts` com WebGL + fallback CPU, threshold 0.6 (já implementado).
+  - GPS: Haversine contra `companies.lat/lng`; se fora do raio, requer justificativa (grava `geo_status='fora_area'`).
 
-Manter/adaptar:
-- Login (mesmo AuthContext)
-- Home: cards "Bater ponto" + "Meus documentos" + "Meus ajustes"
-- `/colaborador/ponto`: câmera facial → chama `/api/rh/ponto` (backend valida facial conforme regra). Mostra empresa atual (se colaborador tem `company_id` só uma).
-- `/colaborador/documentos`: lista `document_deliveries` do colaborador, permite confirmar leitura/assinar; permite enviar documentos pessoais para o RH.
-- `/colaborador/ajustes`: histórico de ajustes solicitados + botão "Solicitar ajuste".
-- `/colaborador/config`: só facial enrollment + tema + sair.
+- **Offline**: usa `offline-db.ts` (IndexedDB) para fila de batidas; worker de sync já existe.
 
-Renomear referências textuais "Promotor" → "Colaborador" nos labels e no manifest `promoter-app-manifest.webmanifest`.
+- **Segurança**: JWT do `PromoterAppAuthContext`; RLS não aplicável (backend Postgres direto). Endpoints validam `employee_id` do token.
 
-## 5. Início zerado
+## Fora do escopo desta entrega
 
-Script no `init-db.js`:
-- Cria tabela `companies` e adiciona colunas em employees/ponto/documentos (idempotente, `IF NOT EXISTS`).
-- Insere company padrão "Anatriello" por organização.
-- **Não faz TRUNCATE**. "Começar do zero" = as tabelas novas nascem vazias; se o usuário quiser limpar employees/pontos existentes, faço em passo separado após confirmação explícita (destrutivo).
+- Push notifications nativas (mockup mostra sino; usa polling por enquanto).
+- Chat/mensagens internas.
+- Assinatura digital de documentos (usa fluxo existente se solicitado depois).
 
----
+## Estimativa de arquivos
 
-## Ordem de entrega
+- ~10 páginas novas em `src/pages/colaborador/`.
+- 2 componentes de layout (Tabs, Header).
+- 1 hook `use-colaborador.ts`.
+- 1 rota backend nova + 3 migrations em `init-db.js`.
+- Registro das rotas em `src/App.tsx`.
 
-1. Backend: `schema-holding.sql` + init-db + rotas novas + patches nas rotas de RH.
-2. Frontend admin: página empresas, dashboard holding, ajustes nas telas RH.
-3. App do Colaborador: remover módulos merchandising, adaptar telas, renomear.
-4. QA rápido: seed empresa Anatriello, criar colaborador, bater ponto, enviar documento, aprovar ajuste.
-
-Confirma para eu executar? Se quiser priorizar (ex: só backend + dashboard antes do app), me diz.
+Aprovar para eu implementar tudo de uma vez?

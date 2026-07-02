@@ -106,6 +106,14 @@ import PromotorEnviar from "./pages/promotor/PromotorEnviar";
 import PromotorConfig from "./pages/promotor/PromotorConfig";
 import PromotorTrocarSenha from "./pages/promotor/PromotorTrocarSenha";
 import PromotorEquipe from "./pages/promotor/PromotorEquipe";
+import ColaboradorHome from "./pages/colaborador/ColaboradorHome";
+import ColaboradorJornada from "./pages/colaborador/ColaboradorJornada";
+import ColaboradorSolicitacoes from "./pages/colaborador/ColaboradorSolicitacoes";
+import ColaboradorFerias from "./pages/colaborador/ColaboradorFerias";
+import ColaboradorHolerite from "./pages/colaborador/ColaboradorHolerite";
+import ColaboradorDocumentos from "./pages/colaborador/ColaboradorDocumentos";
+import ColaboradorBeneficios from "./pages/colaborador/ColaboradorBeneficios";
+import ColaboradorPerfil from "./pages/colaborador/ColaboradorPerfil";
 import AccessLogin from "./pages/promotor/AccessLogin";
 import AccessOnlyHome from "./pages/promotor/AccessOnlyHome";
 import NotFound from "./pages/NotFound";
@@ -368,6 +376,16 @@ const App = () => (
             <Route path="/promotor/configuracoes" element={<PromotorConfig />} />
             <Route path="/promotor/trocar-senha" element={<PromotorTrocarSenha />} />
             <Route path="/promotor/equipe" element={<PromotorEquipe />} />
+            {/* App do Colaborador (Anatriello Gestão) */}
+            <Route path="/app" element={<Navigate to="/app/home" replace />} />
+            <Route path="/app/home" element={<ColaboradorHome />} />
+            <Route path="/app/jornada" element={<ColaboradorJornada />} />
+            <Route path="/app/solicitacoes" element={<ColaboradorSolicitacoes />} />
+            <Route path="/app/ferias" element={<ColaboradorFerias />} />
+            <Route path="/app/holerite" element={<ColaboradorHolerite />} />
+            <Route path="/app/documentos" element={<ColaboradorDocumentos />} />
+            <Route path="/app/beneficios" element={<ColaboradorBeneficios />} />
+            <Route path="/app/perfil" element={<ColaboradorPerfil />} />
             {/* Ayratech Access (Access Only App) */}
             <Route path="/acesso/promotor/login" element={<AccessLogin />} />
             <Route path="/acesso/promotor/home" element={<AccessOnlyHome />} />

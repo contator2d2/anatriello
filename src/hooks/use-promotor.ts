@@ -257,6 +257,51 @@ export function usePromotorChangePassword() {
   });
 }
 
+// ============ COLABORADOR APP - Férias/Solicitações/Atestados/Comunicados/Benefícios ============
+export function useColabMeFull() {
+  return useQuery({ queryKey: ['colab-me-full'], queryFn: () => promotorApi<any>('/api/promotor/me/full') });
+}
+export function useColabVacations() {
+  return useQuery({ queryKey: ['colab-vacations'], queryFn: () => promotorApi<any[]>('/api/promotor/vacations') });
+}
+export function useColabRequestVacation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: any) => promotorApi<any>('/api/promotor/vacations/request', { method: 'POST', body: data }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['colab-vacations'] }); qc.invalidateQueries({ queryKey: ['colab-requests'] }); },
+  });
+}
+export function useColabAbsences() {
+  return useQuery({ queryKey: ['colab-absences'], queryFn: () => promotorApi<any[]>('/api/promotor/absences') });
+}
+export function useColabMedicalCertificates() {
+  return useQuery({ queryKey: ['colab-medcerts'], queryFn: () => promotorApi<any[]>('/api/promotor/medical-certificates') });
+}
+export function useColabCreateMedicalCertificate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: any) => promotorApi<any>('/api/promotor/medical-certificates', { method: 'POST', body: data }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['colab-medcerts'] }),
+  });
+}
+export function useColabRequests() {
+  return useQuery({ queryKey: ['colab-requests'], queryFn: () => promotorApi<any[]>('/api/promotor/requests') });
+}
+export function useColabCreateRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { kind: string; payload: any }) => promotorApi<any>('/api/promotor/requests', { method: 'POST', body: data }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['colab-requests'] }),
+  });
+}
+export function useColabAnnouncements() {
+  return useQuery({ queryKey: ['colab-announcements'], queryFn: () => promotorApi<any[]>('/api/promotor/announcements'), refetchInterval: 60000 });
+}
+export function useColabBenefits() {
+  return useQuery({ queryKey: ['colab-benefits'], queryFn: () => promotorApi<any[]>('/api/promotor/benefits') });
+}
+
+
 export function usePromotorSync() {
   const qc = useQueryClient();
   return useMutation({

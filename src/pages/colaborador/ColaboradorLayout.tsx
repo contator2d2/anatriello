@@ -1,0 +1,63 @@
+import { ReactNode } from "react";
+import { NavLink, useNavigate } from "react-router-dom";
+import { Home, Clock, FileText, User, ChevronLeft } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+interface Props {
+  children: ReactNode;
+  title?: string;
+  showBack?: boolean;
+  rightSlot?: ReactNode;
+  bg?: "navy" | "light";
+}
+
+const tabs = [
+  { to: "/app/home", label: "Início", icon: Home },
+  { to: "/app/jornada", label: "Jornada", icon: Clock },
+  { to: "/app/solicitacoes", label: "Solicitações", icon: FileText },
+  { to: "/app/perfil", label: "Perfil", icon: User },
+];
+
+export function ColaboradorLayout({ children, title, showBack, rightSlot, bg = "light" }: Props) {
+  const nav = useNavigate();
+  return (
+    <div className={cn("min-h-screen flex flex-col", bg === "navy" ? "bg-[#0a1128] text-white" : "bg-[#f4f6fb] text-[#0f172a]")}>
+      {title && (
+        <header className={cn(
+          "sticky top-0 z-30 px-4 pt-[env(safe-area-inset-top)] pb-3 flex items-center gap-3 border-b",
+          bg === "navy" ? "bg-[#0a1128] border-white/10" : "bg-white border-slate-100"
+        )}>
+          {showBack && (
+            <button onClick={() => nav(-1)} className="p-1 -ml-1 rounded-full hover:bg-black/5">
+              <ChevronLeft className="h-6 w-6" />
+            </button>
+          )}
+          <h1 className="flex-1 text-center text-[15px] font-semibold">{title}</h1>
+          <div className="w-6">{rightSlot}</div>
+        </header>
+      )}
+      <main className="flex-1 pb-24 overflow-y-auto">{children}</main>
+      <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-slate-100 shadow-[0_-4px_20px_rgba(15,23,42,0.05)] pb-[env(safe-area-inset-bottom)]">
+        <div className="max-w-lg mx-auto grid grid-cols-4">
+          {tabs.map(t => (
+            <NavLink
+              key={t.to}
+              to={t.to}
+              className={({ isActive }) => cn(
+                "flex flex-col items-center gap-1 py-2.5 text-[11px] font-medium transition-colors",
+                isActive ? "text-[#f97316]" : "text-slate-400"
+              )}
+            >
+              {({ isActive }) => (
+                <>
+                  <t.icon className={cn("h-5 w-5", isActive && "stroke-[2.5]")} />
+                  <span>{t.label}</span>
+                </>
+              )}
+            </NavLink>
+          ))}
+        </div>
+      </nav>
+    </div>
+  );
+}
