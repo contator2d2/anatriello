@@ -1,97 +1,76 @@
-# App do Colaborador — Anatriello
 
-App mobile web (PWA já existente) para o colaborador registrar ponto, acompanhar jornada, fazer solicitações e acessar seus dados. Visual fiel ao mockup enviado (dark navy + laranja, cards arredondados, bottom tabs).
+# Ponto Eletrônico Completo — Anatriello Gestão
 
-## Escopo desta entrega
+Vamos elevar o módulo de ponto ao nível do Secullum, mantendo tudo integrado ao app do colaborador, à biometria facial e ao GPS que já temos.
 
-1. **Ponto e Jornada**
-   - Home com card "PONTO": horário atual, situação (fora/em jornada/almoço), horário previsto de entrada e almoço.
-   - Botão "REGISTRAR PONTO" em fluxo único: detecta o próximo tipo (entrada → saída almoço → retorno → saída → extra).
-   - Captura GPS (obrigatório). Bloqueia se fora do raio da empresa vinculada.
-   - Se `facial_required = true` no cadastro do colaborador → exige validação facial (usa `facial-recognition.ts` já existente). Caso contrário, dispensa.
-   - Empresa vinculada é lida automaticamente de `employees.company_id` (sem seletor).
-   - Modo offline: persiste em IndexedDB e sincroniza quando online (reaproveita `use-offline-sync`).
-   - Tela "Minha Jornada": abas Dia / Semana / Mês, timeline dos batidos (Entrada, Início Almoço, Fim Almoço, Saída Prevista/Saída) com status "No horário / Atraso / Pendente", resumo do dia (Trabalhado, Almoço, Total, Saldo) e Banco de Horas.
+## Visão geral
 
-2. **Solicitações**
-   - Lista abas Minhas / Histórico, cards por tipo: Férias, Afastamento, Vale-transporte, 2ª via de holerite, **Horas extras**, **Ajuste de ponto**, **Atestado médico**.
-   - FAB "+" abre modal para nova solicitação com formulário por tipo (datas, motivo, anexo).
-   - Status: Pendente / Aprovado / Recusado / Concluído.
-   - Backend reaproveita tabelas existentes: `vacations`, `absences`, `medical_certificates`, `punch_adjustments`. Cria tabela nova `employee_requests` para tipos genéricos (vale-transporte, 2ª via, horas extras).
+O ponto passa a ter três camadas:
 
-3. **Férias (tela dedicada)**
-   - Período aquisitivo, cards "Dias totais / gozados / restantes", botão "SOLICITAR FÉRIAS", próximas férias, histórico. Usa `vacations`.
+1. **Coleta** — App do colaborador (biometria facial + GPS + selfie assinada) e importação de REP via arquivo AFD (Portaria 1.510/671).
+2. **Processamento** — Motor de cálculo diário (previsto x realizado, atrasos, extras, DSR, banco de horas 1:1) rodando quando uma batida entra ou uma escala muda.
+3. **Gestão** — Painel do RH com Cartão Ponto editável, extrato do banco de horas, fechamento de período, relatórios PDF e fluxo de ajustes (RH direto **e** solicitação do colaborador com aprovação).
 
-4. **Holerite**
-   - Lista mensal com valor bruto e data de pagamento; download PDF. Usa `payslips`.
+## Fases de entrega
 
-5. **Documentos**
-   - Pastas: Admissão, Contratuais, Pessoais, Holerites, Férias, Avaliações, Treinamentos.
-   - Visualiza documentos enviados pelo RH (`rh_documents`) e permite upload/entrega pelo colaborador (`document_deliveries`).
+### Fase 1 — Cartão Ponto e Cálculos (base)
+- Grade estilo Secullum: colunas Data · Entrada 1 · Saída 1 · Entrada 2 · Saída 2 · … · Normais · BCred · BDeb · BSaldo.
+- Edição inline de batidas com auditoria (asterisco vermelho quando editado manualmente, guardando autor, valor anterior, motivo).
+- Cálculo diário conforme a jornada do colaborador (já temos "horário diferente por dia").
+- Marcadores automáticos: Feriado, Folga, DSR, Falta, Atraso, Extra.
+- Filtros por período, folha (matrícula), nome, empresa (multi-tenant já existente).
 
-6. **Benefícios e Comunicados**
-   - Card na home com últimos comunicados (paginado).
-   - Tela Benefícios: lista de benefícios ativos do colaborador (VA/VR, plano saúde, odonto, seguro).
+### Fase 2 — Banco de Horas 1:1 + regras
+- Saldo diário = Realizado − Previsto (respeitando tolerância configurável por empresa, ex.: 10 min).
+- Acúmulo em `time_bank_entries` com histórico (crédito, débito, compensação, ajuste manual, pagamento).
+- Extrato do banco por colaborador (igual print "Extrato do Período").
+- Fechamento de período (bloqueia edição pós-assinatura eletrônica).
 
-7. **Perfil**
-   - Dados pessoais, contato, dependentes, dados bancários (com PIX), endereço, configurações, privacidade — todos em modo leitura + solicitar alteração (gera `employee_requests`).
-   - Foto do colaborador (usa foto facial cadastrada).
+### Fase 3 — Escalas, Horários e Feriados
+- Cadastro de **Horários** (turnos): jornada semanal com múltiplos intervalos, escala 6x1, 12x36, escala mensal.
+- Cadastro de **Feriados** nacionais/estaduais/municipais por empresa (com importação automática dos nacionais).
+- **Quadro de Horários**: vincular colaborador → horário/escala com vigência (início/fim).
+- Departamentos e Funções (já existem parcialmente — só expor no ponto).
 
-## Arquitetura técnica
+### Fase 4 — Ajustes de ponto (dois fluxos)
+- **RH direto**: edita batida no Cartão Ponto → grava em `punch_adjustments` com autor, motivo, valores antes/depois.
+- **Colaborador via app**: nova aba "Ajuste de ponto" em Solicitações → escolhe dia, informa horário correto, anexa justificativa/foto → gestor aprova/reprova → se aprovado, gera batida com flag `origin='employee_request'`.
+- Notificações in-app + e-mail para o supervisor quando há solicitação pendente.
 
-- **Rotas** (novas em `src/pages/promotor/` — reaproveita `PromotorLayout` renomeado visualmente para "Colaborador"):
-  - `/app/home` (novo `ColaboradorHome.tsx`)
-  - `/app/jornada`
-  - `/app/solicitacoes`
-  - `/app/ferias`
-  - `/app/holerite`
-  - `/app/documentos`
-  - `/app/beneficios`
-  - `/app/perfil`
-  - Reaproveita `PromoterAppAuthContext` para autenticação do colaborador.
+### Fase 5 — App + Biometria (reforço)
+- Batida no app já tem GPS + facial; passa a validar:
+  - **Cerca geográfica** (raio configurado por empresa/endereço da unidade).
+  - **Horário de jornada** (avisa se está fora da janela, mas não bloqueia — vira "batida fora de horário" no cartão).
+  - **Selfie assinada** salva junto com a batida (hash SHA-256 + timestamp GMT-3, requisito da Portaria 671).
+- Comprovante de batida em PDF (NSR) disponível para download no app.
 
-- **Design tokens** (`src/index.css` — novo tema "colaborador-app" escopado por rota):
-  - `--bg`: `220 40% 8%` (navy escuro)
-  - `--card`: `0 0% 100%`
-  - `--brand`: `18 95% 55%` (laranja Anatriello)
-  - Tipografia: manter Inter (já em uso), pesos 600/700 para títulos.
+### Fase 6 — AFD e Relatórios
+- **Importação AFD**: upload do arquivo do REP físico → parser cria batidas com `source='afd'` e evita duplicidade por hash.
+- **Exportação AFD** (layout Portaria 671) para fiscalização.
+- Relatórios PDF: Cartão Ponto individual, Espelho do período (assinável), Extrato do Banco de Horas, Relação de faltas/atrasos, Relatório de horas extras.
+- Assinatura eletrônica do espelho (reaproveita módulo de assinatura já existente com SHA-256 + OTP).
 
-- **Bottom tabs** (novo `ColaboradorTabs.tsx`): Início / Jornada / Solicitações / Perfil.
+## Detalhes técnicos
 
-- **Backend** (novos endpoints em `backend/src/routes/colaborador-app.js`):
-  - `GET /api/colab/me` — dados do colaborador + empresa + config facial/gps.
-  - `POST /api/colab/punch` — registra ponto com validação de raio da empresa (`companies.lat/lng/radius`) e match facial opcional.
-  - `GET /api/colab/journey?date=` — jornada do dia consolidada.
-  - `GET /api/colab/journey/summary?period=week|month` — resumo com banco de horas.
-  - `GET/POST /api/colab/requests` — CRUD de `employee_requests` + adapters para férias/afastamento/atestado.
-  - `GET /api/colab/payslips`, `GET /api/colab/documents`, `POST /api/colab/documents` (upload), `GET /api/colab/benefits`, `GET /api/colab/announcements`.
+### Novas tabelas (backend, via `ensureTables`)
+- `work_schedules` — jornada (nome, tipo, dias com entrada/almoço/saída, tolerância).
+- `employee_schedules` — vínculo colaborador ↔ jornada com vigência.
+- `holidays` — feriados por empresa/escopo (nacional, estadual, municipal).
+- `punch_records` — evolução da atual: adiciona `source` (`app`, `afd`, `manual`, `request`), `nsr`, `signature_hash`, `edited_by`, `edited_at`, `original_time`.
+- `punch_adjustments` — trilha de auditoria de edições (já existe, expandir).
+- `punch_adjustment_requests` — solicitações do colaborador (status, aprovador, motivo).
+- `time_bank_entries` — lançamentos do banco (data, tipo, minutos, saldo acumulado).
+- `time_bank_closings` — fechamentos de período (empresa, período, assinado_por).
 
-- **Migrations** (`backend/src/init-db.js` — ensureTables):
-  - `employee_requests(id, employee_id, company_id, kind, payload jsonb, status, requested_at, resolved_at, resolved_by, notes)`.
-  - `company_announcements(id, company_id, title, body, published_at, created_by)`.
-  - `employee_benefits(id, employee_id, kind, label, value_cents, provider, status)`.
-  - Garante colunas em `companies`: `lat`, `lng`, `punch_radius_m default 150`.
+### Motor de cálculo
+Serviço `PointCalculator` (Node) em `backend/src/services/point-calculator.js` recalcula um dia inteiro quando uma batida entra/edita/escala muda. Idempotente. Roda inline no request e também via cron noturno para fechar o dia.
 
-- **Validação de ponto**:
-  - Facial: `facial-recognition.ts` com WebGL + fallback CPU, threshold 0.6 (já implementado).
-  - GPS: Haversine contra `companies.lat/lng`; se fora do raio, requer justificativa (grava `geo_status='fora_area'`).
+### Frontend
+- Nova rota `/rh/ponto` com abas: **Cartão Ponto** · **Banco de Horas** · **Escalas** · **Feriados** · **Solicitações** · **AFD** · **Relatórios**.
+- Grade editável usando `@tanstack/react-table` + edição inline com atalhos (tab entre células, como Secullum).
+- App do colaborador ganha aba "Ajuste de ponto" dentro de Solicitações.
 
-- **Offline**: usa `offline-db.ts` (IndexedDB) para fila de batidas; worker de sync já existe.
+## Ordem sugerida de execução
+Faço **Fase 1 + Fase 2 + Fase 4** nesta primeira leva (é o coração do sistema e o que você já pode usar com os colaboradores existentes). Fases 3, 5 reforço e 6 (AFD) entram em uma segunda leva, para não estourar essa entrega.
 
-- **Segurança**: JWT do `PromoterAppAuthContext`; RLS não aplicável (backend Postgres direto). Endpoints validam `employee_id` do token.
-
-## Fora do escopo desta entrega
-
-- Push notifications nativas (mockup mostra sino; usa polling por enquanto).
-- Chat/mensagens internas.
-- Assinatura digital de documentos (usa fluxo existente se solicitado depois).
-
-## Estimativa de arquivos
-
-- ~10 páginas novas em `src/pages/colaborador/`.
-- 2 componentes de layout (Tabs, Header).
-- 1 hook `use-colaborador.ts`.
-- 1 rota backend nova + 3 migrations em `init-db.js`.
-- Registro das rotas em `src/App.tsx`.
-
-Aprovar para eu implementar tudo de uma vez?
+Se preferir, posso inverter e começar pela Fase 6 (AFD) para migrar dados históricos do Secullum antes.
