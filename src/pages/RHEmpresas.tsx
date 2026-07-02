@@ -38,6 +38,11 @@ const emptyForm: Partial<Company> = {
   is_active: true,
   punch_facial_required: true,
   punch_gps_required: false,
+  latitude: null,
+  longitude: null,
+  default_radius_meters: 200,
+  geofence_strict: false,
+  geofence_require_photo: false,
 };
 
 export default function RHEmpresas() {
