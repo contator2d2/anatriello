@@ -41,13 +41,16 @@ export default function RHAcessos() {
   const [managerDialog, setManagerDialog] = useState<any>(null);
   const [tempPassword, setTempPassword] = useState("");
   const [managerPassword, setManagerPassword] = useState("");
+  const [grantTemplateId, setGrantTemplateId] = useState<string>("");
   const { toast } = useToast();
 
   const { data: employees = [], isLoading } = useEmployees();
+  const { data: templates = [] } = useAppAccessTemplates();
   const grantAccess = useGrantAppAccess();
   const grantManagerAccess = useGrantManagerAccess();
   const blockAccess = useBlockAppAccess();
   const resetPassword = useResetAppPassword();
+  const assignTemplate = useAssignAppTemplate();
 
   const filtered = useMemo(() => {
     let list = employees as any[];
