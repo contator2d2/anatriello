@@ -317,6 +317,7 @@ router.post('/login', async (req, res) => {
         organization_id: organizationId,
         modules_enabled: modulesEnabled,
         has_connections: hasConnections,
+        must_change_password: !!user.must_change_password,
       },
       token
     });
