@@ -517,6 +517,13 @@ router.post('/punch', authenticatePromotor, async (req, res) => {
       );
     }
 
+    // NSR + assinatura digital (Portaria MTP 671/2021)
+    try {
+      const { ensurePunchSignature } = await import('../services/receipt-pdf.js');
+      const signed = await ensurePunchSignature(result.rows[0].id);
+      if (signed) { result.rows[0].nsr = signed.nsr; result.rows[0].signature_hash = signed.signature_hash; }
+    } catch (e) { logError('promotor.punch.signature', e); }
+
     res.json(result.rows[0]);
   } catch (err) {
     logError('promotor.punch', err);
