@@ -36,6 +36,10 @@ export default function PromotorLogin() {
 
       localStorage.setItem('promotor_token', data.token);
       localStorage.setItem('promotor_employee', JSON.stringify(data.employee));
+      if (Array.isArray(data.employee?.capabilities)) {
+        localStorage.setItem('promotor_capabilities', JSON.stringify(data.employee.capabilities));
+        window.dispatchEvent(new Event('colab-caps-changed'));
+      }
 
       if (data.employee.force_password_change) {
         navigate('/promotor/trocar-senha');

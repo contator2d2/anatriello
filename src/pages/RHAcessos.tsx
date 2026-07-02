@@ -2,6 +2,8 @@ import { useState, useMemo } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { useEmployees, useGrantManagerAccess } from "@/hooks/use-rh";
 import { useGrantAppAccess, useBlockAppAccess, useResetAppPassword } from "@/hooks/use-promotor";
+import { useAppAccessTemplates, useAssignAppTemplate } from "@/hooks/use-app-access-templates";
+import AppAccessTemplatesTab from "@/components/rh/AppAccessTemplatesTab";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -9,6 +11,8 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Search, Shield, ShieldOff, KeyRound, Copy, Smartphone, UserCheck, UserX, RefreshCw, Loader2, BriefcaseBusiness } from "lucide-react";
 import { format } from "date-fns";
@@ -37,13 +41,16 @@ export default function RHAcessos() {
   const [managerDialog, setManagerDialog] = useState<any>(null);
   const [tempPassword, setTempPassword] = useState("");
   const [managerPassword, setManagerPassword] = useState("");
+  const [grantTemplateId, setGrantTemplateId] = useState<string>("");
   const { toast } = useToast();
 
   const { data: employees = [], isLoading } = useEmployees();
+  const { data: templates = [] } = useAppAccessTemplates();
   const grantAccess = useGrantAppAccess();
   const grantManagerAccess = useGrantManagerAccess();
   const blockAccess = useBlockAppAccess();
   const resetPassword = useResetAppPassword();
+  const assignTemplate = useAssignAppTemplate();
 
   const filtered = useMemo(() => {
     let list = employees as any[];
@@ -71,6 +78,10 @@ export default function RHAcessos() {
   const handleGrant = (emp: any) => {
     const pw = generateTempPassword();
     setTempPassword(pw);
+    const currentTpl = emp.app_access_template_id
+      || templates.find((t: any) => t.is_default)?.id
+      || "";
+    setGrantTemplateId(currentTpl);
     setGrantDialog(emp);
   };
 
@@ -84,6 +95,9 @@ export default function RHAcessos() {
     if (!grantDialog) return;
     try {
       await grantAccess.mutateAsync({ employee_id: grantDialog.id, password: tempPassword, force_password_change: true });
+      if (grantTemplateId) {
+        await assignTemplate.mutateAsync({ employee_id: grantDialog.id, template_id: grantTemplateId });
+      }
       toast({ title: "Acesso liberado!", description: `Senha temporária: ${tempPassword}` });
       setGrantDialog(null);
     } catch (err: any) {
@@ -128,6 +142,17 @@ export default function RHAcessos() {
           <h1 className="text-2xl font-bold text-foreground">Gestão de Acessos</h1>
           <p className="text-sm text-muted-foreground">Controle de acesso ao App do Colaborador</p>
         </div>
+
+        <Tabs defaultValue="colaboradores">
+          <TabsList>
+            <TabsTrigger value="colaboradores">Colaboradores</TabsTrigger>
+            <TabsTrigger value="perfis">Perfis do App</TabsTrigger>
+          </TabsList>
+          <TabsContent value="perfis" className="mt-4">
+            <AppAccessTemplatesTab />
+          </TabsContent>
+          <TabsContent value="colaboradores" className="mt-4 space-y-6">
+
 
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -279,7 +304,11 @@ export default function RHAcessos() {
             )}
           </CardContent>
         </Card>
+          </TabsContent>
+        </Tabs>
       </div>
+
+
 
       {/* Grant Access Dialog */}
       <Dialog open={!!grantDialog} onOpenChange={v => !v && setGrantDialog(null)}>
@@ -305,7 +334,26 @@ export default function RHAcessos() {
               </div>
               <p className="text-xs text-muted-foreground">O colaborador será obrigado a trocar a senha no primeiro login.</p>
             </div>
+            <div className="space-y-2">
+              <Label className="text-sm">Perfil do App</Label>
+              <Select value={grantTemplateId} onValueChange={setGrantTemplateId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecionar perfil…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {templates.map((t: any) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.name}{t.is_default ? " (padrão)" : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-muted-foreground">
+                Define o que o colaborador pode fazer dentro do app (ponto, holerite, férias etc.).
+              </p>
+            </div>
             <div className="flex gap-2 justify-end">
+
               <Button variant="outline" onClick={() => setGrantDialog(null)}>Cancelar</Button>
               <Button onClick={confirmGrant} disabled={grantAccess.isPending}>
                 {grantAccess.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}

@@ -118,6 +118,7 @@ import ColaboradorDocumentos from "./pages/colaborador/ColaboradorDocumentos";
 import ColaboradorBeneficios from "./pages/colaborador/ColaboradorBeneficios";
 import ColaboradorPerfil from "./pages/colaborador/ColaboradorPerfil";
 import ColabProtectedRoute from "./components/ColabProtectedRoute";
+import RequireCap from "./components/ColabRequireCap";
 import AccessLogin from "./pages/promotor/AccessLogin";
 import AccessOnlyHome from "./pages/promotor/AccessOnlyHome";
 import NotFound from "./pages/NotFound";
@@ -394,13 +395,15 @@ const App = () => (
             <Route path="/app/login" element={<PromotorLogin />} />
             <Route path="/app" element={<Navigate to="/app/home" replace />} />
             <Route path="/app/home" element={<ColabProtectedRoute><ColaboradorHome /></ColabProtectedRoute>} />
-            <Route path="/app/jornada" element={<ColabProtectedRoute><ColaboradorJornada /></ColabProtectedRoute>} />
-            <Route path="/app/solicitacoes" element={<ColabProtectedRoute><ColaboradorSolicitacoes /></ColabProtectedRoute>} />
-            <Route path="/app/ferias" element={<ColabProtectedRoute><ColaboradorFerias /></ColabProtectedRoute>} />
-            <Route path="/app/holerite" element={<ColabProtectedRoute><ColaboradorHolerite /></ColabProtectedRoute>} />
-            <Route path="/app/documentos" element={<ColabProtectedRoute><ColaboradorDocumentos /></ColabProtectedRoute>} />
-            <Route path="/app/beneficios" element={<ColabProtectedRoute><ColaboradorBeneficios /></ColabProtectedRoute>} />
-            <Route path="/app/perfil" element={<ColabProtectedRoute><ColaboradorPerfil /></ColabProtectedRoute>} />
+            <Route path="/app/jornada" element={<ColabProtectedRoute><RequireCap cap="journey.view"><ColaboradorJornada /></RequireCap></ColabProtectedRoute>} />
+            <Route path="/app/solicitacoes" element={<ColabProtectedRoute><RequireCap cap="requests.view"><ColaboradorSolicitacoes /></RequireCap></ColabProtectedRoute>} />
+            <Route path="/app/ferias" element={<ColabProtectedRoute><RequireCap cap="vacations.view"><ColaboradorFerias /></RequireCap></ColabProtectedRoute>} />
+            <Route path="/app/holerite" element={<ColabProtectedRoute><RequireCap cap="payslip.view"><ColaboradorHolerite /></RequireCap></ColabProtectedRoute>} />
+            <Route path="/app/documentos" element={<ColabProtectedRoute><RequireCap cap="documents.view"><ColaboradorDocumentos /></RequireCap></ColabProtectedRoute>} />
+            <Route path="/app/beneficios" element={<ColabProtectedRoute><RequireCap cap="benefits.view"><ColaboradorBeneficios /></RequireCap></ColabProtectedRoute>} />
+            <Route path="/app/perfil" element={<ColabProtectedRoute><RequireCap cap="profile.view"><ColaboradorPerfil /></RequireCap></ColabProtectedRoute>} />
+
+
 
             {/* Ayratech Access (Access Only App) */}
             <Route path="/acesso/promotor/login" element={<AccessLogin />} />

@@ -4,6 +4,7 @@ import { Home, Clock, FileText, User, ChevronLeft, WifiOff, CloudUpload } from "
 import { cn } from "@/lib/utils";
 import { useBranding } from "@/hooks/use-branding";
 import { useOfflineSync } from "@/hooks/use-offline-sync";
+import { useColabCapabilitiesSync, useCaps } from "@/hooks/use-colab-capabilities";
 import anatrielloLogo from "@/assets/anatriello-logo.png.asset.json";
 
 interface Props {
@@ -14,11 +15,12 @@ interface Props {
   bg?: "navy" | "light";
 }
 
-const tabs = [
+// tab.cap = capability necessária para mostrar a aba (undefined = sempre visível)
+const tabs: { to: string; label: string; icon: any; cap?: string }[] = [
   { to: "/app/home", label: "Início", icon: Home },
-  { to: "/app/jornada", label: "Jornada", icon: Clock },
-  { to: "/app/solicitacoes", label: "Solicitações", icon: FileText },
-  { to: "/app/perfil", label: "Perfil", icon: User },
+  { to: "/app/jornada", label: "Jornada", icon: Clock, cap: "journey.view" },
+  { to: "/app/solicitacoes", label: "Solicitações", icon: FileText, cap: "requests.view" },
+  { to: "/app/perfil", label: "Perfil", icon: User, cap: "profile.view" },
 ];
 
 export function ColaboradorLayout({ children, title, showBack, rightSlot, bg = "light" }: Props) {
@@ -26,6 +28,10 @@ export function ColaboradorLayout({ children, title, showBack, rightSlot, bg = "
   const { branding } = useBranding() as any;
   const { isOnline, isSyncing } = useOfflineSync();
   const logo = branding?.logo_topbar || branding?.logo || anatrielloLogo.url;
+  useColabCapabilitiesSync();
+  const caps = useCaps();
+  const visibleTabs = tabs.filter(t => !t.cap || caps.includes(t.cap));
+  const cols = visibleTabs.length || 1;
 
   return (
     <div className={cn("min-h-screen flex flex-col", bg === "navy" ? "bg-[#0a1128] text-white" : "bg-[#f4f6fb] text-[#0f172a]")}>
@@ -66,8 +72,11 @@ export function ColaboradorLayout({ children, title, showBack, rightSlot, bg = "
       )}
       <main className="flex-1 pb-24 overflow-y-auto">{children}</main>
       <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-slate-100 shadow-[0_-4px_20px_rgba(15,23,42,0.05)] pb-[env(safe-area-inset-bottom)]">
-        <div className="max-w-lg mx-auto grid grid-cols-4">
-          {tabs.map(t => (
+        <div
+          className="max-w-lg mx-auto grid"
+          style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
+        >
+          {visibleTabs.map(t => (
             <NavLink
               key={t.to}
               to={t.to}

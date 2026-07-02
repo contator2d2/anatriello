@@ -5,6 +5,7 @@ import crypto from 'crypto';
 import { query } from '../db.js';
 import { authenticate } from '../middleware/auth.js';
 import { logInfo, logError } from '../logger.js';
+import { getEmployeeCapabilities } from '../lib/colab-capabilities.js';
 
 const router = express.Router();
 router.use((req, res, next) => {
@@ -188,6 +189,7 @@ router.post('/login', async (req, res) => {
         profile: employee.worker_profile,
         organization_id: employee.organization_id,
         force_password_change: employee.force_password_change && employee.temp_password,
+        capabilities: await getEmployeeCapabilities(query, employee.id).catch(() => []),
       },
     });
   } catch (err) {
@@ -2085,7 +2087,8 @@ router.get('/me/full', authenticatePromotor, async (req, res) => {
         WHERE e.id = $1`, [req.employeeId]
     ).catch(async () => await query(`SELECT * FROM employees WHERE id = $1`, [req.employeeId]));
     const dependents = await query(`SELECT * FROM employee_dependents WHERE employee_id = $1`, [req.employeeId]).catch(() => ({ rows: [] }));
-    res.json({ employee: empRes.rows[0], dependents: dependents.rows });
+    const capabilities = await getEmployeeCapabilities(query, req.employeeId).catch(() => []);
+    res.json({ employee: empRes.rows[0], dependents: dependents.rows, capabilities });
   } catch (e) { logError('promotor.me.full', e); res.status(500).json({ error: e.message }); }
 });
 
