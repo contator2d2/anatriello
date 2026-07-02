@@ -561,11 +561,18 @@ router.put('/password', async (req, res) => {
     // Hash new password
     const passwordHash = await bcrypt.hash(newPassword, 10);
     
-    // Update password
-    await query(
-      'UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2',
-      [passwordHash, decoded.userId]
-    );
+    // Update password (and clear the temporary-password flag if present)
+    try {
+      await query(
+        'UPDATE users SET password_hash = $1, must_change_password = false, updated_at = NOW() WHERE id = $2',
+        [passwordHash, decoded.userId]
+      );
+    } catch (_) {
+      await query(
+        'UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2',
+        [passwordHash, decoded.userId]
+      );
+    }
 
     res.json({ message: 'Senha alterada com sucesso' });
   } catch (error) {
