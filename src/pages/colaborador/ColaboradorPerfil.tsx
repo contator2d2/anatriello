@@ -22,7 +22,7 @@ export default function ColaboradorPerfil() {
   function logout() {
     localStorage.removeItem("promotor_token");
     localStorage.removeItem("promotor_employee");
-    nav("/app/login");
+    nav("/colaborador/login");
   }
 
   return (

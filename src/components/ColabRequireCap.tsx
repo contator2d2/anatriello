@@ -9,7 +9,7 @@ interface Props {
   fallback?: string; // caminho para redirecionar. Default: /app/home
 }
 
-export default function RequireCap({ cap, children, fallback = "/app/home" }: Props) {
+export default function RequireCap({ cap, children, fallback = "/colaborador/home" }: Props) {
   const { toast } = useToast();
   const ok = hasCap(cap);
 

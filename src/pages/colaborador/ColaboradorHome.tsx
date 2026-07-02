@@ -148,13 +148,13 @@ export default function ColaboradorHome() {
         <div>
           <p className="text-sm font-bold mb-3">Acesso rápido</p>
           <div className="grid grid-cols-4 gap-3">
-            {can("payslip.view") && <QuickAction icon={FileText} label="Holerite" color="#3b82f6" onClick={() => nav("/app/holerite")} />}
-            {can("vacations.view") && <QuickAction icon={Umbrella} label="Férias" color="#06b6d4" onClick={() => nav("/app/ferias")} />}
-            {can("benefits.view") && <QuickAction icon={Gift} label="Benefícios" color="#f43f5e" onClick={() => nav("/app/beneficios")} />}
-            {can("documents.view") && <QuickAction icon={FolderOpen} label="Documentos" color="#8b5cf6" onClick={() => nav("/app/documentos")} />}
-            {can("requests.view") && <QuickAction icon={Edit3} label="Solicitações" color="#f59e0b" onClick={() => nav("/app/solicitacoes")} />}
-            {can("journey.view") && <QuickAction icon={Clock} label="Jornada" color="#10b981" onClick={() => nav("/app/jornada")} />}
-            {can("announcements.view") && <QuickAction icon={Bell} label="Comunicados" color="#ef4444" onClick={() => nav("/app/perfil")} />}
+            {can("payslip.view") && <QuickAction icon={FileText} label="Holerite" color="#3b82f6" onClick={() => nav("/colaborador/holerite")} />}
+            {can("vacations.view") && <QuickAction icon={Umbrella} label="Férias" color="#06b6d4" onClick={() => nav("/colaborador/ferias")} />}
+            {can("benefits.view") && <QuickAction icon={Gift} label="Benefícios" color="#f43f5e" onClick={() => nav("/colaborador/beneficios")} />}
+            {can("documents.view") && <QuickAction icon={FolderOpen} label="Documentos" color="#8b5cf6" onClick={() => nav("/colaborador/documentos")} />}
+            {can("requests.view") && <QuickAction icon={Edit3} label="Solicitações" color="#f59e0b" onClick={() => nav("/colaborador/solicitacoes")} />}
+            {can("journey.view") && <QuickAction icon={Clock} label="Jornada" color="#10b981" onClick={() => nav("/colaborador/jornada")} />}
+            {can("announcements.view") && <QuickAction icon={Bell} label="Comunicados" color="#ef4444" onClick={() => nav("/colaborador/perfil")} />}
           </div>
         </div>
 

@@ -218,7 +218,7 @@ function SmartRedirect() {
   if (isSupermarketDomain) return <Navigate to="/acesso-supermercado" replace />;
   if (isColaboradorDomain) {
     const hasColabToken = typeof window !== 'undefined' && !!localStorage.getItem('promotor_token');
-    return <Navigate to={hasColabToken ? '/app/home' : '/app/login'} replace />;
+    return <Navigate to={hasColabToken ? '/colaborador/home' : '/colaborador/login'} replace />;
   }
   if (isGestorDomain) return <Navigate to="/gestor" replace />;
   
@@ -392,16 +392,16 @@ const App = () => (
             <Route path="/promotor/trocar-senha" element={<PromotorTrocarSenha />} />
             <Route path="/promotor/equipe" element={<PromotorEquipe />} />
             {/* App do Colaborador (Anatriello Gestão) */}
-            <Route path="/app/login" element={<PromotorLogin />} />
-            <Route path="/app" element={<Navigate to="/app/home" replace />} />
-            <Route path="/app/home" element={<ColabProtectedRoute><ColaboradorHome /></ColabProtectedRoute>} />
-            <Route path="/app/jornada" element={<ColabProtectedRoute><RequireCap cap="journey.view"><ColaboradorJornada /></RequireCap></ColabProtectedRoute>} />
-            <Route path="/app/solicitacoes" element={<ColabProtectedRoute><RequireCap cap="requests.view"><ColaboradorSolicitacoes /></RequireCap></ColabProtectedRoute>} />
-            <Route path="/app/ferias" element={<ColabProtectedRoute><RequireCap cap="vacations.view"><ColaboradorFerias /></RequireCap></ColabProtectedRoute>} />
-            <Route path="/app/holerite" element={<ColabProtectedRoute><RequireCap cap="payslip.view"><ColaboradorHolerite /></RequireCap></ColabProtectedRoute>} />
-            <Route path="/app/documentos" element={<ColabProtectedRoute><RequireCap cap="documents.view"><ColaboradorDocumentos /></RequireCap></ColabProtectedRoute>} />
-            <Route path="/app/beneficios" element={<ColabProtectedRoute><RequireCap cap="benefits.view"><ColaboradorBeneficios /></RequireCap></ColabProtectedRoute>} />
-            <Route path="/app/perfil" element={<ColabProtectedRoute><RequireCap cap="profile.view"><ColaboradorPerfil /></RequireCap></ColabProtectedRoute>} />
+            <Route path="/colaborador/login" element={<PromotorLogin />} />
+            <Route path="/colaborador" element={<Navigate to="/colaborador/home" replace />} />
+            <Route path="/colaborador/home" element={<ColabProtectedRoute><ColaboradorHome /></ColabProtectedRoute>} />
+            <Route path="/colaborador/jornada" element={<ColabProtectedRoute><RequireCap cap="journey.view"><ColaboradorJornada /></RequireCap></ColabProtectedRoute>} />
+            <Route path="/colaborador/solicitacoes" element={<ColabProtectedRoute><RequireCap cap="requests.view"><ColaboradorSolicitacoes /></RequireCap></ColabProtectedRoute>} />
+            <Route path="/colaborador/ferias" element={<ColabProtectedRoute><RequireCap cap="vacations.view"><ColaboradorFerias /></RequireCap></ColabProtectedRoute>} />
+            <Route path="/colaborador/holerite" element={<ColabProtectedRoute><RequireCap cap="payslip.view"><ColaboradorHolerite /></RequireCap></ColabProtectedRoute>} />
+            <Route path="/colaborador/documentos" element={<ColabProtectedRoute><RequireCap cap="documents.view"><ColaboradorDocumentos /></RequireCap></ColabProtectedRoute>} />
+            <Route path="/colaborador/beneficios" element={<ColabProtectedRoute><RequireCap cap="benefits.view"><ColaboradorBeneficios /></RequireCap></ColabProtectedRoute>} />
+            <Route path="/colaborador/perfil" element={<ColabProtectedRoute><RequireCap cap="profile.view"><ColaboradorPerfil /></RequireCap></ColabProtectedRoute>} />
 
 
 

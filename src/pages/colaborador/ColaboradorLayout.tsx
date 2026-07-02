@@ -17,10 +17,10 @@ interface Props {
 
 // tab.cap = capability necessária para mostrar a aba (undefined = sempre visível)
 const tabs: { to: string; label: string; icon: any; cap?: string }[] = [
-  { to: "/app/home", label: "Início", icon: Home },
-  { to: "/app/jornada", label: "Jornada", icon: Clock, cap: "journey.view" },
-  { to: "/app/solicitacoes", label: "Solicitações", icon: FileText, cap: "requests.view" },
-  { to: "/app/perfil", label: "Perfil", icon: User, cap: "profile.view" },
+  { to: "/colaborador/home", label: "Início", icon: Home },
+  { to: "/colaborador/jornada", label: "Jornada", icon: Clock, cap: "journey.view" },
+  { to: "/colaborador/solicitacoes", label: "Solicitações", icon: FileText, cap: "requests.view" },
+  { to: "/colaborador/perfil", label: "Perfil", icon: User, cap: "profile.view" },
 ];
 
 export function ColaboradorLayout({ children, title, showBack, rightSlot, bg = "light" }: Props) {
