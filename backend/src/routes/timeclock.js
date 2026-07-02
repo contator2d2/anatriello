@@ -149,6 +149,49 @@ async function ensureSchema() {
 }
 router.use(async (_req, _res, next) => { await ensureSchema(); next(); });
 
+// ---- helpers: closing lock & notifications ----
+export async function isPeriodClosed(orgId, employeeId, dateStr) {
+  try {
+    const emp = await query(`SELECT company_id FROM employees WHERE id = $1`, [employeeId]);
+    const compId = emp.rows[0]?.company_id || null;
+    const r = await query(
+      `SELECT 1 FROM time_period_closings
+        WHERE organization_id = $1
+          AND (company_id = $2 OR company_id IS NULL)
+          AND $3::date BETWEEN period_start AND period_end
+        LIMIT 1`,
+      [orgId, compId, dateStr]
+    );
+    return r.rowCount > 0;
+  } catch { return false; }
+}
+
+async function notifyEmployee(orgId, employeeId, title, message, type = 'ponto', refType = null, refId = null) {
+  try {
+    await query(
+      `INSERT INTO collaborator_notifications
+       (organization_id, employee_id, title, message, type, reference_type, reference_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      [orgId, employeeId, title, message, type, refType, refId]
+    );
+  } catch (e) { logError('timeclock.notifyEmployee', e); }
+}
+
+async function notifyRhStaff(orgId, title, message, type = 'ponto', refType = null, refId = null) {
+  try {
+    await query(
+      `INSERT INTO collaborator_notifications (organization_id, employee_id, title, message, type, reference_type, reference_id)
+       SELECT $1, e.id, $2, $3, $4, $5, $6
+         FROM employees e
+        WHERE e.organization_id = $1
+          AND e.status = 'ativo'
+          AND e.worker_profile IN ('administrativo','supervisor')
+        LIMIT 20`,
+      [orgId, title, message, type, refType, refId]
+    );
+  } catch (e) { logError('timeclock.notifyRhStaff', e); }
+}
+
 // ============================================
 // JORNADAS DE TRABALHO (Fase 3)
 // ============================================
