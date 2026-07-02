@@ -121,3 +121,47 @@ export function useCreateClosing() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['timeclock'] }),
   });
 }
+
+// ---------- JORNADAS DE TRABALHO (Fase 3) ----------
+export function useWorkSchedules() {
+  return useQuery({
+    queryKey: ['timeclock', 'work-schedules'],
+    queryFn: () => api<any[]>('/api/timeclock/work-schedules'),
+  });
+}
+
+export function useCreateWorkSchedule() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: any) => api('/api/timeclock/work-schedules', { method: 'POST', body: data }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['timeclock', 'work-schedules'] }),
+  });
+}
+
+export function useUpdateWorkSchedule() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }: any) => api(`/api/timeclock/work-schedules/${id}`, { method: 'PUT', body: data }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['timeclock', 'work-schedules'] }),
+  });
+}
+
+export function useDeleteWorkSchedule() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api(`/api/timeclock/work-schedules/${id}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['timeclock', 'work-schedules'] }),
+  });
+}
+
+export function useAssignWorkSchedule() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, employee_ids }: { id: string; employee_ids: string[] }) =>
+      api(`/api/timeclock/work-schedules/${id}/assign`, { method: 'POST', body: { employee_ids } }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['timeclock'] });
+      qc.invalidateQueries({ queryKey: ['employees'] });
+    },
+  });
+}
