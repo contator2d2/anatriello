@@ -1,7 +1,10 @@
 import { ReactNode } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import { Home, Clock, FileText, User, ChevronLeft } from "lucide-react";
+import { Home, Clock, FileText, User, ChevronLeft, WifiOff, CloudUpload } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useBranding } from "@/hooks/use-branding";
+import { useOfflineSync } from "@/hooks/use-offline-sync";
+import anatrielloLogo from "@/assets/anatriello-logo.png.asset.json";
 
 interface Props {
   children: ReactNode;
@@ -20,11 +23,36 @@ const tabs = [
 
 export function ColaboradorLayout({ children, title, showBack, rightSlot, bg = "light" }: Props) {
   const nav = useNavigate();
+  const { branding } = useBranding() as any;
+  const { isOnline, isSyncing } = useOfflineSync();
+  const logo = branding?.logo_topbar || branding?.logo || anatrielloLogo.url;
+
   return (
     <div className={cn("min-h-screen flex flex-col", bg === "navy" ? "bg-[#0a1128] text-white" : "bg-[#f4f6fb] text-[#0f172a]")}>
+      {/* Branded top bar — always visible */}
+      <div className={cn(
+        "sticky top-0 z-30 px-3 pt-[env(safe-area-inset-top)] pb-2 flex items-center gap-2 border-b",
+        bg === "navy" ? "bg-[#0a1128] border-white/10" : "bg-white border-slate-100"
+      )}>
+        <img src={logo} alt="Logo" className="h-8 w-8 rounded-lg object-contain" />
+        <span className={cn("text-sm font-semibold flex-1 truncate", bg === "navy" ? "text-white" : "text-[#0f172a]")}>
+          {branding?.company_name || "Anatriello"}
+        </span>
+        {!isOnline && (
+          <span className="flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-full bg-red-100 text-red-600">
+            <WifiOff className="h-3 w-3" /> Offline
+          </span>
+        )}
+        {isOnline && isSyncing && (
+          <span className="flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-full bg-blue-100 text-blue-600">
+            <CloudUpload className="h-3 w-3 animate-pulse" /> Sincronizando
+          </span>
+        )}
+      </div>
+
       {title && (
         <header className={cn(
-          "sticky top-0 z-30 px-4 pt-[env(safe-area-inset-top)] pb-3 flex items-center gap-3 border-b",
+          "sticky top-[calc(env(safe-area-inset-top)+3rem)] z-20 px-4 py-3 flex items-center gap-3 border-b",
           bg === "navy" ? "bg-[#0a1128] border-white/10" : "bg-white border-slate-100"
         )}>
           {showBack && (
