@@ -1879,6 +1879,33 @@ router.post('/holidays/bulk', async (req, res) => {
   }
 });
 
+// Update holiday
+router.put('/holidays/:id', async (req, res) => {
+  try {
+    const orgId = await getUserOrgId(req.userId);
+    const { name, holiday_date, type, state, city, recurring, active } = req.body;
+    const fields = [];
+    const values = [];
+    let i = 1;
+    if (name !== undefined) { fields.push(`name = $${i++}`); values.push(name); }
+    if (holiday_date !== undefined) { fields.push(`holiday_date = $${i++}`); values.push(holiday_date); }
+    if (type !== undefined) { fields.push(`type = $${i++}`); values.push(type); }
+    if (state !== undefined) { fields.push(`state = $${i++}`); values.push(emptyToNull(state)); }
+    if (city !== undefined) { fields.push(`city = $${i++}`); values.push(emptyToNull(city)); }
+    if (recurring !== undefined) { fields.push(`recurring = $${i++}`); values.push(!!recurring); }
+    if (active !== undefined) { fields.push(`active = $${i++}`); values.push(!!active); }
+    if (!fields.length) return res.status(400).json({ error: 'Nada a atualizar' });
+    fields.push(`updated_at = NOW()`);
+    values.push(req.params.id, orgId);
+    const r = await query(
+      `UPDATE holidays SET ${fields.join(', ')} WHERE id = $${i++} AND organization_id = $${i} RETURNING *`,
+      values
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'Feriado não encontrado' });
+    res.json(r.rows[0]);
+  } catch (err) { logError('rh.holidays.update', err); res.status(500).json({ error: err.message }); }
+});
+
 // Delete holiday
 router.delete('/holidays/:id', async (req, res) => {
   try {
@@ -1886,6 +1913,7 @@ router.delete('/holidays/:id', async (req, res) => {
     res.json({ ok: true });
   } catch (err) { logError('rh.holidays.delete', err); res.status(500).json({ error: err.message }); }
 });
+
 
 // ===== SERVICE REGIONS (auto-heal) =====
 let regionsInfraPromise = null;
