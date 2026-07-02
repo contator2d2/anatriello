@@ -78,6 +78,10 @@ export default function RHAcessos() {
   const handleGrant = (emp: any) => {
     const pw = generateTempPassword();
     setTempPassword(pw);
+    const currentTpl = emp.app_access_template_id
+      || templates.find((t: any) => t.is_default)?.id
+      || "";
+    setGrantTemplateId(currentTpl);
     setGrantDialog(emp);
   };
 
@@ -91,6 +95,9 @@ export default function RHAcessos() {
     if (!grantDialog) return;
     try {
       await grantAccess.mutateAsync({ employee_id: grantDialog.id, password: tempPassword, force_password_change: true });
+      if (grantTemplateId) {
+        await assignTemplate.mutateAsync({ employee_id: grantDialog.id, template_id: grantTemplateId });
+      }
       toast({ title: "Acesso liberado!", description: `Senha temporária: ${tempPassword}` });
       setGrantDialog(null);
     } catch (err: any) {
