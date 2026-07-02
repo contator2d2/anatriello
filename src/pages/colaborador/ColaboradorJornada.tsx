@@ -18,6 +18,8 @@ const STAGES: { key: string; label: string; color: string }[] = [
 export default function ColaboradorJornada() {
   const [tab, setTab] = useState<Tab>("dia");
   const [date, setDate] = useState(new Date());
+  const dlReceipt = useDownloadPunchReceipt();
+  const dlMirror = useDownloadMirror();
 
   const range = useMemo(() => {
     if (tab === "dia") return { start: date, end: date };
