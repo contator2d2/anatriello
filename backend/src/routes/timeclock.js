@@ -654,8 +654,29 @@ router.post('/closings', async (req, res) => {
        VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
       [orgId, company_id || null, period_start, period_end, req.userId, notes || null]
     );
+
+    // Notifica colaboradores afetados
+    try {
+      const empQ = company_id
+        ? await query(`SELECT id FROM employees WHERE organization_id = $1 AND company_id = $2 AND status = 'ativo'`, [orgId, company_id])
+        : await query(`SELECT id FROM employees WHERE organization_id = $1 AND status = 'ativo'`, [orgId]);
+      for (const e of empQ.rows) {
+        await notifyEmployee(orgId, e.id, 'Período de ponto fechado',
+          `Espelho de ${period_start} a ${period_end} foi encerrado pelo RH.`,
+          'ponto_fechamento', 'closing', r.rows[0].id);
+      }
+    } catch (e) { logError('timeclock.closings.notify', e); }
+
     res.json(r.rows[0]);
   } catch (err) { logError('timeclock.closings.post', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.delete('/closings/:id', async (req, res) => {
+  try {
+    const orgId = await resolveOrgId(req);
+    await query(`DELETE FROM time_period_closings WHERE id = $1 AND organization_id = $2`, [req.params.id, orgId]);
+    res.json({ ok: true });
+  } catch (err) { logError('timeclock.closings.delete', err); res.status(500).json({ error: 'Erro' }); }
 });
 
 // ============================================
