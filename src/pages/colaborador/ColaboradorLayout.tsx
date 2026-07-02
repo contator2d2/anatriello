@@ -4,6 +4,7 @@ import { Home, Clock, FileText, User, ChevronLeft, WifiOff, CloudUpload } from "
 import { cn } from "@/lib/utils";
 import { useBranding } from "@/hooks/use-branding";
 import { useOfflineSync } from "@/hooks/use-offline-sync";
+import { useColabCapabilitiesSync, useCaps } from "@/hooks/use-colab-capabilities";
 import anatrielloLogo from "@/assets/anatriello-logo.png.asset.json";
 
 interface Props {
@@ -14,11 +15,12 @@ interface Props {
   bg?: "navy" | "light";
 }
 
-const tabs = [
+// tab.cap = capability necessária para mostrar a aba (undefined = sempre visível)
+const tabs: { to: string; label: string; icon: any; cap?: string }[] = [
   { to: "/app/home", label: "Início", icon: Home },
-  { to: "/app/jornada", label: "Jornada", icon: Clock },
-  { to: "/app/solicitacoes", label: "Solicitações", icon: FileText },
-  { to: "/app/perfil", label: "Perfil", icon: User },
+  { to: "/app/jornada", label: "Jornada", icon: Clock, cap: "journey.view" },
+  { to: "/app/solicitacoes", label: "Solicitações", icon: FileText, cap: "requests.view" },
+  { to: "/app/perfil", label: "Perfil", icon: User, cap: "profile.view" },
 ];
 
 export function ColaboradorLayout({ children, title, showBack, rightSlot, bg = "light" }: Props) {
