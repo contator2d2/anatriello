@@ -1,4 +1,5 @@
 import express from 'express';
+import bcrypt from 'bcryptjs';
 import { query } from '../db.js';
 import { authenticate } from '../middleware/auth.js';
 import { callAI } from '../lib/ai-caller.js';
@@ -577,6 +578,13 @@ async function auditLog(orgId, entityType, entityId, action, changes, userId) {
   }
 }
 
+function assertCanManageRhAccess(req, res) {
+  const role = String(req.user?.role || '').toLowerCase();
+  if (req.user?.is_superadmin || ['owner', 'admin'].includes(role)) return true;
+  res.status(403).json({ error: 'Apenas administradores podem liberar acesso de gestor' });
+  return false;
+}
+
 // ===== EMPLOYEES =====
 
 // List employees
@@ -802,6 +810,68 @@ router.put('/employees/:id', async (req, res) => {
     logError('rh.employees.update', err, { body: req.body, employee_id: req.params.id });
     const message = err?.detail || err?.message || 'Erro ao atualizar colaborador';
     res.status(400).json({ error: message, details: err?.detail || err?.hint || '' });
+  }
+});
+
+// Create/reset a platform login for the employee as manager/supervisor
+router.post('/employees/:id/manager-access', async (req, res) => {
+  try {
+    if (!assertCanManageRhAccess(req, res)) return;
+
+    const orgId = req.user?.organization_id || await getUserOrgId(req.userId);
+    const employeeResult = await query(
+      `SELECT id, organization_id, full_name, email, user_id
+       FROM employees
+       WHERE id = $1 AND organization_id = $2
+       LIMIT 1`,
+      [req.params.id, orgId]
+    );
+    const employee = employeeResult.rows[0];
+    if (!employee) return res.status(404).json({ error: 'Colaborador não encontrado' });
+
+    const email = String(req.body?.email || employee.email || '').trim().toLowerCase();
+    const password = String(req.body?.password || '').trim();
+    if (!email) return res.status(400).json({ error: 'Informe um e-mail no cadastro do gestor' });
+    if (password.length < 6) return res.status(400).json({ error: 'Senha deve ter pelo menos 6 caracteres' });
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    let userId = employee.user_id;
+    if (userId) {
+      await query(
+        `UPDATE users SET email = $1, name = $2, password_hash = $3, updated_at = NOW() WHERE id = $4`,
+        [email, employee.full_name, passwordHash, userId]
+      );
+    } else {
+      const existingUser = await query(`SELECT id FROM users WHERE lower(trim(email)) = lower(trim($1)) LIMIT 1`, [email]);
+      if (existingUser.rows[0]) {
+        userId = existingUser.rows[0].id;
+        await query(
+          `UPDATE users SET name = COALESCE(NULLIF($1, ''), name), password_hash = $2, updated_at = NOW() WHERE id = $3`,
+          [employee.full_name, passwordHash, userId]
+        );
+      } else {
+        const created = await query(
+          `INSERT INTO users (email, name, password_hash) VALUES ($1, $2, $3) RETURNING id`,
+          [email, employee.full_name, passwordHash]
+        );
+        userId = created.rows[0].id;
+      }
+    }
+
+    await query(
+      `INSERT INTO organization_members (organization_id, user_id, role)
+       VALUES ($1, $2, 'manager')
+       ON CONFLICT (organization_id, user_id) DO UPDATE SET role = 'manager'`,
+      [orgId, userId]
+    );
+
+    await query(`UPDATE employees SET user_id = $1, email = $2, updated_at = NOW() WHERE id = $3`, [userId, email, employee.id]);
+    await auditLog(orgId, 'employee', employee.id, 'manager_access', [{ field: 'user_id', oldVal: employee.user_id, newVal: userId }], req.userId);
+
+    res.json({ ok: true, user_id: userId, email, role: 'manager' });
+  } catch (err) {
+    logError('rh.employees.managerAccess', err, { employee_id: req.params.id });
+    res.status(500).json({ error: err?.detail || err?.message || 'Erro ao liberar acesso de gestor' });
   }
 });
 
