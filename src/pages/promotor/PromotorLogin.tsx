@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,6 +15,10 @@ export default function PromotorLogin() {
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
+  const location = useLocation();
+  const isColabContext =
+    location.pathname.startsWith("/app") ||
+    (typeof window !== "undefined" && window.location.hostname.startsWith("colaborador."));
   const { branding } = useBranding() as any;
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -35,6 +39,8 @@ export default function PromotorLogin() {
 
       if (data.employee.force_password_change) {
         navigate('/promotor/trocar-senha');
+      } else if (isColabContext) {
+        navigate('/app/home');
       } else if (data.employee?.agency?.uses_merchandising === false || data.employee?.is_access_only) {
         navigate('/acesso/promotor/home');
       } else {

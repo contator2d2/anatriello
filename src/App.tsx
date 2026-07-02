@@ -117,6 +117,7 @@ import ColaboradorHolerite from "./pages/colaborador/ColaboradorHolerite";
 import ColaboradorDocumentos from "./pages/colaborador/ColaboradorDocumentos";
 import ColaboradorBeneficios from "./pages/colaborador/ColaboradorBeneficios";
 import ColaboradorPerfil from "./pages/colaborador/ColaboradorPerfil";
+import ColabProtectedRoute from "./components/ColabProtectedRoute";
 import AccessLogin from "./pages/promotor/AccessLogin";
 import AccessOnlyHome from "./pages/promotor/AccessOnlyHome";
 import NotFound from "./pages/NotFound";
@@ -214,7 +215,10 @@ function SmartRedirect() {
   if (isPromotorDomain) return <Navigate to="/promotor/login" replace />;
   if (isAccessPromotorDomain) return <Navigate to="/acesso/promotor/login" replace />;
   if (isSupermarketDomain) return <Navigate to="/acesso-supermercado" replace />;
-  if (isColaboradorDomain) return <Navigate to="/app/home" replace />;
+  if (isColaboradorDomain) {
+    const hasColabToken = typeof window !== 'undefined' && !!localStorage.getItem('promotor_token');
+    return <Navigate to={hasColabToken ? '/app/home' : '/app/login'} replace />;
+  }
   if (isGestorDomain) return <Navigate to="/gestor" replace />;
   
   if (isLoading) {
@@ -387,15 +391,17 @@ const App = () => (
             <Route path="/promotor/trocar-senha" element={<PromotorTrocarSenha />} />
             <Route path="/promotor/equipe" element={<PromotorEquipe />} />
             {/* App do Colaborador (Anatriello Gestão) */}
+            <Route path="/app/login" element={<PromotorLogin />} />
             <Route path="/app" element={<Navigate to="/app/home" replace />} />
-            <Route path="/app/home" element={<ColaboradorHome />} />
-            <Route path="/app/jornada" element={<ColaboradorJornada />} />
-            <Route path="/app/solicitacoes" element={<ColaboradorSolicitacoes />} />
-            <Route path="/app/ferias" element={<ColaboradorFerias />} />
-            <Route path="/app/holerite" element={<ColaboradorHolerite />} />
-            <Route path="/app/documentos" element={<ColaboradorDocumentos />} />
-            <Route path="/app/beneficios" element={<ColaboradorBeneficios />} />
-            <Route path="/app/perfil" element={<ColaboradorPerfil />} />
+            <Route path="/app/home" element={<ColabProtectedRoute><ColaboradorHome /></ColabProtectedRoute>} />
+            <Route path="/app/jornada" element={<ColabProtectedRoute><ColaboradorJornada /></ColabProtectedRoute>} />
+            <Route path="/app/solicitacoes" element={<ColabProtectedRoute><ColaboradorSolicitacoes /></ColabProtectedRoute>} />
+            <Route path="/app/ferias" element={<ColabProtectedRoute><ColaboradorFerias /></ColabProtectedRoute>} />
+            <Route path="/app/holerite" element={<ColabProtectedRoute><ColaboradorHolerite /></ColabProtectedRoute>} />
+            <Route path="/app/documentos" element={<ColabProtectedRoute><ColaboradorDocumentos /></ColabProtectedRoute>} />
+            <Route path="/app/beneficios" element={<ColabProtectedRoute><ColaboradorBeneficios /></ColabProtectedRoute>} />
+            <Route path="/app/perfil" element={<ColabProtectedRoute><ColaboradorPerfil /></ColabProtectedRoute>} />
+
             {/* Ayratech Access (Access Only App) */}
             <Route path="/acesso/promotor/login" element={<AccessLogin />} />
             <Route path="/acesso/promotor/home" element={<AccessOnlyHome />} />
