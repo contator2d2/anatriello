@@ -32,15 +32,36 @@ export default function RHFeriados() {
   const [year, setYear] = useState(String(new Date().getFullYear()));
   const [typeFilter, setTypeFilter] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<any>({ ...EMPTY_FORM });
   const { toast } = useToast();
 
   const { data: holidays = [], isLoading } = useHolidays({ year: year || undefined, type: typeFilter || undefined });
   const createHoliday = useCreateHoliday();
+  const updateHoliday = useUpdateHoliday();
   const bulkImport = useBulkImportHolidays();
   const deleteHoliday = useDeleteHoliday();
 
   const setField = (k: string, v: any) => setForm((p: any) => ({ ...p, [k]: v }));
+
+  const openCreate = () => {
+    setEditingId(null);
+    setForm({ ...EMPTY_FORM });
+    setDialogOpen(true);
+  };
+
+  const openEdit = (h: any) => {
+    setEditingId(h.id);
+    setForm({
+      name: h.name || '',
+      holiday_date: h.holiday_date ? String(h.holiday_date).slice(0, 10) : '',
+      type: h.type || 'nacional',
+      state: h.state || '',
+      city: h.city || '',
+      recurring: h.recurring !== false,
+    });
+    setDialogOpen(true);
+  };
 
   const handleSave = async () => {
     if (!form.name || !form.holiday_date) {
@@ -48,9 +69,15 @@ export default function RHFeriados() {
       return;
     }
     try {
-      await createHoliday.mutateAsync(form);
-      toast({ title: 'Feriado adicionado!' });
+      if (editingId) {
+        await updateHoliday.mutateAsync({ id: editingId, ...form });
+        toast({ title: 'Feriado atualizado!' });
+      } else {
+        await createHoliday.mutateAsync(form);
+        toast({ title: 'Feriado adicionado!' });
+      }
       setDialogOpen(false);
+      setEditingId(null);
       setForm({ ...EMPTY_FORM });
     } catch (err: any) {
       toast({ title: 'Erro', description: err.message, variant: 'destructive' });
@@ -58,6 +85,7 @@ export default function RHFeriados() {
   };
 
   const handleDelete = async (id: string) => {
+    if (!confirm('Excluir este feriado?')) return;
     try {
       await deleteHoliday.mutateAsync(id);
       toast({ title: 'Feriado removido' });
@@ -65,6 +93,7 @@ export default function RHFeriados() {
       toast({ title: 'Erro ao remover', variant: 'destructive' });
     }
   };
+
 
   const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
