@@ -28,6 +28,11 @@ export interface Company {
   is_active: boolean;
   punch_facial_required: boolean;
   punch_gps_required: boolean;
+  latitude?: number | null;
+  longitude?: number | null;
+  default_radius_meters?: number | null;
+  geofence_strict?: boolean;
+  geofence_require_photo?: boolean;
   active_employees?: number;
   created_at: string;
   updated_at: string;
