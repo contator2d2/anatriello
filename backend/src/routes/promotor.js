@@ -2087,7 +2087,8 @@ router.get('/me/full', authenticatePromotor, async (req, res) => {
         WHERE e.id = $1`, [req.employeeId]
     ).catch(async () => await query(`SELECT * FROM employees WHERE id = $1`, [req.employeeId]));
     const dependents = await query(`SELECT * FROM employee_dependents WHERE employee_id = $1`, [req.employeeId]).catch(() => ({ rows: [] }));
-    res.json({ employee: empRes.rows[0], dependents: dependents.rows });
+    const capabilities = await getEmployeeCapabilities(query, req.employeeId).catch(() => []);
+    res.json({ employee: empRes.rows[0], dependents: dependents.rows, capabilities });
   } catch (e) { logError('promotor.me.full', e); res.status(500).json({ error: e.message }); }
 });
 
