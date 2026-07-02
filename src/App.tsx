@@ -368,6 +368,16 @@ const App = () => (
             <Route path="/promotor/configuracoes" element={<PromotorConfig />} />
             <Route path="/promotor/trocar-senha" element={<PromotorTrocarSenha />} />
             <Route path="/promotor/equipe" element={<PromotorEquipe />} />
+            {/* App do Colaborador (Anatriello Gestão) */}
+            <Route path="/app" element={<Navigate to="/app/home" replace />} />
+            <Route path="/app/home" element={<ColaboradorHome />} />
+            <Route path="/app/jornada" element={<ColaboradorJornada />} />
+            <Route path="/app/solicitacoes" element={<ColaboradorSolicitacoes />} />
+            <Route path="/app/ferias" element={<ColaboradorFerias />} />
+            <Route path="/app/holerite" element={<ColaboradorHolerite />} />
+            <Route path="/app/documentos" element={<ColaboradorDocumentos />} />
+            <Route path="/app/beneficios" element={<ColaboradorBeneficios />} />
+            <Route path="/app/perfil" element={<ColaboradorPerfil />} />
             {/* Ayratech Access (Access Only App) */}
             <Route path="/acesso/promotor/login" element={<AccessLogin />} />
             <Route path="/acesso/promotor/home" element={<AccessOnlyHome />} />
