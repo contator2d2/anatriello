@@ -466,3 +466,20 @@ export function usePromotorSaveFaceEnrollment() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['promotor-face-enrollment'] }),
   });
 }
+
+// ============ SOLICITAÇÃO DE AJUSTE DE PONTO (colaborador) ============
+export function useColabAdjustmentRequests() {
+  return useQuery({
+    queryKey: ['colab-adj-requests'],
+    queryFn: () => promotorApi<any[]>('/api/promotor/punch-adjustment-requests'),
+  });
+}
+
+export function useColabCreateAdjustmentRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { punch_date: string; requested_times?: string[]; justification: string; attachment_url?: string }) =>
+      promotorApi<any>('/api/promotor/punch-adjustment-requests', { method: 'POST', body: data }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['colab-adj-requests'] }),
+  });
+}

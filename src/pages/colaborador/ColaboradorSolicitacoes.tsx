@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ColaboradorLayout } from "./ColaboradorLayout";
-import { useColabRequests, useColabCreateRequest } from "@/hooks/use-promotor";
+import { useColabRequests, useColabCreateRequest, useColabAdjustmentRequests, useColabCreateAdjustmentRequest } from "@/hooks/use-promotor";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,16 +34,37 @@ export default function ColaboradorSolicitacoes() {
   const [kind, setKind] = useState("ferias");
   const [form, setForm] = useState<any>({});
   const { data: requests, isLoading } = useColabRequests();
+  const { data: adjRequests = [] } = useColabAdjustmentRequests();
   const create = useColabCreateRequest();
+  const createAdj = useColabCreateAdjustmentRequest();
   const { toast } = useToast();
 
-  const list = (requests || []).filter((r: any) =>
+  const mergedRequests = [
+    ...(requests || []),
+    ...adjRequests.map((r: any) => ({
+      id: `adj_${r.id}`,
+      kind: 'ajuste_ponto',
+      status: r.status === 'approved' ? 'concluido' : r.status === 'rejected' ? 'recusado' : 'pendente',
+      created_at: r.created_at,
+      payload: { start_date: r.punch_date, reason: `${r.requested_times || ''} — ${r.justification}` },
+    })),
+  ];
+  const list = mergedRequests.filter((r: any) =>
     tab === "minhas" ? ["pendente", "aprovado"].includes(r.status) : ["concluido", "recusado"].includes(r.status)
   );
 
   async function submit() {
     try {
-      await create.mutateAsync({ kind, payload: form });
+      if (kind === 'ajuste_ponto') {
+        const times = (form.times || '').split(',').map((s: string) => s.trim()).filter(Boolean);
+        await createAdj.mutateAsync({
+          punch_date: form.start_date,
+          requested_times: times,
+          justification: form.reason || 'Ajuste solicitado',
+        });
+      } else {
+        await create.mutateAsync({ kind, payload: form });
+      }
       toast({ title: "Solicitação enviada" });
       setOpen(false); setForm({});
     } catch (e: any) { toast({ title: e.message, variant: "destructive" }); }
@@ -114,11 +135,24 @@ export default function ColaboradorSolicitacoes() {
                 </SelectContent>
               </Select>
             </div>
-            {["ferias", "afastamento", "atestado", "horas_extras", "ajuste_ponto"].includes(kind) && (
+            {["ferias", "afastamento", "atestado", "horas_extras"].includes(kind) && (
               <div className="grid grid-cols-2 gap-2">
                 <div><Label>Data início</Label><Input type="date" value={form.start_date || ""} onChange={e => setForm({ ...form, start_date: e.target.value })} /></div>
                 <div><Label>Data fim</Label><Input type="date" value={form.end_date || ""} onChange={e => setForm({ ...form, end_date: e.target.value })} /></div>
               </div>
+            )}
+            {kind === "ajuste_ponto" && (
+              <>
+                <div>
+                  <Label>Data do ponto</Label>
+                  <Input type="date" value={form.start_date || ""} onChange={e => setForm({ ...form, start_date: e.target.value })} />
+                </div>
+                <div>
+                  <Label>Horários corretos (separe por vírgula)</Label>
+                  <Input placeholder="08:00, 12:00, 13:00, 17:00" value={form.times || ""} onChange={e => setForm({ ...form, times: e.target.value })} />
+                  <p className="text-[10px] text-slate-400 mt-1">Ex: entrada, saída almoço, retorno, saída</p>
+                </div>
+              </>
             )}
             <div>
               <Label>Motivo / observações</Label>
