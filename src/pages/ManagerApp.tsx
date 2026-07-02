@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -8,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
-import { CheckCircle2, XCircle, Clock, Plane, Stethoscope, PencilLine, Loader2, RefreshCw, Building2 } from 'lucide-react';
+import { CheckCircle2, XCircle, Clock, Plane, Stethoscope, PencilLine, Loader2, RefreshCw, Building2, LogOut } from 'lucide-react';
 
 type Pending = {
   overtime: any[]; vacations: any[]; medical: any[]; adjustments: any[]; total: number;
@@ -22,6 +24,8 @@ const KIND_META: Record<string, { label: string; icon: any; endpoint: string }> 
 };
 
 export default function ManagerApp() {
+  const { logout } = useAuth();
+  const navigate = useNavigate();
   const [data, setData] = useState<Pending | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState('overtime');
@@ -102,9 +106,14 @@ export default function ManagerApp() {
           <div className="text-xs opacity-80">App Gestor</div>
           <h1 className="text-lg font-semibold">Aprovações {data && <Badge variant="secondary" className="ml-2">{data.total}</Badge>}</h1>
         </div>
-        <Button size="icon" variant="ghost" className="text-primary-foreground" onClick={load} disabled={loading}>
-          {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <RefreshCw className="h-5 w-5" />}
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button size="icon" variant="ghost" className="text-primary-foreground" onClick={load} disabled={loading}>
+            {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <RefreshCw className="h-5 w-5" />}
+          </Button>
+          <Button size="icon" variant="ghost" className="text-primary-foreground" onClick={() => { logout(); navigate('/gestor/login', { replace: true }); }}>
+            <LogOut className="h-5 w-5" />
+          </Button>
+        </div>
       </header>
 
       <div className="p-3">
