@@ -58,7 +58,8 @@ export default function ColaboradorHome() {
   const entradaHora = punches.find((p: any) => p.punch_type === "entrada")?.punched_at;
   const almocoHora = punches.find((p: any) => p.punch_type === "saida_intervalo")?.punched_at;
   const unreadCount = (notifications || []).filter((n: any) => !n.read).length;
-  const facialRequired = employee?.facial_required === true;
+  const facialRequired = employee?.facial_required === true || can("punch.facial_required");
+  const canPunch = can("punch.register");
 
   async function doPunch(facialVerified = false, selfieDataUrl?: string) {
     if (!gps) { toast({ title: "Aguardando GPS", variant: "destructive" }); return; }
