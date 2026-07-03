@@ -138,6 +138,7 @@ const getNavSections = (hasConnections: boolean): NavSection[] => [
       { name: "Biometria Facial", href: "/rh/biometria", icon: ScanFace, pageKey: 'rh_biometria', moduleKey: 'rh' },
       { name: "Rastreamento", href: "/rh/rastreamento", icon: Navigation, pageKey: 'rh_rastreamento', moduleKey: 'rh' },
       { name: "Logs & Erros", href: "/rh/logs", icon: Code, pageKey: 'rh_logs', moduleKey: 'rh' },
+      { name: "Ajuda", href: "/rh/ajuda", icon: HelpCircle, pageKey: 'rh_ajuda', moduleKey: 'rh' },
     ],
   },
   {
