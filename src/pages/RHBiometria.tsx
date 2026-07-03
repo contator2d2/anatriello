@@ -93,6 +93,16 @@ const RHBiometria = () => {
     onError: () => toast({ title: "Erro ao atualizar configuração", variant: "destructive" }),
   });
 
+  const requestCollectionMutation = useMutation({
+    mutationFn: (id: string) =>
+      api(`/api/rh/facial-recognition/request-collection/${id}`, { method: "POST" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["rh-facial-employees"] });
+      toast({ title: "Nova coleta solicitada", description: "O colaborador poderá refazer a biometria pelo app." });
+    },
+    onError: () => toast({ title: "Erro ao solicitar coleta", variant: "destructive" }),
+  });
+
   const filtered = employees.filter((e) =>
     e.full_name?.toLowerCase().includes(search.toLowerCase()) ||
     e.cpf?.includes(search)
