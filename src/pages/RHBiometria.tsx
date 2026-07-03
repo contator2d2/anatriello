@@ -26,6 +26,8 @@ interface EmployeeFace {
   face_photo_url?: string;
   face_enrolled_at?: string;
   facial_verification_enabled: boolean;
+  face_collection_requested?: boolean;
+  face_collection_requested_at?: string;
 }
 
 interface FacialConfig {
