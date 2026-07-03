@@ -411,6 +411,7 @@ const App = () => (
             <Route path="/colaborador/documentos" element={<ColabProtectedRoute><RequireCap cap="documents.view"><ColaboradorDocumentos /></RequireCap></ColabProtectedRoute>} />
             <Route path="/colaborador/beneficios" element={<ColabProtectedRoute><RequireCap cap="benefits.view"><ColaboradorBeneficios /></RequireCap></ColabProtectedRoute>} />
             <Route path="/colaborador/perfil" element={<ColabProtectedRoute><RequireCap cap="profile.view"><ColaboradorPerfil /></RequireCap></ColabProtectedRoute>} />
+            <Route path="/colaborador/biometria" element={<ColabProtectedRoute><ColaboradorBiometria /></ColabProtectedRoute>} />
             {/* Compat: rotas antigas /app/* redirecionam para /colaborador/* */}
             <Route path="/app" element={<Navigate to="/colaborador/home" replace />} />
             <Route path="/app/*" element={<Navigate to="/colaborador/home" replace />} />
