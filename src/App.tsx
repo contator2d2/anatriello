@@ -78,6 +78,7 @@ import RHBiometria from "./pages/RHBiometria";
 import RHMapaOperacional from "./pages/RHMapaOperacional";
 import RHLogs from "./pages/RHLogs";
 import RHAjuda from "./pages/RHAjuda";
+import RHRelogioPonto from "./pages/RHRelogioPonto";
 import ManagerApp from "./pages/ManagerApp";
 import ManagerLogin from "./pages/ManagerLogin";
 import LiveMaps from "./pages/LiveMaps";
@@ -312,6 +313,7 @@ const App = () => (
             <Route path="/rh/mapa" element={<ProtectedRoute><RHMapaOperacional /></ProtectedRoute>} />
             <Route path="/rh/logs" element={<ProtectedRoute><RHLogs /></ProtectedRoute>} />
             <Route path="/rh/ajuda" element={<ProtectedRoute><RHAjuda /></ProtectedRoute>} />
+            <Route path="/rh/relogio-ponto" element={<ProtectedRoute><RHRelogioPonto /></ProtectedRoute>} />
             <Route path="/live-maps" element={<ProtectedRoute><LiveMaps /></ProtectedRoute>} />
             <Route path="/merch/marcas" element={<ProtectedRoute><MerchMarcas /></ProtectedRoute>} />
             <Route path="/merch/categorias" element={<ProtectedRoute><MerchCategorias /></ProtectedRoute>} />
