@@ -142,15 +142,6 @@ const getNavSections = (hasConnections: boolean): NavSection[] => [
     ],
   },
   {
-    title: "Controle Acesso",
-    icon: ShieldCheck,
-    adminOnly: true,
-    items: [
-      { name: "Painel Acesso", href: "/controle-acesso", icon: ShieldCheck, pageKey: 'controle_acesso', adminOnly: true },
-      { name: "Modelos de Contrato", href: "/modelo-contrato", icon: FileText, adminOnly: true },
-    ],
-  },
-  {
     title: "Disparos",
     icon: Send,
     moduleKey: 'campaigns',
