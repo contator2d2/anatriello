@@ -239,7 +239,21 @@ export default function RHRelogioPonto({ kiosk = false }: { kiosk?: boolean } = 
             {clock.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo", weekday: "long", day: "2-digit", month: "long", year: "numeric" })}
           </div>
         </div>
-        <Button variant="ghost" size="sm" onClick={() => navigate("/rh/ponto")} className="text-white/70 hover:text-white hover:bg-white/10">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => {
+            if (kiosk) {
+              if (!confirm("Sair do modo quiosque? Será necessário fazer login novamente no tablet.")) return;
+              localStorage.removeItem("auth_token");
+              localStorage.removeItem("kiosk_mode");
+              navigate("/kiosk/login", { replace: true });
+            } else {
+              navigate("/rh/ponto");
+            }
+          }}
+          className="text-white/70 hover:text-white hover:bg-white/10"
+        >
           <LogOut className="h-4 w-4 mr-2" /> Sair
         </Button>
       </div>
