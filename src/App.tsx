@@ -79,6 +79,8 @@ import RHMapaOperacional from "./pages/RHMapaOperacional";
 import RHLogs from "./pages/RHLogs";
 import RHAjuda from "./pages/RHAjuda";
 import RHRelogioPonto from "./pages/RHRelogioPonto";
+import KioskLogin from "./pages/KioskLogin";
+import KioskPage from "./pages/KioskPage";
 import ManagerApp from "./pages/ManagerApp";
 import ManagerLogin from "./pages/ManagerLogin";
 import LiveMaps from "./pages/LiveMaps";
