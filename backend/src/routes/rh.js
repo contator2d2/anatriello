@@ -2272,11 +2272,13 @@ async function ensureFacialRecognitionInfra() {
       auto_verify_on_clock_in BOOLEAN DEFAULT false,
       allow_manual_fallback BOOLEAN DEFAULT true,
       photo_quality_check BOOLEAN DEFAULT true,
+      allow_self_enrollment BOOLEAN DEFAULT false,
       created_at TIMESTAMPTZ DEFAULT NOW(),
       updated_at TIMESTAMPTZ DEFAULT NOW(),
       UNIQUE(organization_id)
     )
   `);
+  try { await query(`ALTER TABLE facial_recognition_config ADD COLUMN IF NOT EXISTS allow_self_enrollment BOOLEAN DEFAULT false`); } catch {}
   await query(`
     CREATE TABLE IF NOT EXISTS face_verification_logs (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
