@@ -157,6 +157,33 @@ export default function ColaboradorHome() {
           </div>
         )}
 
+        {/* Coleta de biometria facial pelo app — só aparece quando o RH habilita e o colaborador ainda pode cadastrar */}
+        {faceStatus?.can_enroll && (
+          <button
+            onClick={() => nav("/colaborador/biometria")}
+            className="w-full bg-gradient-to-br from-[#0ea5e9] to-[#0369a1] rounded-2xl p-4 text-left text-white shadow-lg shadow-sky-500/20 active:scale-[.99] transition"
+          >
+            <div className="flex items-center gap-3">
+              <div className="h-11 w-11 rounded-xl bg-white/15 flex items-center justify-center flex-shrink-0">
+                <ScanFace className="h-6 w-6" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[11px] uppercase font-bold opacity-80">Biometria facial</p>
+                <p className="text-sm font-bold truncate">
+                  {faceStatus.collection_requested && faceStatus.enrolled
+                    ? "RH pediu nova coleta"
+                    : "Cadastre sua biometria facial"}
+                </p>
+                <p className="text-[11px] opacity-90 mt-0.5">
+                  2 capturas + teste rápido. Leva menos de 1 minuto.
+                </p>
+              </div>
+              <ChevronRight className="h-5 w-5 opacity-80" />
+            </div>
+          </button>
+        )}
+
+
         {/* Acesso rápido — filtrado por capability */}
         <div>
           <p className="text-sm font-bold mb-3">Acesso rápido</p>
