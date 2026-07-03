@@ -78,6 +78,7 @@ import RHBiometria from "./pages/RHBiometria";
 import RHMapaOperacional from "./pages/RHMapaOperacional";
 import RHLogs from "./pages/RHLogs";
 import RHAjuda from "./pages/RHAjuda";
+import RHRelogioPonto from "./pages/RHRelogioPonto";
 import ManagerApp from "./pages/ManagerApp";
 import ManagerLogin from "./pages/ManagerLogin";
 import LiveMaps from "./pages/LiveMaps";
