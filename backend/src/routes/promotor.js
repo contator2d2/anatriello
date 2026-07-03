@@ -895,22 +895,47 @@ async function ensurePromotorFaceColumns() {
     await query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS face_descriptor JSONB`);
     await query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS face_photo_url TEXT`);
     await query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS face_enrolled_at TIMESTAMPTZ`);
+    await query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS face_collection_requested BOOLEAN DEFAULT false`);
+    await query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS face_collection_requested_at TIMESTAMPTZ`);
+    await query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS face_quality_score NUMERIC(5,2)`);
   } catch {}
+}
+
+async function getOrgFacialConfig(orgId) {
+  try {
+    const { rows } = await query(
+      `SELECT enabled, allow_self_enrollment, min_confidence
+         FROM facial_recognition_config WHERE organization_id = $1`,
+      [orgId]
+    );
+    return rows[0] || { enabled: false, allow_self_enrollment: false, min_confidence: 70 };
+  } catch {
+    return { enabled: false, allow_self_enrollment: false, min_confidence: 70 };
+  }
 }
 
 router.get('/face-enrollment', authenticatePromotor, async (req, res) => {
   try {
     await ensurePromotorFaceColumns();
     const r = await query(
-      `SELECT face_enrolled_at, face_photo_url, (face_descriptor IS NOT NULL) AS enrolled
+      `SELECT face_enrolled_at, face_photo_url, organization_id,
+              (face_descriptor IS NOT NULL) AS enrolled,
+              COALESCE(face_collection_requested, false) AS collection_requested
          FROM employees WHERE id = $1`,
       [req.employeeId]
     );
     const row = r.rows[0] || {};
+    const cfg = await getOrgFacialConfig(row.organization_id);
+    // Pode se cadastrar: RH habilitou a coleta pelo app E (ainda não cadastrou OU RH pediu nova coleta)
+    const canEnroll = !!cfg.allow_self_enrollment && (!row.enrolled || !!row.collection_requested);
     res.json({
       enrolled: !!row.enrolled,
       face_photo_url: row.face_photo_url || null,
       face_enrolled_at: row.face_enrolled_at || null,
+      collection_requested: !!row.collection_requested,
+      allow_self_enrollment: !!cfg.allow_self_enrollment,
+      min_confidence: parseFloat(cfg.min_confidence) || 70,
+      can_enroll: canEnroll,
     });
   } catch (err) {
     res.status(500).json({ error: 'Erro ao carregar status da biometria' });
@@ -920,29 +945,68 @@ router.get('/face-enrollment', authenticatePromotor, async (req, res) => {
 router.post('/face-enrollment', authenticatePromotor, async (req, res) => {
   try {
     await ensurePromotorFaceColumns();
-    const { descriptor, landmarks, imageDataUrl, geometricProfile, selfTestScore } = req.body || {};
-
-    if (!Array.isArray(descriptor) || descriptor.length < 64) {
+    const body = req.body || {};
+    // Aceita tanto o formato antigo (descriptor único) quanto o novo (samples: [{...}, {...}])
+    let samples = Array.isArray(body.samples) ? body.samples : null;
+    if (!samples && Array.isArray(body.descriptor)) {
+      samples = [{
+        descriptor: body.descriptor,
+        landmarks: body.landmarks,
+        imageDataUrl: body.imageDataUrl,
+        geometricProfile: body.geometricProfile,
+        quality: body.quality ?? body.selfTestScore ?? 100,
+      }];
+    }
+    if (!samples || !samples.length) {
+      return res.status(400).json({ error: 'Nenhuma amostra facial recebida' });
+    }
+    // Validação básica
+    samples = samples.filter(s => Array.isArray(s?.descriptor) && s.descriptor.length >= 64);
+    if (!samples.length) {
       return res.status(400).json({ error: 'Descriptor facial inválido' });
     }
-    if (typeof selfTestScore === 'number' && selfTestScore < 70) {
-      return res.status(400).json({ error: 'Validação facial não atingiu a pontuação mínima' });
-    }
 
-    // Bloqueio: não permitir troca após cadastro aprovado
     const existing = await query(
-      `SELECT face_descriptor, face_enrolled_at, organization_id FROM employees WHERE id = $1`,
+      `SELECT face_descriptor, face_enrolled_at, organization_id,
+              COALESCE(face_collection_requested, false) AS collection_requested
+         FROM employees WHERE id = $1`,
       [req.employeeId]
     );
     if (!existing.rows[0]) return res.status(404).json({ error: 'Colaborador não encontrado' });
-    if (existing.rows[0].face_descriptor && existing.rows[0].face_enrolled_at) {
-      return res.status(403).json({ error: 'Biometria já cadastrada. Procure o RH para alterar.' });
+
+    const cfg = await getOrgFacialConfig(existing.rows[0].organization_id);
+    if (!cfg.allow_self_enrollment) {
+      return res.status(403).json({ error: 'A coleta pelo app não está habilitada. Procure o RH.' });
+    }
+    const alreadyEnrolled = !!existing.rows[0].face_descriptor && !!existing.rows[0].face_enrolled_at;
+    if (alreadyEnrolled && !existing.rows[0].collection_requested) {
+      return res.status(403).json({ error: 'Biometria já cadastrada. O RH precisa solicitar uma nova coleta.' });
     }
 
-    const faceData = { descriptor, landmarks: landmarks || [], geometricProfile: geometricProfile || {} };
+    // Escolhe a amostra com maior qualidade
+    const best = samples.reduce((a, b) => (Number(b.quality || 0) > Number(a.quality || 0) ? b : a));
+    const minConfidence = parseFloat(cfg.min_confidence) || 70;
+    if (Number(best.quality || 0) < minConfidence) {
+      return res.status(400).json({
+        error: `A qualidade da captura ficou abaixo do mínimo (${minConfidence}%). Refaça em local mais iluminado.`,
+      });
+    }
+
+    const faceData = {
+      descriptor: best.descriptor,
+      landmarks: best.landmarks || [],
+      geometricProfile: best.geometricProfile || {},
+    };
     await query(
-      `UPDATE employees SET face_descriptor = $1, face_photo_url = $2, face_enrolled_at = NOW() WHERE id = $3`,
-      [JSON.stringify(faceData), imageDataUrl || null, req.employeeId]
+      `UPDATE employees SET
+         face_descriptor = $1,
+         face_photo_url = $2,
+         face_enrolled_at = NOW(),
+         face_quality_score = $3,
+         face_collection_requested = false,
+         face_collection_requested_at = NULL
+       WHERE id = $4`,
+      [JSON.stringify(faceData), best.imageDataUrl || null, Number(best.quality) || null, req.employeeId]
     );
 
     try {
@@ -950,11 +1014,11 @@ router.post('/face-enrollment', authenticatePromotor, async (req, res) => {
         `INSERT INTO face_verification_logs
            (organization_id, employee_id, verification_context, confidence_score, result, captured_image_url)
          VALUES ($1, $2, 'self_enrollment', $3, 'approved', $4)`,
-        [existing.rows[0].organization_id, req.employeeId, selfTestScore || 100, imageDataUrl || null]
+        [existing.rows[0].organization_id, req.employeeId, best.quality || 100, best.imageDataUrl || null]
       );
     } catch {}
 
-    res.json({ success: true, enrolled: true });
+    res.json({ success: true, enrolled: true, quality: best.quality });
   } catch (err) {
     res.status(500).json({ error: err.message || 'Erro ao salvar biometria' });
   }
