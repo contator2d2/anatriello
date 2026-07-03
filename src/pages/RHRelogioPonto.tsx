@@ -40,7 +40,7 @@ function euclideanDistance(a: number[], b: number[]): number {
   return Math.sqrt(s);
 }
 
-export default function RHRelogioPonto() {
+export default function RHRelogioPonto({ kiosk = false }: { kiosk?: boolean } = {}) {
   const { toast } = useToast();
   const navigate = useNavigate();
   const videoRef = useRef<HTMLVideoElement | null>(null);
