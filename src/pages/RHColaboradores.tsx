@@ -481,20 +481,19 @@ export default function RHColaboradores() {
 
       {/* Employee Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-3xl w-[calc(100vw-1rem)] sm:w-full max-h-[95vh] overflow-y-auto p-4 sm:p-6">
-          <DialogHeader>
+        <DialogContent className="max-w-3xl p-0 gap-0 w-screen h-[100dvh] max-h-[100dvh] sm:w-full sm:h-auto sm:max-h-[95vh] rounded-none sm:rounded-lg flex flex-col">
+          <DialogHeader className="p-4 sm:p-6 pb-3 border-b shrink-0 space-y-1">
             <DialogTitle className="text-base sm:text-lg pr-8">{editId ? "Editar Colaborador" : "Novo Colaborador"}</DialogTitle>
-            {/* Age display when editing and has birth_date */}
             {form.birth_date && (
-              <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Calendar className="h-4 w-4" />
                 <span>Idade: <strong className="text-foreground">{calcAge(form.birth_date)}</strong></span>
               </div>
             )}
           </DialogHeader>
-          <Tabs defaultValue="pessoal">
-            <div className="-mx-4 sm:mx-0 overflow-x-auto scrollbar-none">
-              <TabsList className="flex sm:grid sm:grid-cols-5 w-max sm:w-full min-w-full px-4 sm:px-0">
+          <Tabs defaultValue="pessoal" className="flex-1 flex flex-col overflow-hidden">
+            <div className="overflow-x-auto scrollbar-none border-b shrink-0">
+              <TabsList className="flex sm:grid sm:grid-cols-5 w-max sm:w-full min-w-full px-4 sm:px-6 h-auto bg-transparent rounded-none gap-1 py-2">
                 <TabsTrigger value="pessoal" className="flex-shrink-0">Pessoal</TabsTrigger>
                 <TabsTrigger value="profissional" className="flex-shrink-0">Profissional</TabsTrigger>
                 <TabsTrigger value="remuneracao" className="flex-shrink-0 gap-1"><DollarSign className="h-3 w-3" />Remuneração</TabsTrigger>
@@ -502,6 +501,8 @@ export default function RHColaboradores() {
                 <TabsTrigger value="bancario" className="flex-shrink-0">Bancário</TabsTrigger>
               </TabsList>
             </div>
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+
 
 
             <TabsContent value="pessoal" className="space-y-3 mt-4">
@@ -1140,13 +1141,15 @@ export default function RHColaboradores() {
                 </div>
               </div>
             </TabsContent>
+            </div>
           </Tabs>
-          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 mt-4 sticky bottom-0 bg-background pt-3 -mx-4 sm:mx-0 px-4 sm:px-0 border-t sm:border-t-0">
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 p-4 sm:p-6 border-t bg-background shrink-0" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
             <Button variant="outline" onClick={() => setDialogOpen(false)} className="w-full sm:w-auto">Cancelar</Button>
             <Button onClick={handleSave} disabled={createMut.isPending || updateMut.isPending} className="w-full sm:w-auto">
               {createMut.isPending || updateMut.isPending ? "Salvando..." : "Salvar"}
             </Button>
           </div>
+
 
         </DialogContent>
       </Dialog>

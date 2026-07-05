@@ -48,7 +48,7 @@ window.addEventListener("unhandledrejection", (event) => {
 
 void import("./lib/pwa");
 
-const savedTheme = localStorage.getItem('app-theme') || 'dark';
+const savedTheme = localStorage.getItem('app-theme') || 'light';
 const effectiveTheme = savedTheme === 'system' 
   ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
   : savedTheme;
