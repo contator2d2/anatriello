@@ -25,10 +25,11 @@ function applyTheme(theme: Theme) {
 
 export function useTheme() {
   const [theme, setThemeState] = useState<Theme>(() => {
-    if (typeof window === 'undefined') return 'dark';
+    if (typeof window === 'undefined') return 'light';
     const saved = localStorage.getItem(THEME_KEY) as Theme | null;
-    return saved || 'dark';
+    return saved || 'light';
   });
+
 
   const setTheme = useCallback((newTheme: Theme) => {
     setThemeState(newTheme);
