@@ -39,6 +39,9 @@ export const PAGE_PERMISSIONS = [
   { key: 'rh_mapa', label: 'Mapa', section: 'RH', icon: 'MapPin' },
   { key: 'rh_acessos', label: 'Acessos App', section: 'RH', icon: 'Shield' },
   { key: 'rh_biometria', label: 'Biometria Facial', section: 'RH', icon: 'ScanFace' },
+  { key: 'rh_solicitacoes', label: 'Solicitações', section: 'RH', icon: 'Inbox' },
+  { key: 'rh_itens', label: 'Uniformes/EPIs/Chaves', section: 'RH', icon: 'Shirt' },
+  { key: 'rh_checklist_folha', label: 'Checklist Folha', section: 'RH', icon: 'ClipboardList' },
   { key: 'rh_rastreamento', label: 'Rastreamento', section: 'RH', icon: 'Navigation' },
   { key: 'rh_logs', label: 'Logs & Erros', section: 'RH', icon: 'Code' },
   
