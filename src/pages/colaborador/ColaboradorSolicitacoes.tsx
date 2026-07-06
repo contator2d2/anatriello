@@ -1,15 +1,8 @@
 import { useState } from "react";
 import { ColaboradorLayout } from "./ColaboradorLayout";
-import { useColabRequests, useColabCreateRequest, useColabAdjustmentRequests, useColabCreateAdjustmentRequest } from "@/hooks/use-promotor";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Umbrella, HeartPulse, Bus, FileText, Clock, Edit3, Loader2, Wallet, Smile } from "lucide-react";
+import { useColabRequests, useColabAdjustmentRequests } from "@/hooks/use-promotor";
+import { Umbrella, HeartPulse, Bus, FileText, Clock, Edit3, Loader2, Wallet, Smile, Bell } from "lucide-react";
 import { format } from "date-fns";
-import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
 const KIND_META: Record<string, { label: string; icon: any; color: string }> = {
@@ -30,19 +23,19 @@ const STATUS_STYLE: Record<string, string> = {
   concluido: "bg-blue-100 text-blue-700",
   recusado: "bg-red-100 text-red-700",
 };
+const STATUS_LABEL: Record<string, string> = {
+  pendente: "Em análise",
+  aprovado: "Aprovado",
+  concluido: "Concluído",
+  recusado: "Recusado",
+};
 
 export default function ColaboradorSolicitacoes() {
-  const [tab, setTab] = useState<"minhas" | "historico">("minhas");
-  const [open, setOpen] = useState(false);
-  const [kind, setKind] = useState("ferias");
-  const [form, setForm] = useState<any>({});
+  const [tab, setTab] = useState<"ativos" | "historico">("ativos");
   const { data: requests, isLoading } = useColabRequests();
   const { data: adjRequests = [] } = useColabAdjustmentRequests();
-  const create = useColabCreateRequest();
-  const createAdj = useColabCreateAdjustmentRequest();
-  const { toast } = useToast();
 
-  const mergedRequests = [
+  const merged = [
     ...(requests || []),
     ...adjRequests.map((r: any) => ({
       id: `adj_${r.id}`,
@@ -52,36 +45,22 @@ export default function ColaboradorSolicitacoes() {
       payload: { start_date: r.punch_date, reason: `${r.requested_times || ''} — ${r.justification}` },
     })),
   ];
-  const list = mergedRequests.filter((r: any) =>
-    tab === "minhas" ? ["pendente", "aprovado"].includes(r.status) : ["concluido", "recusado"].includes(r.status)
+  const list = merged.filter((r: any) =>
+    tab === "ativos" ? ["pendente", "aprovado"].includes(r.status) : ["concluido", "recusado"].includes(r.status)
   );
 
-  async function submit() {
-    try {
-      if (kind === 'ajuste_ponto') {
-        const times = (form.times || '').split(',').map((s: string) => s.trim()).filter(Boolean);
-        await createAdj.mutateAsync({
-          punch_date: form.start_date,
-          requested_times: times,
-          justification: form.reason || 'Ajuste solicitado',
-        });
-      } else {
-        await create.mutateAsync({ kind, payload: form });
-      }
-      toast({ title: "Solicitação enviada" });
-      setOpen(false); setForm({});
-    } catch (e: any) { toast({ title: e.message, variant: "destructive" }); }
-  }
-
   return (
-    <ColaboradorLayout bg="light" title="Solicitações" rightSlot={
-      <button onClick={() => setOpen(true)} className="h-8 w-8 rounded-full bg-[#f97316] text-white flex items-center justify-center">
-        <Plus className="h-4 w-4" />
-      </button>
-    }>
+    <ColaboradorLayout bg="light" title="Informativos">
       <div className="px-4 pt-4">
+        <div className="bg-blue-50 border border-blue-100 rounded-2xl p-3 flex gap-2 mb-4">
+          <Bell className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />
+          <p className="text-xs text-blue-800 leading-relaxed">
+            As solicitações são registradas e acompanhadas pelo RH. Aqui você visualiza o status dos processos em seu nome.
+          </p>
+        </div>
+
         <div className="flex gap-6 border-b border-slate-200">
-          {(["minhas", "historico"] as const).map(t => (
+          {(["ativos", "historico"] as const).map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -90,7 +69,7 @@ export default function ColaboradorSolicitacoes() {
                 tab === t ? "border-[#f97316] text-[#f97316]" : "border-transparent text-slate-400"
               )}
             >
-              {t === "minhas" ? "Minhas solicitações" : "Histórico"}
+              {t === "ativos" ? "Em andamento" : "Histórico"}
             </button>
           ))}
         </div>
@@ -98,7 +77,7 @@ export default function ColaboradorSolicitacoes() {
         <div className="space-y-3 mt-4">
           {isLoading && <Loader2 className="h-5 w-5 animate-spin mx-auto text-slate-400" />}
           {list.length === 0 && !isLoading && (
-            <p className="text-center text-xs text-slate-400 py-8">Nenhuma solicitação</p>
+            <p className="text-center text-xs text-slate-400 py-8">Nenhum informativo</p>
           )}
           {list.map((r: any) => {
             const m = KIND_META[r.kind] || { label: r.kind, icon: FileText, color: "#64748b" };
@@ -111,84 +90,19 @@ export default function ColaboradorSolicitacoes() {
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-bold">{m.label}</p>
                   {(p.start_date || p.end_date) && (
-                    <p className="text-xs text-slate-500 mt-0.5">Período: {p.start_date} a {p.end_date}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">Período: {p.start_date} {p.end_date ? `a ${p.end_date}` : ''}</p>
                   )}
                   {p.reason && <p className="text-xs text-slate-500 mt-0.5 truncate">{p.reason}</p>}
-                  <p className="text-[10px] text-slate-400 mt-1">Solicitado em {format(new Date(r.created_at), "dd/MM/yyyy")}</p>
+                  <p className="text-[10px] text-slate-400 mt-1">Registrado em {format(new Date(r.created_at), "dd/MM/yyyy")}</p>
                 </div>
-                <span className={cn("h-fit text-[10px] px-2 py-1 rounded-full font-semibold capitalize", STATUS_STYLE[r.status] || "bg-slate-100 text-slate-500")}>
-                  {r.status}
+                <span className={cn("h-fit text-[10px] px-2 py-1 rounded-full font-semibold", STATUS_STYLE[r.status] || "bg-slate-100 text-slate-500")}>
+                  {STATUS_LABEL[r.status] || r.status}
                 </span>
               </div>
             );
           })}
         </div>
       </div>
-
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader><DialogTitle>Nova solicitação</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            <div>
-              <Label>Tipo</Label>
-              <Select value={kind} onValueChange={setKind}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {Object.entries(KIND_META).map(([k, m]) => <SelectItem key={k} value={k}>{m.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            {["ferias", "afastamento", "atestado", "horas_extras"].includes(kind) && (
-              <div className="grid grid-cols-2 gap-2">
-                <div><Label>Data início</Label><Input type="date" value={form.start_date || ""} onChange={e => setForm({ ...form, start_date: e.target.value })} /></div>
-                <div><Label>Data fim</Label><Input type="date" value={form.end_date || ""} onChange={e => setForm({ ...form, end_date: e.target.value })} /></div>
-              </div>
-            )}
-            {kind === "ajuste_ponto" && (
-              <>
-                <div>
-                  <Label>Data do ponto</Label>
-                  <Input type="date" value={form.start_date || ""} onChange={e => setForm({ ...form, start_date: e.target.value })} />
-                </div>
-                <div>
-                  <Label>Horários corretos (separe por vírgula)</Label>
-                  <Input placeholder="08:00, 12:00, 13:00, 17:00" value={form.times || ""} onChange={e => setForm({ ...form, times: e.target.value })} />
-                  <p className="text-[10px] text-slate-400 mt-1">Ex: entrada, saída almoço, retorno, saída</p>
-                </div>
-              </>
-            )}
-            {kind === "adiantamento_salarial" && (
-              <div>
-                <Label>Valor solicitado (R$)</Label>
-                <Input type="number" step="0.01" value={form.amount || ""} onChange={e => setForm({ ...form, amount: e.target.value })} />
-              </div>
-            )}
-            {(kind === "plano_saude" || kind === "plano_odontologico" || kind === "vale_transporte") && (
-              <div>
-                <Label>Ação desejada</Label>
-                <Select value={form.action || ""} onValueChange={v => setForm({ ...form, action: v })}>
-                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="incluir">Incluir</SelectItem>
-                    <SelectItem value="alterar">Alterar</SelectItem>
-                    <SelectItem value="cancelar">Cancelar</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            <div>
-              <Label>Motivo / observações</Label>
-              <Textarea rows={3} value={form.reason || ""} onChange={e => setForm({ ...form, reason: e.target.value })} />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setOpen(false)}>Cancelar</Button>
-            <Button onClick={submit} disabled={create.isPending} className="bg-[#f97316] hover:bg-[#ea580c]">
-              {create.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Enviar"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </ColaboradorLayout>
   );
 }
