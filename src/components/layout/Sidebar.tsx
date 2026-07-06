@@ -48,6 +48,8 @@ import {
   ShoppingBag,
   Tags as TagsIcon,
   Boxes,
+  Shirt,
+  Inbox,
   Store,
   Camera,
   Navigation,
