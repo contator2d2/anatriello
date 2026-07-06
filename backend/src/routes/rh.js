@@ -803,6 +803,23 @@ router.put('/employees/:id', async (req, res) => {
       .map(f => ({ field: f, oldVal: String(old.rows[0][f] ?? ''), newVal: String(d[f] ?? '') }));
     if (changes.length) {
       await auditLog(old.rows[0].organization_id, 'employee', req.params.id, 'update', changes, req.userId);
+      // Emit RH change alerts for tracked fields
+      try {
+        const ALERT_MAP = {
+          position: 'cargo', role_level: 'cargo',
+          salary: 'salario', salary_items: 'salario',
+          benefits: 'plano_saude',
+        };
+        for (const ch of changes) {
+          const alertType = ALERT_MAP[ch.field];
+          if (!alertType) continue;
+          await query(
+            `INSERT INTO rh_change_alerts (organization_id, employee_id, field, old_value, new_value, alert_type, changed_by)
+             VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+            [old.rows[0].organization_id, req.params.id, ch.field, ch.oldVal, ch.newVal, alertType, req.userId]
+          ).catch(() => {});
+        }
+      } catch (e) { /* table may not exist yet - it's created on first call to rh-management */ }
     }
 
     res.json(result.rows[0]);

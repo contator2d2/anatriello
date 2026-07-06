@@ -75,6 +75,9 @@ import RHFeriados from "./pages/RHFeriados";
 import RHAcessos from "./pages/RHAcessos";
 import RHRastreamento from "./pages/RHRastreamento";
 import RHBiometria from "./pages/RHBiometria";
+import RHItens from "./pages/RHItens";
+import RHChecklistFolha from "./pages/RHChecklistFolha";
+import RHSolicitacoesAdmin from "./pages/RHSolicitacoesAdmin";
 import RHMapaOperacional from "./pages/RHMapaOperacional";
 import RHLogs from "./pages/RHLogs";
 import RHAjuda from "./pages/RHAjuda";
@@ -312,6 +315,9 @@ const App = () => (
             <Route path="/rh/feriados" element={<ProtectedRoute><RHFeriados /></ProtectedRoute>} />
             <Route path="/rh/acessos" element={<ProtectedRoute><RHAcessos /></ProtectedRoute>} />
             <Route path="/rh/biometria" element={<ProtectedRoute><RHBiometria /></ProtectedRoute>} />
+            <Route path="/rh/itens" element={<ProtectedRoute><RHItens /></ProtectedRoute>} />
+            <Route path="/rh/checklist-folha" element={<ProtectedRoute><RHChecklistFolha /></ProtectedRoute>} />
+            <Route path="/rh/solicitacoes" element={<ProtectedRoute><RHSolicitacoesAdmin /></ProtectedRoute>} />
             <Route path="/rh/rastreamento" element={<ProtectedRoute><RHRastreamento /></ProtectedRoute>} />
             <Route path="/rh/mapa" element={<ProtectedRoute><RHMapaOperacional /></ProtectedRoute>} />
             <Route path="/rh/logs" element={<ProtectedRoute><RHLogs /></ProtectedRoute>} />

@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Umbrella, HeartPulse, Bus, FileText, Clock, Edit3, Loader2 } from "lucide-react";
+import { Plus, Umbrella, HeartPulse, Bus, FileText, Clock, Edit3, Loader2, Wallet, Smile } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -16,6 +16,9 @@ const KIND_META: Record<string, { label: string; icon: any; color: string }> = {
   ferias: { label: "Férias", icon: Umbrella, color: "#06b6d4" },
   afastamento: { label: "Afastamento", icon: HeartPulse, color: "#f43f5e" },
   vale_transporte: { label: "Vale-transporte", icon: Bus, color: "#8b5cf6" },
+  adiantamento_salarial: { label: "Adiantamento salarial", icon: Wallet, color: "#eab308" },
+  plano_saude: { label: "Plano de saúde", icon: HeartPulse, color: "#ef4444" },
+  plano_odontologico: { label: "Plano odontológico", icon: Smile, color: "#a855f7" },
   segunda_via_holerite: { label: "2ª via de holerite", icon: FileText, color: "#3b82f6" },
   horas_extras: { label: "Horas Extras", icon: Clock, color: "#f59e0b" },
   ajuste_ponto: { label: "Ajuste de Ponto", icon: Edit3, color: "#10b981" },
@@ -153,6 +156,25 @@ export default function ColaboradorSolicitacoes() {
                   <p className="text-[10px] text-slate-400 mt-1">Ex: entrada, saída almoço, retorno, saída</p>
                 </div>
               </>
+            )}
+            {kind === "adiantamento_salarial" && (
+              <div>
+                <Label>Valor solicitado (R$)</Label>
+                <Input type="number" step="0.01" value={form.amount || ""} onChange={e => setForm({ ...form, amount: e.target.value })} />
+              </div>
+            )}
+            {(kind === "plano_saude" || kind === "plano_odontologico" || kind === "vale_transporte") && (
+              <div>
+                <Label>Ação desejada</Label>
+                <Select value={form.action || ""} onValueChange={v => setForm({ ...form, action: v })}>
+                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="incluir">Incluir</SelectItem>
+                    <SelectItem value="alterar">Alterar</SelectItem>
+                    <SelectItem value="cancelar">Cancelar</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             )}
             <div>
               <Label>Motivo / observações</Label>
