@@ -157,6 +157,25 @@ export default function ColaboradorSolicitacoes() {
                 </div>
               </>
             )}
+            {kind === "adiantamento_salarial" && (
+              <div>
+                <Label>Valor solicitado (R$)</Label>
+                <Input type="number" step="0.01" value={form.amount || ""} onChange={e => setForm({ ...form, amount: e.target.value })} />
+              </div>
+            )}
+            {(kind === "plano_saude" || kind === "plano_odontologico" || kind === "vale_transporte") && (
+              <div>
+                <Label>Ação desejada</Label>
+                <Select value={form.action || ""} onValueChange={v => setForm({ ...form, action: v })}>
+                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="incluir">Incluir</SelectItem>
+                    <SelectItem value="alterar">Alterar</SelectItem>
+                    <SelectItem value="cancelar">Cancelar</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div>
               <Label>Motivo / observações</Label>
               <Textarea rows={3} value={form.reason || ""} onChange={e => setForm({ ...form, reason: e.target.value })} />
