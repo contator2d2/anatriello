@@ -131,7 +131,7 @@ export default function SmartRouteRotas() {
 
                 </TableRow>
               ))}
-              {!data.length && <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">Nenhuma rota.</TableCell></TableRow>}
+              {!data.length && <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground py-8">Nenhuma rota.</TableCell></TableRow>}
             </TableBody>
           </Table>
         </CardContent></Card>
