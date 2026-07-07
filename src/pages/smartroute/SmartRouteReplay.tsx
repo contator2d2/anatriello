@@ -15,8 +15,9 @@ export default function SmartRouteReplay() {
   const mapRef = useRef<L.Map | null>(null);
   const container = useRef<HTMLDivElement>(null);
   const trailRef = useRef<L.Polyline | null>(null);
-  const cursorRef = useRef<L.Marker | null>(null);
+  const cursorRef = useRef<L.CircleMarker | null>(null);
   const [idx, setIdx] = useState(0);
+
   const [playing, setPlaying] = useState(false);
 
   useEffect(() => {
