@@ -475,10 +475,12 @@ app.use('/api/pdv-blocks', pdvBlocksRoutes);
 app.use('/api/network-portal', networkPortalRoutes);
 app.use('/api', agencyNetworkRequestsRoutes);
 // promoterAccessRoutes already mounted above (before /api/public)
-// SmartRoute AI — driver mounted before admin so /driver/* isn't caught by admin's authenticate middleware
+// SmartRoute AI — public (tracking, webhook) BEFORE admin auth; driver BEFORE admin
+app.use('/api/smartroute-public', smartroutePublicRoutes);
 app.use('/api/smartroute/driver', smartrouteDriverRoutes);
 app.use('/api/smartroute/ai', smartrouteAIRoutes);
 app.use('/api/smartroute', smartrouteRoutes);
+
 
 app.use('/api/promoter-leaves', promoterLeavesRoutes);
 app.use('/api/access-control-dashboard', accessControlDashboardRoutes);
