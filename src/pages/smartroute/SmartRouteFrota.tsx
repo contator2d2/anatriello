@@ -38,7 +38,7 @@ export default function SmartRouteFrota() {
           <Table>
             <TableHeader><TableRow>
               <TableHead>Placa</TableHead><TableHead>Modelo</TableHead><TableHead>Capacidade</TableHead>
-              <TableHead>Combustível</TableHead><TableHead>Status</TableHead><TableHead></TableHead>
+              <TableHead>Combustível</TableHead><TableHead>Consumo</TableHead><TableHead>R$/L</TableHead><TableHead>Status</TableHead><TableHead></TableHead>
             </TableRow></TableHeader>
             <TableBody>
               {data.map((v: any) => (
@@ -47,6 +47,8 @@ export default function SmartRouteFrota() {
                   <TableCell>{v.brand} {v.model}</TableCell>
                   <TableCell>{v.capacity_kg} kg · {v.capacity_m3} m³</TableCell>
                   <TableCell>{v.fuel_type}</TableCell>
+                  <TableCell>{v.km_per_liter ? `${v.km_per_liter} km/L` : "—"}</TableCell>
+                  <TableCell>{v.fuel_price_per_liter ? `R$ ${Number(v.fuel_price_per_liter).toFixed(2)}` : "—"}</TableCell>
                   <TableCell>{v.status}</TableCell>
                   <TableCell className="text-right space-x-1">
                     <Button size="icon" variant="ghost" onClick={() => { setForm(v); setOpen(true); }}><Edit className="w-4 h-4" /></Button>
