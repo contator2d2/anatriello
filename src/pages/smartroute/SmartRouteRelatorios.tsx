@@ -247,25 +247,7 @@ export default function SmartRouteRelatorios() {
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="h-96 rounded-lg overflow-hidden">
-                  <MapContainer center={center} zoom={11} style={{ height: "100%", width: "100%" }}>
-                    <TileLayer attribution='&copy; OSM' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                    {(heat.data || []).map((p: any, i: number) => (
-                      <CircleMarker
-                        key={i}
-                        center={[Number(p.lat), Number(p.lng)]}
-                        radius={Math.min(6 + Number(p.weight), 30)}
-                        pathOptions={{
-                          color: heatKind === "failed" ? "#ef4444" : "#10b981",
-                          fillColor: heatKind === "failed" ? "#ef4444" : "#10b981",
-                          fillOpacity: 0.5,
-                        }}
-                      >
-                        <Popup>{p.weight} {heatKind === "failed" ? "falhas" : "entregas"}</Popup>
-                      </CircleMarker>
-                    ))}
-                  </MapContainer>
-                </div>
+                <div ref={mapContainerRef} className="h-96 rounded-lg overflow-hidden" />
               </CardContent>
             </Card>
           </TabsContent>
