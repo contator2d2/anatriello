@@ -26,6 +26,7 @@ export default function SmartRouteRotas() {
   const save = useSRSaveRoute();
   const del = useSRDeleteRoute();
   const optimize = useSROptimizeRoute();
+  const optimizeAdv = useSROptimizeAdvanced();
 
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<any>({});
