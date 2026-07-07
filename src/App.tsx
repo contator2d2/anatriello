@@ -176,6 +176,20 @@ import PromoterAppScanner from "./pages/promoter-app/PromoterAppScanner";
 import PromoterAppVisit from "./pages/promoter-app/PromoterAppVisit";
 import PromoterAppHistory from "./pages/promoter-app/PromoterAppHistory";
 
+// SmartRoute AI
+import SmartRouteDashboard from "./pages/smartroute/SmartRouteDashboard";
+import SmartRouteMapa from "./pages/smartroute/SmartRouteMapa";
+import SmartRouteRotas from "./pages/smartroute/SmartRouteRotas";
+import SmartRoutePedidos from "./pages/smartroute/SmartRoutePedidos";
+import SmartRoutePDVs from "./pages/smartroute/SmartRoutePDVs";
+import SmartRouteFrota from "./pages/smartroute/SmartRouteFrota";
+import SmartRouteMotoristas from "./pages/smartroute/SmartRouteMotoristas";
+import { DriverAuthProvider } from "./contexts/DriverAuthContext";
+import EntregadorLogin from "./pages/entregador/EntregadorLogin";
+import EntregadorHome from "./pages/entregador/EntregadorHome";
+import EntregadorRota from "./pages/entregador/EntregadorRota";
+
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
