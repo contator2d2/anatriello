@@ -1,0 +1,128 @@
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { api } from '@/lib/api';
+
+const BASE = '/api/smartroute';
+
+export function useSRDashboard() {
+  return useQuery<any>({ queryKey: ['sr-dashboard'], queryFn: () => api(`${BASE}/dashboard`), refetchInterval: 30000 });
+}
+export function useSRLive() {
+  return useQuery<any>({ queryKey: ['sr-live'], queryFn: () => api(`${BASE}/live`), refetchInterval: 15000 });
+}
+
+// Vehicles
+export function useSRVehicles() {
+  return useQuery<any[]>({ queryKey: ['sr-vehicles'], queryFn: () => api(`${BASE}/vehicles`) });
+}
+export function useSRSaveVehicle() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: any) => id
+      ? api(`${BASE}/vehicles/${id}`, { method: 'PUT', body })
+      : api(`${BASE}/vehicles`, { method: 'POST', body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['sr-vehicles'] }),
+  });
+}
+export function useSRDeleteVehicle() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api(`${BASE}/vehicles/${id}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['sr-vehicles'] }),
+  });
+}
+
+// Drivers
+export function useSRDrivers() {
+  return useQuery<any[]>({ queryKey: ['sr-drivers'], queryFn: () => api(`${BASE}/drivers`) });
+}
+export function useSRSaveDriver() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: any) => id
+      ? api(`${BASE}/drivers/${id}`, { method: 'PUT', body })
+      : api(`${BASE}/drivers`, { method: 'POST', body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['sr-drivers'] }),
+  });
+}
+export function useSRDeleteDriver() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api(`${BASE}/drivers/${id}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['sr-drivers'] }),
+  });
+}
+
+// PDVs
+export function useSRPdvs() {
+  return useQuery<any[]>({ queryKey: ['sr-pdvs'], queryFn: () => api(`${BASE}/pdvs`) });
+}
+export function useSRSavePdv() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: any) => id
+      ? api(`${BASE}/pdvs/${id}`, { method: 'PUT', body })
+      : api(`${BASE}/pdvs`, { method: 'POST', body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['sr-pdvs'] }),
+  });
+}
+export function useSRDeletePdv() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api(`${BASE}/pdvs/${id}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['sr-pdvs'] }),
+  });
+}
+
+// Orders
+export function useSROrders(filters?: { status?: string; date?: string }) {
+  const qs = new URLSearchParams(Object.entries(filters || {}).filter(([, v]) => v).map(([k, v]) => [k, String(v)])).toString();
+  return useQuery<any[]>({ queryKey: ['sr-orders', qs], queryFn: () => api(`${BASE}/orders${qs ? `?${qs}` : ''}`) });
+}
+export function useSRSaveOrder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: any) => id
+      ? api(`${BASE}/orders/${id}`, { method: 'PUT', body })
+      : api(`${BASE}/orders`, { method: 'POST', body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['sr-orders'] }),
+  });
+}
+export function useSRDeleteOrder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api(`${BASE}/orders/${id}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['sr-orders'] }),
+  });
+}
+
+// Routes
+export function useSRRoutes(filters?: { date?: string; status?: string }) {
+  const qs = new URLSearchParams(Object.entries(filters || {}).filter(([, v]) => v).map(([k, v]) => [k, String(v)])).toString();
+  return useQuery<any[]>({ queryKey: ['sr-routes', qs], queryFn: () => api(`${BASE}/routes${qs ? `?${qs}` : ''}`) });
+}
+export function useSRRoute(id?: string) {
+  return useQuery<any>({ queryKey: ['sr-route', id], queryFn: () => api(`${BASE}/routes/${id}`), enabled: !!id });
+}
+export function useSRSaveRoute() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: any) => id
+      ? api(`${BASE}/routes/${id}`, { method: 'PUT', body })
+      : api(`${BASE}/routes`, { method: 'POST', body }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['sr-routes'] }); qc.invalidateQueries({ queryKey: ['sr-orders'] }); },
+  });
+}
+export function useSRDeleteRoute() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api(`${BASE}/routes/${id}`, { method: 'DELETE' }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['sr-routes'] }); qc.invalidateQueries({ queryKey: ['sr-orders'] }); },
+  });
+}
+export function useSROptimizeRoute() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api(`${BASE}/routes/${id}/optimize`, { method: 'POST', body: {} }),
+    onSuccess: (_, id) => qc.invalidateQueries({ queryKey: ['sr-route', id] }),
+  });
+}
