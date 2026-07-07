@@ -162,6 +162,7 @@ const getNavSections = (hasConnections: boolean): NavSection[] => [
       { name: "PDVs / Clientes", href: "/smartroute/pdvs", icon: Store, pageKey: 'sr_pdvs' },
       { name: "Frota", href: "/smartroute/frota", icon: Truck, pageKey: 'sr_frota' },
       { name: "Motoristas", href: "/smartroute/motoristas", icon: Users2, pageKey: 'sr_motoristas' },
+      { name: "IA & Alertas", href: "/smartroute/ia", icon: Sparkles, pageKey: 'sr_ia' },
     ],
   },
   {

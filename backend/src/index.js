@@ -67,6 +67,7 @@ import agencyNetworkRequestsRoutes from './routes/agency-network-requests.js';
 import promoterAccessRoutes from './routes/promoter-access.js';
 import smartrouteRoutes from './routes/smartroute.js';
 import smartrouteDriverRoutes from './routes/smartroute-driver.js';
+import smartrouteAIRoutes from './routes/smartroute-ai.js';
 import promoterLeavesRoutes from './routes/promoter-leaves.js';
 import accessControlDashboardRoutes from './routes/access-control-dashboard.js';
 import appLogsRoutes from './routes/app-logs.js';
@@ -474,6 +475,7 @@ app.use('/api', agencyNetworkRequestsRoutes);
 // promoterAccessRoutes already mounted above (before /api/public)
 // SmartRoute AI — driver mounted before admin so /driver/* isn't caught by admin's authenticate middleware
 app.use('/api/smartroute/driver', smartrouteDriverRoutes);
+app.use('/api/smartroute/ai', smartrouteAIRoutes);
 app.use('/api/smartroute', smartrouteRoutes);
 
 app.use('/api/promoter-leaves', promoterLeavesRoutes);
