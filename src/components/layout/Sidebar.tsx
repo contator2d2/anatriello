@@ -164,7 +164,9 @@ const getNavSections = (hasConnections: boolean): NavSection[] => [
       { name: "Motoristas", href: "/smartroute/motoristas", icon: Users2, pageKey: 'sr_motoristas' },
       { name: "IA & Alertas", href: "/smartroute/ia", icon: Sparkles, pageKey: 'sr_ia' },
       { name: "Gestor IA", href: "/smartroute/gestor-ia", icon: Brain, pageKey: 'sr_gestor_ia' },
+      { name: "Integrações", href: "/smartroute/integracoes", icon: Sparkles, pageKey: 'sr_integracoes' },
     ],
+
   },
   {
     title: "Disparos",
