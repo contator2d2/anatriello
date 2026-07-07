@@ -105,7 +105,7 @@ export default function SmartRouteRotas() {
           <Table>
             <TableHeader><TableRow>
               <TableHead>Código</TableHead><TableHead>Data</TableHead><TableHead>Motorista</TableHead>
-              <TableHead>Veículo</TableHead><TableHead>Paradas</TableHead><TableHead>Status</TableHead><TableHead></TableHead>
+              <TableHead>Veículo</TableHead><TableHead>Paradas</TableHead><TableHead>Km</TableHead><TableHead>Duração</TableHead><TableHead>Custo</TableHead><TableHead>Status</TableHead><TableHead></TableHead>
             </TableRow></TableHeader>
             <TableBody>
               {data.map((r: any) => (
@@ -115,11 +115,14 @@ export default function SmartRouteRotas() {
                   <TableCell>{r.driver_name || "—"}</TableCell>
                   <TableCell>{r.vehicle_plate || "—"}</TableCell>
                   <TableCell>{r.completed_stops}/{r.total_stops}</TableCell>
+                  <TableCell className="text-xs">{r.total_distance_km ? `${r.total_distance_km} km` : "—"}</TableCell>
+                  <TableCell className="text-xs">{r.estimated_duration_min ? `${Math.floor(r.estimated_duration_min/60)}h${String(r.estimated_duration_min%60).padStart(2,'0')}` : "—"}</TableCell>
+                  <TableCell className="text-xs font-medium">{r.estimated_cost_brl ? `R$ ${Number(r.estimated_cost_brl).toFixed(2)}` : "—"}</TableCell>
                   <TableCell><Badge className={statusColor[r.status] || ""}>{r.status}</Badge></TableCell>
                   <TableCell className="text-right space-x-1">
                     <Button size="icon" variant="ghost" onClick={() => setViewId(r.id)}><Eye className="w-4 h-4" /></Button>
                     <Button size="icon" variant="ghost" title="Otimizar (rápido)" onClick={() => optimize.mutate(r.id, { onSuccess: () => toast.success("Sequência otimizada") })}><Wand2 className="w-4 h-4" /></Button>
-                    <Button size="icon" variant="ghost" title="Otimizar IA" onClick={() => optimizeAdv.mutate(r.id, { onSuccess: (d: any) => toast.success(`IA: ${d.sequenced} paradas · ${d.total_km}km`, { description: d.warnings?.length ? d.warnings.join(" | ") : undefined }) })}><Sparkles className="w-4 h-4 text-primary" /></Button>
+                    <Button size="icon" variant="ghost" title="Otimizar IA" onClick={() => optimizeAdv.mutate(r.id, { onSuccess: (d: any) => toast.success(`IA: ${d.sequenced} paradas · ${d.total_km}km${d.estimated_cost_brl ? ` · R$ ${d.estimated_cost_brl}` : ""}`, { description: d.warnings?.length ? d.warnings.join(" | ") : undefined }) })}><Sparkles className="w-4 h-4 text-primary" /></Button>
                     <Button size="icon" variant="ghost" title="Romaneio PDF" onClick={() => romaneioPDF(r)}><FileText className="w-4 h-4" /></Button>
                     <Button size="icon" variant="ghost" title="Copiar links de rastreio" onClick={() => shareTrackingLinks(r)}>🔗</Button>
                     <Link to={`/smartroute/replay/${r.id}`}><Button size="icon" variant="ghost" title="Replay"><PlayCircle className="w-4 h-4" /></Button></Link>
