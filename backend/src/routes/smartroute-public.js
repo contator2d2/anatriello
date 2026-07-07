@@ -40,7 +40,7 @@ router.get('/track/:token', async (req, res) => {
       `SELECT o.id, o.order_number, o.status, o.customer_name, o.value_cents, o.weight_kg,
               o.nps_score, o.nps_comment,
               p.name AS pdv_name, p.address AS pdv_address, p.lat AS pdv_lat, p.lng AS pdv_lng,
-              s.id AS stop_id, s.status AS stop_status, s.sequence, s.arrived_at, s.departed_at,
+              s.id AS stop_id, s.status AS stop_status, s.sequence, s.arrived_at, s.departed_at, s.eta_min,
               s.receiver_name, s.signature_url,
               r.id AS route_id, r.code AS route_code, r.status AS route_status,
               d.full_name AS driver_name, d.phone AS driver_phone,
