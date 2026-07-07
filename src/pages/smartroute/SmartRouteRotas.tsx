@@ -10,9 +10,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Trash2, Route as RouteIcon, Wand2, Eye } from "lucide-react";
+import { Plus, Trash2, Route as RouteIcon, Wand2, Eye, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { useSRRoutes, useSRSaveRoute, useSRDeleteRoute, useSRDrivers, useSRVehicles, useSROrders, useSROptimizeRoute, useSRRoute } from "@/hooks/use-smartroute";
+import { useSROptimizeAdvanced } from "@/hooks/use-smartroute-ai";
 
 const statusColor: Record<string, string> = { planejada: "bg-slate-200", em_andamento: "bg-blue-200", concluida: "bg-emerald-200", cancelada: "bg-red-200" };
 
@@ -25,6 +26,7 @@ export default function SmartRouteRotas() {
   const save = useSRSaveRoute();
   const del = useSRDeleteRoute();
   const optimize = useSROptimizeRoute();
+  const optimizeAdv = useSROptimizeAdvanced();
 
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<any>({});
@@ -74,7 +76,8 @@ export default function SmartRouteRotas() {
                   <TableCell><Badge className={statusColor[r.status] || ""}>{r.status}</Badge></TableCell>
                   <TableCell className="text-right space-x-1">
                     <Button size="icon" variant="ghost" onClick={() => setViewId(r.id)}><Eye className="w-4 h-4" /></Button>
-                    <Button size="icon" variant="ghost" title="Otimizar" onClick={() => optimize.mutate(r.id, { onSuccess: () => toast.success("Sequência otimizada") })}><Wand2 className="w-4 h-4" /></Button>
+                    <Button size="icon" variant="ghost" title="Otimizar (rápido)" onClick={() => optimize.mutate(r.id, { onSuccess: () => toast.success("Sequência otimizada") })}><Wand2 className="w-4 h-4" /></Button>
+                    <Button size="icon" variant="ghost" title="Otimizar IA (peso, volume, janela)" onClick={() => optimizeAdv.mutate(r.id, { onSuccess: (d: any) => toast.success(`IA: ${d.sequenced} paradas · ${d.total_km}km`, { description: d.warnings?.length ? d.warnings.join(" | ") : undefined }) })}><Sparkles className="w-4 h-4 text-primary" /></Button>
                     <Button size="icon" variant="ghost" onClick={() => { if (confirm("Excluir?")) del.mutate(r.id); }}><Trash2 className="w-4 h-4 text-red-500" /></Button>
                   </TableCell>
                 </TableRow>

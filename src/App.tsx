@@ -185,6 +185,7 @@ import SmartRoutePDVs from "./pages/smartroute/SmartRoutePDVs";
 import SmartRouteFrota from "./pages/smartroute/SmartRouteFrota";
 import SmartRouteMotoristas from "./pages/smartroute/SmartRouteMotoristas";
 import SmartRouteIA from "./pages/smartroute/SmartRouteIA";
+import SmartRouteGestorIA from "./pages/smartroute/SmartRouteGestorIA";
 import { DriverAuthProvider } from "./contexts/DriverAuthContext";
 import EntregadorLogin from "./pages/entregador/EntregadorLogin";
 import EntregadorHome from "./pages/entregador/EntregadorHome";
@@ -452,6 +453,7 @@ const App = () => (
             <Route path="/smartroute/frota" element={<ProtectedRoute><SmartRouteFrota /></ProtectedRoute>} />
             <Route path="/smartroute/motoristas" element={<ProtectedRoute><SmartRouteMotoristas /></ProtectedRoute>} />
             <Route path="/smartroute/ia" element={<ProtectedRoute><SmartRouteIA /></ProtectedRoute>} />
+            <Route path="/smartroute/gestor-ia" element={<ProtectedRoute><SmartRouteGestorIA /></ProtectedRoute>} />
             {/* SmartRoute AI - Driver App */}
             <Route path="/entregador/login" element={<DriverAuthProvider><EntregadorLogin /></DriverAuthProvider>} />
             <Route path="/entregador" element={<DriverAuthProvider><EntregadorHome /></DriverAuthProvider>} />
