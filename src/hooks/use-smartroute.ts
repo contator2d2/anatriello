@@ -126,3 +126,34 @@ export function useSROptimizeRoute() {
     onSuccess: (_, id) => qc.invalidateQueries({ queryKey: ['sr-route', id] }),
   });
 }
+
+// Phase 4
+export function useSRReplay(id?: string) {
+  return useQuery<any>({ queryKey: ['sr-replay', id], queryFn: () => api(`${BASE}/routes/${id}/replay`), enabled: !!id });
+}
+export function useSRAlerts() {
+  return useQuery<any[]>({ queryKey: ['sr-alerts'], queryFn: () => api(`${BASE}/alerts`), refetchInterval: 30000 });
+}
+export function useSRResolveAlert() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api(`${BASE}/alerts/${id}/resolve`, { method: 'POST', body: {} }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['sr-alerts'] }),
+  });
+}
+export function useSRWebhookToken() {
+  return useQuery<{ token: string }>({ queryKey: ['sr-webhook-token'], queryFn: () => api(`${BASE}/webhook-token`) });
+}
+export function useSRRotateWebhookToken() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api(`${BASE}/webhook-token/rotate`, { method: 'POST', body: {} }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['sr-webhook-token'] }),
+  });
+}
+export function useSROrderTrackingToken() {
+  return useMutation({
+    mutationFn: (id: string) => api(`${BASE}/orders/${id}/tracking-token`, { method: 'POST', body: {} }) as Promise<{ token: string }>,
+  });
+}
+
