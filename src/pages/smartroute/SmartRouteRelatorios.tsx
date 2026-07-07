@@ -66,13 +66,38 @@ export default function SmartRouteRelatorios() {
   const failures = useSRReportFailures(params);
 
   const k = kpis.data || {};
-  const center = useMemo<[number, number]>(() => {
-    const rows = heat.data || [];
-    if (!rows.length) return [-23.5505, -46.6333];
-    const lat = rows.reduce((s, r) => s + Number(r.lat), 0) / rows.length;
-    const lng = rows.reduce((s, r) => s + Number(r.lng), 0) / rows.length;
-    return [lat, lng];
-  }, [heat.data]);
+
+  // Leaflet heatmap
+  const mapRef = useRef<L.Map | null>(null);
+  const layerRef = useRef<L.LayerGroup | null>(null);
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!mapContainerRef.current || mapRef.current) return;
+    const m = L.map(mapContainerRef.current).setView([-23.5505, -46.6333], 11);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "© OSM", maxZoom: 19 }).addTo(m);
+    layerRef.current = L.layerGroup().addTo(m);
+    mapRef.current = m;
+    return () => { m.remove(); mapRef.current = null; };
+  }, []);
+
+  useEffect(() => {
+    const layer = layerRef.current, m = mapRef.current;
+    if (!layer || !m) return;
+    layer.clearLayers();
+    const rows = (heat.data || []).filter((r: any) => r.lat != null && r.lng != null);
+    const color = heatKind === "failed" ? "#ef4444" : "#10b981";
+    const bounds: [number, number][] = [];
+    rows.forEach((p: any) => {
+      const lat = Number(p.lat), lng = Number(p.lng);
+      L.circleMarker([lat, lng], {
+        radius: Math.min(6 + Number(p.weight), 30),
+        color, fillColor: color, fillOpacity: 0.5, weight: 1,
+      }).bindPopup(`${p.weight} ${heatKind === "failed" ? "falhas" : "entregas"}`).addTo(layer);
+      bounds.push([lat, lng]);
+    });
+    if (bounds.length) m.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
+  }, [heat.data, heatKind]);
 
   return (
     <MainLayout>
