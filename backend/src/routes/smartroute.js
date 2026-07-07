@@ -197,6 +197,71 @@ router.use(async (req, res, next) => { try { await ensureSmartRouteTables(); nex
 
 const orgId = (req) => req.user?.organization_id;
 
+// ============ DEPOTS (Centros de Distribuição) ============
+async function geocodeNominatim(parts) {
+  const q = encodeURIComponent([parts.address, parts.city, parts.state, parts.zip, 'Brasil'].filter(Boolean).join(', '));
+  if (!q) return null;
+  try {
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=br&q=${q}`,
+      { headers: { 'User-Agent': 'AnatrielloSmartRoute/1.0' } });
+    const data = await res.json();
+    if (Array.isArray(data) && data[0]) return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon), display_name: data[0].display_name };
+  } catch (_) {}
+  return null;
+}
+
+router.get('/depots', async (req, res) => {
+  try {
+    const r = await query(`SELECT * FROM smartroute_depots WHERE organization_id=$1 AND active=true ORDER BY is_default DESC, name`, [orgId(req)]);
+    res.json(r.rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+router.post('/depots/geocode', async (req, res) => {
+  try {
+    const g = await geocodeNominatim(req.body || {});
+    if (!g) return res.status(404).json({ error: 'Endereço não encontrado' });
+    res.json(g);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+router.post('/depots', async (req, res) => {
+  try {
+    const b = req.body || {};
+    if (!b.name) return res.status(400).json({ error: 'Nome é obrigatório' });
+    let { lat, lng } = b;
+    if ((lat == null || lng == null) && (b.address || b.city)) {
+      const g = await geocodeNominatim(b);
+      if (g) { lat = g.lat; lng = g.lng; }
+    }
+    if (b.is_default) await query(`UPDATE smartroute_depots SET is_default=false WHERE organization_id=$1`, [orgId(req)]);
+    const r = await query(
+      `INSERT INTO smartroute_depots (organization_id, name, address, city, state, zip, lat, lng, is_default, notes)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,COALESCE($9,false),$10) RETURNING *`,
+      [orgId(req), b.name, b.address, b.city, b.state, b.zip, lat, lng, b.is_default, b.notes]);
+    res.json(r.rows[0]);
+  } catch (e) { logError('smartroute.depots.create', e); res.status(500).json({ error: e.message }); }
+});
+router.put('/depots/:id', async (req, res) => {
+  try {
+    const b = req.body || {};
+    let { lat, lng } = b;
+    if ((lat == null || lng == null) && (b.address || b.city)) {
+      const g = await geocodeNominatim(b);
+      if (g) { lat = g.lat; lng = g.lng; }
+    }
+    if (b.is_default) await query(`UPDATE smartroute_depots SET is_default=false WHERE organization_id=$1 AND id<>$2`, [orgId(req), req.params.id]);
+    const r = await query(
+      `UPDATE smartroute_depots SET name=COALESCE($3,name), address=$4, city=$5, state=$6, zip=$7,
+        lat=COALESCE($8,lat), lng=COALESCE($9,lng), is_default=COALESCE($10,is_default), notes=$11, updated_at=NOW()
+       WHERE id=$1 AND organization_id=$2 RETURNING *`,
+      [req.params.id, orgId(req), b.name, b.address, b.city, b.state, b.zip, lat, lng, b.is_default, b.notes]);
+    res.json(r.rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+router.delete('/depots/:id', async (req, res) => {
+  try { await query(`UPDATE smartroute_depots SET active=false WHERE id=$1 AND organization_id=$2`, [req.params.id, orgId(req)]); res.json({ ok: true }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ============ DASHBOARD ============
 router.get('/dashboard', async (req, res) => {
   try {
