@@ -10,10 +10,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Trash2, Route as RouteIcon, Wand2, Eye, Sparkles } from "lucide-react";
+import { Plus, Trash2, Route as RouteIcon, Wand2, Eye, Sparkles, FileText, PlayCircle } from "lucide-react";
 import { toast } from "sonner";
 import { useSRRoutes, useSRSaveRoute, useSRDeleteRoute, useSRDrivers, useSRVehicles, useSROrders, useSROptimizeRoute, useSRRoute } from "@/hooks/use-smartroute";
 import { useSROptimizeAdvanced } from "@/hooks/use-smartroute-ai";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+
 
 const statusColor: Record<string, string> = { planejada: "bg-slate-200", em_andamento: "bg-blue-200", concluida: "bg-emerald-200", cancelada: "bg-red-200" };
 
@@ -41,6 +44,39 @@ export default function SmartRouteRotas() {
       setOpen(false); setForm({}); setSelectedOrders([]);
     } catch (e: any) { toast.error(e.message); }
   };
+
+  const romaneioPDF = async (r: any) => {
+    const mod = await import("@/lib/api");
+    const full: any = await mod.api(`/api/smartroute/routes/${r.id}`);
+    const doc = new jsPDF();
+    doc.setFontSize(14); doc.text(`Romaneio · Rota ${full.code}`, 14, 15);
+    doc.setFontSize(9); doc.text(`Data: ${full.planned_date?.slice(0, 10)}   Motorista: ${full.driver_name || "—"}   Veículo: ${full.vehicle_plate || "—"}`, 14, 22);
+    autoTable(doc, {
+      startY: 28, styles: { fontSize: 8 },
+      head: [["#", "PDV", "Endereço", "Pedido", "Peso (kg)", "Volume (m³)", "Assinatura"]],
+      body: (full.stops || []).map((s: any) => [
+        s.sequence, s.pdv_name || "", s.pdv_address || "", s.order_number || "",
+        s.weight_kg || 0, s.volume_m3 || 0, "________________",
+      ]),
+    });
+    doc.save(`romaneio-${full.code}.pdf`);
+  };
+
+  const shareTrackingLinks = async (r: any) => {
+    const mod = await import("@/lib/api");
+    const full: any = await mod.api(`/api/smartroute/routes/${r.id}`);
+    const base = window.location.origin;
+    const lines: string[] = [];
+    for (const s of full.stops || []) {
+      if (!s.order_id) continue;
+      const t: any = await mod.api(`/api/smartroute/orders/${s.order_id}/tracking-token`, { method: "POST", body: {} });
+      lines.push(`#${s.sequence} ${s.pdv_name}: ${base}/track/${t.token}`);
+    }
+    await navigator.clipboard.writeText(lines.join("\n"));
+    toast.success(`${lines.length} links copiados`);
+  };
+
+
 
   return (
     <MainLayout>
@@ -77,9 +113,13 @@ export default function SmartRouteRotas() {
                   <TableCell className="text-right space-x-1">
                     <Button size="icon" variant="ghost" onClick={() => setViewId(r.id)}><Eye className="w-4 h-4" /></Button>
                     <Button size="icon" variant="ghost" title="Otimizar (rápido)" onClick={() => optimize.mutate(r.id, { onSuccess: () => toast.success("Sequência otimizada") })}><Wand2 className="w-4 h-4" /></Button>
-                    <Button size="icon" variant="ghost" title="Otimizar IA (peso, volume, janela)" onClick={() => optimizeAdv.mutate(r.id, { onSuccess: (d: any) => toast.success(`IA: ${d.sequenced} paradas · ${d.total_km}km`, { description: d.warnings?.length ? d.warnings.join(" | ") : undefined }) })}><Sparkles className="w-4 h-4 text-primary" /></Button>
+                    <Button size="icon" variant="ghost" title="Otimizar IA" onClick={() => optimizeAdv.mutate(r.id, { onSuccess: (d: any) => toast.success(`IA: ${d.sequenced} paradas · ${d.total_km}km`, { description: d.warnings?.length ? d.warnings.join(" | ") : undefined }) })}><Sparkles className="w-4 h-4 text-primary" /></Button>
+                    <Button size="icon" variant="ghost" title="Romaneio PDF" onClick={() => romaneioPDF(r)}><FileText className="w-4 h-4" /></Button>
+                    <Button size="icon" variant="ghost" title="Copiar links de rastreio" onClick={() => shareTrackingLinks(r)}>🔗</Button>
+                    <Link to={`/smartroute/replay/${r.id}`}><Button size="icon" variant="ghost" title="Replay"><PlayCircle className="w-4 h-4" /></Button></Link>
                     <Button size="icon" variant="ghost" onClick={() => { if (confirm("Excluir?")) del.mutate(r.id); }}><Trash2 className="w-4 h-4 text-red-500" /></Button>
                   </TableCell>
+
                 </TableRow>
               ))}
               {!data.length && <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">Nenhuma rota.</TableCell></TableRow>}

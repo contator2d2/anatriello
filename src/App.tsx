@@ -186,10 +186,14 @@ import SmartRouteFrota from "./pages/smartroute/SmartRouteFrota";
 import SmartRouteMotoristas from "./pages/smartroute/SmartRouteMotoristas";
 import SmartRouteIA from "./pages/smartroute/SmartRouteIA";
 import SmartRouteGestorIA from "./pages/smartroute/SmartRouteGestorIA";
+import SmartRouteReplay from "./pages/smartroute/SmartRouteReplay";
+import SmartRouteIntegracoes from "./pages/smartroute/SmartRouteIntegracoes";
+import TrackingPage from "./pages/TrackingPage";
 import { DriverAuthProvider } from "./contexts/DriverAuthContext";
 import EntregadorLogin from "./pages/entregador/EntregadorLogin";
 import EntregadorHome from "./pages/entregador/EntregadorHome";
 import EntregadorRota from "./pages/entregador/EntregadorRota";
+
 
 
 const queryClient = new QueryClient({
@@ -454,6 +458,10 @@ const App = () => (
             <Route path="/smartroute/motoristas" element={<ProtectedRoute><SmartRouteMotoristas /></ProtectedRoute>} />
             <Route path="/smartroute/ia" element={<ProtectedRoute><SmartRouteIA /></ProtectedRoute>} />
             <Route path="/smartroute/gestor-ia" element={<ProtectedRoute><SmartRouteGestorIA /></ProtectedRoute>} />
+            <Route path="/smartroute/replay/:id" element={<ProtectedRoute><SmartRouteReplay /></ProtectedRoute>} />
+            <Route path="/smartroute/integracoes" element={<ProtectedRoute><SmartRouteIntegracoes /></ProtectedRoute>} />
+            <Route path="/track/:token" element={<TrackingPage />} />
+
             {/* SmartRoute AI - Driver App */}
             <Route path="/entregador/login" element={<DriverAuthProvider><EntregadorLogin /></DriverAuthProvider>} />
             <Route path="/entregador" element={<DriverAuthProvider><EntregadorHome /></DriverAuthProvider>} />

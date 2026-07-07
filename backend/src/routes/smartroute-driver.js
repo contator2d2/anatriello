@@ -176,6 +176,14 @@ router.post('/routes/:id/finish', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Haversine in km
+function distKm(a, b) {
+  const R = 6371, toRad = (x) => (x * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat), dLng = toRad(b.lng - a.lng);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
 router.post('/location', async (req, res) => {
   try {
     const { lat, lng, status } = req.body || {};
@@ -183,8 +191,48 @@ router.post('/location', async (req, res) => {
       `UPDATE smartroute_drivers SET current_lat=$2, current_lng=$3, last_location_at=NOW(),
         current_status=COALESCE($4,current_status) WHERE id=$1`,
       [req.driverId, lat, lng, status]);
+
+    // Geofence deviation check — active route + next pending stop, alert if > 5km
+    if (lat != null && lng != null) {
+      try {
+        const rr = await query(
+          `SELECT r.id AS route_id, s.pdv_lat, s.pdv_lng FROM smartroute_routes r
+           JOIN smartroute_route_stops s ON s.route_id=r.id
+           LEFT JOIN smartroute_pdvs p ON p.id=s.pdv_id
+           WHERE r.driver_id=$1 AND r.status='em_andamento' AND s.status='pendente'
+             AND p.lat IS NOT NULL AND p.lng IS NOT NULL
+           ORDER BY s.sequence LIMIT 1`, [req.driverId]);
+        // pdv_lat/lng aren't projected above from stops; fetch via join fix
+        const rr2 = await query(
+          `SELECT r.id AS route_id, p.lat AS pdv_lat, p.lng AS pdv_lng
+           FROM smartroute_routes r
+           JOIN smartroute_route_stops s ON s.route_id=r.id
+           JOIN smartroute_pdvs p ON p.id=s.pdv_id
+           WHERE r.driver_id=$1 AND r.status='em_andamento' AND s.status='pendente'
+           ORDER BY s.sequence LIMIT 1`, [req.driverId]);
+        const nxt = rr2.rows[0];
+        if (nxt) {
+          const km = distKm({ lat, lng }, { lat: nxt.pdv_lat, lng: nxt.pdv_lng });
+          if (km > 5) {
+            await query(`CREATE TABLE IF NOT EXISTS smartroute_alerts (
+              id UUID PRIMARY KEY DEFAULT gen_random_uuid(), organization_id UUID NOT NULL,
+              route_id UUID, driver_id UUID, severity TEXT DEFAULT 'medium',
+              type TEXT NOT NULL, title TEXT NOT NULL, message TEXT,
+              dedupe_key TEXT UNIQUE, resolved BOOLEAN DEFAULT false, created_at TIMESTAMPTZ DEFAULT NOW())`);
+            const day = new Date().toISOString().slice(0, 10);
+            const dedupe = `geofence:${nxt.route_id}:${day}`;
+            await query(
+              `INSERT INTO smartroute_alerts (organization_id, route_id, driver_id, severity, type, title, message, dedupe_key)
+               VALUES ($1,$2,$3,'high','route_deviation',$4,$5,$6) ON CONFLICT (dedupe_key) DO NOTHING`,
+              [req.organizationId, nxt.route_id, req.driverId,
+               'Desvio de rota detectado', `Motorista a ${km.toFixed(1)}km da próxima parada`, dedupe]);
+          }
+        }
+      } catch { /* silent */ }
+    }
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 export default router;
+

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, Link, Navigate } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -6,9 +6,11 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { ArrowLeft, MapPin, Phone, Camera, CheckCircle2, XCircle, Play, Flag, Navigation } from "lucide-react";
+import { ArrowLeft, MapPin, Phone, Camera, CheckCircle2, XCircle, Play, Flag, Navigation, Eraser } from "lucide-react";
 import { toast } from "sonner";
 import { useDriverAuth, driverApi } from "@/contexts/DriverAuthContext";
+import SignatureCanvas from "react-signature-canvas";
+
 
 const statusColor: Record<string, string> = { pendente: "bg-slate-200", em_atendimento: "bg-amber-200", concluida: "bg-emerald-200", nao_entregue: "bg-red-200" };
 
@@ -43,6 +45,8 @@ export default function EntregadorRota() {
   const [checkoutOpen, setCheckoutOpen] = useState<string | null>(null);
   const [receiver, setReceiver] = useState("");
   const [notes, setNotes] = useState("");
+  const sigRef = useRef<SignatureCanvas>(null);
+
 
   const reload = () => id && driverApi(`/api/smartroute/driver/routes/${id}`).then(setRoute).catch((e) => toast.error(e.message));
   useEffect(() => { reload(); }, [id]);
@@ -81,14 +85,18 @@ export default function EntregadorRota() {
   const doCheckout = async () => {
     if (!checkoutOpen) return;
     if (!receiver.trim()) return toast.error("Informe quem recebeu");
+    const sig = sigRef.current;
+    const signature_url = sig && !sig.isEmpty() ? sig.getCanvas().toDataURL("image/png") : null;
+    if (!signature_url) return toast.error("Assinatura obrigatória");
     const pos = await getPos();
     await driverApi(`/api/smartroute/driver/stops/${checkoutOpen}/checkout`, {
       method: "POST",
-      body: { ...pos, receiver_name: receiver, notes, signature_url: null },
+      body: { ...pos, receiver_name: receiver, notes, signature_url },
     });
     toast.success("Entrega finalizada");
-    setCheckoutOpen(null); setReceiver(""); setNotes(""); reload();
+    setCheckoutOpen(null); setReceiver(""); setNotes(""); sig?.clear(); reload();
   };
+
 
   const doFail = async () => {
     if (!failOpen) return;
@@ -162,8 +170,17 @@ export default function EntregadorRota() {
           <DialogHeader><DialogTitle>Finalizar entrega</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div><label className="text-sm">Nome de quem recebeu*</label><Input value={receiver} onChange={(e) => setReceiver(e.target.value)} /></div>
-            <div><label className="text-sm">Observações</label><Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} /></div>
+            <div>
+              <label className="text-sm flex items-center justify-between">Assinatura*
+                <button type="button" className="text-xs text-blue-600 flex items-center gap-1" onClick={() => sigRef.current?.clear()}><Eraser className="w-3 h-3" />Limpar</button>
+              </label>
+              <div className="border rounded bg-white mt-1">
+                <SignatureCanvas ref={sigRef} penColor="black" canvasProps={{ className: "w-full h-40" }} />
+              </div>
+            </div>
+            <div><label className="text-sm">Observações</label><Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} /></div>
           </div>
+
           <DialogFooter><Button variant="outline" onClick={() => setCheckoutOpen(null)}>Cancelar</Button><Button onClick={doCheckout}>Confirmar entrega</Button></DialogFooter>
         </DialogContent>
       </Dialog>
