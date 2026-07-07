@@ -502,4 +502,99 @@ router.get('/routes/:id/events', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Route replay — geo-tagged events chronological + stops
+router.get('/routes/:id/replay', async (req, res) => {
+  try {
+    const org = orgId(req);
+    const route = await query(
+      `SELECT r.*, d.full_name AS driver_name, v.plate AS vehicle_plate
+       FROM smartroute_routes r
+       LEFT JOIN smartroute_drivers d ON d.id=r.driver_id
+       LEFT JOIN smartroute_vehicles v ON v.id=r.vehicle_id
+       WHERE r.id=$1 AND r.organization_id=$2`, [req.params.id, org]);
+    if (!route.rows[0]) return res.status(404).json({ error: 'not found' });
+    const events = await query(
+      `SELECT event_type, event_data, lat, lng, created_at FROM smartroute_events
+       WHERE route_id=$1 AND organization_id=$2 ORDER BY created_at`, [req.params.id, org]);
+    const stops = await query(
+      `SELECT s.id, s.sequence, s.status, s.arrived_at, s.departed_at, s.checkin_lat, s.checkin_lng,
+              s.checkout_lat, s.checkout_lng, s.receiver_name, p.name AS pdv_name, p.lat AS pdv_lat, p.lng AS pdv_lng
+       FROM smartroute_route_stops s LEFT JOIN smartroute_pdvs p ON p.id=s.pdv_id
+       WHERE s.route_id=$1 ORDER BY s.sequence`, [req.params.id]);
+    res.json({ route: route.rows[0], events: events.rows, stops: stops.rows });
+  } catch (e) { logError('smartroute.replay', e); res.status(500).json({ error: e.message }); }
+});
+
+// Alerts table (shared with geofence + AI scanner)
+export async function ensureSRAlerts() {
+  await query(`
+    CREATE TABLE IF NOT EXISTS smartroute_alerts (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id UUID NOT NULL,
+      route_id UUID REFERENCES smartroute_routes(id) ON DELETE CASCADE,
+      driver_id UUID REFERENCES smartroute_drivers(id) ON DELETE SET NULL,
+      severity TEXT DEFAULT 'medium',
+      type TEXT NOT NULL,
+      title TEXT NOT NULL,
+      message TEXT,
+      dedupe_key TEXT UNIQUE,
+      resolved BOOLEAN DEFAULT false,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+  `);
+}
+
+router.get('/alerts', async (req, res) => {
+  try { await ensureSRAlerts();
+    const r = await query(`SELECT * FROM smartroute_alerts WHERE organization_id=$1 AND resolved=false ORDER BY created_at DESC LIMIT 100`, [orgId(req)]);
+    res.json(r.rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+router.post('/alerts/:id/resolve', async (req, res) => {
+  try { await query(`UPDATE smartroute_alerts SET resolved=true WHERE id=$1 AND organization_id=$2`, [req.params.id, orgId(req)]); res.json({ ok: true }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Webhook token (import orders)
+router.get('/webhook-token', async (req, res) => {
+  try {
+    const org = orgId(req);
+    await query(`CREATE TABLE IF NOT EXISTS smartroute_org_settings (organization_id UUID PRIMARY KEY, webhook_token TEXT UNIQUE, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW())`);
+    let r = await query(`SELECT webhook_token FROM smartroute_org_settings WHERE organization_id=$1`, [org]);
+    if (!r.rows[0]) {
+      const crypto = await import('crypto');
+      const t = crypto.randomBytes(24).toString('hex');
+      r = await query(`INSERT INTO smartroute_org_settings (organization_id, webhook_token) VALUES ($1,$2) RETURNING webhook_token`, [org, t]);
+    }
+    res.json({ token: r.rows[0].webhook_token });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+router.post('/webhook-token/rotate', async (req, res) => {
+  try {
+    const org = orgId(req);
+    const crypto = await import('crypto');
+    const t = crypto.randomBytes(24).toString('hex');
+    await query(`CREATE TABLE IF NOT EXISTS smartroute_org_settings (organization_id UUID PRIMARY KEY, webhook_token TEXT UNIQUE, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW())`);
+    await query(
+      `INSERT INTO smartroute_org_settings (organization_id, webhook_token) VALUES ($1,$2)
+       ON CONFLICT (organization_id) DO UPDATE SET webhook_token=EXCLUDED.webhook_token, updated_at=NOW()`, [org, t]);
+    res.json({ token: t });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Ensure tracking token for a specific order
+router.post('/orders/:id/tracking-token', async (req, res) => {
+  try {
+    const crypto = await import('crypto');
+    const t = crypto.randomBytes(16).toString('hex');
+    await query(`ALTER TABLE smartroute_orders ADD COLUMN IF NOT EXISTS tracking_token TEXT UNIQUE`);
+    const r = await query(
+      `UPDATE smartroute_orders SET tracking_token=COALESCE(tracking_token,$3)
+       WHERE id=$1 AND organization_id=$2 RETURNING tracking_token`,
+      [req.params.id, orgId(req), t]);
+    res.json({ token: r.rows[0]?.tracking_token });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 export default router;
+
