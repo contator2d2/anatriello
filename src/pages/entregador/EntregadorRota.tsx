@@ -85,14 +85,18 @@ export default function EntregadorRota() {
   const doCheckout = async () => {
     if (!checkoutOpen) return;
     if (!receiver.trim()) return toast.error("Informe quem recebeu");
+    const sig = sigRef.current;
+    const signature_url = sig && !sig.isEmpty() ? sig.getCanvas().toDataURL("image/png") : null;
+    if (!signature_url) return toast.error("Assinatura obrigatória");
     const pos = await getPos();
     await driverApi(`/api/smartroute/driver/stops/${checkoutOpen}/checkout`, {
       method: "POST",
-      body: { ...pos, receiver_name: receiver, notes, signature_url: null },
+      body: { ...pos, receiver_name: receiver, notes, signature_url },
     });
     toast.success("Entrega finalizada");
-    setCheckoutOpen(null); setReceiver(""); setNotes(""); reload();
+    setCheckoutOpen(null); setReceiver(""); setNotes(""); sig?.clear(); reload();
   };
+
 
   const doFail = async () => {
     if (!failOpen) return;
