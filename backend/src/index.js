@@ -65,6 +65,8 @@ import pdvBlocksRoutes from './routes/pdv-blocks.js';
 import networkPortalRoutes from './routes/network-portal.js';
 import agencyNetworkRequestsRoutes from './routes/agency-network-requests.js';
 import promoterAccessRoutes from './routes/promoter-access.js';
+import smartrouteRoutes from './routes/smartroute.js';
+import smartrouteDriverRoutes from './routes/smartroute-driver.js';
 import promoterLeavesRoutes from './routes/promoter-leaves.js';
 import accessControlDashboardRoutes from './routes/access-control-dashboard.js';
 import appLogsRoutes from './routes/app-logs.js';
