@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, Link, Navigate } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -6,9 +6,11 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { ArrowLeft, MapPin, Phone, Camera, CheckCircle2, XCircle, Play, Flag, Navigation } from "lucide-react";
+import { ArrowLeft, MapPin, Phone, Camera, CheckCircle2, XCircle, Play, Flag, Navigation, Eraser } from "lucide-react";
 import { toast } from "sonner";
 import { useDriverAuth, driverApi } from "@/contexts/DriverAuthContext";
+import SignatureCanvas from "react-signature-canvas";
+
 
 const statusColor: Record<string, string> = { pendente: "bg-slate-200", em_atendimento: "bg-amber-200", concluida: "bg-emerald-200", nao_entregue: "bg-red-200" };
 
