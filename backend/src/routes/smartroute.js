@@ -169,6 +169,25 @@ export async function ensureSmartRouteTables() {
     ALTER TABLE smartroute_routes ADD COLUMN IF NOT EXISTS estimated_cost_brl NUMERIC(10,2);
     ALTER TABLE smartroute_routes ADD COLUMN IF NOT EXISTS estimated_duration_min INTEGER;
     ALTER TABLE smartroute_route_stops ADD COLUMN IF NOT EXISTS eta_min INTEGER;
+
+    CREATE TABLE IF NOT EXISTS smartroute_depots (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id UUID NOT NULL,
+      name TEXT NOT NULL,
+      address TEXT,
+      city TEXT,
+      state TEXT,
+      zip TEXT,
+      lat DOUBLE PRECISION,
+      lng DOUBLE PRECISION,
+      is_default BOOLEAN DEFAULT false,
+      active BOOLEAN DEFAULT true,
+      notes TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_sr_depots_org ON smartroute_depots(organization_id, active);
+    ALTER TABLE smartroute_routes ADD COLUMN IF NOT EXISTS depot_id UUID;
   `);
   ensured = true;
 }
@@ -177,6 +196,71 @@ router.use(authenticate);
 router.use(async (req, res, next) => { try { await ensureSmartRouteTables(); next(); } catch (e) { next(e); } });
 
 const orgId = (req) => req.user?.organization_id;
+
+// ============ DEPOTS (Centros de Distribuição) ============
+async function geocodeNominatim(parts) {
+  const q = encodeURIComponent([parts.address, parts.city, parts.state, parts.zip, 'Brasil'].filter(Boolean).join(', '));
+  if (!q) return null;
+  try {
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=br&q=${q}`,
+      { headers: { 'User-Agent': 'AnatrielloSmartRoute/1.0' } });
+    const data = await res.json();
+    if (Array.isArray(data) && data[0]) return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon), display_name: data[0].display_name };
+  } catch (_) {}
+  return null;
+}
+
+router.get('/depots', async (req, res) => {
+  try {
+    const r = await query(`SELECT * FROM smartroute_depots WHERE organization_id=$1 AND active=true ORDER BY is_default DESC, name`, [orgId(req)]);
+    res.json(r.rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+router.post('/depots/geocode', async (req, res) => {
+  try {
+    const g = await geocodeNominatim(req.body || {});
+    if (!g) return res.status(404).json({ error: 'Endereço não encontrado' });
+    res.json(g);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+router.post('/depots', async (req, res) => {
+  try {
+    const b = req.body || {};
+    if (!b.name) return res.status(400).json({ error: 'Nome é obrigatório' });
+    let { lat, lng } = b;
+    if ((lat == null || lng == null) && (b.address || b.city)) {
+      const g = await geocodeNominatim(b);
+      if (g) { lat = g.lat; lng = g.lng; }
+    }
+    if (b.is_default) await query(`UPDATE smartroute_depots SET is_default=false WHERE organization_id=$1`, [orgId(req)]);
+    const r = await query(
+      `INSERT INTO smartroute_depots (organization_id, name, address, city, state, zip, lat, lng, is_default, notes)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,COALESCE($9,false),$10) RETURNING *`,
+      [orgId(req), b.name, b.address, b.city, b.state, b.zip, lat, lng, b.is_default, b.notes]);
+    res.json(r.rows[0]);
+  } catch (e) { logError('smartroute.depots.create', e); res.status(500).json({ error: e.message }); }
+});
+router.put('/depots/:id', async (req, res) => {
+  try {
+    const b = req.body || {};
+    let { lat, lng } = b;
+    if ((lat == null || lng == null) && (b.address || b.city)) {
+      const g = await geocodeNominatim(b);
+      if (g) { lat = g.lat; lng = g.lng; }
+    }
+    if (b.is_default) await query(`UPDATE smartroute_depots SET is_default=false WHERE organization_id=$1 AND id<>$2`, [orgId(req), req.params.id]);
+    const r = await query(
+      `UPDATE smartroute_depots SET name=COALESCE($3,name), address=$4, city=$5, state=$6, zip=$7,
+        lat=COALESCE($8,lat), lng=COALESCE($9,lng), is_default=COALESCE($10,is_default), notes=$11, updated_at=NOW()
+       WHERE id=$1 AND organization_id=$2 RETURNING *`,
+      [req.params.id, orgId(req), b.name, b.address, b.city, b.state, b.zip, lat, lng, b.is_default, b.notes]);
+    res.json(r.rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+router.delete('/depots/:id', async (req, res) => {
+  try { await query(`UPDATE smartroute_depots SET active=false WHERE id=$1 AND organization_id=$2`, [req.params.id, orgId(req)]); res.json({ ok: true }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
 
 // ============ DASHBOARD ============
 router.get('/dashboard', async (req, res) => {
@@ -427,10 +511,19 @@ router.post('/routes', async (req, res) => {
   try {
     const b = req.body || {};
     const code = b.code || `R-${Date.now().toString(36).toUpperCase()}`;
+    let { depot_lat, depot_lng } = b;
+    let depotId = b.depot_id || null;
+    if (!depotId && (depot_lat == null || depot_lng == null)) {
+      const d = await query(`SELECT id, lat, lng FROM smartroute_depots WHERE organization_id=$1 AND is_default=true AND active=true LIMIT 1`, [orgId(req)]);
+      if (d.rows[0]) { depotId = d.rows[0].id; depot_lat = d.rows[0].lat; depot_lng = d.rows[0].lng; }
+    } else if (depotId) {
+      const d = await query(`SELECT lat, lng FROM smartroute_depots WHERE id=$1 AND organization_id=$2`, [depotId, orgId(req)]);
+      if (d.rows[0]) { depot_lat = d.rows[0].lat; depot_lng = d.rows[0].lng; }
+    }
     const r = await query(
-      `INSERT INTO smartroute_routes (organization_id, code, driver_id, vehicle_id, planned_date, status, depot_lat, depot_lng, notes)
-       VALUES ($1,$2,$3,$4,COALESCE($5,CURRENT_DATE),'planejada',$6,$7,$8) RETURNING *`,
-      [orgId(req), code, b.driver_id || null, b.vehicle_id || null, b.planned_date || null, b.depot_lat, b.depot_lng, b.notes]
+      `INSERT INTO smartroute_routes (organization_id, code, driver_id, vehicle_id, planned_date, status, depot_lat, depot_lng, depot_id, notes)
+       VALUES ($1,$2,$3,$4,COALESCE($5,CURRENT_DATE),'planejada',$6,$7,$8,$9) RETURNING *`,
+      [orgId(req), code, b.driver_id || null, b.vehicle_id || null, b.planned_date || null, depot_lat, depot_lng, depotId, b.notes]
     );
     const route = r.rows[0];
 

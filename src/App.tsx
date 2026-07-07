@@ -190,6 +190,7 @@ import SmartRouteReplay from "./pages/smartroute/SmartRouteReplay";
 import SmartRouteIntegracoes from "./pages/smartroute/SmartRouteIntegracoes";
 import SmartRouteRelatorios from "./pages/smartroute/SmartRouteRelatorios";
 import SmartRouteConfiguracoes from "./pages/smartroute/SmartRouteConfiguracoes";
+import SmartRouteCDs from "./pages/smartroute/SmartRouteCDs";
 import TrackingPage from "./pages/TrackingPage";
 import { DriverAuthProvider } from "./contexts/DriverAuthContext";
 import EntregadorLogin from "./pages/entregador/EntregadorLogin";
@@ -457,6 +458,7 @@ const App = () => (
             <Route path="/smartroute/pedidos" element={<ProtectedRoute><SmartRoutePedidos /></ProtectedRoute>} />
             <Route path="/smartroute/pdvs" element={<ProtectedRoute><SmartRoutePDVs /></ProtectedRoute>} />
             <Route path="/smartroute/frota" element={<ProtectedRoute><SmartRouteFrota /></ProtectedRoute>} />
+            <Route path="/smartroute/cds" element={<ProtectedRoute><SmartRouteCDs /></ProtectedRoute>} />
             <Route path="/smartroute/motoristas" element={<ProtectedRoute><SmartRouteMotoristas /></ProtectedRoute>} />
             <Route path="/smartroute/ia" element={<ProtectedRoute><SmartRouteIA /></ProtectedRoute>} />
             <Route path="/smartroute/gestor-ia" element={<ProtectedRoute><SmartRouteGestorIA /></ProtectedRoute>} />

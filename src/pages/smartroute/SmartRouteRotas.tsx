@@ -14,6 +14,7 @@ import { Plus, Trash2, Route as RouteIcon, Wand2, Eye, Sparkles, FileText, PlayC
 import { toast } from "sonner";
 import { useSRRoutes, useSRSaveRoute, useSRDeleteRoute, useSRDrivers, useSRVehicles, useSROrders, useSROptimizeRoute, useSRRoute } from "@/hooks/use-smartroute";
 import { useSROptimizeAdvanced } from "@/hooks/use-smartroute-ai";
+import { useSRDepots } from "@/hooks/use-smartroute-depots";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
@@ -30,6 +31,7 @@ export default function SmartRouteRotas() {
   const del = useSRDeleteRoute();
   const optimize = useSROptimizeRoute();
   const optimizeAdv = useSROptimizeAdvanced();
+  const { data: depots = [] } = useSRDepots();
 
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<any>({});
@@ -97,7 +99,11 @@ export default function SmartRouteRotas() {
               <Label className="text-xs">Data</Label>
               <Input type="date" value={filter.date || ""} onChange={(e) => setFilter({ ...filter, date: e.target.value || undefined })} className="w-44" />
             </div>
-            <Button onClick={() => { setForm({ planned_date: new Date().toISOString().slice(0, 10) }); setSelectedOrders([]); setOpen(true); }}><Plus className="w-4 h-4 mr-1" /> Nova rota</Button>
+            <Button onClick={() => {
+              const def = depots.find((d: any) => d.is_default) || depots[0];
+              setForm({ planned_date: new Date().toISOString().slice(0, 10), depot_id: def?.id || null });
+              setSelectedOrders([]); setOpen(true);
+            }}><Plus className="w-4 h-4 mr-1" /> Nova rota</Button>
           </div>
         </div>
 
@@ -163,8 +169,26 @@ export default function SmartRouteRotas() {
                   </SelectContent>
                 </Select>
               </div>
-              <div><Label>Depot latitude</Label><Input type="number" step="any" value={form.depot_lat || ""} onChange={(e) => setForm({ ...form, depot_lat: +e.target.value })} /></div>
-              <div><Label>Depot longitude</Label><Input type="number" step="any" value={form.depot_lng || ""} onChange={(e) => setForm({ ...form, depot_lng: +e.target.value })} /></div>
+              <div className="col-span-2">
+                <Label>Centro de Distribuição (partida)</Label>
+                {depots.length === 0 ? (
+                  <div className="text-xs text-amber-600 border border-amber-300 bg-amber-50 rounded p-2">
+                    Nenhum CD cadastrado. <a href="/smartroute/cds" className="underline font-medium">Cadastrar agora →</a>
+                  </div>
+                ) : (
+                  <Select value={form.depot_id || "none"} onValueChange={(v) => setForm({ ...form, depot_id: v === "none" ? null : v })}>
+                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Sem CD (usar 1º PDV como partida)</SelectItem>
+                      {depots.map((d: any) => (
+                        <SelectItem key={d.id} value={d.id}>
+                          {d.name}{d.is_default ? " ⭐" : ""} {d.city ? `· ${d.city}` : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
             </div>
             <div>
               <Label className="mb-2 block">Pedidos pendentes ({selectedOrders.length} selecionados)</Label>
