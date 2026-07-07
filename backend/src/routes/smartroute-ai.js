@@ -389,10 +389,12 @@ router.post('/routes/:id/optimize-advanced', async (req, res) => {
     const route = r.rows[0];
 
     const vehicle = route.vehicle_id
-      ? (await query(`SELECT capacity_kg, capacity_m3 FROM smartroute_vehicles WHERE id=$1`, [route.vehicle_id])).rows[0]
+      ? (await query(`SELECT capacity_kg, capacity_m3, km_per_liter, fuel_price_per_liter, fuel_type FROM smartroute_vehicles WHERE id=$1`, [route.vehicle_id])).rows[0]
       : null;
     const capKg = Number(vehicle?.capacity_kg) || Infinity;
     const capM3 = Number(vehicle?.capacity_m3) || Infinity;
+    const kmPerL = Number(vehicle?.km_per_liter) || null;
+    const pricePerL = Number(vehicle?.fuel_price_per_liter) || null;
 
     const stops = await query(
       `SELECT s.id, s.pdv_id, p.lat, p.lng, p.name,
@@ -417,7 +419,8 @@ router.post('/routes/:id/optimize-advanced', async (req, res) => {
     const timeMinutes = (t) => t ? Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5)) : null;
 
     let cur = { lat: route.depot_lat ?? pts[0]?.lat, lng: route.depot_lng ?? pts[0]?.lng };
-    let clock = 8 * 60; // início 08:00
+    const startClock = 8 * 60;
+    let clock = startClock;
     const speed = 30; // km/h médio urbano
     const remaining = [...pts]; const order = []; let totalKm = 0;
 
@@ -446,14 +449,29 @@ router.post('/routes/:id/optimize-advanced', async (req, res) => {
     }
 
     for (let i = 0; i < order.length; i++) {
-      await query(`UPDATE smartroute_route_stops SET sequence=$2, updated_at=NOW() WHERE id=$1`, [order[i].id, i + 1]);
+      await query(`UPDATE smartroute_route_stops SET sequence=$2, eta_min=$3, updated_at=NOW() WHERE id=$1`, [order[i].id, i + 1, order[i].eta_min]);
     }
+
+    const totalKmRounded = Math.round(totalKm * 10) / 10;
+    const durationMin = Math.round(clock - startClock);
+    const fuelLiters = kmPerL ? Math.round((totalKm / kmPerL) * 100) / 100 : null;
+    const costBRL = fuelLiters != null && pricePerL ? Math.round(fuelLiters * pricePerL * 100) / 100 : null;
+
+    await query(
+      `UPDATE smartroute_routes SET total_distance_km=$2, estimated_fuel_liters=$3, estimated_cost_brl=$4, estimated_duration_min=$5, updated_at=NOW() WHERE id=$1`,
+      [route.id, totalKmRounded, fuelLiters, costBRL, durationMin]
+    );
+
+    if (!kmPerL) warnings.push('Consumo (km/l) não cadastrado no veículo — custo de combustível não estimado.');
+    else if (!pricePerL) warnings.push('Preço do combustível não cadastrado no veículo — custo não calculado.');
 
     res.json({
       ok: true,
       sequenced: order.length,
-      total_km: Math.round(totalKm * 10) / 10,
-      estimated_duration_min: Math.round(clock - 8 * 60),
+      total_km: totalKmRounded,
+      estimated_duration_min: durationMin,
+      estimated_fuel_liters: fuelLiters,
+      estimated_cost_brl: costBRL,
       total_weight_kg: Math.round(totalKg * 10) / 10,
       total_volume_m3: Math.round(totalM3 * 100) / 100,
       capacity_used_kg_pct: capKg === Infinity ? null : Math.round((totalKg / capKg) * 100),
