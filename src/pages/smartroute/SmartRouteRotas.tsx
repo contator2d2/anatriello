@@ -99,7 +99,11 @@ export default function SmartRouteRotas() {
               <Label className="text-xs">Data</Label>
               <Input type="date" value={filter.date || ""} onChange={(e) => setFilter({ ...filter, date: e.target.value || undefined })} className="w-44" />
             </div>
-            <Button onClick={() => { setForm({ planned_date: new Date().toISOString().slice(0, 10) }); setSelectedOrders([]); setOpen(true); }}><Plus className="w-4 h-4 mr-1" /> Nova rota</Button>
+            <Button onClick={() => {
+              const def = depots.find((d: any) => d.is_default) || depots[0];
+              setForm({ planned_date: new Date().toISOString().slice(0, 10), depot_id: def?.id || null });
+              setSelectedOrders([]); setOpen(true);
+            }}><Plus className="w-4 h-4 mr-1" /> Nova rota</Button>
           </div>
         </div>
 
