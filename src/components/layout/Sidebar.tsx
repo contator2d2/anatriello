@@ -134,6 +134,7 @@ const getNavSections = (hasConnections: boolean): NavSection[] => [
       { name: "Holding", href: "/rh/holding", icon: Building2, pageKey: 'rh_holding', adminOnly: true },
       { name: "Empresas", href: "/rh/empresas", icon: Building2, pageKey: 'rh_empresas', adminOnly: true },
       { name: "Dashboard", href: "/rh/dashboard", icon: LayoutDashboard, pageKey: 'rh_dashboard', moduleKey: 'rh' },
+      { name: "Analytics", href: "/rh/analytics", icon: TrendingUp, pageKey: 'rh_analytics', moduleKey: 'rh' },
       { name: "Colaboradores", href: "/rh/colaboradores", icon: UserPlus, pageKey: 'rh_colaboradores', moduleKey: 'rh' },
       { name: "Ponto", href: "/rh/ponto", icon: Clock, pageKey: 'rh_ponto', moduleKey: 'rh' },
       { name: "Relógio de Ponto (Tablet)", href: "/rh/relogio-ponto", icon: ScanFace, pageKey: 'rh_relogio_ponto', moduleKey: 'rh' },
