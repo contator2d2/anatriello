@@ -198,8 +198,9 @@ export default function EntregadorEntrega() {
 
         {/* Fluxo em abas */}
         <Tabs value={tab} onValueChange={setTab}>
-          <TabsList className="grid grid-cols-4 w-full">
+          <TabsList className="grid grid-cols-5 w-full">
             <TabsTrigger value="navigate">Navegar</TabsTrigger>
+            <TabsTrigger value="checklist">Checklist</TabsTrigger>
             <TabsTrigger value="proof">Comprovante</TabsTrigger>
             <TabsTrigger value="sign">Assinar</TabsTrigger>
             <TabsTrigger value="finish">Finalizar</TabsTrigger>
