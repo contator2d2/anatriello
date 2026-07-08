@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useParams, Link } from "react-router-dom";
 import { useSRReplay } from "@/hooks/use-smartroute";
+import { useRouteJourneyEvents } from "@/hooks/use-smartroute-checklists";
 import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
