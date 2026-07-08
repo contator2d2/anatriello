@@ -30,8 +30,10 @@ const statusColor: Record<string, string> = {
 export default function SmartRouteDashboard() {
   const { data } = useSRDashboard();
   const { data: live } = useSRLive();
+  const { data: ops } = useOpsMetrics();
   const d = data || {};
   const sum = (m: any = {}) => Object.values(m).reduce((a: any, b: any) => a + b, 0);
+  const avgMin = ops?.avg_stop_ms ? Math.round(ops.avg_stop_ms / 60000) : 0;
 
   return (
     <MainLayout>
