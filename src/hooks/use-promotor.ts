@@ -508,3 +508,38 @@ export function useColabCreateAdjustmentRequest() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['colab-adj-requests'] }),
   });
 }
+
+// ===== FASE 8: Espelho Digital com Aceite =====
+export function useColabMirrors() {
+  return useQuery({
+    queryKey: ['colab-mirrors'],
+    queryFn: () => promotorApi<any[]>('/api/promotor/mirror-acceptance'),
+  });
+}
+export function useColabMirror(id?: string) {
+  return useQuery({
+    queryKey: ['colab-mirror', id],
+    queryFn: () => promotorApi<any>(`/api/promotor/mirror-acceptance/${id}`),
+    enabled: !!id,
+  });
+}
+export function useColabAcceptMirror() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, comments }: { id: string; comments?: string }) =>
+      promotorApi(`/api/promotor/mirror-acceptance/${id}/accept`, {
+        method: 'POST',
+        body: { comments, device_info: { ua: navigator.userAgent, platform: navigator.platform } },
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['colab-mirror'] }),
+  });
+}
+export function useColabRejectMirror() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      promotorApi(`/api/promotor/mirror-acceptance/${id}/reject`, { method: 'POST', body: { reason } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['colab-mirror'] }),
+  });
+}
+
