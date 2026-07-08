@@ -367,6 +367,37 @@ router.post('/stops/:id/checkout', async (req, res) => {
   } catch (e) { logError('sr.driver.checkout', e); res.status(500).json({ error: e.message }); }
 });
 
+// Detalhe da entrega com mídias, ocorrências e link de navegação
+router.get('/stops/:id', async (req, res) => {
+  try {
+    const r = await query(
+      `SELECT s.*, p.name AS pdv_name, p.address AS pdv_address, p.city AS pdv_city,
+              p.lat AS pdv_lat, p.lng AS pdv_lng, p.contact_name, p.contact_phone,
+              o.order_number, o.weight_kg, o.volume_m3, o.value_cents, o.items, o.notes AS order_notes,
+              r.code AS route_code, r.status AS route_status
+       FROM smartroute_route_stops s
+       LEFT JOIN smartroute_pdvs p ON p.id=s.pdv_id
+       LEFT JOIN smartroute_orders o ON o.id=s.order_id
+       LEFT JOIN smartroute_routes r ON r.id=s.route_id
+       WHERE s.id=$1`, [req.params.id]);
+    const s = r.rows[0];
+    if (!s) return res.status(404).json({ error: 'not found' });
+    const media = await query(
+      `SELECT id, kind, url, lat, lng, taken_at FROM smartroute_stop_media
+       WHERE stop_id=$1 ORDER BY taken_at`, [req.params.id]);
+    const occ = await query(
+      `SELECT * FROM smartroute_stop_occurrences WHERE stop_id=$1 ORDER BY created_at`, [req.params.id]);
+    const settings = await getOperationSettings(req.organizationId);
+    res.json({
+      ...s,
+      media: media.rows,
+      occurrences: occ.rows,
+      operation: settings,
+      nav_link: buildNavLink({ lat: s.pdv_lat, lng: s.pdv_lng, preferred: settings.preferred_nav_app }),
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 router.post('/stops/:id/fail', async (req, res) => {
   try {
     const { reason, lat, lng } = req.body || {};
