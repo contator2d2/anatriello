@@ -73,6 +73,7 @@ import RHFolhaExport from "./pages/RHFolhaExport";
 import RHBancoHoras from "./pages/RHBancoHoras";
 import RHEscalas from "./pages/RHEscalas";
 import RHFeriasColetivas from "./pages/RHFeriasColetivas";
+import RHDesligamento from "./pages/RHDesligamento";
 import RHEspelhoDigital from "./pages/RHEspelhoDigital";
 
 
