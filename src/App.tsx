@@ -72,6 +72,8 @@ import RHAnalytics from "./pages/RHAnalytics";
 import RHFolhaExport from "./pages/RHFolhaExport";
 import RHBancoHoras from "./pages/RHBancoHoras";
 import RHEscalas from "./pages/RHEscalas";
+import RHEspelhoDigital from "./pages/RHEspelhoDigital";
+
 
 
 import RHDocumentos from "./pages/RHDocumentos";
