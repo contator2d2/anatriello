@@ -461,6 +461,7 @@ app.use('/api/rh', rhRoutes);
 app.use('/api/rh/app-templates', appAccessTemplatesRoutes);
 app.use('/api/rh/kiosk', rhKioskRoutes);
 app.use('/api/rh', rhManagementRoutes);
+app.use('/api/rh/payroll-export', rhPayrollExportRoutes);
 app.use('/api/timeclock', timeclockRoutes);
 app.use('/api/manager', managerRoutes);
 app.use('/api/companies', companiesRoutes);
