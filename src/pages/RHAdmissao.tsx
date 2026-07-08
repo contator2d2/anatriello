@@ -17,6 +17,7 @@ import {
   useOnboardings, useOnboarding, useCreateOnboarding, useUpdateOnboarding,
   useFinishOnboarding, useCancelOnboarding, useEmployees, useBranches, useRhDepartments,
 } from "@/hooks/use-rh";
+import { useCompanies } from "@/hooks/use-companies";
 import {
   UserPlus, Plus, FileText, Check, Loader2, ClipboardCheck, FileCheck, GraduationCap, Trash2, Users,
 } from "lucide-react";
