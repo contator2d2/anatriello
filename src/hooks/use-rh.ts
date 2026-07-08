@@ -637,3 +637,62 @@ export function useCancelTermination() {
   });
 }
 
+
+// ===== FASE 11 - ADMISSÃO / ONBOARDING =====
+export function useOnboardings(filters?: { status?: string }) {
+  const params = new URLSearchParams();
+  if (filters?.status) params.set('status', filters.status);
+  const qs = params.toString();
+  return useQuery({
+    queryKey: ['rh-onboardings', qs],
+    queryFn: () => api<any[]>(`/api/rh/onboarding${qs ? `?${qs}` : ''}`),
+  });
+}
+
+export function useOnboarding(id?: string) {
+  return useQuery({
+    queryKey: ['rh-onboarding', id],
+    queryFn: () => api<any>(`/api/rh/onboarding/${id}`),
+    enabled: !!id,
+  });
+}
+
+export function useCreateOnboarding() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: any) => api<any>('/api/rh/onboarding', { method: 'POST', body: data }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['rh-onboardings'] }),
+  });
+}
+
+export function useUpdateOnboarding() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }: any) => api<any>(`/api/rh/onboarding/${id}`, { method: 'PUT', body: data }),
+    onSuccess: (_d, v: any) => {
+      qc.invalidateQueries({ queryKey: ['rh-onboardings'] });
+      qc.invalidateQueries({ queryKey: ['rh-onboarding', v.id] });
+    },
+  });
+}
+
+export function useFinishOnboarding() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, force }: { id: string; force?: boolean }) =>
+      api<any>(`/api/rh/onboarding/${id}/finish`, { method: 'POST', body: { force } }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['rh-onboardings'] });
+      qc.invalidateQueries({ queryKey: ['rh-employees'] });
+    },
+  });
+}
+
+export function useCancelOnboarding() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason?: string }) =>
+      api<any>(`/api/rh/onboarding/${id}/cancel`, { method: 'POST', body: { reason } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['rh-onboardings'] }),
+  });
+}
