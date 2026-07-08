@@ -233,6 +233,11 @@ export default function EntregadorEntrega() {
             </Card>
           </TabsContent>
 
+          {/* CHECKLIST configurável */}
+          <TabsContent value="checklist">
+            <ChecklistRunner stopId={id} />
+          </TabsContent>
+
           {/* COMPROVANTE — foto de nota fiscal + mídias */}
           <TabsContent value="proof">
             <Card>
