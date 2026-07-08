@@ -253,8 +253,8 @@ export default function RHAdmissao() {
                 <Label>Cargo</Label>
                 <Input value={form.position} onChange={(e) => setForm({ ...form, position: e.target.value })} />
               </div>
-              <div>
               <div className="col-span-2">
+
                 <Label>Empresa *</Label>
                 <Select value={form.company_id || "none"} onValueChange={(v) => setForm({ ...form, company_id: v === "none" ? "" : v })}>
                   <SelectTrigger><SelectValue placeholder="Selecione a empresa do colaborador" /></SelectTrigger>
