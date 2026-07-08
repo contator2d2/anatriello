@@ -20,6 +20,7 @@ import {
   useStopOccurrence, useStopSignature, useStopCheckout, useNextStop,
   getPos, pickPhoto, openNavLink,
 } from "@/hooks/use-smartroute-journey";
+import { ChecklistRunner } from "@/components/entregador/ChecklistRunner";
 
 const OCCURRENCE_TYPES = [
   { value: "danificado", label: "Produto danificado" },
