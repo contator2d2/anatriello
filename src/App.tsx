@@ -216,6 +216,7 @@ import EntregadorLogin from "./pages/entregador/EntregadorLogin";
 import EntregadorHome from "./pages/entregador/EntregadorHome";
 import EntregadorRota from "./pages/entregador/EntregadorRota";
 import EntregadorEntrega from "./pages/entregador/EntregadorEntrega";
+import CentralApps from "./pages/CentralApps";
 
 
 
