@@ -11,12 +11,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Truck, Clock, CalendarX, Plus, Pencil, Trash2, Settings } from "lucide-react";
+import { Truck, Clock, CalendarX, Plus, Pencil, Trash2, Settings, ShieldCheck } from "lucide-react";
 import {
   useSRVehicleTypes, useSRSaveVehicleType, useSRDeleteVehicleType,
   useSRWindows, useSRSaveWindow, useSRDeleteWindow,
   useSRExceptions, useSRSaveException, useSRDeleteException,
 } from "@/hooks/use-smartroute-ops";
+import { useOperationSettings, useSaveOperationSettings } from "@/hooks/use-smartroute-checklists";
 import { toast } from "sonner";
 
 const DAYS = [
