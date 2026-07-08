@@ -126,6 +126,8 @@ import PromotorTrocarSenha from "./pages/promotor/PromotorTrocarSenha";
 import PromotorEquipe from "./pages/promotor/PromotorEquipe";
 import ColaboradorHome from "./pages/colaborador/ColaboradorHome";
 import ColaboradorJornada from "./pages/colaborador/ColaboradorJornada";
+import ColaboradorEspelho from "./pages/colaborador/ColaboradorEspelho";
+
 import ColaboradorSolicitacoes from "./pages/colaborador/ColaboradorSolicitacoes";
 import ColaboradorFerias from "./pages/colaborador/ColaboradorFerias";
 import ColaboradorHolerite from "./pages/colaborador/ColaboradorHolerite";
