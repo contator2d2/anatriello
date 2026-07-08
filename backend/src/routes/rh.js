@@ -4227,4 +4227,585 @@ router.get('/esocial/summary', async (req, res) => {
   } catch (err) { logError('rh.esocial.summary', err); res.status(500).json({ error: 'Erro' }); }
 });
 
+
+// ============================================================
+// FASE 14 - AVALIAÇÕES DE DESEMPENHO
+// ============================================================
+async function ensurePerformanceTables() {
+  await query(`
+    CREATE TABLE IF NOT EXISTS rh_perf_cycles (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id UUID NOT NULL,
+      name TEXT NOT NULL,
+      description TEXT,
+      cycle_type TEXT NOT NULL DEFAULT '90',
+      scale_min INTEGER DEFAULT 1,
+      scale_max INTEGER DEFAULT 5,
+      criteria JSONB DEFAULT '[]'::jsonb,
+      start_date DATE,
+      end_date DATE,
+      status TEXT NOT NULL DEFAULT 'rascunho',
+      opened_at TIMESTAMPTZ,
+      closed_at TIMESTAMPTZ,
+      created_by UUID,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_perf_cycles_org ON rh_perf_cycles(organization_id, created_at DESC)`);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS rh_perf_reviews (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id UUID NOT NULL,
+      cycle_id UUID NOT NULL,
+      employee_id UUID NOT NULL,
+      evaluator_id UUID,
+      evaluator_type TEXT NOT NULL DEFAULT 'manager',
+      status TEXT NOT NULL DEFAULT 'pendente',
+      scores JSONB DEFAULT '[]'::jsonb,
+      overall_score NUMERIC(4,2),
+      strengths TEXT,
+      improvements TEXT,
+      comments TEXT,
+      submitted_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_perf_reviews_cycle ON rh_perf_reviews(cycle_id, employee_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_perf_reviews_evaluator ON rh_perf_reviews(evaluator_id, status)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_perf_reviews_emp ON rh_perf_reviews(employee_id, cycle_id)`);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS rh_perf_goals (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id UUID NOT NULL,
+      employee_id UUID NOT NULL,
+      cycle_id UUID,
+      title TEXT NOT NULL,
+      description TEXT,
+      metric TEXT,
+      target_value NUMERIC(14,2),
+      current_value NUMERIC(14,2) DEFAULT 0,
+      unit TEXT,
+      weight INTEGER DEFAULT 1,
+      due_date DATE,
+      progress_pct INTEGER DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'nao_iniciada',
+      created_by UUID,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_perf_goals_emp ON rh_perf_goals(employee_id, cycle_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_perf_goals_org ON rh_perf_goals(organization_id)`);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS rh_perf_feedback (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id UUID NOT NULL,
+      employee_id UUID NOT NULL,
+      given_by UUID,
+      given_by_name TEXT,
+      feedback_type TEXT NOT NULL DEFAULT 'positivo',
+      category TEXT,
+      message TEXT NOT NULL,
+      is_private BOOLEAN DEFAULT false,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_perf_feedback_emp ON rh_perf_feedback(employee_id, created_at DESC)`);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS rh_perf_pdi (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id UUID NOT NULL,
+      employee_id UUID NOT NULL,
+      cycle_id UUID,
+      title TEXT NOT NULL DEFAULT 'PDI',
+      actions JSONB DEFAULT '[]'::jsonb,
+      notes TEXT,
+      status TEXT NOT NULL DEFAULT 'ativo',
+      potential_score INTEGER,
+      performance_score NUMERIC(4,2),
+      nine_box_cell TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_perf_pdi_emp ON rh_perf_pdi(employee_id)`);
+}
+
+const DEFAULT_PERF_CRITERIA = [
+  { key: 'entrega', label: 'Entrega de resultados', weight: 3 },
+  { key: 'qualidade', label: 'Qualidade do trabalho', weight: 3 },
+  { key: 'colaboracao', label: 'Colaboração e trabalho em equipe', weight: 2 },
+  { key: 'comunicacao', label: 'Comunicação', weight: 2 },
+  { key: 'proatividade', label: 'Proatividade e iniciativa', weight: 2 },
+  { key: 'aprendizado', label: 'Aprendizado e desenvolvimento', weight: 2 },
+  { key: 'lideranca', label: 'Liderança / influência', weight: 2 },
+  { key: 'valores', label: 'Alinhamento com valores da empresa', weight: 3 },
+];
+
+function nineBoxCell(perf, pot) {
+  // perf 1-5, potential 1-3 (baixo/médio/alto)
+  const p = Number(perf || 0);
+  const q = Number(pot || 2);
+  let pRow;
+  if (p >= 4) pRow = 'alto';
+  else if (p >= 3) pRow = 'medio';
+  else pRow = 'baixo';
+  const potMap = { 1: 'baixo', 2: 'medio', 3: 'alto' };
+  const pCol = potMap[q] || 'medio';
+  return `${pRow}_${pCol}`;
+}
+
+// ===== CICLOS =====
+router.get('/performance/cycles', async (req, res) => {
+  try {
+    await ensurePerformanceTables();
+    const orgId = req.query.org_id || await getUserOrgId(req.userId);
+    if (!orgId) return res.json([]);
+    const r = await query(
+      `SELECT c.*,
+              (SELECT COUNT(*)::int FROM rh_perf_reviews r WHERE r.cycle_id = c.id) as reviews_total,
+              (SELECT COUNT(*)::int FROM rh_perf_reviews r WHERE r.cycle_id = c.id AND r.status = 'enviada') as reviews_done
+       FROM rh_perf_cycles c WHERE c.organization_id = $1 ORDER BY c.created_at DESC`, [orgId]);
+    res.json(r.rows);
+  } catch (err) { logError('rh.perf.cycles.list', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.get('/performance/cycles/:id', async (req, res) => {
+  try {
+    await ensurePerformanceTables();
+    const c = (await query(`SELECT * FROM rh_perf_cycles WHERE id=$1`, [req.params.id])).rows[0];
+    if (!c) return res.status(404).json({ error: 'Não encontrado' });
+    const reviews = await query(
+      `SELECT r.*, e.full_name as employee_name, e.position as employee_position,
+              ev.full_name as evaluator_name
+       FROM rh_perf_reviews r
+       LEFT JOIN employees e ON e.id = r.employee_id
+       LEFT JOIN employees ev ON ev.id = r.evaluator_id
+       WHERE r.cycle_id=$1 ORDER BY e.full_name, r.evaluator_type`, [c.id]);
+    res.json({ ...c, reviews: reviews.rows });
+  } catch (err) { logError('rh.perf.cycles.detail', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.post('/performance/cycles', async (req, res) => {
+  try {
+    await ensurePerformanceTables();
+    const orgId = req.body.organization_id || await getUserOrgId(req.userId);
+    if (!orgId) return res.status(400).json({ error: 'Organização não encontrada' });
+    const { name, description, cycle_type, scale_min, scale_max, criteria, start_date, end_date } = req.body;
+    if (!name) return res.status(400).json({ error: 'Nome é obrigatório' });
+    const cr = criteria && criteria.length ? criteria : DEFAULT_PERF_CRITERIA;
+    const r = await query(
+      `INSERT INTO rh_perf_cycles (organization_id, name, description, cycle_type,
+        scale_min, scale_max, criteria, start_date, end_date, created_by)
+       VALUES ($1,$2,$3,$4,COALESCE($5,1),COALESCE($6,5),$7,$8,$9,$10) RETURNING *`,
+      [orgId, name, description || null, cycle_type || '90',
+        scale_min, scale_max, JSON.stringify(cr), start_date || null, end_date || null, req.userId]
+    );
+    res.json(r.rows[0]);
+  } catch (err) { logError('rh.perf.cycles.create', err); res.status(500).json({ error: err.message || 'Erro' }); }
+});
+
+router.put('/performance/cycles/:id', async (req, res) => {
+  try {
+    await ensurePerformanceTables();
+    const b = req.body;
+    const r = await query(
+      `UPDATE rh_perf_cycles SET name=COALESCE($2,name), description=COALESCE($3,description),
+        cycle_type=COALESCE($4,cycle_type), scale_min=COALESCE($5,scale_min), scale_max=COALESCE($6,scale_max),
+        criteria=COALESCE($7,criteria), start_date=COALESCE($8,start_date), end_date=COALESCE($9,end_date),
+        updated_at=NOW() WHERE id=$1 RETURNING *`,
+      [req.params.id, b.name, b.description, b.cycle_type, b.scale_min, b.scale_max,
+        b.criteria ? JSON.stringify(b.criteria) : null, b.start_date, b.end_date]
+    );
+    if (!r.rows[0]) return res.status(404).json({ error: 'Não encontrado' });
+    res.json(r.rows[0]);
+  } catch (err) { logError('rh.perf.cycles.update', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// Abrir ciclo: cria reviews para colaboradores selecionados conforme cycle_type
+router.post('/performance/cycles/:id/open', async (req, res) => {
+  try {
+    await ensurePerformanceTables();
+    const cycle = (await query(`SELECT * FROM rh_perf_cycles WHERE id=$1`, [req.params.id])).rows[0];
+    if (!cycle) return res.status(404).json({ error: 'Não encontrado' });
+    if (cycle.status !== 'rascunho' && cycle.status !== 'aberto') return res.status(400).json({ error: 'Ciclo não pode ser aberto neste status' });
+
+    const { employee_ids, peers_per_employee = 0 } = req.body;
+    const empIds = Array.isArray(employee_ids) && employee_ids.length
+      ? employee_ids
+      : (await query(`SELECT id FROM employees WHERE organization_id=$1 AND status='ativo'`, [cycle.organization_id])).rows.map(e => e.id);
+
+    let created = 0;
+    for (const empId of empIds) {
+      const emp = (await query(`SELECT id, direct_manager_id FROM employees WHERE id=$1`, [empId])).rows[0];
+      if (!emp) continue;
+      const targets = [];
+      // autoavaliação
+      targets.push({ evaluator_id: empId, evaluator_type: 'self' });
+      if (cycle.cycle_type === '180' || cycle.cycle_type === '360') {
+        if (emp.direct_manager_id) targets.push({ evaluator_id: emp.direct_manager_id, evaluator_type: 'manager' });
+      } else {
+        // 90 = só gestor
+        if (emp.direct_manager_id) targets.push({ evaluator_id: emp.direct_manager_id, evaluator_type: 'manager' });
+      }
+      if (cycle.cycle_type === '360') {
+        // pares
+        if (peers_per_employee > 0) {
+          const peers = (await query(
+            `SELECT id FROM employees WHERE organization_id=$1 AND status='ativo' AND id<>$2
+             AND (department_id = (SELECT department_id FROM employees WHERE id=$2) OR $3=true)
+             ORDER BY random() LIMIT $4`,
+            [cycle.organization_id, empId, false, peers_per_employee])).rows;
+          peers.forEach(p => targets.push({ evaluator_id: p.id, evaluator_type: 'peer' }));
+        }
+        // subordinados avaliam o gestor (quando emp é gestor de alguém)
+        const subs = (await query(`SELECT id FROM employees WHERE direct_manager_id=$1 AND status='ativo'`, [empId])).rows;
+        subs.forEach(s => targets.push({ evaluator_id: s.id, evaluator_type: 'subordinate' }));
+      }
+
+      for (const t of targets) {
+        const exists = await query(
+          `SELECT 1 FROM rh_perf_reviews WHERE cycle_id=$1 AND employee_id=$2 AND evaluator_id=$3 AND evaluator_type=$4`,
+          [cycle.id, empId, t.evaluator_id, t.evaluator_type]);
+        if (exists.rows.length) continue;
+        await query(
+          `INSERT INTO rh_perf_reviews (organization_id, cycle_id, employee_id, evaluator_id, evaluator_type)
+           VALUES ($1,$2,$3,$4,$5)`,
+          [cycle.organization_id, cycle.id, empId, t.evaluator_id, t.evaluator_type]);
+        created++;
+      }
+    }
+
+    await query(`UPDATE rh_perf_cycles SET status='em_avaliacao', opened_at=COALESCE(opened_at,NOW()), updated_at=NOW() WHERE id=$1`, [cycle.id]);
+    res.json({ ok: true, created, employees: empIds.length });
+  } catch (err) { logError('rh.perf.cycles.open', err); res.status(500).json({ error: err.message || 'Erro ao abrir' }); }
+});
+
+router.post('/performance/cycles/:id/close', async (req, res) => {
+  try {
+    await ensurePerformanceTables();
+    await query(`UPDATE rh_perf_cycles SET status='concluido', closed_at=NOW(), updated_at=NOW() WHERE id=$1`, [req.params.id]);
+    res.json({ ok: true });
+  } catch (err) { logError('rh.perf.cycles.close', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.delete('/performance/cycles/:id', async (req, res) => {
+  try {
+    await ensurePerformanceTables();
+    const c = (await query(`SELECT * FROM rh_perf_cycles WHERE id=$1`, [req.params.id])).rows[0];
+    if (!c) return res.status(404).json({ error: 'Não encontrado' });
+    if (c.status !== 'rascunho') return res.status(400).json({ error: 'Só é possível excluir ciclos em rascunho' });
+    await query(`DELETE FROM rh_perf_cycles WHERE id=$1`, [c.id]);
+    res.json({ ok: true });
+  } catch (err) { logError('rh.perf.cycles.delete', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// ===== REVIEWS =====
+router.get('/performance/reviews', async (req, res) => {
+  try {
+    await ensurePerformanceTables();
+    const orgId = req.query.org_id || await getUserOrgId(req.userId);
+    if (!orgId) return res.json([]);
+    const { cycle_id, employee_id, evaluator_id, status } = req.query;
+    let sql = `SELECT r.*, e.full_name as employee_name, e.position as employee_position,
+                      ev.full_name as evaluator_name, c.name as cycle_name, c.criteria as cycle_criteria,
+                      c.scale_min, c.scale_max
+               FROM rh_perf_reviews r
+               LEFT JOIN employees e ON e.id = r.employee_id
+               LEFT JOIN employees ev ON ev.id = r.evaluator_id
+               LEFT JOIN rh_perf_cycles c ON c.id = r.cycle_id
+               WHERE r.organization_id=$1`;
+    const params = [orgId]; let idx = 2;
+    if (cycle_id) { sql += ` AND r.cycle_id=$${idx++}`; params.push(cycle_id); }
+    if (employee_id) { sql += ` AND r.employee_id=$${idx++}`; params.push(employee_id); }
+    if (evaluator_id) { sql += ` AND r.evaluator_id=$${idx++}`; params.push(evaluator_id); }
+    if (status) { sql += ` AND r.status=$${idx++}`; params.push(status); }
+    sql += ` ORDER BY r.updated_at DESC`;
+    const r = await query(sql, params);
+    res.json(r.rows);
+  } catch (err) { logError('rh.perf.reviews.list', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.get('/performance/reviews/:id', async (req, res) => {
+  try {
+    await ensurePerformanceTables();
+    const r = await query(
+      `SELECT r.*, e.full_name as employee_name, e.position as employee_position,
+              ev.full_name as evaluator_name, c.name as cycle_name, c.criteria as cycle_criteria,
+              c.scale_min, c.scale_max, c.cycle_type
+       FROM rh_perf_reviews r
+       LEFT JOIN employees e ON e.id = r.employee_id
+       LEFT JOIN employees ev ON ev.id = r.evaluator_id
+       LEFT JOIN rh_perf_cycles c ON c.id = r.cycle_id
+       WHERE r.id=$1`, [req.params.id]);
+    if (!r.rows[0]) return res.status(404).json({ error: 'Não encontrado' });
+    res.json(r.rows[0]);
+  } catch (err) { logError('rh.perf.reviews.detail', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.put('/performance/reviews/:id', async (req, res) => {
+  try {
+    await ensurePerformanceTables();
+    const cur = (await query(`SELECT * FROM rh_perf_reviews WHERE id=$1`, [req.params.id])).rows[0];
+    if (!cur) return res.status(404).json({ error: 'Não encontrada' });
+    if (cur.status === 'enviada') return res.status(400).json({ error: 'Avaliação já enviada, não pode ser editada' });
+    const { scores, comments, strengths, improvements } = req.body;
+
+    let overall = null;
+    if (Array.isArray(scores) && scores.length) {
+      let sum = 0, wSum = 0;
+      for (const s of scores) {
+        const val = Number(s.value || 0);
+        const w = Number(s.weight || 1);
+        if (val > 0) { sum += val * w; wSum += w; }
+      }
+      overall = wSum > 0 ? +(sum / wSum).toFixed(2) : null;
+    }
+
+    const r = await query(
+      `UPDATE rh_perf_reviews SET scores=COALESCE($2,scores), overall_score=COALESCE($3,overall_score),
+        comments=COALESCE($4,comments), strengths=COALESCE($5,strengths), improvements=COALESCE($6,improvements),
+        status=CASE WHEN status='pendente' THEN 'em_andamento' ELSE status END,
+        updated_at=NOW() WHERE id=$1 RETURNING *`,
+      [cur.id, scores ? JSON.stringify(scores) : null, overall, comments, strengths, improvements]);
+    res.json(r.rows[0]);
+  } catch (err) { logError('rh.perf.reviews.update', err); res.status(500).json({ error: err.message || 'Erro' }); }
+});
+
+router.post('/performance/reviews/:id/submit', async (req, res) => {
+  try {
+    await ensurePerformanceTables();
+    const cur = (await query(`SELECT * FROM rh_perf_reviews WHERE id=$1`, [req.params.id])).rows[0];
+    if (!cur) return res.status(404).json({ error: 'Não encontrada' });
+    if (cur.status === 'enviada') return res.status(400).json({ error: 'Já enviada' });
+    if (!cur.scores || !Array.isArray(cur.scores) || cur.scores.length === 0) {
+      return res.status(400).json({ error: 'Preencha as notas antes de enviar' });
+    }
+    const r = await query(
+      `UPDATE rh_perf_reviews SET status='enviada', submitted_at=NOW(), updated_at=NOW() WHERE id=$1 RETURNING *`,
+      [cur.id]);
+    res.json(r.rows[0]);
+  } catch (err) { logError('rh.perf.reviews.submit', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// ===== METAS =====
+router.get('/performance/goals', async (req, res) => {
+  try {
+    await ensurePerformanceTables();
+    const orgId = req.query.org_id || await getUserOrgId(req.userId);
+    if (!orgId) return res.json([]);
+    const { employee_id, cycle_id, status } = req.query;
+    let sql = `SELECT g.*, e.full_name as employee_name FROM rh_perf_goals g
+               LEFT JOIN employees e ON e.id = g.employee_id WHERE g.organization_id=$1`;
+    const params = [orgId]; let idx = 2;
+    if (employee_id) { sql += ` AND g.employee_id=$${idx++}`; params.push(employee_id); }
+    if (cycle_id) { sql += ` AND g.cycle_id=$${idx++}`; params.push(cycle_id); }
+    if (status) { sql += ` AND g.status=$${idx++}`; params.push(status); }
+    sql += ` ORDER BY g.due_date NULLS LAST, g.created_at DESC`;
+    const r = await query(sql, params);
+    res.json(r.rows);
+  } catch (err) { logError('rh.perf.goals.list', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.post('/performance/goals', async (req, res) => {
+  try {
+    await ensurePerformanceTables();
+    const orgId = req.body.organization_id || await getUserOrgId(req.userId);
+    if (!orgId) return res.status(400).json({ error: 'Organização não encontrada' });
+    const b = req.body;
+    if (!b.employee_id || !b.title) return res.status(400).json({ error: 'Colaborador e título são obrigatórios' });
+    const r = await query(
+      `INSERT INTO rh_perf_goals (organization_id, employee_id, cycle_id, title, description,
+        metric, target_value, current_value, unit, weight, due_date, progress_pct, status, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,COALESCE($8,0),$9,COALESCE($10,1),$11,COALESCE($12,0),COALESCE($13,'nao_iniciada'),$14) RETURNING *`,
+      [orgId, b.employee_id, b.cycle_id || null, b.title, b.description || null,
+        b.metric || null, b.target_value || null, b.current_value, b.unit || null,
+        b.weight, b.due_date || null, b.progress_pct, b.status, req.userId]);
+    res.json(r.rows[0]);
+  } catch (err) { logError('rh.perf.goals.create', err); res.status(500).json({ error: err.message || 'Erro' }); }
+});
+
+router.put('/performance/goals/:id', async (req, res) => {
+  try {
+    await ensurePerformanceTables();
+    const b = req.body;
+    let progress = b.progress_pct;
+    if (progress === undefined && b.target_value && b.current_value !== undefined) {
+      const t = Number(b.target_value); const c = Number(b.current_value);
+      progress = t > 0 ? Math.min(100, Math.round((c / t) * 100)) : 0;
+    }
+    let status = b.status;
+    if (!status && progress !== undefined) {
+      status = progress >= 100 ? 'concluida' : progress > 0 ? 'em_andamento' : 'nao_iniciada';
+    }
+    const r = await query(
+      `UPDATE rh_perf_goals SET title=COALESCE($2,title), description=COALESCE($3,description),
+        metric=COALESCE($4,metric), target_value=COALESCE($5,target_value), current_value=COALESCE($6,current_value),
+        unit=COALESCE($7,unit), weight=COALESCE($8,weight), due_date=COALESCE($9,due_date),
+        progress_pct=COALESCE($10,progress_pct), status=COALESCE($11,status), updated_at=NOW()
+       WHERE id=$1 RETURNING *`,
+      [req.params.id, b.title, b.description, b.metric, b.target_value, b.current_value,
+        b.unit, b.weight, b.due_date, progress, status]);
+    if (!r.rows[0]) return res.status(404).json({ error: 'Não encontrada' });
+    res.json(r.rows[0]);
+  } catch (err) { logError('rh.perf.goals.update', err); res.status(500).json({ error: err.message || 'Erro' }); }
+});
+
+router.delete('/performance/goals/:id', async (req, res) => {
+  try {
+    await ensurePerformanceTables();
+    await query(`DELETE FROM rh_perf_goals WHERE id=$1`, [req.params.id]);
+    res.json({ ok: true });
+  } catch (err) { logError('rh.perf.goals.delete', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// ===== FEEDBACK CONTÍNUO =====
+router.get('/performance/feedback', async (req, res) => {
+  try {
+    await ensurePerformanceTables();
+    const orgId = req.query.org_id || await getUserOrgId(req.userId);
+    if (!orgId) return res.json([]);
+    const { employee_id } = req.query;
+    let sql = `SELECT f.*, e.full_name as employee_name, g.full_name as given_by_full_name
+               FROM rh_perf_feedback f
+               LEFT JOIN employees e ON e.id = f.employee_id
+               LEFT JOIN employees g ON g.id = f.given_by
+               WHERE f.organization_id=$1`;
+    const params = [orgId]; let idx = 2;
+    if (employee_id) { sql += ` AND f.employee_id=$${idx++}`; params.push(employee_id); }
+    sql += ` ORDER BY f.created_at DESC LIMIT 200`;
+    const r = await query(sql, params);
+    res.json(r.rows);
+  } catch (err) { logError('rh.perf.feedback.list', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.post('/performance/feedback', async (req, res) => {
+  try {
+    await ensurePerformanceTables();
+    const orgId = req.body.organization_id || await getUserOrgId(req.userId);
+    if (!orgId) return res.status(400).json({ error: 'Organização não encontrada' });
+    const { employee_id, given_by, given_by_name, feedback_type, category, message, is_private } = req.body;
+    if (!employee_id || !message) return res.status(400).json({ error: 'Colaborador e mensagem são obrigatórios' });
+    const r = await query(
+      `INSERT INTO rh_perf_feedback (organization_id, employee_id, given_by, given_by_name,
+        feedback_type, category, message, is_private)
+       VALUES ($1,$2,$3,$4,COALESCE($5,'positivo'),$6,$7,COALESCE($8,false)) RETURNING *`,
+      [orgId, employee_id, given_by || req.userId, given_by_name || null,
+        feedback_type, category || null, message, is_private]);
+    res.json(r.rows[0]);
+  } catch (err) { logError('rh.perf.feedback.create', err); res.status(500).json({ error: err.message || 'Erro' }); }
+});
+
+router.delete('/performance/feedback/:id', async (req, res) => {
+  try {
+    await ensurePerformanceTables();
+    await query(`DELETE FROM rh_perf_feedback WHERE id=$1`, [req.params.id]);
+    res.json({ ok: true });
+  } catch (err) { logError('rh.perf.feedback.delete', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// ===== PDI =====
+router.get('/performance/pdi', async (req, res) => {
+  try {
+    await ensurePerformanceTables();
+    const orgId = req.query.org_id || await getUserOrgId(req.userId);
+    if (!orgId) return res.json([]);
+    const { employee_id, cycle_id } = req.query;
+    let sql = `SELECT p.*, e.full_name as employee_name, e.position as employee_position
+               FROM rh_perf_pdi p LEFT JOIN employees e ON e.id = p.employee_id
+               WHERE p.organization_id=$1`;
+    const params = [orgId]; let idx = 2;
+    if (employee_id) { sql += ` AND p.employee_id=$${idx++}`; params.push(employee_id); }
+    if (cycle_id) { sql += ` AND p.cycle_id=$${idx++}`; params.push(cycle_id); }
+    sql += ` ORDER BY p.updated_at DESC`;
+    const r = await query(sql, params);
+    res.json(r.rows);
+  } catch (err) { logError('rh.perf.pdi.list', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.post('/performance/pdi', async (req, res) => {
+  try {
+    await ensurePerformanceTables();
+    const orgId = req.body.organization_id || await getUserOrgId(req.userId);
+    if (!orgId) return res.status(400).json({ error: 'Organização não encontrada' });
+    const b = req.body;
+    if (!b.employee_id) return res.status(400).json({ error: 'Colaborador é obrigatório' });
+    const cell = (b.performance_score && b.potential_score) ? nineBoxCell(b.performance_score, b.potential_score) : null;
+    const r = await query(
+      `INSERT INTO rh_perf_pdi (organization_id, employee_id, cycle_id, title, actions, notes,
+        potential_score, performance_score, nine_box_cell)
+       VALUES ($1,$2,$3,COALESCE($4,'PDI'),$5,$6,$7,$8,$9) RETURNING *`,
+      [orgId, b.employee_id, b.cycle_id || null, b.title,
+        JSON.stringify(b.actions || []), b.notes || null,
+        b.potential_score || null, b.performance_score || null, cell]);
+    res.json(r.rows[0]);
+  } catch (err) { logError('rh.perf.pdi.create', err); res.status(500).json({ error: err.message || 'Erro' }); }
+});
+
+router.put('/performance/pdi/:id', async (req, res) => {
+  try {
+    await ensurePerformanceTables();
+    const b = req.body;
+    const cur = (await query(`SELECT * FROM rh_perf_pdi WHERE id=$1`, [req.params.id])).rows[0];
+    if (!cur) return res.status(404).json({ error: 'Não encontrado' });
+    const perf = b.performance_score ?? cur.performance_score;
+    const pot = b.potential_score ?? cur.potential_score;
+    const cell = (perf && pot) ? nineBoxCell(perf, pot) : cur.nine_box_cell;
+    const r = await query(
+      `UPDATE rh_perf_pdi SET title=COALESCE($2,title), actions=COALESCE($3,actions), notes=COALESCE($4,notes),
+        potential_score=COALESCE($5,potential_score), performance_score=COALESCE($6,performance_score),
+        nine_box_cell=$7, status=COALESCE($8,status), updated_at=NOW() WHERE id=$1 RETURNING *`,
+      [cur.id, b.title, b.actions ? JSON.stringify(b.actions) : null, b.notes,
+        b.potential_score, b.performance_score, cell, b.status]);
+    res.json(r.rows[0]);
+  } catch (err) { logError('rh.perf.pdi.update', err); res.status(500).json({ error: err.message || 'Erro' }); }
+});
+
+router.delete('/performance/pdi/:id', async (req, res) => {
+  try {
+    await ensurePerformanceTables();
+    await query(`DELETE FROM rh_perf_pdi WHERE id=$1`, [req.params.id]);
+    res.json({ ok: true });
+  } catch (err) { logError('rh.perf.pdi.delete', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// Matriz 9-box (consolidada por colaborador, último PDI)
+router.get('/performance/nine-box', async (req, res) => {
+  try {
+    await ensurePerformanceTables();
+    const orgId = req.query.org_id || await getUserOrgId(req.userId);
+    if (!orgId) return res.json([]);
+    const r = await query(
+      `SELECT DISTINCT ON (p.employee_id) p.employee_id, e.full_name, e.position,
+              p.performance_score, p.potential_score, p.nine_box_cell
+       FROM rh_perf_pdi p
+       JOIN employees e ON e.id = p.employee_id
+       WHERE p.organization_id=$1 AND p.performance_score IS NOT NULL AND p.potential_score IS NOT NULL
+       ORDER BY p.employee_id, p.updated_at DESC`, [orgId]);
+    res.json(r.rows);
+  } catch (err) { logError('rh.perf.ninebox', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// Resumo consolidado por colaborador (média das reviews enviadas do ciclo)
+router.get('/performance/cycles/:id/consolidated', async (req, res) => {
+  try {
+    await ensurePerformanceTables();
+    const r = await query(
+      `SELECT r.employee_id, e.full_name, e.position,
+              AVG(r.overall_score)::numeric(4,2) as avg_score,
+              COUNT(*)::int as reviewers,
+              COUNT(*) FILTER (WHERE r.status='enviada')::int as submitted
+       FROM rh_perf_reviews r JOIN employees e ON e.id = r.employee_id
+       WHERE r.cycle_id=$1 GROUP BY r.employee_id, e.full_name, e.position
+       ORDER BY avg_score DESC NULLS LAST`, [req.params.id]);
+    res.json(r.rows);
+  } catch (err) { logError('rh.perf.consolidated', err); res.status(500).json({ error: 'Erro' }); }
+});
+
 export default router;
