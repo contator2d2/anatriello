@@ -189,6 +189,14 @@ export async function ensureSmartRouteTables() {
     CREATE INDEX IF NOT EXISTS idx_sr_depots_org ON smartroute_depots(organization_id, active);
     ALTER TABLE smartroute_routes ADD COLUMN IF NOT EXISTS depot_id UUID;
 
+    -- Atributos do PDV usados pelas regras de checklist
+    ALTER TABLE smartroute_pdvs ADD COLUMN IF NOT EXISTS client_id UUID;
+    ALTER TABLE smartroute_pdvs ADD COLUMN IF NOT EXISTS pdv_type TEXT;
+    ALTER TABLE smartroute_pdvs ADD COLUMN IF NOT EXISTS channel TEXT;
+    ALTER TABLE smartroute_pdvs ADD COLUMN IF NOT EXISTS category TEXT;
+    ALTER TABLE smartroute_pdvs ADD COLUMN IF NOT EXISTS region TEXT;
+
+
     -- === Fluxo Inteligente da Operação (Onda 1) ===
     -- Máquina de estados por stop
     ALTER TABLE smartroute_route_stops ADD COLUMN IF NOT EXISTS state TEXT DEFAULT 'PENDING';
