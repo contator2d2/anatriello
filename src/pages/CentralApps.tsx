@@ -7,8 +7,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { useToast } from "@/hooks/use-toast";
 import {
   Copy, Check, MessageCircle, Mail, QrCode, ExternalLink,
-  Users, Truck, Briefcase, Smartphone, ShoppingBag,
+  Users, Truck, Briefcase, Smartphone,
 } from "lucide-react";
+
 
 interface AppInfo {
   key: string;
@@ -47,15 +48,6 @@ const APPS: AppInfo[] = [
     icon: Briefcase,
     color: "bg-purple-500/10 text-purple-600 border-purple-500/30",
     audience: "Supervisores / Gerentes",
-  },
-  {
-    key: "promotor",
-    title: "App do Promotor (PDV)",
-    description: "Check-in em PDV, fotos, pesquisa de preço e merchandising.",
-    path: "/p/login",
-    icon: ShoppingBag,
-    color: "bg-amber-500/10 text-amber-600 border-amber-500/30",
-    audience: "Promotores de merchandising",
   },
 ];
 
