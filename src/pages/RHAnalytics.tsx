@@ -52,7 +52,7 @@ export default function RHAnalytics() {
   const [companyId, setCompanyId] = useState<string>("all");
   const [departmentId, setDepartmentId] = useState<string>("all");
 
-  const { data: companies = [] } = useCompanies();
+  const { companies = [] } = useCompanies();
   const { data: departments = [] } = useRhDepartments();
 
   const { data, isLoading, refetch } = useRhAnalytics({
