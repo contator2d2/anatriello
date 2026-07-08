@@ -850,3 +850,199 @@ export function useDeleteEsocial() {
     },
   });
 }
+
+// ===== FASE 14 - AVALIAÇÕES DE DESEMPENHO =====
+export function usePerfCycles() {
+  return useQuery({
+    queryKey: ['rh-perf-cycles'],
+    queryFn: () => api<any[]>('/api/rh/performance/cycles'),
+  });
+}
+export function usePerfCycle(id?: string) {
+  return useQuery({
+    queryKey: ['rh-perf-cycle', id],
+    queryFn: () => api<any>(`/api/rh/performance/cycles/${id}`),
+    enabled: !!id,
+  });
+}
+export function useCreatePerfCycle() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: any) => api<any>('/api/rh/performance/cycles', { method: 'POST', body: data }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['rh-perf-cycles'] }),
+  });
+}
+export function useUpdatePerfCycle() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }: any) => api<any>(`/api/rh/performance/cycles/${id}`, { method: 'PUT', body: data }),
+    onSuccess: (_d, v: any) => {
+      qc.invalidateQueries({ queryKey: ['rh-perf-cycles'] });
+      qc.invalidateQueries({ queryKey: ['rh-perf-cycle', v.id] });
+    },
+  });
+}
+export function useOpenPerfCycle() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, employee_ids, peers_per_employee }: any) =>
+      api<any>(`/api/rh/performance/cycles/${id}/open`, { method: 'POST', body: { employee_ids, peers_per_employee } }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['rh-perf-cycles'] });
+      qc.invalidateQueries({ queryKey: ['rh-perf-reviews'] });
+    },
+  });
+}
+export function useClosePerfCycle() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api<any>(`/api/rh/performance/cycles/${id}/close`, { method: 'POST', body: {} }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['rh-perf-cycles'] }),
+  });
+}
+export function useDeletePerfCycle() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api<any>(`/api/rh/performance/cycles/${id}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['rh-perf-cycles'] }),
+  });
+}
+export function usePerfReviews(filters?: { cycle_id?: string; employee_id?: string; evaluator_id?: string; status?: string }) {
+  const p = new URLSearchParams();
+  if (filters?.cycle_id) p.set('cycle_id', filters.cycle_id);
+  if (filters?.employee_id) p.set('employee_id', filters.employee_id);
+  if (filters?.evaluator_id) p.set('evaluator_id', filters.evaluator_id);
+  if (filters?.status) p.set('status', filters.status);
+  const qs = p.toString();
+  return useQuery({
+    queryKey: ['rh-perf-reviews', qs],
+    queryFn: () => api<any[]>(`/api/rh/performance/reviews${qs ? `?${qs}` : ''}`),
+  });
+}
+export function usePerfReview(id?: string) {
+  return useQuery({
+    queryKey: ['rh-perf-review', id],
+    queryFn: () => api<any>(`/api/rh/performance/reviews/${id}`),
+    enabled: !!id,
+  });
+}
+export function useUpdatePerfReview() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }: any) => api<any>(`/api/rh/performance/reviews/${id}`, { method: 'PUT', body: data }),
+    onSuccess: (_d, v: any) => {
+      qc.invalidateQueries({ queryKey: ['rh-perf-reviews'] });
+      qc.invalidateQueries({ queryKey: ['rh-perf-review', v.id] });
+    },
+  });
+}
+export function useSubmitPerfReview() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api<any>(`/api/rh/performance/reviews/${id}/submit`, { method: 'POST', body: {} }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['rh-perf-reviews'] }),
+  });
+}
+export function usePerfGoals(filters?: { employee_id?: string; cycle_id?: string; status?: string }) {
+  const p = new URLSearchParams();
+  if (filters?.employee_id) p.set('employee_id', filters.employee_id);
+  if (filters?.cycle_id) p.set('cycle_id', filters.cycle_id);
+  if (filters?.status) p.set('status', filters.status);
+  const qs = p.toString();
+  return useQuery({
+    queryKey: ['rh-perf-goals', qs],
+    queryFn: () => api<any[]>(`/api/rh/performance/goals${qs ? `?${qs}` : ''}`),
+  });
+}
+export function useCreatePerfGoal() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: any) => api<any>('/api/rh/performance/goals', { method: 'POST', body: data }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['rh-perf-goals'] }),
+  });
+}
+export function useUpdatePerfGoal() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }: any) => api<any>(`/api/rh/performance/goals/${id}`, { method: 'PUT', body: data }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['rh-perf-goals'] }),
+  });
+}
+export function useDeletePerfGoal() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api<any>(`/api/rh/performance/goals/${id}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['rh-perf-goals'] }),
+  });
+}
+export function usePerfFeedback(employeeId?: string) {
+  const qs = employeeId ? `?employee_id=${employeeId}` : '';
+  return useQuery({
+    queryKey: ['rh-perf-feedback', employeeId || ''],
+    queryFn: () => api<any[]>(`/api/rh/performance/feedback${qs}`),
+  });
+}
+export function useCreatePerfFeedback() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: any) => api<any>('/api/rh/performance/feedback', { method: 'POST', body: data }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['rh-perf-feedback'] }),
+  });
+}
+export function useDeletePerfFeedback() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api<any>(`/api/rh/performance/feedback/${id}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['rh-perf-feedback'] }),
+  });
+}
+export function usePerfPDIs(filters?: { employee_id?: string; cycle_id?: string }) {
+  const p = new URLSearchParams();
+  if (filters?.employee_id) p.set('employee_id', filters.employee_id);
+  if (filters?.cycle_id) p.set('cycle_id', filters.cycle_id);
+  const qs = p.toString();
+  return useQuery({
+    queryKey: ['rh-perf-pdis', qs],
+    queryFn: () => api<any[]>(`/api/rh/performance/pdi${qs ? `?${qs}` : ''}`),
+  });
+}
+export function useCreatePerfPDI() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: any) => api<any>('/api/rh/performance/pdi', { method: 'POST', body: data }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['rh-perf-pdis'] });
+      qc.invalidateQueries({ queryKey: ['rh-perf-ninebox'] });
+    },
+  });
+}
+export function useUpdatePerfPDI() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }: any) => api<any>(`/api/rh/performance/pdi/${id}`, { method: 'PUT', body: data }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['rh-perf-pdis'] });
+      qc.invalidateQueries({ queryKey: ['rh-perf-ninebox'] });
+    },
+  });
+}
+export function useDeletePerfPDI() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api<any>(`/api/rh/performance/pdi/${id}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['rh-perf-pdis'] }),
+  });
+}
+export function usePerfNineBox() {
+  return useQuery({
+    queryKey: ['rh-perf-ninebox'],
+    queryFn: () => api<any[]>('/api/rh/performance/nine-box'),
+  });
+}
+export function usePerfConsolidated(cycleId?: string) {
+  return useQuery({
+    queryKey: ['rh-perf-consolidated', cycleId],
+    queryFn: () => api<any[]>(`/api/rh/performance/cycles/${cycleId}/consolidated`),
+    enabled: !!cycleId,
+  });
+}
