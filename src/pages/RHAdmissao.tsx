@@ -254,6 +254,17 @@ export default function RHAdmissao() {
                 <Input value={form.position} onChange={(e) => setForm({ ...form, position: e.target.value })} />
               </div>
               <div>
+              <div className="col-span-2">
+                <Label>Empresa *</Label>
+                <Select value={form.company_id || "none"} onValueChange={(v) => setForm({ ...form, company_id: v === "none" ? "" : v })}>
+                  <SelectTrigger><SelectValue placeholder="Selecione a empresa do colaborador" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">—</SelectItem>
+                    {companies.map((c) => <SelectItem key={c.id} value={c.id}>{c.trade_name || c.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
                 <Label>Filial</Label>
                 <Select value={form.branch_id || "none"} onValueChange={(v) => setForm({ ...form, branch_id: v === "none" ? "" : v })}>
                   <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
