@@ -2275,7 +2275,62 @@ router.get('/mirror.pdf', authenticatePromotor, async (req, res) => {
   } catch (e) { logError('promotor.mirror.pdf', e); res.status(500).json({ error: 'Erro ao gerar espelho' }); }
 });
 
+// ==== FASE 8: ESPELHO DIGITAL COM ACEITE ====
+router.get('/mirror-acceptance', authenticatePromotor, async (req, res) => {
+  try {
+    const r = await query(
+      `SELECT id, reference_month, period_start, period_end, status,
+              accepted_at, rejected_at, rejection_reason, generated_at,
+              totals_json
+         FROM time_mirror_acceptances
+        WHERE employee_id = $1
+        ORDER BY reference_month DESC LIMIT 24`,
+      [req.employeeId]
+    );
+    res.json(r.rows);
+  } catch (e) { logError('promotor.mirror.list', e); res.json([]); }
+});
+
+router.get('/mirror-acceptance/:id', authenticatePromotor, async (req, res) => {
+  try {
+    const r = await query(
+      `SELECT * FROM time_mirror_acceptances
+        WHERE id = $1 AND employee_id = $2`,
+      [req.params.id, req.employeeId]
+    );
+    if (!r.rowCount) return res.status(404).json({ error: 'Não encontrado' });
+    res.json(r.rows[0]);
+  } catch (e) { res.status(500).json({ error: 'Erro' }); }
+});
+
+router.post('/mirror-acceptance/:id/accept', authenticatePromotor, async (req, res) => {
+  try {
+    const { signMirrorAcceptance } = await import('./timeclock.js');
+    const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || null;
+    const result = await signMirrorAcceptance({
+      orgId: req.organizationId, mirrorId: req.params.id, employeeId: req.employeeId,
+      action: 'accept', comments: req.body?.comments,
+      ip, device: req.body?.device_info || { ua: req.headers['user-agent'] },
+    });
+    res.json(result);
+  } catch (e) { logError('promotor.mirror.accept', e); res.status(400).json({ error: e.message || 'Erro' }); }
+});
+
+router.post('/mirror-acceptance/:id/reject', authenticatePromotor, async (req, res) => {
+  try {
+    const { reason } = req.body || {};
+    if (!reason?.trim()) return res.status(400).json({ error: 'Motivo obrigatório' });
+    const { signMirrorAcceptance } = await import('./timeclock.js');
+    const result = await signMirrorAcceptance({
+      orgId: req.organizationId, mirrorId: req.params.id, employeeId: req.employeeId,
+      action: 'reject', reason,
+    });
+    res.json(result);
+  } catch (e) { logError('promotor.mirror.reject', e); res.status(400).json({ error: e.message || 'Erro' }); }
+});
+
 export default router;
+
 
 
 
