@@ -508,6 +508,7 @@ const App = () => (
             <Route path="/entregador" element={<DriverAuthProvider><EntregadorHome /></DriverAuthProvider>} />
             <Route path="/entregador/home" element={<DriverAuthProvider><EntregadorHome /></DriverAuthProvider>} />
             <Route path="/entregador/rota/:id" element={<DriverAuthProvider><EntregadorRota /></DriverAuthProvider>} />
+            <Route path="/entregador/entrega/:id" element={<DriverAuthProvider><EntregadorEntrega /></DriverAuthProvider>} />
             <Route path="/api-docs" element={<ApiDocumentation />} />
             <Route path="/f/:slug" element={<PublicFormPage />} />
             <Route path="/assinar/:token" element={<AssinarDocumento />} />
