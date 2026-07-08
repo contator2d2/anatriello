@@ -194,6 +194,31 @@ export function useDeleteClosing() {
   });
 }
 
+// ---------- ESCALAS AVANÇADAS (Fase 7) ----------
+export function useScheduleTemplates() {
+  return useQuery({
+    queryKey: ['timeclock', 'ws-templates'],
+    queryFn: () => api<any[]>('/api/timeclock/work-schedules/templates'),
+    staleTime: 5 * 60_000,
+  });
+}
+export function useScheduleForecast(id?: string, start?: string, days = 90) {
+  return useQuery({
+    queryKey: ['timeclock', 'ws-forecast', id, start, days],
+    queryFn: () => api<{ schedule: any; days_list: any[]; totals: any }>(
+      `/api/timeclock/work-schedules/${id}/forecast?start=${start}&days=${days}`
+    ),
+    enabled: !!(id && start),
+  });
+}
+export function useSchedulePreview() {
+  return useMutation({
+    mutationFn: (data: { schedule: any; start: string; days: number }) =>
+      api<{ days_list: any[]; totals: any }>('/api/timeclock/work-schedules/preview', { method: 'POST', body: data }),
+  });
+}
+
+
 // ---------- JORNADAS DE TRABALHO (Fase 3) ----------
 export function useWorkSchedules() {
   return useQuery({
