@@ -344,6 +344,181 @@ router.post('/work-schedules/:id/assign', async (req, res) => {
 });
 
 // ============================================
+// FASE 7: Escalas Avançadas — Templates + Forecast
+// ============================================
+const WEEKDAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+
+const SCHEDULE_TEMPLATES = [
+  {
+    id: '5x2_comercial', name: 'Comercial 5x2 (Seg–Sex 8h–17h)', kind: 'fixa',
+    description: 'Segunda a sexta, com 1h de almoço. Folga sáb/dom.',
+    schedule_json: {
+      mon: '08:00-12:00,13:00-17:00', tue: '08:00-12:00,13:00-17:00',
+      wed: '08:00-12:00,13:00-17:00', thu: '08:00-12:00,13:00-17:00',
+      fri: '08:00-12:00,13:00-17:00', sat: 'folga', sun: 'folga',
+    },
+  },
+  {
+    id: '6x1_varejo', name: 'Varejo 6x1', kind: 'escala_6x1',
+    description: 'Seis dias trabalhados, um de folga. Rotação semanal.',
+    cycle_pattern: [
+      { d: 1, h: '09:00-13:00,14:00-18:00' }, { d: 2, h: '09:00-13:00,14:00-18:00' },
+      { d: 3, h: '09:00-13:00,14:00-18:00' }, { d: 4, h: '09:00-13:00,14:00-18:00' },
+      { d: 5, h: '09:00-13:00,14:00-18:00' }, { d: 6, h: '09:00-13:00,14:00-18:00' },
+      { d: 7, h: 'folga' },
+    ],
+  },
+  {
+    id: '5x1_operacional', name: 'Operacional 5x1', kind: 'ciclica',
+    description: 'Cinco dias corridos de trabalho e um de folga.',
+    cycle_pattern: [
+      { d: 1, h: '07:00-11:00,12:00-16:00' }, { d: 2, h: '07:00-11:00,12:00-16:00' },
+      { d: 3, h: '07:00-11:00,12:00-16:00' }, { d: 4, h: '07:00-11:00,12:00-16:00' },
+      { d: 5, h: '07:00-11:00,12:00-16:00' }, { d: 6, h: 'folga' },
+    ],
+  },
+  {
+    id: '4x2_industrial', name: 'Industrial 4x2', kind: 'ciclica',
+    description: 'Quatro dias de trabalho por dois de folga (turnos de 8h).',
+    cycle_pattern: [
+      { d: 1, h: '06:00-14:00' }, { d: 2, h: '06:00-14:00' },
+      { d: 3, h: '06:00-14:00' }, { d: 4, h: '06:00-14:00' },
+      { d: 5, h: 'folga' }, { d: 6, h: 'folga' },
+    ],
+  },
+  {
+    id: '12x36_plantao', name: 'Plantão 12x36', kind: 'escala_12x36',
+    description: '12 horas trabalhadas, 36 de descanso. Comum em saúde e segurança.',
+    cycle_pattern: [
+      { d: 1, h: '07:00-19:00' }, { d: 2, h: 'folga' }, { d: 3, h: 'folga' },
+    ],
+  },
+  {
+    id: '24x48_plantao', name: 'Plantão 24x48', kind: 'ciclica',
+    description: '24 horas trabalhadas, 48 de descanso.',
+    cycle_pattern: [
+      { d: 1, h: '00:00-23:59' }, { d: 2, h: 'folga' }, { d: 3, h: 'folga' },
+    ],
+  },
+  {
+    id: 'noturno_6x1', name: 'Noturno 6x1 (22h–06h)', kind: 'escala_6x1',
+    description: 'Escala noturna com adicional de 20%.',
+    cycle_pattern: [
+      { d: 1, h: '22:00-06:00' }, { d: 2, h: '22:00-06:00' }, { d: 3, h: '22:00-06:00' },
+      { d: 4, h: '22:00-06:00' }, { d: 5, h: '22:00-06:00' }, { d: 6, h: '22:00-06:00' },
+      { d: 7, h: 'folga' },
+    ],
+  },
+];
+
+router.get('/work-schedules/templates', (_req, res) => {
+  res.json(SCHEDULE_TEMPLATES);
+});
+
+// Calcula minutos de uma string tipo "08:00-12:00,13:00-17:00"
+function shiftMinutes(shift) {
+  if (!shift || shift === 'folga' || shift === 'off') return 0;
+  return String(shift).split(',').reduce((sum, part) => {
+    const [a, b] = part.trim().split('-');
+    if (!a || !b) return sum;
+    const [ah, am] = a.split(':').map(Number);
+    const [bh, bm] = b.split(':').map(Number);
+    let mins = (bh * 60 + bm) - (ah * 60 + am);
+    if (mins < 0) mins += 24 * 60; // atravessa meia-noite
+    return sum + mins;
+  }, 0);
+}
+
+// Expande uma escala em N dias a partir de startDate
+function expandSchedule(ws, startDateStr, days) {
+  const startDate = new Date(startDateStr + 'T00:00:00Z');
+  const result = [];
+  const kind = ws.kind || 'fixa';
+  const scheduleJson = ws.schedule_json || {};
+  const cycle = ws.cycle_pattern || [];
+  const cycleStart = ws.cycle_start_date
+    ? new Date(ws.cycle_start_date + 'T00:00:00Z')
+    : startDate;
+  const cycleLen = Array.isArray(cycle) ? cycle.length : 0;
+
+  for (let i = 0; i < days; i++) {
+    const d = new Date(startDate);
+    d.setUTCDate(d.getUTCDate() + i);
+    const dateStr = d.toISOString().slice(0, 10);
+    let shift = 'folga';
+
+    if (kind === 'fixa') {
+      const wk = WEEKDAY_KEYS[d.getUTCDay()];
+      shift = scheduleJson[wk] || 'folga';
+    } else if (cycleLen > 0) {
+      const diffDays = Math.floor((d - cycleStart) / 86400000);
+      const idx = ((diffDays % cycleLen) + cycleLen) % cycleLen;
+      shift = cycle[idx]?.h || 'folga';
+    }
+
+    const minutes = shiftMinutes(shift);
+    result.push({
+      date: dateStr,
+      weekday: d.getUTCDay(),
+      shift,
+      minutes,
+      is_off: minutes === 0,
+    });
+  }
+  return result;
+}
+
+// GET forecast de uma escala existente
+router.get('/work-schedules/:id/forecast', async (req, res) => {
+  try {
+    const { start, days } = req.query;
+    const n = Math.min(Number(days) || 30, 400);
+    if (!start) return res.status(400).json({ error: 'start obrigatório' });
+    const r = await query(`SELECT * FROM work_schedules WHERE id = $1`, [req.params.id]);
+    if (!r.rowCount) return res.status(404).json({ error: 'Escala não encontrada' });
+    const days_list = expandSchedule(r.rows[0], start, n);
+    const totalMin = days_list.reduce((s, d) => s + d.minutes, 0);
+    const workDays = days_list.filter(d => !d.is_off).length;
+    res.json({
+      schedule: r.rows[0],
+      start, days: n,
+      days_list,
+      totals: {
+        work_days: workDays,
+        off_days: days_list.length - workDays,
+        total_minutes: totalMin,
+        avg_daily_minutes: workDays ? Math.round(totalMin / workDays) : 0,
+        weekly_hours: Math.round((totalMin / n) * 7 / 60 * 100) / 100,
+      },
+    });
+  } catch (err) { logError('timeclock.ws.forecast', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// POST preview (para escalas ainda não salvas)
+router.post('/work-schedules/preview', async (req, res) => {
+  try {
+    const { schedule, start, days } = req.body || {};
+    if (!schedule || !start) return res.status(400).json({ error: 'schedule e start obrigatórios' });
+    const n = Math.min(Number(days) || 30, 400);
+    const days_list = expandSchedule(schedule, start, n);
+    const totalMin = days_list.reduce((s, d) => s + d.minutes, 0);
+    const workDays = days_list.filter(d => !d.is_off).length;
+    res.json({
+      days_list,
+      totals: {
+        work_days: workDays,
+        off_days: days_list.length - workDays,
+        total_minutes: totalMin,
+        avg_daily_minutes: workDays ? Math.round(totalMin / workDays) : 0,
+        weekly_hours: Math.round((totalMin / n) * 7 / 60 * 100) / 100,
+      },
+    });
+  } catch (err) { logError('timeclock.ws.preview', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+
+
+// ============================================
 // CARTÃO PONTO (grade estilo Secullum)
 // ============================================
 
