@@ -3520,4 +3520,226 @@ router.post('/onboarding/:id/cancel', async (req, res) => {
   } catch (err) { logError('rh.onboarding.cancel', err); res.status(500).json({ error: 'Erro' }); }
 });
 
+
+// ============================================================
+// FASE 12 - ADVERTÊNCIAS E MEDIDAS DISCIPLINARES
+// ============================================================
+async function ensureWarningsTables() {
+  await query(`
+    CREATE TABLE IF NOT EXISTS rh_warnings (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id UUID NOT NULL,
+      employee_id UUID NOT NULL,
+      type TEXT NOT NULL,
+      reason TEXT NOT NULL,
+      description TEXT,
+      incident_date DATE,
+      issued_date DATE NOT NULL DEFAULT CURRENT_DATE,
+      suspension_days INTEGER DEFAULT 0,
+      suspension_start_date DATE,
+      suspension_end_date DATE,
+      witness_name TEXT,
+      witness_document TEXT,
+      attachments JSONB DEFAULT '[]'::jsonb,
+      status TEXT DEFAULT 'pendente_ciencia',
+      acknowledged_at TIMESTAMPTZ,
+      acknowledged_signature TEXT,
+      acknowledged_ip TEXT,
+      acknowledged_note TEXT,
+      refused_at TIMESTAMPTZ,
+      refused_reason TEXT,
+      revoked_at TIMESTAMPTZ,
+      revoked_reason TEXT,
+      revoked_by UUID,
+      issued_by UUID,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_warnings_org ON rh_warnings(organization_id, issued_date DESC)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_warnings_emp ON rh_warnings(employee_id, issued_date DESC)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_warnings_status ON rh_warnings(organization_id, status)`);
+}
+
+const WARNING_TYPES = ['verbal', 'escrita', 'suspensao', 'justa_causa'];
+
+// Listar
+router.get('/warnings', async (req, res) => {
+  try {
+    await ensureWarningsTables();
+    const orgId = req.query.org_id || await getUserOrgId(req.userId);
+    if (!orgId) return res.json([]);
+    const { employee_id, status, type } = req.query;
+    let sql = `SELECT w.*, e.full_name as employee_name, e.registration as employee_registration,
+                      e.position as employee_position
+               FROM rh_warnings w
+               LEFT JOIN employees e ON e.id = w.employee_id
+               WHERE w.organization_id = $1`;
+    const params = [orgId]; let idx = 2;
+    if (employee_id) { sql += ` AND w.employee_id = $${idx++}`; params.push(employee_id); }
+    if (status) { sql += ` AND w.status = $${idx++}`; params.push(status); }
+    if (type) { sql += ` AND w.type = $${idx++}`; params.push(type); }
+    sql += ` ORDER BY w.issued_date DESC, w.created_at DESC`;
+    const r = await query(sql, params);
+    res.json(r.rows);
+  } catch (err) { logError('rh.warnings.list', err); res.status(500).json({ error: 'Erro ao listar advertências' }); }
+});
+
+// Detalhe
+router.get('/warnings/:id', async (req, res) => {
+  try {
+    await ensureWarningsTables();
+    const r = await query(
+      `SELECT w.*, e.full_name as employee_name, e.registration as employee_registration,
+              e.position as employee_position, e.cpf as employee_cpf
+       FROM rh_warnings w LEFT JOIN employees e ON e.id = w.employee_id WHERE w.id = $1`,
+      [req.params.id]
+    );
+    if (!r.rows[0]) return res.status(404).json({ error: 'Não encontrado' });
+    res.json(r.rows[0]);
+  } catch (err) { logError('rh.warnings.detail', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// Criar
+router.post('/warnings', async (req, res) => {
+  try {
+    await ensureWarningsTables();
+    const orgId = req.body.organization_id || await getUserOrgId(req.userId);
+    if (!orgId) return res.status(400).json({ error: 'Organização não encontrada' });
+    const {
+      employee_id, type, reason, description, incident_date, issued_date,
+      suspension_days, suspension_start_date, suspension_end_date,
+      witness_name, witness_document, attachments,
+    } = req.body;
+    if (!employee_id) return res.status(400).json({ error: 'Colaborador é obrigatório' });
+    if (!WARNING_TYPES.includes(type)) return res.status(400).json({ error: 'Tipo inválido' });
+    if (!reason || String(reason).trim().length < 3) return res.status(400).json({ error: 'Motivo é obrigatório' });
+    if (type === 'suspensao' && (!suspension_days || Number(suspension_days) < 1)) {
+      return res.status(400).json({ error: 'Suspensão exige dias > 0' });
+    }
+    const r = await query(
+      `INSERT INTO rh_warnings (organization_id, employee_id, type, reason, description,
+        incident_date, issued_date, suspension_days, suspension_start_date, suspension_end_date,
+        witness_name, witness_document, attachments, issued_by)
+       VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7,CURRENT_DATE),$8,$9,$10,$11,$12,COALESCE($13,'[]'::jsonb),$14)
+       RETURNING *`,
+      [orgId, employee_id, type, reason, description || null,
+        incident_date || null, issued_date || null,
+        Number(suspension_days || 0), suspension_start_date || null, suspension_end_date || null,
+        witness_name || null, witness_document || null,
+        attachments ? JSON.stringify(attachments) : null, req.userId]
+    );
+    await auditLog(orgId, 'warning', r.rows[0].id, 'create',
+      [{ field: 'type', oldVal: null, newVal: type }, { field: 'employee_id', oldVal: null, newVal: employee_id }], req.userId);
+    res.json(r.rows[0]);
+  } catch (err) { logError('rh.warnings.create', err); res.status(500).json({ error: err.message || 'Erro ao criar advertência' }); }
+});
+
+// Atualizar (apenas enquanto pendente)
+router.put('/warnings/:id', async (req, res) => {
+  try {
+    await ensureWarningsTables();
+    const cur = (await query(`SELECT * FROM rh_warnings WHERE id = $1`, [req.params.id])).rows[0];
+    if (!cur) return res.status(404).json({ error: 'Não encontrada' });
+    if (cur.status !== 'pendente_ciencia') return res.status(400).json({ error: 'Só é possível editar advertências pendentes de ciência' });
+    const b = req.body;
+    const r = await query(
+      `UPDATE rh_warnings SET reason=COALESCE($2,reason), description=COALESCE($3,description),
+        incident_date=COALESCE($4,incident_date), issued_date=COALESCE($5,issued_date),
+        suspension_days=COALESCE($6,suspension_days), suspension_start_date=COALESCE($7,suspension_start_date),
+        suspension_end_date=COALESCE($8,suspension_end_date), witness_name=COALESCE($9,witness_name),
+        witness_document=COALESCE($10,witness_document), attachments=COALESCE($11,attachments),
+        updated_at=NOW() WHERE id=$1 RETURNING *`,
+      [cur.id, b.reason, b.description, b.incident_date, b.issued_date,
+        b.suspension_days, b.suspension_start_date, b.suspension_end_date,
+        b.witness_name, b.witness_document, b.attachments ? JSON.stringify(b.attachments) : null]
+    );
+    res.json(r.rows[0]);
+  } catch (err) { logError('rh.warnings.update', err); res.status(500).json({ error: err.message || 'Erro' }); }
+});
+
+// Dar ciência (assinatura do colaborador)
+router.post('/warnings/:id/acknowledge', async (req, res) => {
+  try {
+    await ensureWarningsTables();
+    const { signature, note } = req.body;
+    if (!signature) return res.status(400).json({ error: 'Assinatura é obrigatória' });
+    const cur = (await query(`SELECT * FROM rh_warnings WHERE id = $1`, [req.params.id])).rows[0];
+    if (!cur) return res.status(404).json({ error: 'Não encontrada' });
+    if (cur.status !== 'pendente_ciencia') return res.status(400).json({ error: 'Já processada' });
+    const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress || null;
+    const r = await query(
+      `UPDATE rh_warnings SET status='dada_ciencia', acknowledged_at=NOW(),
+        acknowledged_signature=$2, acknowledged_ip=$3, acknowledged_note=$4, updated_at=NOW()
+       WHERE id=$1 RETURNING *`,
+      [cur.id, signature, ip, note || null]
+    );
+    await auditLog(cur.organization_id, 'warning', cur.id, 'acknowledge',
+      [{ field: 'status', oldVal: 'pendente_ciencia', newVal: 'dada_ciencia' }], req.userId);
+    res.json(r.rows[0]);
+  } catch (err) { logError('rh.warnings.acknowledge', err); res.status(500).json({ error: err.message || 'Erro' }); }
+});
+
+// Recusar ciência
+router.post('/warnings/:id/refuse', async (req, res) => {
+  try {
+    await ensureWarningsTables();
+    const { reason } = req.body;
+    const cur = (await query(`SELECT * FROM rh_warnings WHERE id = $1`, [req.params.id])).rows[0];
+    if (!cur) return res.status(404).json({ error: 'Não encontrada' });
+    if (cur.status !== 'pendente_ciencia') return res.status(400).json({ error: 'Já processada' });
+    const r = await query(
+      `UPDATE rh_warnings SET status='recusada', refused_at=NOW(), refused_reason=$2, updated_at=NOW()
+       WHERE id=$1 RETURNING *`,
+      [cur.id, reason || 'Sem justificativa']
+    );
+    res.json(r.rows[0]);
+  } catch (err) { logError('rh.warnings.refuse', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// Revogar
+router.post('/warnings/:id/revoke', async (req, res) => {
+  try {
+    await ensureWarningsTables();
+    const { reason } = req.body;
+    if (!reason) return res.status(400).json({ error: 'Motivo da revogação é obrigatório' });
+    const cur = (await query(`SELECT * FROM rh_warnings WHERE id = $1`, [req.params.id])).rows[0];
+    if (!cur) return res.status(404).json({ error: 'Não encontrada' });
+    if (cur.status === 'revogada' || cur.status === 'cancelada') return res.status(400).json({ error: 'Já revogada/cancelada' });
+    const r = await query(
+      `UPDATE rh_warnings SET status='revogada', revoked_at=NOW(), revoked_reason=$2, revoked_by=$3, updated_at=NOW()
+       WHERE id=$1 RETURNING *`,
+      [cur.id, reason, req.userId]
+    );
+    await auditLog(cur.organization_id, 'warning', cur.id, 'revoke',
+      [{ field: 'status', oldVal: cur.status, newVal: 'revogada' }], req.userId);
+    res.json(r.rows[0]);
+  } catch (err) { logError('rh.warnings.revoke', err); res.status(500).json({ error: err.message || 'Erro' }); }
+});
+
+// Excluir (apenas pendente)
+router.delete('/warnings/:id', async (req, res) => {
+  try {
+    await ensureWarningsTables();
+    const cur = (await query(`SELECT * FROM rh_warnings WHERE id = $1`, [req.params.id])).rows[0];
+    if (!cur) return res.status(404).json({ error: 'Não encontrada' });
+    if (cur.status !== 'pendente_ciencia') return res.status(400).json({ error: 'Só é possível excluir advertências pendentes' });
+    await query(`DELETE FROM rh_warnings WHERE id = $1`, [cur.id]);
+    res.json({ ok: true });
+  } catch (err) { logError('rh.warnings.delete', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// Histórico disciplinar do colaborador (resumo)
+router.get('/warnings/employee/:employeeId/summary', async (req, res) => {
+  try {
+    await ensureWarningsTables();
+    const r = await query(
+      `SELECT type, status, COUNT(*)::int as total FROM rh_warnings
+       WHERE employee_id = $1 GROUP BY type, status`,
+      [req.params.employeeId]
+    );
+    res.json(r.rows);
+  } catch (err) { logError('rh.warnings.summary', err); res.status(500).json({ error: 'Erro' }); }
+});
+
 export default router;
