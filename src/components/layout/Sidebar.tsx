@@ -143,6 +143,8 @@ const getNavSections = (hasConnections: boolean): NavSection[] => [
       { name: "Holerite", href: "/rh/holerite", icon: DollarSign, pageKey: 'rh_holerite', moduleKey: 'rh' },
       { name: "Integração Folha", href: "/rh/folha-export", icon: FileDown, pageKey: 'rh_folha_export', moduleKey: 'rh' },
       { name: "Banco de Horas", href: "/rh/banco-horas", icon: Clock, pageKey: 'rh_banco_horas', moduleKey: 'rh' },
+      { name: "Escalas", href: "/rh/escalas", icon: CalendarDays, pageKey: 'rh_escalas', moduleKey: 'rh' },
+
 
       { name: "Documentos", href: "/rh/documentos", icon: FileText, pageKey: 'rh_documentos', moduleKey: 'rh' },
       { name: "Feriados", href: "/rh/feriados", icon: CalendarDays, pageKey: 'rh_feriados', moduleKey: 'rh' },
