@@ -144,6 +144,8 @@ const getNavSections = (hasConnections: boolean): NavSection[] => [
       { name: "Integração Folha", href: "/rh/folha-export", icon: FileDown, pageKey: 'rh_folha_export', moduleKey: 'rh' },
       { name: "Banco de Horas", href: "/rh/banco-horas", icon: Clock, pageKey: 'rh_banco_horas', moduleKey: 'rh' },
       { name: "Escalas", href: "/rh/escalas", icon: CalendarDays, pageKey: 'rh_escalas', moduleKey: 'rh' },
+      { name: "Espelho Digital", href: "/rh/espelho-digital", icon: FileText, pageKey: 'rh_espelho_digital', moduleKey: 'rh' },
+
 
 
       { name: "Documentos", href: "/rh/documentos", icon: FileText, pageKey: 'rh_documentos', moduleKey: 'rh' },
