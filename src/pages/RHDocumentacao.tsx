@@ -3,8 +3,9 @@ import {
   BookOpen, Search, Building2, Shield, Settings, UserPlus, FileSignature,
   CalendarRange, Clock, ScanFace, Timer, Plane, AlertTriangle, DollarSign,
   Calculator, UserMinus, FileCode2, Target, MapPin, LineChart, Inbox,
-  ClipboardCheck, ChevronRight, CheckCircle2, Info, AlertCircle,
+  ClipboardCheck, ChevronRight, CheckCircle2, Info, AlertCircle, Download,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
