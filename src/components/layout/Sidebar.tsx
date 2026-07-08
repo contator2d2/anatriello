@@ -35,6 +35,7 @@ import {
   User,
   Users,
   UserPlus,
+  UserMinus,
   Zap,
   Bell,
   Lock,
