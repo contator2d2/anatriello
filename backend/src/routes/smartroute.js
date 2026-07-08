@@ -188,6 +188,150 @@ export async function ensureSmartRouteTables() {
     );
     CREATE INDEX IF NOT EXISTS idx_sr_depots_org ON smartroute_depots(organization_id, active);
     ALTER TABLE smartroute_routes ADD COLUMN IF NOT EXISTS depot_id UUID;
+
+    -- === Fluxo Inteligente da Operação (Onda 1) ===
+    -- Máquina de estados por stop
+    ALTER TABLE smartroute_route_stops ADD COLUMN IF NOT EXISTS state TEXT DEFAULT 'PENDING';
+    ALTER TABLE smartroute_route_stops ADD COLUMN IF NOT EXISTS checkin_at TIMESTAMPTZ;
+    ALTER TABLE smartroute_route_stops ADD COLUMN IF NOT EXISTS checkout_at TIMESTAMPTZ;
+    ALTER TABLE smartroute_route_stops ADD COLUMN IF NOT EXISTS distance_ok BOOLEAN;
+    ALTER TABLE smartroute_route_stops ADD COLUMN IF NOT EXISTS checkin_distance_m NUMERIC(10,2);
+    ALTER TABLE smartroute_route_stops ADD COLUMN IF NOT EXISTS duration_ms INTEGER;
+    ALTER TABLE smartroute_route_stops ADD COLUMN IF NOT EXISTS template_snapshot_id UUID;
+    ALTER TABLE smartroute_route_stops ADD COLUMN IF NOT EXISTS occurrence_summary TEXT;
+
+    -- Mídias ricas (foto/vídeo/áudio/assinatura) com EXIF
+    CREATE TABLE IF NOT EXISTS smartroute_stop_media (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id UUID NOT NULL,
+      stop_id UUID NOT NULL REFERENCES smartroute_route_stops(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL,               -- photo | video | audio | signature | facade | invoice
+      url TEXT NOT NULL,
+      lat DOUBLE PRECISION,
+      lng DOUBLE PRECISION,
+      taken_at TIMESTAMPTZ DEFAULT NOW(),
+      device_info JSONB DEFAULT '{}'::jsonb,
+      metadata JSONB DEFAULT '{}'::jsonb,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_sr_media_stop ON smartroute_stop_media(stop_id, kind);
+    CREATE INDEX IF NOT EXISTS idx_sr_media_org ON smartroute_stop_media(organization_id, created_at DESC);
+
+    -- Ocorrências ricas por stop
+    CREATE TABLE IF NOT EXISTS smartroute_stop_occurrences (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id UUID NOT NULL,
+      stop_id UUID NOT NULL REFERENCES smartroute_route_stops(id) ON DELETE CASCADE,
+      driver_id UUID,
+      type TEXT NOT NULL,               -- danificado | vencido | recusado | cliente_ausente | cliente_fechado | garantia | devolucao | descarte | equipamento | freezer | outro
+      description TEXT,
+      severity TEXT DEFAULT 'medium',   -- low | medium | high
+      lat DOUBLE PRECISION,
+      lng DOUBLE PRECISION,
+      media_ids UUID[] DEFAULT '{}'::uuid[],
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_sr_occ_stop ON smartroute_stop_occurrences(stop_id);
+    CREATE INDEX IF NOT EXISTS idx_sr_occ_org ON smartroute_stop_occurrences(organization_id, created_at DESC);
+
+    -- Configurações operacionais por organização
+    CREATE TABLE IF NOT EXISTS smartroute_org_operation_settings (
+      organization_id UUID PRIMARY KEY,
+      max_checkin_distance_m INTEGER DEFAULT 30,
+      require_facade_photo BOOLEAN DEFAULT true,
+      require_vehicle_checklist BOOLEAN DEFAULT false,
+      preferred_nav_app TEXT DEFAULT 'ask',     -- google | waze | ask
+      allow_checkout_with_occurrence BOOLEAN DEFAULT true,
+      require_signature BOOLEAN DEFAULT true,
+      require_invoice_photo BOOLEAN DEFAULT true,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    -- === Checklists configuráveis (Onda 2 — schema pronto) ===
+    CREATE TABLE IF NOT EXISTS smartroute_checklist_templates (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id UUID NOT NULL,
+      name TEXT NOT NULL,
+      description TEXT,
+      active BOOLEAN DEFAULT true,
+      priority INTEGER DEFAULT 100,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_sr_ck_tpl_org ON smartroute_checklist_templates(organization_id, active);
+
+    CREATE TABLE IF NOT EXISTS smartroute_checklist_template_items (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      template_id UUID NOT NULL REFERENCES smartroute_checklist_templates(id) ON DELETE CASCADE,
+      seq INTEGER NOT NULL DEFAULT 0,
+      field_type TEXT NOT NULL,          -- photo|video|text|number|temperature|stock_count|ocr|qr|barcode|signature|geo|face|yes_no|multi_choice
+      label TEXT NOT NULL,
+      required BOOLEAN DEFAULT true,
+      config JSONB DEFAULT '{}'::jsonb,  -- { min, max, options, gpsToleranceM, ocrTargets, ... }
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_sr_ck_item_tpl ON smartroute_checklist_template_items(template_id, seq);
+
+    CREATE TABLE IF NOT EXISTS smartroute_checklist_assignments (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id UUID NOT NULL,
+      template_id UUID NOT NULL REFERENCES smartroute_checklist_templates(id) ON DELETE CASCADE,
+      scope JSONB NOT NULL DEFAULT '{}'::jsonb,  -- { client_ids, pdv_types, channels, categories, regions, equipment, operation, product_ids }
+      priority INTEGER DEFAULT 100,
+      active BOOLEAN DEFAULT true,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_sr_ck_asg_org ON smartroute_checklist_assignments(organization_id, active);
+
+    CREATE TABLE IF NOT EXISTS smartroute_stop_checklist_responses (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      stop_id UUID NOT NULL REFERENCES smartroute_route_stops(id) ON DELETE CASCADE,
+      template_id UUID NOT NULL,
+      item_id UUID NOT NULL,
+      value JSONB DEFAULT '{}'::jsonb,
+      media_ids UUID[] DEFAULT '{}'::uuid[],
+      ocr_json JSONB,
+      lat DOUBLE PRECISION,
+      lng DOUBLE PRECISION,
+      answered_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_sr_ck_resp_stop ON smartroute_stop_checklist_responses(stop_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_sr_ck_resp ON smartroute_stop_checklist_responses(stop_id, item_id);
+
+    CREATE TABLE IF NOT EXISTS smartroute_stop_ocr_results (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id UUID NOT NULL,
+      stop_id UUID NOT NULL REFERENCES smartroute_route_stops(id) ON DELETE CASCADE,
+      media_id UUID REFERENCES smartroute_stop_media(id) ON DELETE SET NULL,
+      product TEXT,
+      brand TEXT,
+      code TEXT,
+      ean TEXT,
+      batch TEXT,
+      manufactured_at DATE,
+      expires_at DATE,
+      confidence NUMERIC(4,3),
+      raw_json JSONB,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_sr_ocr_stop ON smartroute_stop_ocr_results(stop_id);
+
+    -- Log append-only da jornada
+    CREATE TABLE IF NOT EXISTS smartroute_journey_events (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id UUID NOT NULL,
+      driver_id UUID,
+      route_id UUID,
+      stop_id UUID,
+      event_type TEXT NOT NULL,          -- journey_started | stop_navigate | stop_checkin | stop_checkin_denied | checklist_item_answered | occurrence_added | stop_signed | stop_checkout | journey_finished
+      payload JSONB DEFAULT '{}'::jsonb,
+      lat DOUBLE PRECISION,
+      lng DOUBLE PRECISION,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_sr_jev_route ON smartroute_journey_events(route_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_sr_jev_org ON smartroute_journey_events(organization_id, created_at DESC);
   `);
   ensured = true;
 }
@@ -694,6 +838,20 @@ router.post('/orders/:id/tracking-token', async (req, res) => {
        WHERE id=$1 AND organization_id=$2 RETURNING tracking_token`,
       [req.params.id, orgId(req), t]);
     res.json({ token: r.rows[0]?.tracking_token });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ============ Configurações da Operação (Fluxo Inteligente) ============
+router.get('/operation-settings', async (req, res) => {
+  try {
+    const { getOperationSettings } = await import('../lib/sr-journey.js');
+    res.json(await getOperationSettings(orgId(req)));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+router.put('/operation-settings', async (req, res) => {
+  try {
+    const { upsertOperationSettings } = await import('../lib/sr-journey.js');
+    res.json(await upsertOperationSettings(orgId(req), req.body || {}));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
