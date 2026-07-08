@@ -341,6 +341,8 @@ const App = () => (
             <Route path="/rh/holerite" element={<ProtectedRoute><RHHolerite /></ProtectedRoute>} />
             <Route path="/rh/folha-export" element={<ProtectedRoute><RHFolhaExport /></ProtectedRoute>} />
             <Route path="/rh/banco-horas" element={<ProtectedRoute><RHBancoHoras /></ProtectedRoute>} />
+            <Route path="/rh/escalas" element={<ProtectedRoute><RHEscalas /></ProtectedRoute>} />
+
 
             <Route path="/rh/documentos" element={<ProtectedRoute><RHDocumentos /></ProtectedRoute>} />
             <Route path="/rh/ponto-monitor" element={<ProtectedRoute><RHPontoMonitor /></ProtectedRoute>} />
