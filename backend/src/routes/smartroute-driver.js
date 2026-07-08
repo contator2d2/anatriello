@@ -5,6 +5,10 @@ import jwt from 'jsonwebtoken';
 import { query } from '../db.js';
 import { logError } from '../logger.js';
 import { ensureSmartRouteTables } from './smartroute.js';
+import {
+  distanceMeters, getOperationSettings, computeCheckoutBlockers,
+  logEvent, buildNavLink,
+} from '../lib/sr-journey.js';
 
 const router = express.Router();
 router.use(async (req, res, next) => { try { await ensureSmartRouteTables(); next(); } catch (e) { next(e); } });
