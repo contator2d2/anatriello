@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Bell, FileText, Umbrella, Gift, FolderOpen, Edit3, Clock, MessageSquare, ChevronRight, Megaphone, Loader2, Camera, MapPin, ShieldOff, ScanFace } from "lucide-react";
+import { Bell, FileText, Umbrella, Gift, FolderOpen, Edit3, Clock, MessageSquare, ChevronRight, Megaphone, Loader2, Camera, MapPin, ShieldOff, ScanFace, FileSignature } from "lucide-react";
 import { ColaboradorLayout } from "./ColaboradorLayout";
 import { usePromotorHome, usePromotorPunch, usePromotorNotifications, usePromotorMarkRead } from "@/hooks/use-promotor";
 import { useColabAnnouncements, useColabMeFull } from "@/hooks/use-promotor";
