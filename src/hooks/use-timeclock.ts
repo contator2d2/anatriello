@@ -63,6 +63,70 @@ export function useHolidays(params: { company_id?: string; year?: number } = {})
   });
 }
 
+// ---------- CONFIG BANCO DE HORAS (Fase 6) ----------
+export function useTimeBankConfig(company_id?: string) {
+  return useQuery({
+    queryKey: ['timeclock', 'tb-config', company_id || 'org'],
+    queryFn: () => api<any>(`/api/timeclock/time-bank/config${company_id ? `?company_id=${company_id}` : ''}`),
+  });
+}
+export function useSaveTimeBankConfig() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: any) => api('/api/timeclock/time-bank/config', { method: 'PUT', body: data }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['timeclock', 'tb-config'] }),
+  });
+}
+
+// ---------- EXPIRAÇÃO ----------
+export function useExpiringEntries(params: { days?: number; company_id?: string; employee_id?: string } = {}) {
+  const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null) as [string, string][]).toString();
+  return useQuery({
+    queryKey: ['timeclock', 'tb-expiring', qs],
+    queryFn: () => api<any[]>(`/api/timeclock/time-bank/expiring${qs ? `?${qs}` : ''}`),
+  });
+}
+export function useRunExpiration() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api<{ ok: boolean; processed: number }>('/api/timeclock/time-bank/expire-run', { method: 'POST' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['timeclock'] }),
+  });
+}
+
+// ---------- COMPENSAÇÕES ----------
+export function useCompensations(params: { status?: string; employee_id?: string } = {}) {
+  const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v) as [string, string][]).toString();
+  return useQuery({
+    queryKey: ['timeclock', 'compensations', qs],
+    queryFn: () => api<any[]>(`/api/timeclock/time-bank/compensations${qs ? `?${qs}` : ''}`),
+  });
+}
+export function useCreateCompensation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { employee_id: string; planned_date: string; minutes: number; description?: string }) =>
+      api('/api/timeclock/time-bank/compensations', { method: 'POST', body: data }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['timeclock'] }),
+  });
+}
+export function useUpdateCompensation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, status, review_note }: { id: string; status: 'approved' | 'rejected' | 'cancelled' | 'executed'; review_note?: string }) =>
+      api(`/api/timeclock/time-bank/compensations/${id}`, { method: 'PATCH', body: { status, review_note } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['timeclock'] }),
+  });
+}
+export function useDeleteCompensation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api(`/api/timeclock/time-bank/compensations/${id}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['timeclock'] }),
+  });
+}
+
+
 export function useCreateHoliday() {
   const qc = useQueryClient();
   return useMutation({

@@ -142,6 +142,8 @@ const getNavSections = (hasConnections: boolean): NavSection[] => [
       { name: "Relógio de Ponto (Tablet)", href: "/rh/relogio-ponto", icon: ScanFace, pageKey: 'rh_relogio_ponto', moduleKey: 'rh' },
       { name: "Holerite", href: "/rh/holerite", icon: DollarSign, pageKey: 'rh_holerite', moduleKey: 'rh' },
       { name: "Integração Folha", href: "/rh/folha-export", icon: FileDown, pageKey: 'rh_folha_export', moduleKey: 'rh' },
+      { name: "Banco de Horas", href: "/rh/banco-horas", icon: Clock, pageKey: 'rh_banco_horas', moduleKey: 'rh' },
+
       { name: "Documentos", href: "/rh/documentos", icon: FileText, pageKey: 'rh_documentos', moduleKey: 'rh' },
       { name: "Feriados", href: "/rh/feriados", icon: CalendarDays, pageKey: 'rh_feriados', moduleKey: 'rh' },
       { name: "Mapa", href: "/rh/mapa", icon: MapPin, pageKey: 'rh_mapa', moduleKey: 'rh' },

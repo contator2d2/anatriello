@@ -144,9 +144,73 @@ async function ensureSchema() {
     );
     CREATE INDEX IF NOT EXISTS idx_ws_org ON work_schedules(organization_id);
     ALTER TABLE employees ADD COLUMN IF NOT EXISTS work_schedule_id UUID REFERENCES work_schedules(id) ON DELETE SET NULL;
+
+    -- ==== FASE 6: Banco de Horas com Compensação e Expiração ====
+    ALTER TABLE time_bank_entries ADD COLUMN IF NOT EXISTS expires_at DATE;
+    ALTER TABLE time_bank_entries ADD COLUMN IF NOT EXISTS expired BOOLEAN DEFAULT FALSE;
+    ALTER TABLE time_bank_entries ADD COLUMN IF NOT EXISTS expired_at TIMESTAMPTZ;
+    ALTER TABLE time_bank_entries ADD COLUMN IF NOT EXISTS compensation_id UUID;
+    CREATE INDEX IF NOT EXISTS idx_tb_expires ON time_bank_entries(expires_at) WHERE expired = FALSE AND minutes > 0;
+
+    CREATE TABLE IF NOT EXISTS time_bank_config (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+      company_id UUID REFERENCES companies(id) ON DELETE CASCADE,
+      expiration_months INTEGER NOT NULL DEFAULT 12,
+      allow_debit BOOLEAN DEFAULT TRUE,
+      max_debit_hours NUMERIC(6,2) DEFAULT 40,
+      notify_days_before INTEGER DEFAULT 30,
+      compensation_requires_approval BOOLEAN DEFAULT TRUE,
+      auto_expire_enabled BOOLEAN DEFAULT TRUE,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_tb_config_org_comp ON time_bank_config(organization_id, COALESCE(company_id::text,''));
+
+    CREATE TABLE IF NOT EXISTS time_bank_compensations (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+      company_id UUID REFERENCES companies(id) ON DELETE SET NULL,
+      employee_id UUID NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+      planned_date DATE NOT NULL,
+      minutes INTEGER NOT NULL CHECK (minutes > 0),
+      description TEXT,
+      status VARCHAR(20) NOT NULL DEFAULT 'pending',
+      requested_by UUID REFERENCES users(id) ON DELETE SET NULL,
+      reviewed_by UUID REFERENCES users(id) ON DELETE SET NULL,
+      reviewed_at TIMESTAMPTZ,
+      review_note TEXT,
+      executed_entry_id UUID,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_tbc_org_status ON time_bank_compensations(organization_id, status);
+    CREATE INDEX IF NOT EXISTS idx_tbc_emp ON time_bank_compensations(employee_id, planned_date);
+
+    -- Trigger para preencher expires_at automaticamente em créditos
+    CREATE OR REPLACE FUNCTION set_time_bank_expiration()
+    RETURNS TRIGGER AS $$
+    DECLARE
+      cfg_months INTEGER;
+    BEGIN
+      IF NEW.minutes > 0 AND NEW.expires_at IS NULL THEN
+        SELECT expiration_months INTO cfg_months
+          FROM time_bank_config
+         WHERE organization_id = NEW.organization_id
+           AND (company_id = NEW.company_id OR company_id IS NULL)
+         ORDER BY (company_id = NEW.company_id) DESC NULLS LAST
+         LIMIT 1;
+        NEW.expires_at := NEW.entry_date + ((COALESCE(cfg_months, 12)) || ' months')::interval;
+      END IF;
+      RETURN NEW;
+    END; $$ LANGUAGE plpgsql;
+
+    DROP TRIGGER IF EXISTS trg_set_tb_expiration ON time_bank_entries;
+    CREATE TRIGGER trg_set_tb_expiration BEFORE INSERT ON time_bank_entries
+      FOR EACH ROW EXECUTE FUNCTION set_time_bank_expiration();
   `).catch(err => logError('timeclock.ensureSchema', err));
   schemaReady = true;
 }
+
 router.use(async (_req, _res, next) => { await ensureSchema(); next(); });
 
 // ---- helpers: closing lock & notifications ----
@@ -405,23 +469,34 @@ router.get('/time-bank/summary', async (req, res) => {
   try {
     const orgId = await resolveOrgId(req);
     const { employee_id } = req.query;
+    const notifyDays = 30;
+    const baseSelect = `
+      COALESCE(SUM(tb.minutes),0)::int AS balance_min,
+      COALESCE(SUM(CASE WHEN tb.expired = FALSE THEN tb.minutes ELSE 0 END),0)::int AS available_min,
+      COALESCE(SUM(CASE WHEN tb.minutes > 0 AND tb.expired = FALSE
+                        AND tb.expires_at IS NOT NULL
+                        AND tb.expires_at <= (CURRENT_DATE + ($X || ' days')::interval)
+                   THEN tb.minutes ELSE 0 END),0)::int AS expiring_soon_min,
+      COALESCE(SUM(CASE WHEN tb.expired = TRUE THEN tb.minutes ELSE 0 END),0)::int AS expired_min`;
     let sql, params;
     if (employee_id) {
-      sql = `SELECT e.id, e.full_name,
-                    COALESCE(SUM(tb.minutes),0)::int AS balance_min
+      sql = `SELECT e.id, e.full_name, ${baseSelect.replace('$X', '$2')},
+                    COALESCE((SELECT SUM(minutes) FROM time_bank_compensations
+                              WHERE employee_id = e.id AND status = 'pending'),0)::int AS pending_comp_min
              FROM employees e
              LEFT JOIN time_bank_entries tb ON tb.employee_id = e.id
              WHERE e.id = $1 GROUP BY e.id, e.full_name`;
-      params = [employee_id];
+      params = [employee_id, notifyDays];
     } else {
-      sql = `SELECT e.id, e.full_name, e.photo_url,
-                    COALESCE(SUM(tb.minutes),0)::int AS balance_min
+      sql = `SELECT e.id, e.full_name, e.photo_url, ${baseSelect.replace('$X', '$2')},
+                    COALESCE((SELECT SUM(minutes) FROM time_bank_compensations
+                              WHERE employee_id = e.id AND status = 'pending'),0)::int AS pending_comp_min
              FROM employees e
              LEFT JOIN time_bank_entries tb ON tb.employee_id = e.id
              WHERE e.organization_id = $1 AND e.status = 'ativo'
              GROUP BY e.id, e.full_name, e.photo_url
              ORDER BY e.full_name`;
-      params = [orgId];
+      params = [orgId, notifyDays];
     }
     res.json((await query(sql, params)).rows);
   } catch (err) { logError('timeclock.tb.summary', err); res.status(500).json({ error: 'Erro' }); }
@@ -463,6 +538,216 @@ router.delete('/time-bank/entries/:id', async (req, res) => {
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: 'Erro' }); }
 });
+
+// ---------- CONFIG BANCO DE HORAS ----------
+router.get('/time-bank/config', async (req, res) => {
+  try {
+    const orgId = await resolveOrgId(req);
+    const { company_id } = req.query;
+    const r = await query(
+      `SELECT * FROM time_bank_config
+        WHERE organization_id = $1
+          AND (company_id = $2 OR ($2::uuid IS NULL AND company_id IS NULL))
+        ORDER BY (company_id IS NOT NULL) DESC LIMIT 1`,
+      [orgId, company_id || null]
+    );
+    res.json(r.rows[0] || {
+      organization_id: orgId, company_id: company_id || null,
+      expiration_months: 12, allow_debit: true, max_debit_hours: 40,
+      notify_days_before: 30, compensation_requires_approval: true, auto_expire_enabled: true,
+    });
+  } catch (err) { logError('timeclock.tb.config.get', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.put('/time-bank/config', async (req, res) => {
+  try {
+    const orgId = await resolveOrgId(req);
+    const { company_id, expiration_months, allow_debit, max_debit_hours,
+            notify_days_before, compensation_requires_approval, auto_expire_enabled } = req.body || {};
+    const months = [6, 12, 18].includes(Number(expiration_months)) ? Number(expiration_months) : 12;
+    const r = await query(
+      `INSERT INTO time_bank_config
+         (organization_id, company_id, expiration_months, allow_debit, max_debit_hours,
+          notify_days_before, compensation_requires_approval, auto_expire_enabled)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+       ON CONFLICT (organization_id, COALESCE(company_id::text,''))
+       DO UPDATE SET expiration_months = EXCLUDED.expiration_months,
+                     allow_debit = EXCLUDED.allow_debit,
+                     max_debit_hours = EXCLUDED.max_debit_hours,
+                     notify_days_before = EXCLUDED.notify_days_before,
+                     compensation_requires_approval = EXCLUDED.compensation_requires_approval,
+                     auto_expire_enabled = EXCLUDED.auto_expire_enabled,
+                     updated_at = NOW()
+       RETURNING *`,
+      [orgId, company_id || null, months, allow_debit !== false, max_debit_hours ?? 40,
+       notify_days_before ?? 30, compensation_requires_approval !== false, auto_expire_enabled !== false]
+    );
+    res.json(r.rows[0]);
+  } catch (err) { logError('timeclock.tb.config.put', err); res.status(500).json({ error: 'Erro ao salvar configuração' }); }
+});
+
+// ---------- ENTRIES EXPIRANDO ----------
+router.get('/time-bank/expiring', async (req, res) => {
+  try {
+    const orgId = await resolveOrgId(req);
+    const days = Number(req.query.days) || 30;
+    const { employee_id, company_id } = req.query;
+    const filters = ['tb.organization_id = $1', 'tb.expired = FALSE', 'tb.minutes > 0',
+                     'tb.expires_at IS NOT NULL',
+                     `tb.expires_at <= (CURRENT_DATE + ($2 || ' days')::interval)`];
+    const params = [orgId, days];
+    if (employee_id) { params.push(employee_id); filters.push(`tb.employee_id = $${params.length}`); }
+    if (company_id) { params.push(company_id); filters.push(`tb.company_id = $${params.length}`); }
+    const r = await query(
+      `SELECT tb.*, e.full_name, e.registration_number,
+              (tb.expires_at - CURRENT_DATE) AS days_remaining
+         FROM time_bank_entries tb
+         JOIN employees e ON e.id = tb.employee_id
+        WHERE ${filters.join(' AND ')}
+        ORDER BY tb.expires_at ASC, e.full_name`,
+      params
+    );
+    res.json(r.rows);
+  } catch (err) { logError('timeclock.tb.expiring', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// Executa expiração (marca créditos vencidos e gera débito compensatório)
+router.post('/time-bank/expire-run', async (req, res) => {
+  try {
+    const orgId = await resolveOrgId(req);
+    const expired = await query(
+      `SELECT id, organization_id, company_id, employee_id, minutes, expires_at
+         FROM time_bank_entries
+        WHERE organization_id = $1 AND expired = FALSE AND minutes > 0
+          AND expires_at IS NOT NULL AND expires_at < CURRENT_DATE`,
+      [orgId]
+    );
+    let processed = 0;
+    for (const row of expired.rows) {
+      await query(
+        `UPDATE time_bank_entries SET expired = TRUE, expired_at = NOW() WHERE id = $1`,
+        [row.id]
+      );
+      await query(
+        `INSERT INTO time_bank_entries
+           (organization_id, company_id, employee_id, entry_date, minutes, kind, source, description, expires_at)
+         VALUES ($1,$2,$3,CURRENT_DATE,$4,'debit','expiration',$5,NULL)`,
+        [row.organization_id, row.company_id, row.employee_id, -row.minutes,
+         `Expiração automática do crédito de ${row.expires_at.toISOString().slice(0, 10)}`]
+      );
+      processed++;
+    }
+    res.json({ ok: true, processed });
+  } catch (err) { logError('timeclock.tb.expire', err); res.status(500).json({ error: 'Erro ao executar expiração' }); }
+});
+
+// ---------- COMPENSAÇÕES ----------
+router.get('/time-bank/compensations', async (req, res) => {
+  try {
+    const orgId = await resolveOrgId(req);
+    const { status, employee_id } = req.query;
+    const filters = ['c.organization_id = $1'];
+    const params = [orgId];
+    if (status) { params.push(status); filters.push(`c.status = $${params.length}`); }
+    if (employee_id) { params.push(employee_id); filters.push(`c.employee_id = $${params.length}`); }
+    const r = await query(
+      `SELECT c.*, e.full_name, e.registration_number,
+              ur.name AS requested_by_name, ua.name AS reviewed_by_name
+         FROM time_bank_compensations c
+         JOIN employees e ON e.id = c.employee_id
+         LEFT JOIN users ur ON ur.id = c.requested_by
+         LEFT JOIN users ua ON ua.id = c.reviewed_by
+        WHERE ${filters.join(' AND ')}
+        ORDER BY c.planned_date DESC, c.created_at DESC`,
+      params
+    );
+    res.json(r.rows);
+  } catch (err) { logError('timeclock.tb.comp.list', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.post('/time-bank/compensations', async (req, res) => {
+  try {
+    const orgId = await resolveOrgId(req);
+    const { employee_id, planned_date, minutes, description } = req.body || {};
+    if (!employee_id || !planned_date || !minutes || minutes <= 0) {
+      return res.status(400).json({ error: 'Dados obrigatórios (minutos deve ser positivo)' });
+    }
+    const emp = await query(`SELECT company_id FROM employees WHERE id = $1`, [employee_id]);
+    const cfg = await query(
+      `SELECT compensation_requires_approval FROM time_bank_config
+        WHERE organization_id = $1 AND (company_id = $2 OR company_id IS NULL)
+        ORDER BY (company_id IS NOT NULL) DESC LIMIT 1`,
+      [orgId, emp.rows[0]?.company_id || null]
+    );
+    const requiresApproval = cfg.rows[0]?.compensation_requires_approval !== false;
+    const status = requiresApproval ? 'pending' : 'approved';
+    const r = await query(
+      `INSERT INTO time_bank_compensations
+         (organization_id, company_id, employee_id, planned_date, minutes, description, status, requested_by, reviewed_by, reviewed_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8, CASE WHEN $7='approved' THEN $8 ELSE NULL END, CASE WHEN $7='approved' THEN NOW() ELSE NULL END)
+       RETURNING *`,
+      [orgId, emp.rows[0]?.company_id || null, employee_id, planned_date, minutes,
+       description || null, status, req.userId]
+    );
+    res.json(r.rows[0]);
+  } catch (err) { logError('timeclock.tb.comp.create', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.patch('/time-bank/compensations/:id', async (req, res) => {
+  try {
+    const orgId = await resolveOrgId(req);
+    const { status, review_note } = req.body || {};
+    if (!['approved', 'rejected', 'cancelled', 'executed'].includes(status)) {
+      return res.status(400).json({ error: 'Status inválido' });
+    }
+    const cur = await query(
+      `SELECT * FROM time_bank_compensations WHERE id = $1 AND organization_id = $2`,
+      [req.params.id, orgId]
+    );
+    if (!cur.rowCount) return res.status(404).json({ error: 'Não encontrado' });
+    const comp = cur.rows[0];
+    let executed_entry_id = comp.executed_entry_id;
+
+    if (status === 'executed' && !executed_entry_id) {
+      const ent = await query(
+        `INSERT INTO time_bank_entries
+           (organization_id, company_id, employee_id, entry_date, minutes, kind, source, description, compensation_id, expires_at)
+         VALUES ($1,$2,$3,$4,$5,'debit','compensation',$6,$7,NULL) RETURNING id`,
+        [comp.organization_id, comp.company_id, comp.employee_id, comp.planned_date,
+         -comp.minutes, comp.description || 'Compensação de horas', comp.id]
+      );
+      executed_entry_id = ent.rows[0].id;
+    }
+    if (status === 'cancelled' && executed_entry_id) {
+      await query(`DELETE FROM time_bank_entries WHERE id = $1`, [executed_entry_id]);
+      executed_entry_id = null;
+    }
+    const r = await query(
+      `UPDATE time_bank_compensations
+          SET status = $1, review_note = $2, reviewed_by = $3, reviewed_at = NOW(), executed_entry_id = $4
+        WHERE id = $5 RETURNING *`,
+      [status, review_note || null, req.userId, executed_entry_id, req.params.id]
+    );
+    res.json(r.rows[0]);
+  } catch (err) { logError('timeclock.tb.comp.patch', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.delete('/time-bank/compensations/:id', async (req, res) => {
+  try {
+    const orgId = await resolveOrgId(req);
+    const cur = await query(
+      `SELECT executed_entry_id FROM time_bank_compensations WHERE id = $1 AND organization_id = $2`,
+      [req.params.id, orgId]
+    );
+    if (cur.rows[0]?.executed_entry_id) {
+      await query(`DELETE FROM time_bank_entries WHERE id = $1`, [cur.rows[0].executed_entry_id]);
+    }
+    await query(`DELETE FROM time_bank_compensations WHERE id = $1 AND organization_id = $2 AND status = 'pending'`,
+      [req.params.id, orgId]);
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: 'Erro' }); }
+});
+
 
 // ============================================
 // FERIADOS
