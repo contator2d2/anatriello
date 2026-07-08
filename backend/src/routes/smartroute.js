@@ -855,5 +855,175 @@ router.put('/operation-settings', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ============ CHECKLISTS CONFIGURÁVEIS (Onda 2) ============
+router.get('/checklist-templates', async (req, res) => {
+  try {
+    const r = await query(
+      `SELECT t.*, (SELECT COUNT(*) FROM smartroute_checklist_template_items i WHERE i.template_id=t.id)::int AS items_count
+       FROM smartroute_checklist_templates t
+       WHERE t.organization_id=$1 ORDER BY t.priority ASC, t.name ASC`, [orgId(req)]);
+    res.json(r.rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/checklist-templates/:id', async (req, res) => {
+  try {
+    const t = await query(
+      `SELECT * FROM smartroute_checklist_templates WHERE id=$1 AND organization_id=$2`,
+      [req.params.id, orgId(req)]);
+    if (!t.rows[0]) return res.status(404).json({ error: 'not found' });
+    const items = await query(
+      `SELECT * FROM smartroute_checklist_template_items WHERE template_id=$1 ORDER BY seq ASC`,
+      [req.params.id]);
+    const assigns = await query(
+      `SELECT * FROM smartroute_checklist_assignments WHERE template_id=$1 AND organization_id=$2`,
+      [req.params.id, orgId(req)]);
+    res.json({ ...t.rows[0], items: items.rows, assignments: assigns.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/checklist-templates', async (req, res) => {
+  try {
+    const b = req.body || {};
+    const r = await query(
+      `INSERT INTO smartroute_checklist_templates (organization_id, name, description, active, priority)
+       VALUES ($1,$2,$3,COALESCE($4,true),COALESCE($5,100)) RETURNING *`,
+      [orgId(req), b.name, b.description || null, b.active, b.priority]);
+    res.json(r.rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put('/checklist-templates/:id', async (req, res) => {
+  try {
+    const b = req.body || {};
+    const r = await query(
+      `UPDATE smartroute_checklist_templates
+         SET name=COALESCE($3,name), description=COALESCE($4,description),
+             active=COALESCE($5,active), priority=COALESCE($6,priority), updated_at=NOW()
+       WHERE id=$1 AND organization_id=$2 RETURNING *`,
+      [req.params.id, orgId(req), b.name, b.description, b.active, b.priority]);
+    res.json(r.rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/checklist-templates/:id', async (req, res) => {
+  try {
+    await query(`DELETE FROM smartroute_checklist_templates WHERE id=$1 AND organization_id=$2`,
+      [req.params.id, orgId(req)]);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Substitui todos os itens do template (edição em lote)
+router.put('/checklist-templates/:id/items', async (req, res) => {
+  try {
+    const items = Array.isArray(req.body?.items) ? req.body.items : [];
+    await query(`DELETE FROM smartroute_checklist_template_items WHERE template_id=$1`, [req.params.id]);
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      await query(
+        `INSERT INTO smartroute_checklist_template_items
+           (template_id, seq, field_type, label, required, config)
+         VALUES ($1,$2,$3,$4,COALESCE($5,true),$6)`,
+        [req.params.id, i + 1, it.field_type, it.label, it.required,
+          JSON.stringify(it.config || {})]);
+    }
+    res.json({ ok: true, count: items.length });
+  } catch (e) { logError('sr.checklist.items.put', e); res.status(500).json({ error: e.message }); }
+});
+
+router.get('/checklist-assignments', async (req, res) => {
+  try {
+    const r = await query(
+      `SELECT a.*, t.name AS template_name
+       FROM smartroute_checklist_assignments a
+       JOIN smartroute_checklist_templates t ON t.id=a.template_id
+       WHERE a.organization_id=$1 ORDER BY a.priority ASC`, [orgId(req)]);
+    res.json(r.rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/checklist-assignments', async (req, res) => {
+  try {
+    const b = req.body || {};
+    const r = await query(
+      `INSERT INTO smartroute_checklist_assignments
+         (organization_id, template_id, scope, priority, active)
+       VALUES ($1,$2,$3,COALESCE($4,100),COALESCE($5,true)) RETURNING *`,
+      [orgId(req), b.template_id, JSON.stringify(b.scope || {}), b.priority, b.active]);
+    res.json(r.rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put('/checklist-assignments/:id', async (req, res) => {
+  try {
+    const b = req.body || {};
+    const r = await query(
+      `UPDATE smartroute_checklist_assignments
+         SET scope=COALESCE($3,scope), priority=COALESCE($4,priority), active=COALESCE($5,active)
+       WHERE id=$1 AND organization_id=$2 RETURNING *`,
+      [req.params.id, orgId(req), b.scope ? JSON.stringify(b.scope) : null, b.priority, b.active]);
+    res.json(r.rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/checklist-assignments/:id', async (req, res) => {
+  try {
+    await query(`DELETE FROM smartroute_checklist_assignments WHERE id=$1 AND organization_id=$2`,
+      [req.params.id, orgId(req)]);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ============ REPLAY ENRIQUECIDO (Onda 3) ============
+router.get('/routes/:id/journey-events', async (req, res) => {
+  try {
+    const r = await query(
+      `SELECT e.*, s.sequence AS stop_seq, p.name AS pdv_name
+       FROM smartroute_journey_events e
+       LEFT JOIN smartroute_route_stops s ON s.id=e.stop_id
+       LEFT JOIN smartroute_pdvs p ON p.id=s.pdv_id
+       WHERE e.route_id=$1 AND e.organization_id=$2
+       ORDER BY e.created_at ASC`, [req.params.id, orgId(req)]);
+    res.json(r.rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ============ MÉTRICAS OPERACIONAIS (Onda 3) ============
+router.get('/ops-metrics', async (req, res) => {
+  try {
+    const org = orgId(req);
+    const today = new Date().toISOString().slice(0, 10);
+    const avg = await query(
+      `SELECT AVG(duration_ms)::bigint AS avg_ms, COUNT(*)::int AS n
+       FROM smartroute_route_stops s
+       JOIN smartroute_routes r ON r.id=s.route_id
+       WHERE r.organization_id=$1 AND s.duration_ms IS NOT NULL
+         AND r.planned_date >= CURRENT_DATE - INTERVAL '7 days'`, [org]);
+    const byState = await query(
+      `SELECT state, COUNT(*)::int AS n FROM smartroute_route_stops s
+       JOIN smartroute_routes r ON r.id=s.route_id
+       WHERE r.organization_id=$1 AND r.planned_date=$2
+       GROUP BY state`, [org, today]);
+    const occ = await query(
+      `SELECT type, COUNT(*)::int AS n FROM smartroute_stop_occurrences
+       WHERE organization_id=$1 AND created_at >= CURRENT_DATE - INTERVAL '7 days'
+       GROUP BY type ORDER BY n DESC LIMIT 10`, [org]);
+    const failedItems = await query(
+      `SELECT i.label, COUNT(*)::int AS n
+       FROM smartroute_checklist_template_items i
+       LEFT JOIN smartroute_stop_checklist_responses r ON r.item_id=i.id
+       WHERE i.required=true AND r.id IS NULL
+       GROUP BY i.label ORDER BY n DESC LIMIT 5`);
+    res.json({
+      avg_stop_ms: avg.rows[0]?.avg_ms || 0,
+      stops_today_by_state: byState.rows,
+      occurrences_7d: occ.rows,
+      checklist_gaps: failedItems.rows,
+    });
+  } catch (e) { logError('sr.ops-metrics', e); res.status(500).json({ error: e.message }); }
+});
+
 export default router;
+
 
