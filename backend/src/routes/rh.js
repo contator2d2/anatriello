@@ -2975,4 +2975,332 @@ router.delete('/vacations/collective/:id', async (req, res) => {
   } catch (err) { logError('rh.collective.cancel', err); res.status(500).json({ error: 'Erro ao cancelar' }); }
 });
 
+// ============================================================
+// FASE 10 - DESLIGAMENTO / RESCISÃO
+// ============================================================
+async function ensureTerminationsTables() {
+  await query(`
+    CREATE TABLE IF NOT EXISTS rh_terminations (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id UUID NOT NULL,
+      employee_id UUID NOT NULL,
+      reason TEXT NOT NULL,
+      notice_type TEXT NOT NULL DEFAULT 'indenizado',
+      notice_days INTEGER DEFAULT 30,
+      notice_start DATE,
+      notice_end DATE,
+      termination_date DATE NOT NULL,
+      last_working_day DATE,
+      admission_date DATE,
+      base_salary NUMERIC(14,2) DEFAULT 0,
+      days_worked_month INTEGER DEFAULT 0,
+      salary_proportional NUMERIC(14,2) DEFAULT 0,
+      thirteenth_proportional NUMERIC(14,2) DEFAULT 0,
+      vacation_proportional NUMERIC(14,2) DEFAULT 0,
+      vacation_expired NUMERIC(14,2) DEFAULT 0,
+      vacation_third NUMERIC(14,2) DEFAULT 0,
+      notice_amount NUMERIC(14,2) DEFAULT 0,
+      time_bank_amount NUMERIC(14,2) DEFAULT 0,
+      time_bank_minutes INTEGER DEFAULT 0,
+      fgts_balance NUMERIC(14,2) DEFAULT 0,
+      fgts_fine NUMERIC(14,2) DEFAULT 0,
+      other_credits NUMERIC(14,2) DEFAULT 0,
+      other_debits NUMERIC(14,2) DEFAULT 0,
+      gross_total NUMERIC(14,2) DEFAULT 0,
+      net_total NUMERIC(14,2) DEFAULT 0,
+      checklist JSONB DEFAULT '[]'::jsonb,
+      documents JSONB DEFAULT '[]'::jsonb,
+      interview_notes TEXT,
+      status TEXT NOT NULL DEFAULT 'em_andamento',
+      homologated_at TIMESTAMPTZ,
+      homologated_by UUID,
+      cancelled_at TIMESTAMPTZ,
+      notes TEXT,
+      created_by UUID,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_terminations_org ON rh_terminations(organization_id, termination_date DESC)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_terminations_emp ON rh_terminations(employee_id)`);
+}
+
+const DEFAULT_CHECKLIST = [
+  { key: 'uniforme', label: 'Devolução de uniformes', done: false },
+  { key: 'cracha', label: 'Devolução de crachá', done: false },
+  { key: 'equipamentos', label: 'Devolução de equipamentos (notebook, celular)', done: false },
+  { key: 'epis', label: 'Devolução de EPIs', done: false },
+  { key: 'chaves', label: 'Devolução de chaves/acessos', done: false },
+  { key: 'exame', label: 'Exame demissional realizado', done: false },
+  { key: 'acesso_sistemas', label: 'Revogação de acessos aos sistemas', done: false },
+  { key: 'trct', label: 'TRCT assinado', done: false },
+  { key: 'homologacao', label: 'Homologação sindical (quando aplicável)', done: false },
+  { key: 'fgts_saque', label: 'Chave PIX/dados para saque FGTS', done: false },
+];
+
+// Calcula verbas rescisórias com base nos dados do colaborador
+async function computeTerminationValues(orgId, employeeId, payload) {
+  const emp = (await query(
+    `SELECT id, admission_date, salary, current_salary, monthly_hours FROM employees WHERE id = $1 AND organization_id = $2`,
+    [employeeId, orgId]
+  )).rows[0];
+  if (!emp) throw new Error('Colaborador não encontrado');
+
+  const termDate = payload.termination_date ? new Date(payload.termination_date + 'T12:00:00') : new Date();
+  const admDate = emp.admission_date ? new Date(emp.admission_date + 'T12:00:00') : termDate;
+  const baseSalary = Number(payload.base_salary ?? emp.current_salary ?? emp.salary ?? 0);
+  const reason = payload.reason || 'sem_justa_causa';
+  const noticeType = payload.notice_type || 'indenizado';
+
+  // Dias trabalhados no mês da rescisão
+  const daysWorked = Math.min(termDate.getDate(), 30);
+  const salaryProp = +(baseSalary / 30 * daysWorked).toFixed(2);
+
+  // 13º proporcional (avos por mês trabalhado no ano)
+  const yearStart = new Date(termDate.getFullYear(), 0, 1);
+  const startFor13 = admDate > yearStart ? admDate : yearStart;
+  const monthsFor13 = Math.max(0, Math.min(12,
+    (termDate.getMonth() - startFor13.getMonth()) + (termDate.getDate() >= 15 ? 1 : 0) + 1));
+  const thirteenthProp = reason === 'com_justa_causa' ? 0 : +(baseSalary / 12 * monthsFor13).toFixed(2);
+
+  // Férias proporcionais (avos)
+  const cycleStart = new Date(admDate);
+  while (cycleStart.getFullYear() < termDate.getFullYear() - 1) cycleStart.setFullYear(cycleStart.getFullYear() + 1);
+  const monthsForVac = Math.max(0, Math.min(12,
+    Math.floor((termDate - cycleStart) / (1000 * 60 * 60 * 24 * 30))));
+  const vacProp = reason === 'com_justa_causa' ? 0 : +(baseSalary / 12 * monthsForVac).toFixed(2);
+
+  // Férias vencidas (busca no rh_vacations)
+  let vacExpired = 0;
+  try {
+    const v = await query(
+      `SELECT COALESCE(SUM(days_remaining), 0) as days FROM rh_vacations
+       WHERE employee_id = $1 AND status = 'agendada' AND acquisition_end < NOW() - INTERVAL '1 year'`,
+      [employeeId]);
+    const days = Number(v.rows[0]?.days || 0);
+    vacExpired = reason === 'com_justa_causa' ? 0 : +(baseSalary / 30 * days).toFixed(2);
+  } catch (_) { /* tabela pode não ter esses campos */ }
+
+  const vacThird = +((vacProp + vacExpired) / 3).toFixed(2);
+
+  // Aviso prévio
+  const yearsWorked = (termDate - admDate) / (1000 * 60 * 60 * 24 * 365);
+  const noticeDays = Math.min(90, 30 + Math.floor(yearsWorked) * 3);
+  let noticeAmount = 0;
+  if (['sem_justa_causa', 'fim_contrato_experiencia_antecipado'].includes(reason)) {
+    if (noticeType === 'indenizado') noticeAmount = +(baseSalary / 30 * noticeDays).toFixed(2);
+  } else if (reason === 'pedido_demissao' && noticeType === 'nao_cumprido') {
+    noticeAmount = -+(baseSalary / 30 * noticeDays).toFixed(2); // desconto
+  }
+
+  // Banco de horas
+  let timeBankMinutes = 0, timeBankAmount = 0;
+  try {
+    const tb = await query(
+      `SELECT COALESCE(SUM(minutes), 0) as total FROM time_bank_entries
+       WHERE employee_id = $1 AND expired = FALSE`, [employeeId]);
+    timeBankMinutes = Number(tb.rows[0]?.total || 0);
+    const hourlyRate = baseSalary / (Number(emp.monthly_hours) || 220);
+    timeBankAmount = +(timeBankMinutes / 60 * hourlyRate * 1.5).toFixed(2); // 50% adicional
+    if (reason === 'com_justa_causa') timeBankAmount = 0;
+  } catch (_) {}
+
+  // FGTS
+  const fgtsBalance = Number(payload.fgts_balance || 0);
+  let fgtsFine = 0;
+  if (reason === 'sem_justa_causa' || reason === 'fim_contrato_experiencia_antecipado') fgtsFine = +(fgtsBalance * 0.40).toFixed(2);
+  else if (reason === 'acordo') fgtsFine = +(fgtsBalance * 0.20).toFixed(2);
+
+  const otherCredits = Number(payload.other_credits || 0);
+  const otherDebits = Number(payload.other_debits || 0);
+
+  const gross = salaryProp + thirteenthProp + vacProp + vacExpired + vacThird + noticeAmount + timeBankAmount + otherCredits;
+  const net = +(gross - otherDebits).toFixed(2);
+
+  return {
+    admission_date: emp.admission_date,
+    base_salary: baseSalary,
+    days_worked_month: daysWorked,
+    salary_proportional: salaryProp,
+    thirteenth_proportional: thirteenthProp,
+    vacation_proportional: vacProp,
+    vacation_expired: vacExpired,
+    vacation_third: vacThird,
+    notice_days: noticeDays,
+    notice_amount: noticeAmount,
+    time_bank_minutes: timeBankMinutes,
+    time_bank_amount: timeBankAmount,
+    fgts_balance: fgtsBalance,
+    fgts_fine: fgtsFine,
+    other_credits: otherCredits,
+    other_debits: otherDebits,
+    gross_total: +gross.toFixed(2),
+    net_total: net,
+  };
+}
+
+// Preview de cálculo
+router.post('/terminations/preview', async (req, res) => {
+  try {
+    await ensureTerminationsTables();
+    const orgId = req.body.organization_id || await getUserOrgId(req.userId);
+    if (!orgId || !req.body.employee_id) return res.status(400).json({ error: 'employee_id obrigatório' });
+    const calc = await computeTerminationValues(orgId, req.body.employee_id, req.body);
+    res.json(calc);
+  } catch (err) { logError('rh.termination.preview', err); res.status(500).json({ error: err.message || 'Erro ao calcular' }); }
+});
+
+// Listar rescisões
+router.get('/terminations', async (req, res) => {
+  try {
+    await ensureTerminationsTables();
+    const orgId = req.query.org_id || await getUserOrgId(req.userId);
+    if (!orgId) return res.json([]);
+    const { status, employee_id } = req.query;
+    let sql = `SELECT t.*, e.full_name as employee_name, e.position, e.registration_number
+               FROM rh_terminations t JOIN employees e ON e.id = t.employee_id
+               WHERE t.organization_id = $1`;
+    const params = [orgId]; let idx = 2;
+    if (status) { sql += ` AND t.status = $${idx++}`; params.push(status); }
+    if (employee_id) { sql += ` AND t.employee_id = $${idx++}`; params.push(employee_id); }
+    sql += ` ORDER BY t.termination_date DESC`;
+    res.json((await query(sql, params)).rows);
+  } catch (err) { logError('rh.terminations.list', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// Detalhe
+router.get('/terminations/:id', async (req, res) => {
+  try {
+    await ensureTerminationsTables();
+    const r = await query(
+      `SELECT t.*, e.full_name as employee_name, e.position, e.cpf, e.registration_number, e.admission_date as emp_admission
+       FROM rh_terminations t JOIN employees e ON e.id = t.employee_id WHERE t.id = $1`,
+      [req.params.id]);
+    if (!r.rows[0]) return res.status(404).json({ error: 'Não encontrado' });
+    res.json(r.rows[0]);
+  } catch (err) { logError('rh.terminations.detail', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// Criar rescisão (não desliga ainda, fica em_andamento)
+router.post('/terminations', async (req, res) => {
+  try {
+    await ensureTerminationsTables();
+    const orgId = req.body.organization_id || await getUserOrgId(req.userId);
+    const d = req.body;
+    if (!d.employee_id || !d.termination_date || !d.reason)
+      return res.status(400).json({ error: 'employee_id, termination_date e reason são obrigatórios' });
+
+    const calc = await computeTerminationValues(orgId, d.employee_id, d);
+    const checklist = d.checklist || DEFAULT_CHECKLIST;
+
+    const r = await query(
+      `INSERT INTO rh_terminations (organization_id, employee_id, reason, notice_type, notice_days, notice_start, notice_end,
+        termination_date, last_working_day, admission_date, base_salary, days_worked_month,
+        salary_proportional, thirteenth_proportional, vacation_proportional, vacation_expired, vacation_third,
+        notice_amount, time_bank_amount, time_bank_minutes, fgts_balance, fgts_fine,
+        other_credits, other_debits, gross_total, net_total, checklist, interview_notes, notes, status, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,'em_andamento',$30)
+       RETURNING *`,
+      [orgId, d.employee_id, d.reason, d.notice_type || 'indenizado', calc.notice_days,
+        d.notice_start || null, d.notice_end || null, d.termination_date, d.last_working_day || d.termination_date,
+        calc.admission_date, calc.base_salary, calc.days_worked_month,
+        calc.salary_proportional, calc.thirteenth_proportional, calc.vacation_proportional, calc.vacation_expired, calc.vacation_third,
+        calc.notice_amount, calc.time_bank_amount, calc.time_bank_minutes, calc.fgts_balance, calc.fgts_fine,
+        calc.other_credits, calc.other_debits, calc.gross_total, calc.net_total,
+        JSON.stringify(checklist), d.interview_notes || null, d.notes || null, req.userId]
+    );
+    await auditLog(orgId, 'termination', r.rows[0].id, 'create',
+      [{ field: 'reason', oldVal: null, newVal: `${d.reason} em ${d.termination_date}` }], req.userId);
+    res.json(r.rows[0]);
+  } catch (err) { logError('rh.terminations.create', err); res.status(500).json({ error: err.message || 'Erro ao criar rescisão' }); }
+});
+
+// Atualizar (recalcula se dados chave mudarem)
+router.put('/terminations/:id', async (req, res) => {
+  try {
+    await ensureTerminationsTables();
+    const cur = (await query(`SELECT * FROM rh_terminations WHERE id = $1`, [req.params.id])).rows[0];
+    if (!cur) return res.status(404).json({ error: 'Não encontrado' });
+    if (cur.status === 'homologado') return res.status(400).json({ error: 'Rescisão já homologada' });
+
+    const d = { ...cur, ...req.body };
+    const shouldRecalc = ['reason', 'notice_type', 'termination_date', 'base_salary', 'fgts_balance', 'other_credits', 'other_debits'].some(k => k in req.body);
+    let extra = {};
+    if (shouldRecalc) {
+      const calc = await computeTerminationValues(cur.organization_id, cur.employee_id, d);
+      extra = calc;
+    }
+    const merged = { ...cur, ...req.body, ...extra };
+    const r = await query(
+      `UPDATE rh_terminations SET reason=$2, notice_type=$3, notice_days=$4, notice_start=$5, notice_end=$6,
+        termination_date=$7, last_working_day=$8, base_salary=$9, days_worked_month=$10,
+        salary_proportional=$11, thirteenth_proportional=$12, vacation_proportional=$13, vacation_expired=$14, vacation_third=$15,
+        notice_amount=$16, time_bank_amount=$17, time_bank_minutes=$18, fgts_balance=$19, fgts_fine=$20,
+        other_credits=$21, other_debits=$22, gross_total=$23, net_total=$24, checklist=$25,
+        interview_notes=$26, notes=$27, status=$28, updated_at=NOW() WHERE id=$1 RETURNING *`,
+      [req.params.id, merged.reason, merged.notice_type, merged.notice_days, merged.notice_start, merged.notice_end,
+        merged.termination_date, merged.last_working_day, merged.base_salary, merged.days_worked_month,
+        merged.salary_proportional, merged.thirteenth_proportional, merged.vacation_proportional, merged.vacation_expired, merged.vacation_third,
+        merged.notice_amount, merged.time_bank_amount, merged.time_bank_minutes, merged.fgts_balance, merged.fgts_fine,
+        merged.other_credits, merged.other_debits, merged.gross_total, merged.net_total,
+        JSON.stringify(Array.isArray(merged.checklist) ? merged.checklist : (typeof merged.checklist === 'string' ? JSON.parse(merged.checklist) : DEFAULT_CHECKLIST)),
+        merged.interview_notes, merged.notes, merged.status || 'em_andamento']
+    );
+    res.json(r.rows[0]);
+  } catch (err) { logError('rh.terminations.update', err); res.status(500).json({ error: err.message || 'Erro' }); }
+});
+
+// Homologar: efetiva o desligamento do colaborador
+router.post('/terminations/:id/homologate', async (req, res) => {
+  try {
+    await ensureTerminationsTables();
+    const cur = (await query(`SELECT * FROM rh_terminations WHERE id = $1`, [req.params.id])).rows[0];
+    if (!cur) return res.status(404).json({ error: 'Não encontrado' });
+    if (cur.status === 'homologado') return res.status(400).json({ error: 'Já homologado' });
+
+    const checklist = Array.isArray(cur.checklist) ? cur.checklist : (typeof cur.checklist === 'string' ? JSON.parse(cur.checklist) : []);
+    const pending = checklist.filter(c => !c.done && !c.optional);
+    if (pending.length && !req.body.force)
+      return res.status(400).json({ error: `${pending.length} itens do checklist pendentes`, pending });
+
+    await query(
+      `UPDATE rh_terminations SET status='homologado', homologated_at=NOW(), homologated_by=$2, updated_at=NOW() WHERE id=$1`,
+      [req.params.id, req.userId]);
+    await query(
+      `UPDATE employees SET status='desligado', termination_date=$2, termination_reason=$3, updated_at=NOW() WHERE id=$1`,
+      [cur.employee_id, cur.termination_date, cur.reason]);
+    await auditLog(cur.organization_id, 'termination', cur.id, 'homologate',
+      [{ field: 'status', oldVal: cur.status, newVal: 'homologado' }], req.userId);
+    res.json({ ok: true });
+  } catch (err) { logError('rh.terminations.homologate', err); res.status(500).json({ error: err.message || 'Erro' }); }
+});
+
+// Cancelar rescisão
+router.post('/terminations/:id/cancel', async (req, res) => {
+  try {
+    await ensureTerminationsTables();
+    await query(
+      `UPDATE rh_terminations SET status='cancelado', cancelled_at=NOW(), notes = COALESCE(notes,'') || E'\nCancelado: ' || $2, updated_at=NOW() WHERE id=$1`,
+      [req.params.id, req.body.reason || 'sem motivo']);
+    res.json({ ok: true });
+  } catch (err) { logError('rh.terminations.cancel', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// TRCT (dados estruturados para PDF no frontend)
+router.get('/terminations/:id/trct', async (req, res) => {
+  try {
+    await ensureTerminationsTables();
+    const r = await query(
+      `SELECT t.*, e.full_name, e.cpf, e.rg, e.registration_number, e.position, e.admission_date,
+              o.name as organization_name
+       FROM rh_terminations t
+       JOIN employees e ON e.id = t.employee_id
+       LEFT JOIN organizations o ON o.id = t.organization_id
+       WHERE t.id = $1`,
+      [req.params.id]);
+    if (!r.rows[0]) return res.status(404).json({ error: 'Não encontrado' });
+    res.json(r.rows[0]);
+  } catch (err) { logError('rh.terminations.trct', err); res.status(500).json({ error: 'Erro' }); }
+});
+
 export default router;
