@@ -150,6 +150,7 @@ const getNavSections = (hasConnections: boolean): NavSection[] => [
       { name: "Férias Coletivas", href: "/rh/ferias-coletivas", icon: CalendarDays, pageKey: 'rh_ferias_coletivas', moduleKey: 'rh' },
       { name: "Desligamento", href: "/rh/desligamento", icon: UserMinus, pageKey: 'rh_desligamento', moduleKey: 'rh' },
       { name: "Advertências", href: "/rh/advertencias", icon: AlertTriangle, pageKey: 'rh_advertencias', moduleKey: 'rh' },
+      { name: "eSocial", href: "/rh/esocial", icon: FileText, pageKey: 'rh_esocial', moduleKey: 'rh' },
 
 
 

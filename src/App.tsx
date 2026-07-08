@@ -76,6 +76,7 @@ import RHFeriasColetivas from "./pages/RHFeriasColetivas";
 import RHDesligamento from "./pages/RHDesligamento";
 import RHAdmissao from "./pages/RHAdmissao";
 import RHAdvertencias from "./pages/RHAdvertencias";
+import RHESocial from "./pages/RHESocial";
 import RHEspelhoDigital from "./pages/RHEspelhoDigital";
 
 
@@ -354,6 +355,7 @@ const App = () => (
             <Route path="/rh/desligamento" element={<ProtectedRoute><RHDesligamento /></ProtectedRoute>} />
             <Route path="/rh/admissao" element={<ProtectedRoute><RHAdmissao /></ProtectedRoute>} />
             <Route path="/rh/advertencias" element={<ProtectedRoute><RHAdvertencias /></ProtectedRoute>} />
+            <Route path="/rh/esocial" element={<ProtectedRoute><RHESocial /></ProtectedRoute>} />
             <Route path="/rh/espelho-digital" element={<ProtectedRoute><RHEspelhoDigital /></ProtectedRoute>} />
 
 

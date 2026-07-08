@@ -3742,4 +3742,489 @@ router.get('/warnings/employee/:employeeId/summary', async (req, res) => {
   } catch (err) { logError('rh.warnings.summary', err); res.status(500).json({ error: 'Erro' }); }
 });
 
+
+// ============================================================
+// FASE 13 - EXPORTAÇÃO eSOCIAL (S-2200, S-2299, S-2230)
+// ============================================================
+async function ensureEsocialTables() {
+  await query(`
+    CREATE TABLE IF NOT EXISTS rh_esocial_events (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id UUID NOT NULL,
+      company_id UUID,
+      employee_id UUID,
+      event_type TEXT NOT NULL,
+      reference_type TEXT,
+      reference_id UUID,
+      event_id_esocial TEXT,
+      event_date DATE,
+      xml TEXT NOT NULL,
+      xml_hash TEXT,
+      status TEXT NOT NULL DEFAULT 'gerado',
+      protocol TEXT,
+      receipt_number TEXT,
+      error_message TEXT,
+      response_data JSONB DEFAULT '{}'::jsonb,
+      sent_at TIMESTAMPTZ,
+      processed_at TIMESTAMPTZ,
+      generated_by UUID,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_esocial_org ON rh_esocial_events(organization_id, created_at DESC)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_esocial_emp ON rh_esocial_events(employee_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_esocial_type ON rh_esocial_events(organization_id, event_type, status)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_esocial_ref ON rh_esocial_events(reference_type, reference_id)`);
+}
+
+const ESOCIAL_EVENT_TYPES = ['S-2200', 'S-2299', 'S-2230', 'S-3000'];
+const ESOCIAL_STATUS = ['gerado', 'enviado', 'aceito', 'rejeitado', 'cancelado'];
+
+// Helpers
+function xmlEscape(s) {
+  if (s === null || s === undefined) return '';
+  return String(s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+}
+function onlyDigits(s) { return String(s || '').replace(/\D/g, ''); }
+function fmtEsocialDate(d) {
+  if (!d) return '';
+  const dt = (d instanceof Date) ? d : new Date(d);
+  if (isNaN(dt.getTime())) return '';
+  return dt.toISOString().slice(0, 10);
+}
+function fmtEsocialDateTime(d) {
+  const dt = (d instanceof Date) ? d : new Date(d || Date.now());
+  return dt.toISOString().slice(0, 19);
+}
+function esocialEventIdFor(cnpj, tipo) {
+  // ID{tpInsc}{nrInsc padded 14}{aammddhhmmss}{seq5}
+  const nr = onlyDigits(cnpj).padStart(14, '0').slice(0, 14);
+  const d = new Date();
+  const stamp = `${String(d.getFullYear()).slice(2)}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}${String(d.getSeconds()).padStart(2, '0')}`;
+  const seq = String(Math.floor(Math.random() * 99999)).padStart(5, '0');
+  return `ID1${nr}${stamp}${seq}`;
+}
+async function sha256(text) {
+  const { createHash } = await import('crypto');
+  return createHash('sha256').update(text, 'utf8').digest('hex');
+}
+
+async function loadEmployerContext(companyId, orgId) {
+  let cmp = null;
+  if (companyId) {
+    cmp = (await query(`SELECT * FROM companies WHERE id=$1`, [companyId])).rows[0];
+  }
+  if (!cmp) {
+    cmp = (await query(`SELECT * FROM companies WHERE organization_id=$1 AND is_active=true ORDER BY created_at LIMIT 1`, [orgId])).rows[0];
+  }
+  return {
+    tpInsc: 1,
+    nrInsc: onlyDigits(cmp?.cnpj || '').slice(0, 14),
+    nmRazao: cmp?.name || cmp?.trade_name || 'Empregador',
+  };
+}
+
+function buildIdeEvento(evtType, indRetif = 1) {
+  const perApur = new Date().toISOString().slice(0, 7);
+  return `<ideEvento><indRetif>${indRetif}</indRetif><tpAmb>2</tpAmb><procEmi>1</procEmi><verProc>Ayratech-1.0</verProc>${['S-2200','S-2299','S-2230'].includes(evtType) ? '' : `<perApur>${perApur}</perApur>`}</ideEvento>`;
+}
+
+function buildIdeEmpregador(emp) {
+  return `<ideEmpregador><tpInsc>${emp.tpInsc}</tpInsc><nrInsc>${xmlEscape(emp.nrInsc)}</nrInsc></ideEmpregador>`;
+}
+
+// S-2200: Admissão
+function buildS2200XML(evtId, emp, employee) {
+  const cpf = onlyDigits(employee.cpf).padStart(11, '0').slice(0, 11);
+  const nis = onlyDigits(employee.pis_pasep).padStart(11, '0').slice(0, 11);
+  const dtNasc = fmtEsocialDate(employee.birth_date);
+  const dtAdm = fmtEsocialDate(employee.admission_date);
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<eSocial xmlns="http://www.esocial.gov.br/schema/evt/evtAdmissao/v_S_01_02_00">
+  <evtAdmissao Id="${xmlEscape(evtId)}">
+    ${buildIdeEvento('S-2200')}
+    ${buildIdeEmpregador(emp)}
+    <trabalhador>
+      <cpfTrab>${cpf}</cpfTrab>
+      <nmTrab>${xmlEscape(employee.full_name)}</nmTrab>
+      <sexo>${employee.gender === 'F' ? 'F' : 'M'}</sexo>
+      <racaCor>${employee.skin_color || '1'}</racaCor>
+      <estCiv>${employee.marital_status || '1'}</estCiv>
+      <grauInstr>07</grauInstr>
+      <nascimento>
+        <dtNascto>${dtNasc}</dtNascto>
+        <paisNascto>105</paisNascto>
+        <paisNac>105</paisNac>
+      </nascimento>
+      ${employee.email ? `<contato><fonePrinc>${onlyDigits(employee.phone)}</fonePrinc><emailPrinc>${xmlEscape(employee.email)}</emailPrinc></contato>` : ''}
+    </trabalhador>
+    <vinculo>
+      <matricula>${xmlEscape(employee.registration_number || employee.id.slice(0, 8))}</matricula>
+      <tpRegTrab>1</tpRegTrab>
+      <tpRegPrev>1</tpRegPrev>
+      ${nis ? `<nisTrab>${nis}</nisTrab>` : ''}
+      <infoRegimeTrab>
+        <infoCeletista>
+          <dtAdm>${dtAdm}</dtAdm>
+          <tpAdmissao>1</tpAdmissao>
+          <indAdmissao>1</indAdmissao>
+          <tpRegJor>1</tpRegJor>
+          <natAtividade>1</natAtividade>
+          <dtOpcFGTS>${dtAdm}</dtOpcFGTS>
+        </infoCeletista>
+      </infoRegimeTrab>
+      <infoContrato>
+        <nmCargo>${xmlEscape(employee.position || 'Não informado')}</nmCargo>
+        <CBOCargo>999999</CBOCargo>
+        <remuneracao>
+          <vrSalFx>${Number(employee.salary || 0).toFixed(2)}</vrSalFx>
+          <undSalFixo>5</undSalFixo>
+        </remuneracao>
+        <tpContr>1</tpContr>
+        <duracao><tpContr>1</tpContr></duracao>
+        <localTrabalho>
+          <localTrabGeral><tpInsc>${emp.tpInsc}</tpInsc><nrInsc>${xmlEscape(emp.nrInsc)}</nrInsc></localTrabGeral>
+        </localTrabalho>
+        <horContratual>
+          <qtdHrsSem>44</qtdHrsSem>
+          <tpJornada>1</tpJornada>
+          <tmpParc>0</tmpParc>
+        </horContratual>
+      </infoContrato>
+    </vinculo>
+  </evtAdmissao>
+</eSocial>`;
+}
+
+// S-2299: Desligamento
+function buildS2299XML(evtId, emp, employee, termination) {
+  const cpf = onlyDigits(employee.cpf).padStart(11, '0').slice(0, 11);
+  const mtc = employee.registration_number || employee.id.slice(0, 8);
+  const dtDeslig = fmtEsocialDate(termination.termination_date);
+  const causaMap = { sem_justa_causa: '02', pedido_demissao: '07', justa_causa: '11', acordo: '03', experiencia: '12', aposentadoria: '10' };
+  const cause = causaMap[termination.reason] || '02';
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<eSocial xmlns="http://www.esocial.gov.br/schema/evt/evtDeslig/v_S_01_02_00">
+  <evtDeslig Id="${xmlEscape(evtId)}">
+    ${buildIdeEvento('S-2299')}
+    ${buildIdeEmpregador(emp)}
+    <ideVinculo>
+      <cpfTrab>${cpf}</cpfTrab>
+      <matricula>${xmlEscape(mtc)}</matricula>
+    </ideVinculo>
+    <infoDeslig>
+      <mtvDeslig>${cause}</mtvDeslig>
+      <dtDeslig>${dtDeslig}</dtDeslig>
+      <indPagtoAPI>${termination.notice_type === 'indenizado' ? 'S' : 'N'}</indPagtoAPI>
+      ${termination.notice_type === 'indenizado' ? `<dtProjFimAPI>${fmtEsocialDate(termination.notice_end || termination.termination_date)}</dtProjFimAPI>` : ''}
+      <pensAlim>N</pensAlim>
+      <verbasResc>
+        <dmDev>
+          <ideDmDev>DES${evtId.slice(-6)}</ideDmDev>
+          <infoPerApur>
+            <ideEstabLot>
+              <tpInsc>${emp.tpInsc}</tpInsc>
+              <nrInsc>${xmlEscape(emp.nrInsc)}</nrInsc>
+              <codLotacao>00001</codLotacao>
+              <detVerbas>
+                <codRubr>1000</codRubr>
+                <ideTabRubr>Ayratech</ideTabRubr>
+                <qtdRubr>1</qtdRubr>
+                <vrUnit>${Number(termination.gross_total || 0).toFixed(2)}</vrUnit>
+                <vrRubr>${Number(termination.gross_total || 0).toFixed(2)}</vrRubr>
+              </detVerbas>
+            </ideEstabLot>
+          </infoPerApur>
+        </dmDev>
+      </verbasResc>
+    </infoDeslig>
+  </evtDeslig>
+</eSocial>`;
+}
+
+// S-2230: Afastamento
+function buildS2230XML(evtId, emp, employee, absence) {
+  const cpf = onlyDigits(employee.cpf).padStart(11, '0').slice(0, 11);
+  const mtc = employee.registration_number || employee.id.slice(0, 8);
+  const dtIniAfast = fmtEsocialDate(absence.start_date);
+  const dtTermAfast = absence.end_date ? fmtEsocialDate(absence.end_date) : '';
+  const codMap = { doenca: '01', acidente_trabalho: '03', maternidade: '17', paternidade: '19', ferias: '15', servico_militar: '11', licenca_nao_remunerada: '10' };
+  const codMotAfast = codMap[absence.absence_type] || '01';
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<eSocial xmlns="http://www.esocial.gov.br/schema/evt/evtAfastTemp/v_S_01_02_00">
+  <evtAfastTemp Id="${xmlEscape(evtId)}">
+    ${buildIdeEvento('S-2230')}
+    ${buildIdeEmpregador(emp)}
+    <ideVinculo>
+      <cpfTrab>${cpf}</cpfTrab>
+      <matricula>${xmlEscape(mtc)}</matricula>
+    </ideVinculo>
+    <infoAfastamento>
+      <iniAfastamento>
+        <dtIniAfast>${dtIniAfast}</dtIniAfast>
+        <codMotAfast>${codMotAfast}</codMotAfast>
+        ${absence.reason ? `<observacao>${xmlEscape(absence.reason).slice(0, 999)}</observacao>` : ''}
+      </iniAfastamento>
+      ${dtTermAfast ? `<fimAfastamento><dtTermAfast>${dtTermAfast}</dtTermAfast></fimAfastamento>` : ''}
+    </infoAfastamento>
+  </evtAfastTemp>
+</eSocial>`;
+}
+
+// S-3000: Exclusão de evento
+function buildS3000XML(evtId, emp, originalEvent) {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<eSocial xmlns="http://www.esocial.gov.br/schema/evt/evtExclusao/v_S_01_02_00">
+  <evtExclusao Id="${xmlEscape(evtId)}">
+    ${buildIdeEvento('S-3000')}
+    ${buildIdeEmpregador(emp)}
+    <infoExclusao>
+      <tpEvento>${originalEvent.event_type}</tpEvento>
+      <nrRecEvt>${xmlEscape(originalEvent.receipt_number || '')}</nrRecEvt>
+    </infoExclusao>
+  </evtExclusao>
+</eSocial>`;
+}
+
+async function generateEsocialEvent({ orgId, type, referenceId, referenceType, userId }) {
+  if (!ESOCIAL_EVENT_TYPES.includes(type)) throw new Error(`Tipo inválido: ${type}`);
+  let employee = null, refRow = null, companyId = null, xml = '', evtId = '';
+
+  if (type === 'S-2200') {
+    employee = (await query(`SELECT * FROM employees WHERE id=$1`, [referenceId])).rows[0];
+    if (!employee) throw new Error('Colaborador não encontrado');
+    if (!employee.cpf) throw new Error('CPF do colaborador é obrigatório');
+    if (!employee.admission_date) throw new Error('Data de admissão é obrigatória');
+    companyId = employee.company_id;
+    const emp = await loadEmployerContext(companyId, orgId);
+    if (!emp.nrInsc) throw new Error('CNPJ da empresa é obrigatório');
+    evtId = esocialEventIdFor(emp.nrInsc, type);
+    xml = buildS2200XML(evtId, emp, employee);
+    referenceType = 'employee';
+    refRow = { event_date: employee.admission_date };
+  } else if (type === 'S-2299') {
+    const term = (await query(`SELECT * FROM rh_terminations WHERE id=$1`, [referenceId])).rows[0];
+    if (!term) throw new Error('Rescisão não encontrada');
+    employee = (await query(`SELECT * FROM employees WHERE id=$1`, [term.employee_id])).rows[0];
+    if (!employee) throw new Error('Colaborador não encontrado');
+    companyId = employee.company_id;
+    const emp = await loadEmployerContext(companyId, orgId);
+    if (!emp.nrInsc) throw new Error('CNPJ da empresa é obrigatório');
+    evtId = esocialEventIdFor(emp.nrInsc, type);
+    xml = buildS2299XML(evtId, emp, employee, term);
+    referenceType = 'termination';
+    refRow = { event_date: term.termination_date };
+  } else if (type === 'S-2230') {
+    const abs = (await query(`SELECT * FROM employee_absences WHERE id=$1`, [referenceId])).rows[0];
+    if (!abs) throw new Error('Afastamento não encontrado');
+    employee = (await query(`SELECT * FROM employees WHERE id=$1`, [abs.employee_id])).rows[0];
+    if (!employee) throw new Error('Colaborador não encontrado');
+    companyId = employee.company_id;
+    const emp = await loadEmployerContext(companyId, orgId);
+    if (!emp.nrInsc) throw new Error('CNPJ da empresa é obrigatório');
+    evtId = esocialEventIdFor(emp.nrInsc, type);
+    xml = buildS2230XML(evtId, emp, employee, abs);
+    referenceType = 'absence';
+    refRow = { event_date: abs.start_date };
+  } else if (type === 'S-3000') {
+    const orig = (await query(`SELECT * FROM rh_esocial_events WHERE id=$1`, [referenceId])).rows[0];
+    if (!orig) throw new Error('Evento original não encontrado');
+    if (!orig.receipt_number) throw new Error('Evento original precisa de nº de recibo antes de excluir');
+    const emp = await loadEmployerContext(orig.company_id, orgId);
+    evtId = esocialEventIdFor(emp.nrInsc, type);
+    xml = buildS3000XML(evtId, emp, orig);
+    employee = orig.employee_id ? { id: orig.employee_id } : null;
+    companyId = orig.company_id;
+    referenceType = 'esocial_event';
+    refRow = { event_date: new Date() };
+  }
+
+  const hash = await sha256(xml);
+  const r = await query(
+    `INSERT INTO rh_esocial_events (organization_id, company_id, employee_id, event_type,
+      reference_type, reference_id, event_id_esocial, event_date, xml, xml_hash, status, generated_by)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'gerado',$11) RETURNING *`,
+    [orgId, companyId, employee?.id || null, type, referenceType, referenceId,
+      evtId, refRow?.event_date || null, xml, hash, userId]
+  );
+  return r.rows[0];
+}
+
+// Listar
+router.get('/esocial/events', async (req, res) => {
+  try {
+    await ensureEsocialTables();
+    const orgId = req.query.org_id || await getUserOrgId(req.userId);
+    if (!orgId) return res.json([]);
+    const { event_type, status, employee_id } = req.query;
+    let sql = `SELECT ev.id, ev.event_type, ev.event_id_esocial, ev.event_date, ev.status,
+                      ev.protocol, ev.receipt_number, ev.error_message, ev.xml_hash,
+                      ev.reference_type, ev.reference_id, ev.sent_at, ev.processed_at, ev.created_at,
+                      e.full_name as employee_name, e.cpf as employee_cpf, e.registration_number
+               FROM rh_esocial_events ev
+               LEFT JOIN employees e ON e.id = ev.employee_id
+               WHERE ev.organization_id = $1`;
+    const params = [orgId]; let idx = 2;
+    if (event_type) { sql += ` AND ev.event_type = $${idx++}`; params.push(event_type); }
+    if (status) { sql += ` AND ev.status = $${idx++}`; params.push(status); }
+    if (employee_id) { sql += ` AND ev.employee_id = $${idx++}`; params.push(employee_id); }
+    sql += ` ORDER BY ev.created_at DESC LIMIT 500`;
+    const r = await query(sql, params);
+    res.json(r.rows);
+  } catch (err) { logError('rh.esocial.list', err); res.status(500).json({ error: 'Erro ao listar eventos' }); }
+});
+
+// Detalhe (com XML completo)
+router.get('/esocial/events/:id', async (req, res) => {
+  try {
+    await ensureEsocialTables();
+    const r = await query(
+      `SELECT ev.*, e.full_name as employee_name, e.cpf as employee_cpf, e.registration_number
+       FROM rh_esocial_events ev
+       LEFT JOIN employees e ON e.id = ev.employee_id
+       WHERE ev.id = $1`, [req.params.id]);
+    if (!r.rows[0]) return res.status(404).json({ error: 'Não encontrado' });
+    res.json(r.rows[0]);
+  } catch (err) { logError('rh.esocial.detail', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// Gerar evento individual
+router.post('/esocial/generate', async (req, res) => {
+  try {
+    await ensureEsocialTables();
+    const orgId = req.body.organization_id || await getUserOrgId(req.userId);
+    if (!orgId) return res.status(400).json({ error: 'Organização não encontrada' });
+    const { type, reference_id, reference_type } = req.body;
+    if (!type || !reference_id) return res.status(400).json({ error: 'type e reference_id são obrigatórios' });
+    const evt = await generateEsocialEvent({ orgId, type, referenceId: reference_id, referenceType: reference_type, userId: req.userId });
+    await auditLog(orgId, 'esocial_event', evt.id, 'generate',
+      [{ field: 'event_type', oldVal: null, newVal: type }], req.userId);
+    res.json(evt);
+  } catch (err) { logError('rh.esocial.generate', err); res.status(500).json({ error: err.message || 'Erro ao gerar evento' }); }
+});
+
+// Geração em lote (todos elegíveis ainda não gerados)
+router.post('/esocial/generate-batch', async (req, res) => {
+  try {
+    await ensureEsocialTables();
+    const orgId = req.body.organization_id || await getUserOrgId(req.userId);
+    if (!orgId) return res.status(400).json({ error: 'Organização não encontrada' });
+    const { type } = req.body;
+    if (!['S-2200', 'S-2299', 'S-2230'].includes(type)) return res.status(400).json({ error: 'Tipo inválido' });
+
+    let candidates = [];
+    if (type === 'S-2200') {
+      const r = await query(
+        `SELECT e.id FROM employees e
+         WHERE e.organization_id = $1 AND e.status = 'ativo' AND e.cpf IS NOT NULL AND e.admission_date IS NOT NULL
+         AND NOT EXISTS (SELECT 1 FROM rh_esocial_events ev WHERE ev.reference_id = e.id AND ev.event_type='S-2200' AND ev.status <> 'cancelado')`,
+        [orgId]);
+      candidates = r.rows.map(x => x.id);
+    } else if (type === 'S-2299') {
+      const r = await query(
+        `SELECT t.id FROM rh_terminations t
+         WHERE t.organization_id = $1 AND t.status = 'homologada'
+         AND NOT EXISTS (SELECT 1 FROM rh_esocial_events ev WHERE ev.reference_id = t.id AND ev.event_type='S-2299' AND ev.status <> 'cancelado')`,
+        [orgId]);
+      candidates = r.rows.map(x => x.id);
+    } else if (type === 'S-2230') {
+      const r = await query(
+        `SELECT a.id FROM employee_absences a
+         JOIN employees e ON e.id = a.employee_id
+         WHERE e.organization_id = $1 AND (a.approved IS NULL OR a.approved = true)
+         AND NOT EXISTS (SELECT 1 FROM rh_esocial_events ev WHERE ev.reference_id = a.id AND ev.event_type='S-2230' AND ev.status <> 'cancelado')`,
+        [orgId]);
+      candidates = r.rows.map(x => x.id);
+    }
+
+    const results = { total: candidates.length, ok: 0, failed: 0, errors: [] };
+    for (const id of candidates) {
+      try {
+        await generateEsocialEvent({ orgId, type, referenceId: id, userId: req.userId });
+        results.ok++;
+      } catch (e) {
+        results.failed++;
+        results.errors.push({ reference_id: id, error: e.message });
+      }
+    }
+    res.json(results);
+  } catch (err) { logError('rh.esocial.batch', err); res.status(500).json({ error: err.message || 'Erro' }); }
+});
+
+// Download XML
+router.get('/esocial/events/:id/xml', async (req, res) => {
+  try {
+    await ensureEsocialTables();
+    const r = await query(`SELECT event_id_esocial, event_type, xml FROM rh_esocial_events WHERE id=$1`, [req.params.id]);
+    if (!r.rows[0]) return res.status(404).send('Não encontrado');
+    const row = r.rows[0];
+    res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${row.event_type}_${row.event_id_esocial}.xml"`);
+    res.send(row.xml);
+  } catch (err) { logError('rh.esocial.download', err); res.status(500).send('Erro'); }
+});
+
+// Atualizar status (marcar enviado / aceito / rejeitado com protocolo)
+router.put('/esocial/events/:id/status', async (req, res) => {
+  try {
+    await ensureEsocialTables();
+    const { status, protocol, receipt_number, error_message, response_data } = req.body;
+    if (!ESOCIAL_STATUS.includes(status)) return res.status(400).json({ error: 'Status inválido' });
+    const cur = (await query(`SELECT * FROM rh_esocial_events WHERE id=$1`, [req.params.id])).rows[0];
+    if (!cur) return res.status(404).json({ error: 'Não encontrado' });
+    const r = await query(
+      `UPDATE rh_esocial_events SET status=$2, protocol=COALESCE($3,protocol),
+        receipt_number=COALESCE($4,receipt_number), error_message=$5,
+        response_data=COALESCE($6, response_data),
+        sent_at=CASE WHEN $2='enviado' AND sent_at IS NULL THEN NOW() ELSE sent_at END,
+        processed_at=CASE WHEN $2 IN ('aceito','rejeitado') THEN NOW() ELSE processed_at END,
+        updated_at=NOW() WHERE id=$1 RETURNING *`,
+      [cur.id, status, protocol || null, receipt_number || null, error_message || null,
+        response_data ? JSON.stringify(response_data) : null]
+    );
+    await auditLog(cur.organization_id, 'esocial_event', cur.id, 'status',
+      [{ field: 'status', oldVal: cur.status, newVal: status }], req.userId);
+    res.json(r.rows[0]);
+  } catch (err) { logError('rh.esocial.status', err); res.status(500).json({ error: err.message || 'Erro' }); }
+});
+
+// Excluir (só se ainda não enviado)
+router.delete('/esocial/events/:id', async (req, res) => {
+  try {
+    await ensureEsocialTables();
+    const cur = (await query(`SELECT * FROM rh_esocial_events WHERE id=$1`, [req.params.id])).rows[0];
+    if (!cur) return res.status(404).json({ error: 'Não encontrado' });
+    if (!['gerado', 'rejeitado', 'cancelado'].includes(cur.status)) {
+      return res.status(400).json({ error: 'Só é possível excluir eventos ainda não enviados/aceitos' });
+    }
+    await query(`DELETE FROM rh_esocial_events WHERE id=$1`, [cur.id]);
+    res.json({ ok: true });
+  } catch (err) { logError('rh.esocial.delete', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// KPIs
+router.get('/esocial/summary', async (req, res) => {
+  try {
+    await ensureEsocialTables();
+    const orgId = req.query.org_id || await getUserOrgId(req.userId);
+    if (!orgId) return res.json({ by_type: [], by_status: [] });
+    const byType = await query(
+      `SELECT event_type, COUNT(*)::int as total FROM rh_esocial_events WHERE organization_id=$1 GROUP BY event_type`, [orgId]);
+    const byStatus = await query(
+      `SELECT status, COUNT(*)::int as total FROM rh_esocial_events WHERE organization_id=$1 GROUP BY status`, [orgId]);
+    const pendingS2200 = await query(
+      `SELECT COUNT(*)::int as n FROM employees e WHERE e.organization_id=$1 AND e.status='ativo'
+        AND e.cpf IS NOT NULL AND e.admission_date IS NOT NULL
+        AND NOT EXISTS (SELECT 1 FROM rh_esocial_events ev WHERE ev.reference_id=e.id AND ev.event_type='S-2200' AND ev.status<>'cancelado')`,
+      [orgId]);
+    res.json({
+      by_type: byType.rows, by_status: byStatus.rows,
+      pending: { 'S-2200': pendingS2200.rows[0]?.n || 0 },
+    });
+  } catch (err) { logError('rh.esocial.summary', err); res.status(500).json({ error: 'Erro' }); }
+});
+
 export default router;
