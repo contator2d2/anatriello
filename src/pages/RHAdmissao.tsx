@@ -44,6 +44,7 @@ export default function RHAdmissao() {
   const { data: employees = [] } = useEmployees();
   const { data: branches = [] } = useBranches();
   const { data: departments = [] } = useRhDepartments();
+  const { companies } = useCompanies();
 
   const createMut = useCreateOnboarding();
   const updateMut = useUpdateOnboarding();
