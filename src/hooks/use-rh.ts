@@ -774,3 +774,79 @@ export function useDeleteWarning() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['rh-warnings'] }),
   });
 }
+
+// ===== FASE 13 - eSOCIAL =====
+export function useEsocialEvents(filters?: { event_type?: string; status?: string; employee_id?: string }) {
+  const params = new URLSearchParams();
+  if (filters?.event_type) params.set('event_type', filters.event_type);
+  if (filters?.status) params.set('status', filters.status);
+  if (filters?.employee_id) params.set('employee_id', filters.employee_id);
+  const qs = params.toString();
+  return useQuery({
+    queryKey: ['rh-esocial-events', qs],
+    queryFn: () => api<any[]>(`/api/rh/esocial/events${qs ? `?${qs}` : ''}`),
+  });
+}
+
+export function useEsocialEvent(id?: string) {
+  return useQuery({
+    queryKey: ['rh-esocial-event', id],
+    queryFn: () => api<any>(`/api/rh/esocial/events/${id}`),
+    enabled: !!id,
+  });
+}
+
+export function useEsocialSummary() {
+  return useQuery({
+    queryKey: ['rh-esocial-summary'],
+    queryFn: () => api<any>('/api/rh/esocial/summary'),
+  });
+}
+
+export function useGenerateEsocial() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { type: string; reference_id: string }) =>
+      api<any>('/api/rh/esocial/generate', { method: 'POST', body: data }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['rh-esocial-events'] });
+      qc.invalidateQueries({ queryKey: ['rh-esocial-summary'] });
+    },
+  });
+}
+
+export function useGenerateEsocialBatch() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { type: string }) =>
+      api<any>('/api/rh/esocial/generate-batch', { method: 'POST', body: data }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['rh-esocial-events'] });
+      qc.invalidateQueries({ queryKey: ['rh-esocial-summary'] });
+    },
+  });
+}
+
+export function useUpdateEsocialStatus() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }: any) =>
+      api<any>(`/api/rh/esocial/events/${id}/status`, { method: 'PUT', body: data }),
+    onSuccess: (_d, v: any) => {
+      qc.invalidateQueries({ queryKey: ['rh-esocial-events'] });
+      qc.invalidateQueries({ queryKey: ['rh-esocial-event', v.id] });
+      qc.invalidateQueries({ queryKey: ['rh-esocial-summary'] });
+    },
+  });
+}
+
+export function useDeleteEsocial() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api<any>(`/api/rh/esocial/events/${id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['rh-esocial-events'] });
+      qc.invalidateQueries({ queryKey: ['rh-esocial-summary'] });
+    },
+  });
+}
