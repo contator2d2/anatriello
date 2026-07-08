@@ -950,6 +950,207 @@ router.delete('/time-bank/compensations/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: 'Erro' }); }
 });
 
+// ============================================
+// FASE 8: ESPELHO DIGITAL COM ACEITE
+// ============================================
+import crypto from 'crypto';
+
+async function buildMirrorSnapshot({ orgId, employeeId, start, end }) {
+  const emp = await query(
+    `SELECT e.id, e.full_name, e.cpf, e.registration_number, e.position,
+            c.trade_name AS company_name
+       FROM employees e
+       LEFT JOIN companies c ON c.id = e.company_id
+      WHERE e.id = $1 AND e.organization_id = $2`,
+    [employeeId, orgId]
+  );
+  if (!emp.rowCount) throw new Error('Colaborador não encontrado');
+  const rows = await buildEmployeesReport({ orgId, start, end, employeeId });
+  const totals = rows[0] || {};
+  return {
+    employee: emp.rows[0],
+    period: { start, end },
+    totals: {
+      worked_min: totals.worked_min || 0,
+      expected_min: totals.expected_min || 0,
+      overtime_min: totals.overtime_min || 0,
+      night_min: totals.night_min || 0,
+      credit_min: totals.credit_min || 0,
+      debit_min: totals.debit_min || 0,
+      balance_min: totals.balance_min || 0,
+      absences: totals.absences || 0,
+      lates: totals.lates || 0,
+    },
+    days: (totals.detail || []),
+  };
+}
+
+// GET /mirror-acceptance?month=YYYY-MM&status=&company_id=
+router.get('/mirror-acceptance', async (req, res) => {
+  try {
+    const orgId = await resolveOrgId(req);
+    const { month, status, company_id, employee_id } = req.query;
+    const filters = ['m.organization_id = $1'];
+    const params = [orgId];
+    if (month) { params.push(month); filters.push(`m.reference_month = $${params.length}`); }
+    if (status) { params.push(status); filters.push(`m.status = $${params.length}`); }
+    if (company_id) { params.push(company_id); filters.push(`m.company_id = $${params.length}`); }
+    if (employee_id) { params.push(employee_id); filters.push(`m.employee_id = $${params.length}`); }
+    const r = await query(
+      `SELECT m.*, e.full_name, e.registration_number, e.cpf,
+              u.name AS generated_by_name
+         FROM time_mirror_acceptances m
+         JOIN employees e ON e.id = m.employee_id
+         LEFT JOIN users u ON u.id = m.generated_by
+        WHERE ${filters.join(' AND ')}
+        ORDER BY m.reference_month DESC, e.full_name`,
+      params
+    );
+    res.json(r.rows);
+  } catch (err) { logError('timeclock.mirror.list', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// GET /mirror-acceptance/:id
+router.get('/mirror-acceptance/:id', async (req, res) => {
+  try {
+    const orgId = await resolveOrgId(req);
+    const r = await query(
+      `SELECT m.*, e.full_name, e.cpf, e.registration_number
+         FROM time_mirror_acceptances m
+         JOIN employees e ON e.id = m.employee_id
+        WHERE m.id = $1 AND m.organization_id = $2`,
+      [req.params.id, orgId]
+    );
+    if (!r.rowCount) return res.status(404).json({ error: 'Não encontrado' });
+    res.json(r.rows[0]);
+  } catch (err) { res.status(500).json({ error: 'Erro' }); }
+});
+
+// POST /mirror-acceptance/generate — gera espelhos para colaboradores do mês
+router.post('/mirror-acceptance/generate', async (req, res) => {
+  try {
+    const orgId = await resolveOrgId(req);
+    const { reference_month, company_id, employee_ids } = req.body || {};
+    if (!reference_month || !/^\d{4}-\d{2}$/.test(reference_month)) {
+      return res.status(400).json({ error: 'reference_month (YYYY-MM) obrigatório' });
+    }
+    const [y, m] = reference_month.split('-').map(Number);
+    const periodStart = `${reference_month}-01`;
+    const periodEnd = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
+
+    let empList;
+    if (Array.isArray(employee_ids) && employee_ids.length) {
+      empList = { rows: employee_ids.map(id => ({ id })) };
+    } else {
+      const params = [orgId];
+      let filter = 'organization_id = $1 AND status = \'ativo\'';
+      if (company_id) { params.push(company_id); filter += ` AND company_id = $2`; }
+      empList = await query(`SELECT id FROM employees WHERE ${filter}`, params);
+    }
+
+    let created = 0, skipped = 0;
+    for (const e of empList.rows) {
+      const existing = await query(
+        `SELECT id, status FROM time_mirror_acceptances
+          WHERE employee_id = $1 AND reference_month = $2`,
+        [e.id, reference_month]
+      );
+      if (existing.rowCount && existing.rows[0].status !== 'rejected') {
+        skipped++;
+        continue;
+      }
+      try {
+        const snap = await buildMirrorSnapshot({ orgId, employeeId: e.id, start: periodStart, end: periodEnd });
+        if (existing.rowCount) {
+          await query(
+            `UPDATE time_mirror_acceptances
+                SET snapshot_json = $1::jsonb, totals_json = $2::jsonb,
+                    status = 'pending', period_start = $3, period_end = $4,
+                    generated_by = $5, generated_at = NOW(),
+                    accepted_at = NULL, rejected_at = NULL, rejection_reason = NULL,
+                    signature_hash = NULL, signature_ip = NULL, device_info = NULL
+              WHERE id = $6`,
+            [JSON.stringify(snap), JSON.stringify(snap.totals), periodStart, periodEnd, req.userId, existing.rows[0].id]
+          );
+        } else {
+          const empRow = await query(`SELECT company_id FROM employees WHERE id = $1`, [e.id]);
+          await query(
+            `INSERT INTO time_mirror_acceptances
+               (organization_id, company_id, employee_id, reference_month, period_start, period_end,
+                snapshot_json, totals_json, generated_by)
+             VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9)`,
+            [orgId, empRow.rows[0]?.company_id || null, e.id, reference_month,
+             periodStart, periodEnd, JSON.stringify(snap), JSON.stringify(snap.totals), req.userId]
+          );
+        }
+        created++;
+        try {
+          await notifyEmployee(orgId, e.id,
+            'Espelho de Ponto disponível',
+            `Seu espelho de ${reference_month} está disponível para conferência e aceite`,
+            'espelho', 'mirror', null);
+        } catch {}
+      } catch (err) {
+        logError('timeclock.mirror.generate.item', err, { employee_id: e.id });
+      }
+    }
+    res.json({ ok: true, created, skipped, total: empList.rows.length });
+  } catch (err) { logError('timeclock.mirror.generate', err); res.status(500).json({ error: 'Erro ao gerar espelhos' }); }
+});
+
+// DELETE /mirror-acceptance/:id (só permite excluir pending)
+router.delete('/mirror-acceptance/:id', async (req, res) => {
+  try {
+    const orgId = await resolveOrgId(req);
+    const r = await query(
+      `DELETE FROM time_mirror_acceptances
+        WHERE id = $1 AND organization_id = $2 AND status IN ('pending','rejected')`,
+      [req.params.id, orgId]
+    );
+    res.json({ ok: true, deleted: r.rowCount });
+  } catch (err) { res.status(500).json({ error: 'Erro' }); }
+});
+
+// Helper compartilhado (usado por promotor.js)
+export async function signMirrorAcceptance({ orgId, mirrorId, employeeId, action, comments, reason, ip, device }) {
+  const cur = await query(
+    `SELECT * FROM time_mirror_acceptances
+      WHERE id = $1 AND organization_id = $2 AND employee_id = $3`,
+    [mirrorId, orgId, employeeId]
+  );
+  if (!cur.rowCount) throw new Error('Espelho não encontrado');
+  const mirror = cur.rows[0];
+  if (mirror.status === 'accepted') throw new Error('Espelho já aceito');
+
+  if (action === 'accept') {
+    const payload = JSON.stringify({
+      id: mirror.id, employee_id: employeeId, ref: mirror.reference_month,
+      snapshot: mirror.snapshot_json, accepted_at: new Date().toISOString(),
+    });
+    const hash = crypto.createHash('sha256').update(payload).digest('hex');
+    const r = await query(
+      `UPDATE time_mirror_acceptances
+          SET status = 'accepted', accepted_at = NOW(),
+              employee_comments = $1, signature_hash = $2,
+              signature_ip = $3, device_info = $4::jsonb
+        WHERE id = $5 RETURNING *`,
+      [comments || null, hash, ip || null, device ? JSON.stringify(device) : null, mirrorId]
+    );
+    return r.rows[0];
+  }
+  if (action === 'reject') {
+    if (!reason) throw new Error('Motivo obrigatório');
+    const r = await query(
+      `UPDATE time_mirror_acceptances
+          SET status = 'rejected', rejected_at = NOW(), rejection_reason = $1
+        WHERE id = $2 RETURNING *`,
+      [reason, mirrorId]
+    );
+    return r.rows[0];
+  }
+  throw new Error('Ação inválida');
+}
+
 
 // ============================================
 // FERIADOS
