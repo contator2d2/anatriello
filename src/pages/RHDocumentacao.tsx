@@ -555,9 +555,15 @@ export default function RHDocumentacao() {
             </p>
           </div>
         </div>
-        <Badge variant="secondary" className="mt-2">
-          {sections.length} seções
-        </Badge>
+        <div className="flex flex-wrap items-center gap-2 mt-2">
+          <Badge variant="secondary">{sections.length} seções</Badge>
+          <Button asChild variant="outline" size="sm" className="gap-2">
+            <a href="/docs/rh-documentacao.md" download="rh-documentacao.md">
+              <Download className="h-4 w-4" />
+              Baixar Markdown
+            </a>
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-4">
