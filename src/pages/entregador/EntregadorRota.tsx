@@ -127,7 +127,11 @@ export default function EntregadorRota() {
         )}
 
         {route.stops?.map((s: any) => (
-          <Card key={s.id} className="overflow-hidden">
+          <Card
+            key={s.id}
+            className="overflow-hidden cursor-pointer transition hover:shadow-md active:scale-[0.99]"
+            onClick={() => route.status === "em_andamento" && goTo(`/entregador/entrega/${s.id}`)}
+          >
             <CardContent className="p-4">
               <div className="flex items-start gap-3">
                 <div className="w-9 h-9 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-sm shrink-0">{s.sequence}</div>
