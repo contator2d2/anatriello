@@ -144,9 +144,73 @@ async function ensureSchema() {
     );
     CREATE INDEX IF NOT EXISTS idx_ws_org ON work_schedules(organization_id);
     ALTER TABLE employees ADD COLUMN IF NOT EXISTS work_schedule_id UUID REFERENCES work_schedules(id) ON DELETE SET NULL;
+
+    -- ==== FASE 6: Banco de Horas com Compensação e Expiração ====
+    ALTER TABLE time_bank_entries ADD COLUMN IF NOT EXISTS expires_at DATE;
+    ALTER TABLE time_bank_entries ADD COLUMN IF NOT EXISTS expired BOOLEAN DEFAULT FALSE;
+    ALTER TABLE time_bank_entries ADD COLUMN IF NOT EXISTS expired_at TIMESTAMPTZ;
+    ALTER TABLE time_bank_entries ADD COLUMN IF NOT EXISTS compensation_id UUID;
+    CREATE INDEX IF NOT EXISTS idx_tb_expires ON time_bank_entries(expires_at) WHERE expired = FALSE AND minutes > 0;
+
+    CREATE TABLE IF NOT EXISTS time_bank_config (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+      company_id UUID REFERENCES companies(id) ON DELETE CASCADE,
+      expiration_months INTEGER NOT NULL DEFAULT 12,
+      allow_debit BOOLEAN DEFAULT TRUE,
+      max_debit_hours NUMERIC(6,2) DEFAULT 40,
+      notify_days_before INTEGER DEFAULT 30,
+      compensation_requires_approval BOOLEAN DEFAULT TRUE,
+      auto_expire_enabled BOOLEAN DEFAULT TRUE,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_tb_config_org_comp ON time_bank_config(organization_id, COALESCE(company_id::text,''));
+
+    CREATE TABLE IF NOT EXISTS time_bank_compensations (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+      company_id UUID REFERENCES companies(id) ON DELETE SET NULL,
+      employee_id UUID NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+      planned_date DATE NOT NULL,
+      minutes INTEGER NOT NULL CHECK (minutes > 0),
+      description TEXT,
+      status VARCHAR(20) NOT NULL DEFAULT 'pending',
+      requested_by UUID REFERENCES users(id) ON DELETE SET NULL,
+      reviewed_by UUID REFERENCES users(id) ON DELETE SET NULL,
+      reviewed_at TIMESTAMPTZ,
+      review_note TEXT,
+      executed_entry_id UUID,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_tbc_org_status ON time_bank_compensations(organization_id, status);
+    CREATE INDEX IF NOT EXISTS idx_tbc_emp ON time_bank_compensations(employee_id, planned_date);
+
+    -- Trigger para preencher expires_at automaticamente em créditos
+    CREATE OR REPLACE FUNCTION set_time_bank_expiration()
+    RETURNS TRIGGER AS $$
+    DECLARE
+      cfg_months INTEGER;
+    BEGIN
+      IF NEW.minutes > 0 AND NEW.expires_at IS NULL THEN
+        SELECT expiration_months INTO cfg_months
+          FROM time_bank_config
+         WHERE organization_id = NEW.organization_id
+           AND (company_id = NEW.company_id OR company_id IS NULL)
+         ORDER BY (company_id = NEW.company_id) DESC NULLS LAST
+         LIMIT 1;
+        NEW.expires_at := NEW.entry_date + ((COALESCE(cfg_months, 12)) || ' months')::interval;
+      END IF;
+      RETURN NEW;
+    END; $$ LANGUAGE plpgsql;
+
+    DROP TRIGGER IF EXISTS trg_set_tb_expiration ON time_bank_entries;
+    CREATE TRIGGER trg_set_tb_expiration BEFORE INSERT ON time_bank_entries
+      FOR EACH ROW EXECUTE FUNCTION set_time_bank_expiration();
   `).catch(err => logError('timeclock.ensureSchema', err));
   schemaReady = true;
 }
+
 router.use(async (_req, _res, next) => { await ensureSchema(); next(); });
 
 // ---- helpers: closing lock & notifications ----
