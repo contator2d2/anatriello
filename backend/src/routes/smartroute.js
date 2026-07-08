@@ -841,5 +841,19 @@ router.post('/orders/:id/tracking-token', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ============ Configurações da Operação (Fluxo Inteligente) ============
+router.get('/operation-settings', async (req, res) => {
+  try {
+    const { getOperationSettings } = await import('../lib/sr-journey.js');
+    res.json(await getOperationSettings(orgId(req)));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+router.put('/operation-settings', async (req, res) => {
+  try {
+    const { upsertOperationSettings } = await import('../lib/sr-journey.js');
+    res.json(await upsertOperationSettings(orgId(req), req.body || {}));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 export default router;
 
