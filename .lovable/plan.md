@@ -1,105 +1,124 @@
-
 ## Objetivo
 
-Criar **Perfis (Templates) de Acesso do App do Colaborador**, onde o RH define quais funções cada tipo de colaborador pode usar dentro do app (bater ponto, ver holerite, pedir férias etc.). Cada colaborador é vinculado a um template e as telas/botões do app se adaptam.
+Transformar o SmartRoute AI de um gerador de rotas em um **controlador de jornada operacional** ponta-a-ponta. Cada entrega vira uma máquina de estados com validações configuráveis, e a próxima só é liberada após o Check-out atender todos os requisitos obrigatórios.
 
-## Capabilities (funções do app hoje)
-
-Vou mapear tudo o que existe atualmente como uma "capability" (chave técnica). Um template é apenas um conjunto liga/desliga dessas chaves.
+## Máquina de estados por entrega (stop)
 
 ```text
-punch.register           Bater ponto pelo celular
-punch.facial_required    Exigir reconhecimento facial no ponto
-punch.view_history       Ver histórico de batidas / espelho
-journey.view             Aba Jornada (horas trabalhadas, banco de horas)
-requests.view            Aba Solicitações (listar)
-requests.create          Abrir novas solicitações
-vacations.view           Consultar férias
-vacations.request        Solicitar férias
-payslip.view             Baixar holerite
-payslip.download_pdf     Salvar/exportar holerite em PDF
-documents.view           Ver documentos pessoais
-documents.upload         Enviar documentos (RG, comprovante etc.)
-benefits.view            Ver benefícios (VR, VT, plano)
-announcements.view       Receber comunicados
-profile.view             Ver perfil
-profile.change_password  Trocar a própria senha
-notifications.receive    Receber push do sistema
+PENDING → NAVIGATING → ARRIVED → CHECKED_IN
+  → CHECKLIST_IN_PROGRESS → CHECKLIST_DONE
+  → PROOF_CAPTURED → SIGNED → CHECKED_OUT → COMPLETED
+                                          ↘ EXCEPTION (com ocorrência)
 ```
 
-Novas funções futuras entram só adicionando uma linha na tabela de capabilities.
+Regras: um stop só avança de estado quando todos os itens obrigatórios daquele passo estão preenchidos. A rota só libera o próximo stop quando o atual está em `COMPLETED` ou `EXCEPTION` justificada.
 
-## Templates iniciais criados por padrão
+## Entidades novas (backend)
 
-- **Operacional (padrão)** — bate ponto (facial ON), vê jornada, holerite, comunicados, perfil, trocar senha. Sem solicitações/férias/documentos/benefícios.
-- **Administrativo** — tudo do Operacional + solicitações, férias, benefícios, documentos.
-- **Gestor** — tudo habilitado.
-- **Visitante / Terceirizado** — só perfil + comunicados. Não bate ponto.
+Prefixo `sr_` (SmartRoute), no schema `public`, com GRANTs e RLS conforme padrão do projeto.
 
-Templates são editáveis; o RH pode criar quantos quiser.
+- `sr_checklist_templates` — nome, escopo (cliente/tipo/canal/categoria/produto/região/equipamento/operação), ativo.
+- `sr_checklist_template_items` — ordem, tipo de campo (`photo`, `video`, `text`, `number`, `temperature`, `stock_count`, `ocr`, `qr`, `barcode`, `signature`, `geo`, `face`, `yes_no`, `multi_choice`), obrigatório, config JSONB (min/max, opções, tolerância GPS, etc.).
+- `sr_checklist_assignments` — regras de vinculação por atributo do PDV (cliente_id, tipo, canal, categoria, região, equipamento, operação, produto). O motor escolhe o(s) template(s) aplicáveis no momento da entrega.
+- `sr_stops` — reforço do stop atual: `state`, `checkin_at`, `checkin_lat/lng`, `checkin_photo_url`, `checkout_at`, `distance_ok`, `template_snapshot_id`, `duration_ms`.
+- `sr_stop_checklist_responses` — resposta por item (valor, mídia, ocr_json, coords, timestamps).
+- `sr_stop_media` — fotos/vídeos/áudios com EXIF (lat, lng, taken_at, device).
+- `sr_stop_occurrences` — tipo (danificado, vencido, recusado, ausente, garantia, devolução, descarte, equipamento, freezer, outros), descrição, mídias, geo.
+- `sr_stop_ocr_results` — produto, marca, código, EAN, lote, fabricação, validade, confiança da IA, ligação com stop e mídia origem.
+- `sr_journey_events` — log append-only de tudo (auditoria/replay do gestor).
 
-## Telas novas no painel do RH
+Todas as tabelas: `GRANT` para `authenticated` + `service_role`, `ENABLE RLS`, policies por `organization_id`.
 
-1. **RH → Acessos → aba "Perfis do App"**
-   - Lista de templates com contagem de colaboradores vinculados.
-   - Botão "Novo perfil" → nome + descrição + grid de capabilities agrupadas (Ponto, Solicitações, Financeiro, Documentos, Perfil).
-   - Editor com switches por capability.
+## Endpoints REST (backend/src/routes/smartroute-driver.js e novos)
 
-2. **Na tela de cada Colaborador (RHColaboradores / RHAcessos)**
-   - Novo campo "Perfil do App" (select com os templates).
-   - Botão "Aplicar template padrão da função" (usa o cargo para sugerir).
+- `POST /api/sr/journey/start` — inicia jornada do dia (checklist do veículo opcional).
+- `GET  /api/sr/journey/today` — resumo (nº entregas, km, tempo, veículo, produtos, ordem).
+- `POST /api/sr/stops/:id/navigate` — marca `NAVIGATING`, retorna deep link Google Maps/Waze.
+- `POST /api/sr/stops/:id/checkin` — valida distância GPS (config por org, padrão 30 m), aceita foto de fachada com EXIF.
+- `GET  /api/sr/stops/:id/checklist` — resolve templates aplicáveis e devolve itens ordenados.
+- `POST /api/sr/stops/:id/checklist/items/:itemId` — grava resposta (com upload de mídia via bucket).
+- `POST /api/sr/stops/:id/ocr` — recebe imagem, chama Lovable AI (Gemini multimodal) e devolve produto/lote/validade/EAN estruturados.
+- `POST /api/sr/stops/:id/occurrence` — registra ocorrência.
+- `POST /api/sr/stops/:id/signature` — assinatura base64 do cliente.
+- `POST /api/sr/stops/:id/checkout` — valida obrigatórios, fecha stop, calcula duração, libera próximo.
+- `GET  /api/sr/stops/:id/next` — devolve próximo stop e deep link de navegação.
 
-## Comportamento no App do Colaborador
+## Motor de validação (backend)
 
-- Ao logar, o backend devolve `capabilities: string[]` junto de `employee`.
-- Guardado em `localStorage.promotor_capabilities` (offline-ready).
-- Um hook `useCanColab(cap)` decide render:
-  - Card de "Registrar Ponto" só aparece com `punch.register`.
-  - Ícones de acesso rápido (Holerite, Férias, Benefícios, Documentos, Solicitações, Jornada, Comunicados) filtrados por capability.
-  - Rotas `/app/*` protegidas por um wrapper `<RequireCap cap="...">`; sem permissão → redireciona para `/app/home` com toast "Função não liberada".
-  - Tabs inferiores (Início, Jornada, Solicitações, Perfil) escondem itens sem permissão.
-- Se o colaborador **não tem** `punch.register`, a Home mostra card "Seu perfil não permite bater ponto pelo app — procure a portaria/gestor".
+Serviço `sr-validation.js`:
+- Resolve templates aplicáveis (interseção de escopos).
+- Faz snapshot do template no `sr_stops` para não quebrar histórico se admin editar depois.
+- Bloqueia transições de estado quando obrigatórios faltam; retorna lista amigável de pendências.
+- Distância GPS: Haversine entre check-in e PDV, com tolerância configurável.
 
-## Detalhes técnicos
+## OCR de embalagens
 
-**Banco (Postgres backend):**
+- Provider: Lovable AI Gateway (`google/gemini-3.1-flash-image` ou `-flash` para JSON estruturado).
+- Prompt fixo pedindo JSON: `{ product, brand, code, ean, batch, manufactured_at, expires_at, confidence }`.
+- Client-side: chamado após cada foto marcada com `ocr: true` no template; resultado exibido para o entregador confirmar/corrigir antes de gravar.
 
-```sql
-CREATE TABLE app_access_templates (
-  id UUID PK,
-  organization_id UUID,
-  name TEXT,
-  description TEXT,
-  is_default BOOLEAN,
-  created_at, updated_at
-);
+## Frontend — App do Entregador
 
-CREATE TABLE app_access_template_caps (
-  template_id UUID FK,
-  capability TEXT,             -- ex: 'punch.register'
-  PRIMARY KEY (template_id, capability)
-);
+Novas telas em `src/pages/entregador/`:
+- `EntregadorJornada.tsx` — resumo do dia + botão "Iniciar operação".
+- `EntregadorEntrega.tsx` — tela principal do stop atual, dividida em abas: **Navegar**, **Check-in**, **Checklist**, **Ocorrências**, **Finalizar**.
+- `components/entregador/`:
+  - `CheckinCard.tsx` (GPS + foto de fachada + validação).
+  - `ChecklistRunner.tsx` (renderiza itens por tipo).
+  - `field-types/` (um componente por tipo: PhotoField, VideoField, NumberField, TemperatureField, StockCountField, OcrField, QrField, BarcodeField, SignatureField, GeoField, FaceField, YesNoField, MultiChoiceField).
+  - `OccurrenceSheet.tsx` (bottom-sheet para registrar ocorrência).
+  - `SignaturePad.tsx` (canvas).
+  - `NextStopBanner.tsx` (aparece após check-out, com contagem regressiva e botão "Navegar").
+- Hook `use-smartroute-journey.ts` (React Query) para todos os endpoints acima.
+- Deep links: `google.navigation:q=lat,lng` (Android) e `comgooglemaps://` / `waze://` (iOS), com fallback web `https://www.google.com/maps/dir/?api=1&destination=...`.
+- Suporte offline: fila local (IndexedDB via `offline-db.ts` existente) para mídias/respostas, sincroniza ao voltar rede — reaproveita `use-offline-sync`.
 
-ALTER TABLE employees
-  ADD COLUMN app_access_template_id UUID REFERENCES app_access_templates(id);
-```
+## Frontend — Admin (SmartRoute)
 
-Seed automático dos 4 templates iniciais em `init-db.js` (só se a org não tiver nenhum).
+Nova página `src/pages/smartroute/SmartRouteChecklists.tsx`:
+- Editor drag-and-drop de templates com preview mobile.
+- Aba de **Vinculação** (regras por cliente/tipo/canal/categoria/região/equipamento/operação/produto).
+- Aba **Simulação**: escolhe um PDV/pedido e mostra qual checklist seria aplicado.
 
-**Backend (`backend/src/routes/rh.js` + novo `access-templates.js`):**
-- `GET/POST/PUT/DELETE /api/rh/app-templates`
-- `PUT /api/rh/employees/:id/app-template` — vincula/desvincula.
-- Endpoint `/api/promotor/me` passa a devolver `capabilities`.
+Enriquecer `SmartRouteReplay.tsx` para exibir eventos da jornada (checkins, fotos, OCR, ocorrências, checkout) na timeline existente.
 
-**Frontend:**
-- Novo hook `useAppAccessTemplates()` (React Query).
-- Novo componente `AppAccessTemplatesTab` dentro de `RHAcessos.tsx` (aba lateral) — mesmo padrão visual das tabs existentes.
-- Novo select "Perfil do App" no dialog de "Liberar acesso" em `RHAcessos.tsx` e na edição do colaborador em `RHColaboradores.tsx`.
-- Novo `src/lib/colab-capabilities.ts` — helper `hasCap(cap)`.
-- Novo `<RequireCap>` em `src/components/ColabRequireCap.tsx`.
-- `ColaboradorHome.tsx` e `ColaboradorLayout.tsx` passam a filtrar cards/tabs por capability.
+Adicionar cards no `SmartRouteDashboard.tsx`: entregas em andamento por estado, tempo médio por stop, taxa de ocorrências, checklists com maior falha.
 
-## Fora do escopo agora
+## Configurações por organização
 
-- UI para atribuir template em massa (fica no próximo ciclo).
-- Permissões por PDV/Filial (o template atual é global por colaborador).
+Em `SmartRouteConfiguracoes.tsx` adicionar bloco "Operação":
+- Distância máxima de check-in (default 30 m).
+- Exigir foto de fachada (sim/não).
+- Exigir checklist do veículo no início do dia (sim/não).
+- App de navegação preferido (Google Maps / Waze / perguntar).
+- Permitir check-out com ocorrência (sim/não).
+
+## Storage
+
+Bucket privado `smartroute-media` (fotos, vídeos, áudios, assinaturas). Upload assinado pelo backend; policies por `organization_id` e `stop_id`.
+
+## Ordem de entrega (3 ondas)
+
+**Onda 1 — Fundação**
+Migração completa (`sr_*`), motor de validação, endpoints de jornada/check-in/checkout, tela `EntregadorJornada` + `EntregadorEntrega` com Navegar, Check-in e Finalizar (foto NF + assinatura + checkout). Sem checklists customizados ainda — só campos padrão.
+
+**Onda 2 — Checklists configuráveis + OCR**
+Templates, vinculação por escopo, `ChecklistRunner` com todos os tipos de campo, integração OCR via Lovable AI, `SmartRouteChecklists.tsx` (editor + simulação).
+
+**Onda 3 — Ocorrências, offline, replay e dashboard**
+`OccurrenceSheet`, fila offline, timeline no `SmartRouteReplay`, cards operacionais no Dashboard, configurações da organização.
+
+## Detalhes técnicos importantes
+
+- Fuso `America/Sao_Paulo` em todos os timestamps exibidos (usar helpers `br-utils`, evitar `toISOString`).
+- Reaproveitar `ensureTables` (padrão do projeto) para JIT das novas tabelas antes de I/O.
+- Reaproveitar `WebGL + fallback CPU` do face-api.js quando `field-type: face` for usado.
+- Deep link de navegação nunca abre em nova aba dentro do WebView — usa `window.location.href` com o scheme nativo.
+- Todas as mídias armazenam EXIF (lat, lng, taken_at) — se faltar, backend recusa com mensagem clara.
+- Snapshot do template no stop garante que edições futuras do admin não retroagem em entregas já iniciadas.
+
+## Fora de escopo desta entrega
+
+- Roteirização em si (já existe).
+- Integração com ERPs externos (fica em `SmartRouteIntegracoes`).
+- Cobrança/financeiro do entregador.
