@@ -20,6 +20,7 @@ import {
   useStopOccurrence, useStopSignature, useStopCheckout, useNextStop,
   getPos, pickPhoto, openNavLink,
 } from "@/hooks/use-smartroute-journey";
+import { ChecklistRunner } from "@/components/entregador/ChecklistRunner";
 
 const OCCURRENCE_TYPES = [
   { value: "danificado", label: "Produto danificado" },
@@ -197,8 +198,9 @@ export default function EntregadorEntrega() {
 
         {/* Fluxo em abas */}
         <Tabs value={tab} onValueChange={setTab}>
-          <TabsList className="grid grid-cols-4 w-full">
+          <TabsList className="grid grid-cols-5 w-full">
             <TabsTrigger value="navigate">Navegar</TabsTrigger>
+            <TabsTrigger value="checklist">Checklist</TabsTrigger>
             <TabsTrigger value="proof">Comprovante</TabsTrigger>
             <TabsTrigger value="sign">Assinar</TabsTrigger>
             <TabsTrigger value="finish">Finalizar</TabsTrigger>
@@ -229,6 +231,11 @@ export default function EntregadorEntrega() {
                 )}
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* CHECKLIST configurável */}
+          <TabsContent value="checklist">
+            <ChecklistRunner stopId={id} />
           </TabsContent>
 
           {/* COMPROVANTE — foto de nota fiscal + mídias */}

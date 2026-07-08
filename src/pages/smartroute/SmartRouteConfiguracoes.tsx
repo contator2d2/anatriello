@@ -11,12 +11,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Truck, Clock, CalendarX, Plus, Pencil, Trash2, Settings } from "lucide-react";
+import { Truck, Clock, CalendarX, Plus, Pencil, Trash2, Settings, ShieldCheck } from "lucide-react";
 import {
   useSRVehicleTypes, useSRSaveVehicleType, useSRDeleteVehicleType,
   useSRWindows, useSRSaveWindow, useSRDeleteWindow,
   useSRExceptions, useSRSaveException, useSRDeleteException,
 } from "@/hooks/use-smartroute-ops";
+import { useOperationSettings, useSaveOperationSettings } from "@/hooks/use-smartroute-checklists";
 import { toast } from "sonner";
 
 const DAYS = [
@@ -226,20 +227,70 @@ function ExceptionsTab() {
   );
 }
 
+function OperationTab() {
+  const { data } = useOperationSettings();
+  const save = useSaveOperationSettings();
+  const [form, setForm] = useState<any>({});
+  const cur = { ...(data || {}), ...form };
+  const submit = async () => {
+    await save.mutateAsync(form);
+    toast.success("Salvo");
+    setForm({});
+  };
+  return (
+    <Card>
+      <CardHeader><CardTitle className="text-base">Fluxo Inteligente da Operação</CardTitle></CardHeader>
+      <CardContent className="space-y-4 max-w-xl">
+        <div>
+          <Label>Distância máxima de check-in (metros)</Label>
+          <Input type="number" value={cur.max_checkin_distance_m ?? 30}
+            onChange={(e) => setForm({ ...form, max_checkin_distance_m: +e.target.value })} />
+        </div>
+        <div>
+          <Label>App de navegação preferido</Label>
+          <Select value={cur.preferred_nav_app || "ask"} onValueChange={(v) => setForm({ ...form, preferred_nav_app: v })}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ask">Perguntar</SelectItem>
+              <SelectItem value="google">Google Maps</SelectItem>
+              <SelectItem value="waze">Waze</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        {[
+          ["require_facade_photo", "Exigir foto da fachada"],
+          ["require_invoice_photo", "Exigir foto da nota fiscal"],
+          ["require_signature", "Exigir assinatura do cliente"],
+          ["require_vehicle_checklist", "Exigir checklist do veículo no início do dia"],
+          ["allow_checkout_with_occurrence", "Permitir check-out com ocorrência"],
+        ].map(([k, l]) => (
+          <div key={k} className="flex items-center justify-between border-t pt-3">
+            <Label>{l}</Label>
+            <Switch checked={!!cur[k]} onCheckedChange={(v) => setForm({ ...form, [k]: v })} />
+          </div>
+        ))}
+        <Button onClick={submit} disabled={save.isPending}>Salvar operação</Button>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function SmartRouteConfiguracoes() {
   return (
     <MainLayout>
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2"><Settings className="w-6 h-6" />Configurações operacionais</h1>
-          <p className="text-sm text-muted-foreground">Tipos de veículo, janelas de entrega e exceções do calendário.</p>
+          <p className="text-sm text-muted-foreground">Operação, tipos de veículo, janelas de entrega e exceções.</p>
         </div>
-        <Tabs defaultValue="tipos">
+        <Tabs defaultValue="operacao">
           <TabsList>
+            <TabsTrigger value="operacao"><ShieldCheck className="w-4 h-4 mr-1" />Operação</TabsTrigger>
             <TabsTrigger value="tipos"><Truck className="w-4 h-4 mr-1" />Tipos de veículo</TabsTrigger>
             <TabsTrigger value="janelas"><Clock className="w-4 h-4 mr-1" />Janelas de entrega</TabsTrigger>
             <TabsTrigger value="excecoes"><CalendarX className="w-4 h-4 mr-1" />Exceções</TabsTrigger>
           </TabsList>
+          <TabsContent value="operacao"><OperationTab /></TabsContent>
           <TabsContent value="tipos"><VehicleTypesTab /></TabsContent>
           <TabsContent value="janelas"><WindowsTab /></TabsContent>
           <TabsContent value="excecoes"><ExceptionsTab /></TabsContent>

@@ -103,6 +103,35 @@ export function useNextStop(stopId?: string) {
   });
 }
 
+// ============ CHECKLIST (Onda 2) ============
+export function useStopChecklist(stopId?: string) {
+  return useQuery<{ templates: any[]; items: any[] }>({
+    queryKey: ['sr-stop-checklist', stopId],
+    queryFn: () => driverApi(`${BASE}/stops/${stopId}/checklist`),
+    enabled: !!stopId,
+  });
+}
+
+export function useSaveChecklistItem(stopId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ itemId, ...body }: {
+      itemId: string; value?: any; media_ids?: string[]; ocr_json?: any; lat?: number; lng?: number;
+    }) => driverApi(`${BASE}/stops/${stopId}/checklist/items/${itemId}`, { method: 'POST', body }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['sr-stop-checklist', stopId] });
+      qc.invalidateQueries({ queryKey: ['sr-stop', stopId] });
+    },
+  });
+}
+
+export function useStopOcr(stopId: string) {
+  return useMutation({
+    mutationFn: (body: { image: string; media_id?: string; model?: string }) =>
+      driverApi(`${BASE}/stops/${stopId}/ocr`, { method: 'POST', body }),
+  });
+}
+
 // Utilidades
 export const getPos = () => new Promise<{ lat?: number; lng?: number }>((resolve) => {
   if (!navigator.geolocation) return resolve({});

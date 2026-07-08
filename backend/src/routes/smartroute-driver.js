@@ -9,6 +9,7 @@ import {
   distanceMeters, getOperationSettings, computeCheckoutBlockers,
   logEvent, buildNavLink,
 } from '../lib/sr-journey.js';
+import { resolveTemplatesForStop, ocrProductImage } from '../lib/sr-checklists.js';
 
 const router = express.Router();
 router.use(async (req, res, next) => { try { await ensureSmartRouteTables(); next(); } catch (e) { next(e); } });
@@ -308,6 +309,79 @@ router.get('/stops/:id/next', async (req, res) => {
       link: buildNavLink({ lat: s.pdv_lat, lng: s.pdv_lng, preferred: settings.preferred_nav_app }),
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ============ CHECKLIST + OCR (Onda 2) ============
+router.get('/stops/:id/checklist', async (req, res) => {
+  try {
+    const { templates, items } = await resolveTemplatesForStop(req.params.id, req.organizationId);
+    const responses = await query(
+      `SELECT * FROM smartroute_stop_checklist_responses WHERE stop_id=$1`, [req.params.id]
+    );
+    const byItem = new Map(responses.rows.map((r) => [r.item_id, r]));
+    res.json({
+      templates,
+      items: items.map((it) => ({ ...it, response: byItem.get(it.id) || null })),
+    });
+  } catch (e) { logError('sr.driver.checklist.get', e); res.status(500).json({ error: e.message }); }
+});
+
+router.post('/stops/:id/checklist/items/:itemId', async (req, res) => {
+  try {
+    const { value, media_ids, ocr_json, lat, lng } = req.body || {};
+    const it = await query(
+      `SELECT template_id, required, field_type, label FROM smartroute_checklist_template_items WHERE id=$1`,
+      [req.params.itemId]
+    );
+    if (!it.rows[0]) return res.status(404).json({ error: 'Item não encontrado' });
+    const r = await query(
+      `INSERT INTO smartroute_stop_checklist_responses
+         (stop_id, template_id, item_id, value, media_ids, ocr_json, lat, lng, answered_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())
+       ON CONFLICT (stop_id, item_id) DO UPDATE SET
+         value=EXCLUDED.value, media_ids=EXCLUDED.media_ids, ocr_json=EXCLUDED.ocr_json,
+         lat=EXCLUDED.lat, lng=EXCLUDED.lng, answered_at=NOW()
+       RETURNING *`,
+      [req.params.id, it.rows[0].template_id, req.params.itemId,
+        JSON.stringify(value ?? null), media_ids || [], ocr_json ? JSON.stringify(ocr_json) : null,
+        lat ?? null, lng ?? null]
+    );
+    await query(
+      `UPDATE smartroute_route_stops SET state=CASE
+         WHEN state IN ('PENDING','NAVIGATING','ARRIVED','CHECKED_IN') THEN 'CHECKLIST_IN_PROGRESS'
+         ELSE state END, updated_at=NOW() WHERE id=$1`, [req.params.id]);
+    await logEvent({
+      organizationId: req.organizationId, driverId: req.driverId, stopId: req.params.id,
+      eventType: 'checklist_item_answered',
+      payload: { item_id: req.params.itemId, label: it.rows[0].label, field_type: it.rows[0].field_type },
+      lat, lng,
+    });
+    res.json(r.rows[0]);
+  } catch (e) { logError('sr.driver.checklist.save', e); res.status(500).json({ error: e.message }); }
+});
+
+router.post('/stops/:id/ocr', async (req, res) => {
+  try {
+    const { image, media_id, model } = req.body || {};
+    if (!image) return res.status(400).json({ error: 'image (data URL) obrigatório' });
+    const parsed = await ocrProductImage(image, { model });
+    const r = await query(
+      `INSERT INTO smartroute_stop_ocr_results
+         (organization_id, stop_id, media_id, product, brand, code, ean, batch,
+          manufactured_at, expires_at, confidence, raw_json)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+      [req.organizationId, req.params.id, media_id || null,
+        parsed.product || null, parsed.brand || null, parsed.code || null,
+        parsed.ean || null, parsed.batch || null,
+        parsed.manufactured_at || null, parsed.expires_at || null,
+        parsed.confidence ?? null, JSON.stringify(parsed)]
+    );
+    await logEvent({
+      organizationId: req.organizationId, driverId: req.driverId, stopId: req.params.id,
+      eventType: 'ocr_extracted', payload: { model, confidence: parsed.confidence },
+    });
+    res.json({ ok: true, result: r.rows[0], parsed });
+  } catch (e) { logError('sr.driver.ocr', e); res.status(500).json({ error: e.message }); }
 });
 
 router.post('/stops/:id/checkout', async (req, res) => {

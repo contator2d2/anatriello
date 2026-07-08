@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useParams, Link } from "react-router-dom";
 import { useSRReplay } from "@/hooks/use-smartroute";
+import { useRouteJourneyEvents } from "@/hooks/use-smartroute-checklists";
 import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -12,6 +13,7 @@ import { ArrowLeft, Play, Pause, RotateCcw } from "lucide-react";
 export default function SmartRouteReplay() {
   const { id } = useParams<{ id: string }>();
   const { data } = useSRReplay(id);
+  const { data: journeyEvents = [] } = useRouteJourneyEvents(id);
   const mapRef = useRef<L.Map | null>(null);
   const container = useRef<HTMLDivElement>(null);
   const trailRef = useRef<L.Polyline | null>(null);
@@ -86,12 +88,22 @@ export default function SmartRouteReplay() {
           </CardContent>
         </Card>
         <Card>
-          <CardHeader><CardTitle className="text-base">Eventos</CardTitle></CardHeader>
-          <CardContent className="text-sm space-y-1 max-h-64 overflow-auto">
-            {(data?.events || []).map((e: any, i: number) => (
+          <CardHeader><CardTitle className="text-base">Linha do tempo da jornada</CardTitle></CardHeader>
+          <CardContent className="text-sm space-y-1 max-h-96 overflow-auto">
+            {journeyEvents.map((e: any) => (
+              <div key={e.id} className="flex items-center justify-between border-b py-1.5 text-xs">
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline">{e.event_type}</Badge>
+                  {e.stop_seq != null && <span className="text-muted-foreground">#{e.stop_seq}</span>}
+                  {e.pdv_name && <span>{e.pdv_name}</span>}
+                </div>
+                <span className="text-muted-foreground">{new Date(e.created_at).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo" })}</span>
+              </div>
+            ))}
+            {!journeyEvents.length && (data?.events || []).map((e: any, i: number) => (
               <div key={i} className="flex justify-between border-b py-1">
                 <span>{e.event_type}</span>
-                <span className="text-muted-foreground text-xs">{new Date(e.created_at).toLocaleString()}</span>
+                <span className="text-muted-foreground text-xs">{new Date(e.created_at).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}</span>
               </div>
             ))}
           </CardContent>

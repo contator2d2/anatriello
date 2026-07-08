@@ -104,6 +104,13 @@ export async function computeCheckoutBlockers(stopId, organizationId) {
   if (settings.require_invoice_photo && !has('invoice')) blockers.push('Foto da nota fiscal obrigatória');
   if (settings.require_signature && !has('signature')) blockers.push('Assinatura do cliente obrigatória');
 
+  // Itens obrigatórios do checklist configurável
+  try {
+    const { getPendingRequiredItems } = await import('./sr-checklists.js');
+    const pending = await getPendingRequiredItems(stopId, organizationId);
+    for (const label of pending) blockers.push(`Checklist: ${label}`);
+  } catch { /* silent */ }
+
   return blockers;
 }
 
