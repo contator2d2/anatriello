@@ -303,6 +303,7 @@ const App = () => (
             <Route path="/landing" element={<LandingPage />} />
             <Route path="/supermercado" element={<SupermarketLandingPage />} />
             <Route path="/dashboard" element={<ProtectedRoute><Index /></ProtectedRoute>} />
+            <Route path="/central-apps" element={<ProtectedRoute><CentralApps /></ProtectedRoute>} />
             <Route path="/merch/dashboard" element={<ProtectedRoute><MerchDashboard /></ProtectedRoute>} />
             <Route path="/conexao" element={<ProtectedRoute><Conexao /></ProtectedRoute>} />
             <Route path="/contatos" element={<ProtectedRoute><Contatos /></ProtectedRoute>} />
