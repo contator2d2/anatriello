@@ -103,53 +103,268 @@ router.post('/routes/:id/start', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ============ JORNADA (Onda 1) ============
+router.get('/journey/today', async (req, res) => {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const r = await query(
+      `SELECT r.id, r.code, r.status, r.total_stops, r.completed_stops,
+              r.total_distance_km, r.estimated_duration_min, r.started_at, r.ended_at,
+              v.plate AS vehicle_plate, v.model AS vehicle_model,
+              (SELECT COUNT(*) FROM smartroute_orders o
+                JOIN smartroute_route_stops s2 ON s2.order_id=o.id
+                WHERE s2.route_id=r.id) AS orders_count
+       FROM smartroute_routes r
+       LEFT JOIN smartroute_vehicles v ON v.id=r.vehicle_id
+       WHERE r.driver_id=$1 AND r.planned_date=$2
+       ORDER BY r.created_at`, [req.driverId, today]);
+    const settings = await getOperationSettings(req.organizationId);
+    res.json({ date: today, routes: r.rows, operation: settings });
+  } catch (e) { logError('sr.driver.journey.today', e); res.status(500).json({ error: e.message }); }
+});
+
+router.post('/journey/start', async (req, res) => {
+  try {
+    const { route_id, vehicle_checklist } = req.body || {};
+    if (route_id) {
+      await query(
+        `UPDATE smartroute_routes SET status='em_andamento',
+           started_at=COALESCE(started_at,NOW()), updated_at=NOW()
+         WHERE id=$1 AND driver_id=$2`, [route_id, req.driverId]);
+    }
+    await query(`UPDATE smartroute_drivers SET current_status='em_rota' WHERE id=$1`, [req.driverId]);
+    await logEvent({
+      organizationId: req.organizationId, driverId: req.driverId, routeId: route_id,
+      eventType: 'journey_started', payload: { vehicle_checklist: vehicle_checklist || null },
+    });
+    res.json({ ok: true });
+  } catch (e) { logError('sr.driver.journey.start', e); res.status(500).json({ error: e.message }); }
+});
+
+router.post('/stops/:id/navigate', async (req, res) => {
+  try {
+    const { lat, lng } = req.body || {};
+    const r = await query(
+      `SELECT s.id, s.route_id, s.state, p.lat AS pdv_lat, p.lng AS pdv_lng, p.name AS pdv_name
+       FROM smartroute_route_stops s
+       LEFT JOIN smartroute_pdvs p ON p.id=s.pdv_id
+       WHERE s.id=$1`, [req.params.id]);
+    const s = r.rows[0];
+    if (!s) return res.status(404).json({ error: 'not found' });
+    if (['PENDING', 'NAVIGATING'].includes(s.state || 'PENDING')) {
+      await query(`UPDATE smartroute_route_stops SET state='NAVIGATING', updated_at=NOW() WHERE id=$1`, [s.id]);
+    }
+    const settings = await getOperationSettings(req.organizationId);
+    const link = buildNavLink({ lat: s.pdv_lat, lng: s.pdv_lng, preferred: settings.preferred_nav_app });
+    await logEvent({
+      organizationId: req.organizationId, driverId: req.driverId, routeId: s.route_id, stopId: s.id,
+      eventType: 'stop_navigate', payload: { preferred: settings.preferred_nav_app }, lat, lng,
+    });
+    res.json({ ok: true, link, pdv: { name: s.pdv_name, lat: s.pdv_lat, lng: s.pdv_lng } });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 router.post('/stops/:id/checkin', async (req, res) => {
   try {
     const { lat, lng, photo } = req.body || {};
-    const s = await query(
-      `UPDATE smartroute_route_stops SET status='em_atendimento', arrived_at=NOW(),
-        checkin_lat=$2, checkin_lng=$3, checkin_photo=$4, updated_at=NOW()
-       WHERE id=$1 RETURNING route_id`, [req.params.id, lat, lng, photo]);
-    if (!s.rows[0]) return res.status(404).json({ error: 'not found' });
-    await query(`UPDATE smartroute_drivers SET current_status='em_pdv', current_lat=$2, current_lng=$3, last_location_at=NOW() WHERE id=$1`, [req.driverId, lat, lng]);
+    const r = await query(
+      `SELECT s.id, s.route_id, s.state, p.lat AS pdv_lat, p.lng AS pdv_lng
+       FROM smartroute_route_stops s
+       LEFT JOIN smartroute_pdvs p ON p.id=s.pdv_id
+       WHERE s.id=$1`, [req.params.id]);
+    const s = r.rows[0];
+    if (!s) return res.status(404).json({ error: 'Entrega não encontrada' });
+    const settings = await getOperationSettings(req.organizationId);
+
+    // Validação de distância
+    let distance = null;
+    let distanceOk = true;
+    if (s.pdv_lat != null && s.pdv_lng != null && lat != null && lng != null) {
+      distance = distanceMeters({ lat, lng }, { lat: s.pdv_lat, lng: s.pdv_lng });
+      distanceOk = distance != null && distance <= (settings.max_checkin_distance_m || 30);
+    } else if (s.pdv_lat != null && (lat == null || lng == null)) {
+      distanceOk = false;
+    }
+
+    if (!distanceOk) {
+      await logEvent({
+        organizationId: req.organizationId, driverId: req.driverId, routeId: s.route_id, stopId: s.id,
+        eventType: 'stop_checkin_denied', payload: { distance_m: distance, max: settings.max_checkin_distance_m }, lat, lng,
+      });
+      return res.status(422).json({
+        error: 'Check-in bloqueado: você está fora do raio permitido do PDV.',
+        distance_m: distance != null ? Math.round(distance) : null,
+        max_distance_m: settings.max_checkin_distance_m,
+      });
+    }
+
+    if (settings.require_facade_photo && !photo) {
+      return res.status(422).json({ error: 'Foto da fachada é obrigatória para o check-in.' });
+    }
+
+    await query(
+      `UPDATE smartroute_route_stops
+         SET status='em_atendimento', state='CHECKED_IN',
+             arrived_at=COALESCE(arrived_at,NOW()), checkin_at=COALESCE(checkin_at,NOW()),
+             checkin_lat=$2, checkin_lng=$3, checkin_photo=$4,
+             checkin_distance_m=$5, distance_ok=$6, updated_at=NOW()
+       WHERE id=$1`, [s.id, lat, lng, photo || null, distance, distanceOk]);
+
+    if (photo) {
+      await query(
+        `INSERT INTO smartroute_stop_media (organization_id, stop_id, kind, url, lat, lng, taken_at)
+         VALUES ($1,$2,'facade',$3,$4,$5,NOW())`,
+        [req.organizationId, s.id, photo, lat, lng]);
+    }
+
+    await query(`UPDATE smartroute_drivers SET current_status='em_pdv', current_lat=$2, current_lng=$3, last_location_at=NOW() WHERE id=$1`,
+      [req.driverId, lat, lng]);
     await query(
       `INSERT INTO smartroute_events (organization_id, route_id, driver_id, stop_id, event_type, lat, lng)
        VALUES ($1,$2,$3,$4,'stop_checkin',$5,$6)`,
-      [req.organizationId, s.rows[0].route_id, req.driverId, req.params.id, lat, lng]);
+      [req.organizationId, s.route_id, req.driverId, s.id, lat, lng]);
+    await logEvent({
+      organizationId: req.organizationId, driverId: req.driverId, routeId: s.route_id, stopId: s.id,
+      eventType: 'stop_checkin', payload: { distance_m: distance }, lat, lng,
+    });
+    res.json({ ok: true, distance_m: distance != null ? Math.round(distance) : null });
+  } catch (e) { logError('sr.driver.checkin', e); res.status(500).json({ error: e.message }); }
+});
+
+// Upload genérico de mídia associada à entrega
+router.post('/stops/:id/media', async (req, res) => {
+  try {
+    const { kind, url, lat, lng, metadata } = req.body || {};
+    if (!url || !kind) return res.status(400).json({ error: 'kind e url são obrigatórios' });
+    const r = await query(
+      `INSERT INTO smartroute_stop_media (organization_id, stop_id, kind, url, lat, lng, metadata)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [req.organizationId, req.params.id, kind, url, lat ?? null, lng ?? null,
+        JSON.stringify(metadata || {})]);
+    res.json(r.rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Ocorrências ricas
+router.post('/stops/:id/occurrence', async (req, res) => {
+  try {
+    const { type, description, severity, lat, lng, media_ids } = req.body || {};
+    if (!type) return res.status(400).json({ error: 'type é obrigatório' });
+    const r = await query(
+      `INSERT INTO smartroute_stop_occurrences
+         (organization_id, stop_id, driver_id, type, description, severity, lat, lng, media_ids)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+      [req.organizationId, req.params.id, req.driverId, type, description || null,
+        severity || 'medium', lat ?? null, lng ?? null, media_ids || []]);
+    await logEvent({
+      organizationId: req.organizationId, driverId: req.driverId, stopId: req.params.id,
+      eventType: 'occurrence_added', payload: { type, severity }, lat, lng,
+    });
+    res.json(r.rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Assinatura do cliente (registra como mídia kind=signature)
+router.post('/stops/:id/signature', async (req, res) => {
+  try {
+    const { signature_url, receiver_name, lat, lng } = req.body || {};
+    if (!signature_url) return res.status(400).json({ error: 'signature_url é obrigatório' });
+    await query(
+      `INSERT INTO smartroute_stop_media (organization_id, stop_id, kind, url, lat, lng)
+       VALUES ($1,$2,'signature',$3,$4,$5)`,
+      [req.organizationId, req.params.id, signature_url, lat ?? null, lng ?? null]);
+    await query(
+      `UPDATE smartroute_route_stops SET state='SIGNED',
+         signature_url=$2, receiver_name=COALESCE($3,receiver_name), updated_at=NOW()
+       WHERE id=$1`, [req.params.id, signature_url, receiver_name || null]);
+    await logEvent({
+      organizationId: req.organizationId, driverId: req.driverId, stopId: req.params.id,
+      eventType: 'stop_signed', payload: { receiver_name: receiver_name || null }, lat, lng,
+    });
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.post('/stops/:id/photo', async (req, res) => {
+// Próxima entrega
+router.get('/stops/:id/next', async (req, res) => {
   try {
-    const { url, kind, lat, lng } = req.body || {};
-    const r = await query(
-      `INSERT INTO smartroute_stop_photos (stop_id, url, kind, lat, lng) VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-      [req.params.id, url, kind || 'entrega', lat, lng]);
-    res.json(r.rows[0]);
+    const cur = await query(
+      `SELECT route_id, sequence FROM smartroute_route_stops WHERE id=$1`, [req.params.id]);
+    const c = cur.rows[0];
+    if (!c) return res.status(404).json({ error: 'not found' });
+    const nxt = await query(
+      `SELECT s.id, s.sequence, p.name AS pdv_name, p.address AS pdv_address,
+              p.lat AS pdv_lat, p.lng AS pdv_lng
+       FROM smartroute_route_stops s
+       LEFT JOIN smartroute_pdvs p ON p.id=s.pdv_id
+       WHERE s.route_id=$1 AND s.status='pendente' AND s.sequence > $2
+       ORDER BY s.sequence LIMIT 1`, [c.route_id, c.sequence]);
+    if (!nxt.rows[0]) return res.json({ done: true });
+    const settings = await getOperationSettings(req.organizationId);
+    const s = nxt.rows[0];
+    res.json({
+      done: false,
+      stop: s,
+      link: buildNavLink({ lat: s.pdv_lat, lng: s.pdv_lng, preferred: settings.preferred_nav_app }),
+    });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 router.post('/stops/:id/checkout', async (req, res) => {
   try {
     const { lat, lng, signature_url, receiver_name, notes } = req.body || {};
+
+    // Grava assinatura recebida no mesmo payload (compat com fluxo antigo)
+    if (signature_url) {
+      await query(
+        `INSERT INTO smartroute_stop_media (organization_id, stop_id, kind, url, lat, lng)
+         VALUES ($1,$2,'signature',$3,$4,$5)`,
+        [req.organizationId, req.params.id, signature_url, lat ?? null, lng ?? null]);
+    }
+
+    // Bloqueios
+    const blockers = await computeCheckoutBlockers(req.params.id, req.organizationId);
+    if (blockers.length) {
+      return res.status(422).json({ error: 'Pendências obrigatórias', blockers });
+    }
+
     const s = await query(
-      `UPDATE smartroute_route_stops SET status='concluida', departed_at=NOW(),
-        checkout_lat=$2, checkout_lng=$3, signature_url=$4, receiver_name=$5, notes=COALESCE($6,notes), updated_at=NOW()
-       WHERE id=$1 RETURNING route_id, order_id`, [req.params.id, lat, lng, signature_url, receiver_name, notes]);
+      `UPDATE smartroute_route_stops
+         SET status='concluida', state='COMPLETED',
+             departed_at=NOW(), checkout_at=NOW(),
+             checkout_lat=$2, checkout_lng=$3,
+             signature_url=COALESCE($4,signature_url),
+             receiver_name=COALESCE($5,receiver_name),
+             notes=COALESCE($6,notes),
+             duration_ms = CASE WHEN checkin_at IS NOT NULL
+               THEN EXTRACT(EPOCH FROM (NOW() - checkin_at))*1000 ELSE duration_ms END,
+             updated_at=NOW()
+       WHERE id=$1 RETURNING route_id, order_id, duration_ms`,
+      [req.params.id, lat, lng, signature_url || null, receiver_name || null, notes || null]);
     if (!s.rows[0]) return res.status(404).json({ error: 'not found' });
-    if (s.rows[0].order_id) await query(`UPDATE smartroute_orders SET status='entregue', updated_at=NOW() WHERE id=$1`, [s.rows[0].order_id]);
+
+    if (s.rows[0].order_id) {
+      await query(`UPDATE smartroute_orders SET status='entregue', updated_at=NOW() WHERE id=$1`, [s.rows[0].order_id]);
+    }
     await query(
       `UPDATE smartroute_routes SET completed_stops = (
          SELECT COUNT(*) FROM smartroute_route_stops WHERE route_id=$1 AND status='concluida'
        ), updated_at=NOW() WHERE id=$1`, [s.rows[0].route_id]);
-    await query(`UPDATE smartroute_drivers SET current_status='em_rota', current_lat=$2, current_lng=$3, last_location_at=NOW() WHERE id=$1`, [req.driverId, lat, lng]);
+    await query(`UPDATE smartroute_drivers SET current_status='em_rota',
+       current_lat=$2, current_lng=$3, last_location_at=NOW() WHERE id=$1`,
+      [req.driverId, lat, lng]);
+
     await query(
       `INSERT INTO smartroute_events (organization_id, route_id, driver_id, stop_id, event_type, lat, lng)
        VALUES ($1,$2,$3,$4,'stop_checkout',$5,$6)`,
       [req.organizationId, s.rows[0].route_id, req.driverId, req.params.id, lat, lng]);
-    res.json({ ok: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+    await logEvent({
+      organizationId: req.organizationId, driverId: req.driverId,
+      routeId: s.rows[0].route_id, stopId: req.params.id,
+      eventType: 'stop_checkout', payload: { duration_ms: s.rows[0].duration_ms }, lat, lng,
+    });
+    res.json({ ok: true, duration_ms: s.rows[0].duration_ms });
+  } catch (e) { logError('sr.driver.checkout', e); res.status(500).json({ error: e.message }); }
 });
 
 router.post('/stops/:id/fail', async (req, res) => {
