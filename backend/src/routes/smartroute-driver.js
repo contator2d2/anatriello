@@ -384,7 +384,7 @@ router.post('/stops/:id/ocr', async (req, res) => {
   } catch (e) { logError('sr.driver.ocr', e); res.status(500).json({ error: e.message }); }
 });
 
-
+router.post('/stops/:id/checkout', async (req, res) => {
   try {
     const { lat, lng, signature_url, receiver_name, notes } = req.body || {};
 
