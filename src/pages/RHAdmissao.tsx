@@ -53,7 +53,7 @@ export default function RHAdmissao() {
 
   const emptyForm = {
     candidate_name: "", candidate_email: "", candidate_phone: "", candidate_cpf: "",
-    position: "", department_id: "", branch_id: "",
+    position: "", department_id: "", branch_id: "", company_id: "",
     admission_date: new Date().toISOString().slice(0, 10),
     probation_end_date: "",
     salary: 0,
