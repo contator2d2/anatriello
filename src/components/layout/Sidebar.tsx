@@ -58,6 +58,7 @@ import {
   ScanFace,
   AlertTriangle,
   HelpCircle,
+  BookOpen,
   Truck,
   Route as RouteIcon,
   Package,
@@ -166,6 +167,7 @@ const getNavSections = (hasConnections: boolean): NavSection[] => [
       { name: "Rastreamento", href: "/rh/rastreamento", icon: Navigation, pageKey: 'rh_rastreamento', moduleKey: 'rh' },
       { name: "Logs & Erros", href: "/rh/logs", icon: Code, pageKey: 'rh_logs', moduleKey: 'rh' },
       { name: "Ajuda", href: "/rh/ajuda", icon: HelpCircle, pageKey: 'rh_ajuda', moduleKey: 'rh' },
+      { name: "Documentação", href: "/rh/documentacao", icon: BookOpen, pageKey: 'rh_ajuda', moduleKey: 'rh' },
     ],
   },
   {

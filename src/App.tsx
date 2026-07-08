@@ -95,6 +95,7 @@ import RHSolicitacoesAdmin from "./pages/RHSolicitacoesAdmin";
 import RHMapaOperacional from "./pages/RHMapaOperacional";
 import RHLogs from "./pages/RHLogs";
 import RHAjuda from "./pages/RHAjuda";
+import RHDocumentacao from "./pages/RHDocumentacao";
 import RHRelogioPonto from "./pages/RHRelogioPonto";
 import KioskLogin from "./pages/KioskLogin";
 import KioskPage from "./pages/KioskPage";
@@ -375,6 +376,7 @@ const App = () => (
             <Route path="/rh/mapa" element={<ProtectedRoute><RHMapaOperacional /></ProtectedRoute>} />
             <Route path="/rh/logs" element={<ProtectedRoute><RHLogs /></ProtectedRoute>} />
             <Route path="/rh/ajuda" element={<ProtectedRoute><RHAjuda /></ProtectedRoute>} />
+            <Route path="/rh/documentacao" element={<ProtectedRoute><RHDocumentacao /></ProtectedRoute>} />
             <Route path="/rh/relogio-ponto" element={<ProtectedRoute><RHRelogioPonto /></ProtectedRoute>} />
             <Route path="/kiosk/login" element={<KioskLogin />} />
             <Route path="/kiosk" element={<KioskPage />} />
