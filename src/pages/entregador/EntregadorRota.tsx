@@ -39,6 +39,7 @@ const pickPhoto = (): Promise<string | null> => new Promise((resolve) => {
 export default function EntregadorRota() {
   const { id } = useParams<{ id: string }>();
   const { driver, loading } = useDriverAuth();
+  const goTo = useNavigate();
   const [route, setRoute] = useState<any>(null);
   const [failOpen, setFailOpen] = useState<string | null>(null);
   const [failReason, setFailReason] = useState("");
