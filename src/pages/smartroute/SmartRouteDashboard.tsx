@@ -59,6 +59,31 @@ export default function SmartRouteDashboard() {
           <KPI icon={Users2} label="Disponíveis" value={d.drivers?.disponivel || 0} />
         </div>
 
+        <div className="grid md:grid-cols-3 gap-4">
+          <Card>
+            <CardHeader><CardTitle className="text-sm flex items-center gap-2"><Timer className="w-4 h-4" /> Duração média por entrega (7d)</CardTitle></CardHeader>
+            <CardContent><div className="text-3xl font-bold">{avgMin} min</div></CardContent>
+          </Card>
+          <Card>
+            <CardHeader><CardTitle className="text-sm flex items-center gap-2"><AlertTriangle className="w-4 h-4" /> Ocorrências (7d)</CardTitle></CardHeader>
+            <CardContent className="space-y-1 text-sm">
+              {(ops?.occurrences_7d || []).slice(0, 5).map((o: any) => (
+                <div key={o.type} className="flex justify-between"><span>{o.type}</span><Badge variant="outline">{o.n}</Badge></div>
+              ))}
+              {!ops?.occurrences_7d?.length && <div className="text-xs text-muted-foreground">Nenhuma ocorrência.</div>}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader><CardTitle className="text-sm flex items-center gap-2"><ClipboardX className="w-4 h-4" /> Itens de checklist mais pendentes</CardTitle></CardHeader>
+            <CardContent className="space-y-1 text-sm">
+              {(ops?.checklist_gaps || []).map((g: any) => (
+                <div key={g.label} className="flex justify-between"><span className="truncate">{g.label}</span><Badge variant="outline">{g.n}</Badge></div>
+              ))}
+              {!ops?.checklist_gaps?.length && <div className="text-xs text-muted-foreground">Sem lacunas.</div>}
+            </CardContent>
+          </Card>
+        </div>
+
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-base flex items-center gap-2"><MapPin className="w-4 h-4" /> Motoristas em campo</CardTitle>
