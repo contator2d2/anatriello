@@ -74,6 +74,7 @@ import RHBancoHoras from "./pages/RHBancoHoras";
 import RHEscalas from "./pages/RHEscalas";
 import RHFeriasColetivas from "./pages/RHFeriasColetivas";
 import RHDesligamento from "./pages/RHDesligamento";
+import RHAdmissao from "./pages/RHAdmissao";
 import RHEspelhoDigital from "./pages/RHEspelhoDigital";
 
 
