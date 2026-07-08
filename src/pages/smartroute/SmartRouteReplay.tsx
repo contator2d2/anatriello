@@ -13,6 +13,7 @@ import { ArrowLeft, Play, Pause, RotateCcw } from "lucide-react";
 export default function SmartRouteReplay() {
   const { id } = useParams<{ id: string }>();
   const { data } = useSRReplay(id);
+  const { data: journeyEvents = [] } = useRouteJourneyEvents(id);
   const mapRef = useRef<L.Map | null>(null);
   const container = useRef<HTMLDivElement>(null);
   const trailRef = useRef<L.Polyline | null>(null);
