@@ -2563,4 +2563,219 @@ router.get('/facial-recognition/descriptor/:employeeId', async (req, res) => {
   }
 });
 
+// ============================================================
+// FASE 4 — DASHBOARD RH (Analytics)
+//   GET /api/rh/analytics?start=YYYY-MM-DD&end=YYYY-MM-DD
+//                       &company_id=&department_id=
+// ============================================================
+router.get('/analytics', async (req, res) => {
+  try {
+    const orgId = req.query.org_id || await getUserOrgId(req.userId);
+    if (!orgId) return res.json({});
+
+    const today = new Date();
+    const defaultEnd = today.toISOString().slice(0, 10);
+    const first = new Date(today.getFullYear(), today.getMonth(), 1);
+    const defaultStart = first.toISOString().slice(0, 10);
+
+    const start = req.query.start || defaultStart;
+    const end = req.query.end || defaultEnd;
+    const companyId = req.query.company_id || null;
+    const departmentId = req.query.department_id || null;
+
+    const empFilter = [`e.organization_id = $1`];
+    const empParams = [orgId];
+    let idx = 2;
+    if (companyId) { empFilter.push(`e.company_id = $${idx++}`); empParams.push(companyId); }
+    if (departmentId) { empFilter.push(`e.department_id = $${idx++}`); empParams.push(departmentId); }
+    const empWhere = empFilter.join(' AND ');
+
+    // Days in period (for absenteeism rate)
+    const periodDays = Math.max(1, Math.round((new Date(end) - new Date(start)) / 86400000) + 1);
+    const workingDays = Math.max(1, Math.round(periodDays * (5 / 7)));
+
+    // ---------- 1. HEADCOUNT + STATUS ----------
+    const headcount = await query(
+      `SELECT
+        COUNT(*) FILTER (WHERE e.status = 'ativo') AS active,
+        COUNT(*) FILTER (WHERE e.status = 'ferias') AS on_vacation,
+        COUNT(*) FILTER (WHERE e.status = 'afastado') AS on_leave,
+        COUNT(*) FILTER (WHERE e.status = 'inativo') AS inactive,
+        COUNT(*) AS total
+      FROM employees e WHERE ${empWhere}`,
+      empParams
+    );
+
+    // ---------- 2. ADMISSÕES / DESLIGAMENTOS ----------
+    const admissions = await query(
+      `SELECT COUNT(*)::int AS n FROM employees e
+       WHERE ${empWhere} AND e.admission_date BETWEEN $${idx} AND $${idx + 1}`,
+      [...empParams, start, end]
+    );
+    const dismissals = await query(
+      `SELECT COUNT(*)::int AS n FROM employees e
+       WHERE ${empWhere} AND e.termination_date BETWEEN $${idx} AND $${idx + 1}`,
+      [...empParams, start, end]
+    );
+
+    const active = Number(headcount.rows[0]?.active || 0);
+    const dism = Number(dismissals.rows[0]?.n || 0);
+    const adm = Number(admissions.rows[0]?.n || 0);
+    const turnoverPct = active > 0 ? Number((((adm + dism) / 2 / active) * 100).toFixed(2)) : 0;
+
+    // ---------- 3. TURNOVER MENSAL (12m) ----------
+    let turnoverMonthly = { rows: [] };
+    try {
+      turnoverMonthly = await query(
+        `WITH months AS (
+           SELECT generate_series(
+             date_trunc('month', CURRENT_DATE) - INTERVAL '11 months',
+             date_trunc('month', CURRENT_DATE),
+             INTERVAL '1 month'
+           )::date AS m
+         )
+         SELECT
+           to_char(m, 'YYYY-MM') AS month,
+           (SELECT COUNT(*)::int FROM employees e
+             WHERE ${empWhere} AND date_trunc('month', e.admission_date) = m) AS admissions,
+           (SELECT COUNT(*)::int FROM employees e
+             WHERE ${empWhere} AND date_trunc('month', e.termination_date) = m) AS dismissals
+         FROM months ORDER BY m`,
+        empParams
+      );
+    } catch (e) { /* ignore */ }
+
+    // ---------- 4. HORAS EXTRAS POR DEPARTAMENTO ----------
+    let overtimeByDept = { rows: [] };
+    try {
+      overtimeByDept = await query(
+        `SELECT COALESCE(d.name, 'Sem departamento') AS department,
+                COALESCE(SUM(tr.overtime_hours), 0)::numeric(10,2) AS overtime_hours,
+                COUNT(DISTINCT tr.employee_id)::int AS employees_count
+         FROM time_records tr
+         JOIN employees e ON e.id = tr.employee_id
+         LEFT JOIN rh_departments d ON d.id = e.department_id
+         WHERE ${empWhere} AND tr.record_date BETWEEN $${idx} AND $${idx + 1}
+         GROUP BY d.name ORDER BY overtime_hours DESC`,
+        [...empParams, start, end]
+      );
+    } catch (e) { /* ignore */ }
+
+    const totalOvertime = overtimeByDept.rows.reduce((s, r) => s + Number(r.overtime_hours || 0), 0);
+
+    // ---------- 5. ABSENTEÍSMO ----------
+    let absencesByType = { rows: [] };
+    try {
+      absencesByType = await query(
+        `SELECT tr.status AS type, COUNT(*)::int AS n
+         FROM time_records tr JOIN employees e ON e.id = tr.employee_id
+         WHERE ${empWhere} AND tr.record_date BETWEEN $${idx} AND $${idx + 1}
+           AND tr.status IN ('falta','atestado','licenca','afastamento')
+         GROUP BY tr.status`,
+        [...empParams, start, end]
+      );
+    } catch (e) { /* ignore */ }
+
+    const totalAbsences = absencesByType.rows.reduce((s, r) => s + Number(r.n || 0), 0);
+    const absenteeismRate = active > 0
+      ? Number(((totalAbsences / (active * workingDays)) * 100).toFixed(2))
+      : 0;
+
+    let topAbsentees = { rows: [] };
+    try {
+      topAbsentees = await query(
+        `SELECT e.id, e.full_name, COUNT(*)::int AS absences
+         FROM time_records tr JOIN employees e ON e.id = tr.employee_id
+         WHERE ${empWhere} AND tr.record_date BETWEEN $${idx} AND $${idx + 1}
+           AND tr.status IN ('falta','atestado')
+         GROUP BY e.id, e.full_name
+         HAVING COUNT(*) > 0
+         ORDER BY absences DESC LIMIT 5`,
+        [...empParams, start, end]
+      );
+    } catch (e) { /* ignore */ }
+
+    // ---------- 6. ATRASOS ----------
+    let latesByDay = { rows: [] };
+    try {
+      latesByDay = await query(
+        `SELECT tr.record_date AS day,
+                COUNT(*) FILTER (
+                  WHERE tr.entry1 IS NOT NULL AND e.work_schedule IS NOT NULL
+                    AND tr.entry1 > CAST(SPLIT_PART(e.work_schedule, '-', 1) || ':00' AS TIME) + INTERVAL '5 minutes'
+                )::int AS lates
+         FROM time_records tr JOIN employees e ON e.id = tr.employee_id
+         WHERE ${empWhere} AND tr.record_date BETWEEN $${idx} AND $${idx + 1}
+         GROUP BY tr.record_date ORDER BY tr.record_date`,
+        [...empParams, start, end]
+      );
+    } catch (e) { /* ignore */ }
+
+    const totalLates = latesByDay.rows.reduce((s, r) => s + Number(r.lates || 0), 0);
+
+    // ---------- 7. DISTRIBUIÇÃO POR DEPARTAMENTO ----------
+    const byDept = await query(
+      `SELECT COALESCE(d.name, 'Sem departamento') AS name,
+              COUNT(*)::int AS count
+       FROM employees e LEFT JOIN rh_departments d ON d.id = e.department_id
+       WHERE ${empWhere} AND e.status = 'ativo'
+       GROUP BY d.name ORDER BY count DESC`,
+      empParams
+    );
+
+    // ---------- 8. DISTRIBUIÇÃO POR EMPRESA ----------
+    let byCompany = { rows: [] };
+    try {
+      byCompany = await query(
+        `SELECT COALESCE(c.name, 'Sem empresa') AS name, COUNT(*)::int AS count
+         FROM employees e LEFT JOIN companies c ON c.id = e.company_id
+         WHERE ${empWhere} AND e.status = 'ativo'
+         GROUP BY c.name ORDER BY count DESC`,
+        empParams
+      );
+    } catch (e) { /* ignore */ }
+
+    // ---------- 9. ANIVERSARIANTES DO MÊS ----------
+    let birthdays = { rows: [] };
+    try {
+      birthdays = await query(
+        `SELECT e.id, e.full_name, e.birth_date, e.position
+         FROM employees e
+         WHERE ${empWhere} AND e.status = 'ativo' AND e.birth_date IS NOT NULL
+           AND EXTRACT(MONTH FROM e.birth_date) = EXTRACT(MONTH FROM CURRENT_DATE)
+         ORDER BY EXTRACT(DAY FROM e.birth_date)`,
+        empParams
+      );
+    } catch (e) { /* ignore */ }
+
+    res.json({
+      period: { start, end, working_days: workingDays },
+      kpis: {
+        headcount_active: active,
+        headcount_total: Number(headcount.rows[0]?.total || 0),
+        on_vacation: Number(headcount.rows[0]?.on_vacation || 0),
+        on_leave: Number(headcount.rows[0]?.on_leave || 0),
+        admissions: adm,
+        dismissals: dism,
+        turnover_pct: turnoverPct,
+        overtime_hours: Number(totalOvertime.toFixed(2)),
+        absenteeism_pct: absenteeismRate,
+        absences_total: totalAbsences,
+        lates_total: totalLates,
+      },
+      turnover_monthly: turnoverMonthly.rows,
+      overtime_by_department: overtimeByDept.rows,
+      absences_by_type: absencesByType.rows,
+      top_absentees: topAbsentees.rows,
+      lates_by_day: latesByDay.rows,
+      by_department: byDept.rows,
+      by_company: byCompany.rows,
+      birthdays: birthdays.rows,
+    });
+  } catch (err) {
+    logError('rh.analytics', err);
+    res.status(500).json({ error: 'Erro ao carregar analytics' });
+  }
+});
+
 export default router;
