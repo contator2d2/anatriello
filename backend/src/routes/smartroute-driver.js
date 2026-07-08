@@ -9,6 +9,7 @@ import {
   distanceMeters, getOperationSettings, computeCheckoutBlockers,
   logEvent, buildNavLink,
 } from '../lib/sr-journey.js';
+import { resolveTemplatesForStop, ocrProductImage } from '../lib/sr-checklists.js';
 
 const router = express.Router();
 router.use(async (req, res, next) => { try { await ensureSmartRouteTables(); next(); } catch (e) { next(e); } });
