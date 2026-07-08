@@ -35,6 +35,7 @@ import {
   User,
   Users,
   UserPlus,
+  UserMinus,
   Zap,
   Bell,
   Lock,
@@ -146,6 +147,7 @@ const getNavSections = (hasConnections: boolean): NavSection[] => [
       { name: "Escalas", href: "/rh/escalas", icon: CalendarDays, pageKey: 'rh_escalas', moduleKey: 'rh' },
       { name: "Espelho Digital", href: "/rh/espelho-digital", icon: FileText, pageKey: 'rh_espelho_digital', moduleKey: 'rh' },
       { name: "Férias Coletivas", href: "/rh/ferias-coletivas", icon: CalendarDays, pageKey: 'rh_ferias_coletivas', moduleKey: 'rh' },
+      { name: "Desligamento", href: "/rh/desligamento", icon: UserMinus, pageKey: 'rh_desligamento', moduleKey: 'rh' },
 
 
 

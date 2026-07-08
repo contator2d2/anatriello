@@ -567,3 +567,73 @@ export function useCancelCollectiveVacation() {
     },
   });
 }
+
+// ===== FASE 10 - DESLIGAMENTO / RESCISÃO =====
+export function useTerminations(filters?: { status?: string; employee_id?: string }) {
+  const params = new URLSearchParams();
+  if (filters?.status) params.set('status', filters.status);
+  if (filters?.employee_id) params.set('employee_id', filters.employee_id);
+  const qs = params.toString();
+  return useQuery({
+    queryKey: ['rh-terminations', qs],
+    queryFn: () => api<any[]>(`/api/rh/terminations${qs ? `?${qs}` : ''}`),
+  });
+}
+
+export function useTermination(id?: string) {
+  return useQuery({
+    queryKey: ['rh-termination', id],
+    queryFn: () => api<any>(`/api/rh/terminations/${id}`),
+    enabled: !!id,
+  });
+}
+
+export function usePreviewTermination() {
+  return useMutation({
+    mutationFn: (data: any) => api<any>('/api/rh/terminations/preview', { method: 'POST', body: data }),
+  });
+}
+
+export function useCreateTermination() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: any) => api<any>('/api/rh/terminations', { method: 'POST', body: data }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['rh-terminations'] });
+      qc.invalidateQueries({ queryKey: ['rh-dashboard'] });
+    },
+  });
+}
+
+export function useUpdateTermination() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }: any) => api<any>(`/api/rh/terminations/${id}`, { method: 'PUT', body: data }),
+    onSuccess: (_d, v: any) => {
+      qc.invalidateQueries({ queryKey: ['rh-terminations'] });
+      qc.invalidateQueries({ queryKey: ['rh-termination', v.id] });
+    },
+  });
+}
+
+export function useHomologateTermination() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, force }: { id: string; force?: boolean }) =>
+      api<any>(`/api/rh/terminations/${id}/homologate`, { method: 'POST', body: { force } }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['rh-terminations'] });
+      qc.invalidateQueries({ queryKey: ['rh-employees'] });
+    },
+  });
+}
+
+export function useCancelTermination() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason?: string }) =>
+      api<any>(`/api/rh/terminations/${id}/cancel`, { method: 'POST', body: { reason } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['rh-terminations'] }),
+  });
+}
+
