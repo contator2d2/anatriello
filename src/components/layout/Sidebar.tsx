@@ -188,6 +188,7 @@ const getNavSections = (hasConnections: boolean): NavSection[] => [
       { name: "Relatórios & BI", href: "/smartroute/relatorios", icon: BarChart3, pageKey: 'sr_relatorios' },
       { name: "Configurações", href: "/smartroute/configuracoes", icon: Settings, pageKey: 'sr_configuracoes' },
       { name: "Documentação", href: "/smartroute/documentacao", icon: BookOpen, pageKey: 'sr_dashboard' },
+      { name: "Central de Apps", href: "/central-apps", icon: Smartphone, pageKey: 'sr_dashboard' },
     ],
 
   },
