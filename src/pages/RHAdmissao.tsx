@@ -17,6 +17,7 @@ import {
   useOnboardings, useOnboarding, useCreateOnboarding, useUpdateOnboarding,
   useFinishOnboarding, useCancelOnboarding, useEmployees, useBranches, useRhDepartments,
 } from "@/hooks/use-rh";
+import { useCompanies } from "@/hooks/use-companies";
 import {
   UserPlus, Plus, FileText, Check, Loader2, ClipboardCheck, FileCheck, GraduationCap, Trash2, Users,
 } from "lucide-react";
@@ -43,6 +44,7 @@ export default function RHAdmissao() {
   const { data: employees = [] } = useEmployees();
   const { data: branches = [] } = useBranches();
   const { data: departments = [] } = useRhDepartments();
+  const { companies } = useCompanies();
 
   const createMut = useCreateOnboarding();
   const updateMut = useUpdateOnboarding();
@@ -51,7 +53,7 @@ export default function RHAdmissao() {
 
   const emptyForm = {
     candidate_name: "", candidate_email: "", candidate_phone: "", candidate_cpf: "",
-    position: "", department_id: "", branch_id: "",
+    position: "", department_id: "", branch_id: "", company_id: "",
     admission_date: new Date().toISOString().slice(0, 10),
     probation_end_date: "",
     salary: 0,
@@ -250,6 +252,17 @@ export default function RHAdmissao() {
               <div>
                 <Label>Cargo</Label>
                 <Input value={form.position} onChange={(e) => setForm({ ...form, position: e.target.value })} />
+              </div>
+              <div className="col-span-2">
+
+                <Label>Empresa *</Label>
+                <Select value={form.company_id || "none"} onValueChange={(v) => setForm({ ...form, company_id: v === "none" ? "" : v })}>
+                  <SelectTrigger><SelectValue placeholder="Selecione a empresa do colaborador" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">—</SelectItem>
+                    {companies.map((c) => <SelectItem key={c.id} value={c.id}>{c.trade_name || c.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
               <div>
                 <Label>Filial</Label>
