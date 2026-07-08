@@ -1,8 +1,9 @@
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Route as RouteIcon, Truck, Users2, Package, Store, MapPin, CheckCircle2, Clock, AlertTriangle } from "lucide-react";
+import { Route as RouteIcon, Truck, Users2, Package, Store, MapPin, CheckCircle2, Clock, AlertTriangle, Timer, ClipboardX } from "lucide-react";
 import { useSRDashboard, useSRLive } from "@/hooks/use-smartroute";
+import { useOpsMetrics } from "@/hooks/use-smartroute-checklists";
 import { Link } from "react-router-dom";
 
 const KPI = ({ icon: Icon, label, value, tone = "default" }: any) => (
