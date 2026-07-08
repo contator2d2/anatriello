@@ -2,6 +2,8 @@
 // Cartão Ponto (grade Secullum), Banco de Horas 1:1, Feriados, Ajustes (RH + Colaborador)
 
 import express from 'express';
+import crypto from 'crypto';
+
 import { query } from '../db.js';
 import { authenticate } from '../middleware/auth.js';
 import { logError } from '../logger.js';
