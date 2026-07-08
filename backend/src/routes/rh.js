@@ -3303,4 +3303,221 @@ router.get('/terminations/:id/trct', async (req, res) => {
   } catch (err) { logError('rh.terminations.trct', err); res.status(500).json({ error: 'Erro' }); }
 });
 
+// ============================================================
+// FASE 11 - ADMISSÃO / ONBOARDING
+// ============================================================
+async function ensureOnboardingTables() {
+  await query(`
+    CREATE TABLE IF NOT EXISTS rh_onboarding (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id UUID NOT NULL,
+      employee_id UUID,
+      candidate_name TEXT NOT NULL,
+      candidate_email TEXT,
+      candidate_phone TEXT,
+      candidate_cpf TEXT,
+      position TEXT,
+      department_id UUID,
+      branch_id UUID,
+      company_id UUID,
+      admission_date DATE NOT NULL,
+      probation_end_date DATE,
+      salary NUMERIC(14,2) DEFAULT 0,
+      buddy_id UUID,
+      manager_id UUID,
+      exam_scheduled_at TIMESTAMPTZ,
+      exam_done_at TIMESTAMPTZ,
+      exam_result TEXT,
+      exam_file_url TEXT,
+      integration_scheduled_at TIMESTAMPTZ,
+      integration_done_at TIMESTAMPTZ,
+      documents JSONB DEFAULT '[]'::jsonb,
+      checklist JSONB DEFAULT '[]'::jsonb,
+      current_step TEXT DEFAULT 'dados',
+      status TEXT DEFAULT 'em_andamento',
+      completed_at TIMESTAMPTZ,
+      notes TEXT,
+      created_by UUID,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_onboarding_org ON rh_onboarding(organization_id, admission_date DESC)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_onboarding_status ON rh_onboarding(organization_id, status)`);
+}
+
+// Documentos obrigatórios padrão (CLT + eSocial)
+const DEFAULT_ONBOARDING_DOCS = [
+  { key: 'rg', label: 'RG (frente e verso)', required: true, received: false },
+  { key: 'cpf', label: 'CPF', required: true, received: false },
+  { key: 'ctps', label: 'Carteira de Trabalho (CTPS)', required: true, received: false },
+  { key: 'pis', label: 'PIS/PASEP/NIS', required: true, received: false },
+  { key: 'titulo', label: 'Título de eleitor', required: true, received: false },
+  { key: 'reservista', label: 'Certificado de reservista (homens)', required: false, received: false },
+  { key: 'endereco', label: 'Comprovante de residência', required: true, received: false },
+  { key: 'escolaridade', label: 'Comprovante de escolaridade', required: true, received: false },
+  { key: 'foto', label: 'Foto 3x4', required: true, received: false },
+  { key: 'nascimento_filhos', label: 'Certidão de nascimento (filhos < 14)', required: false, received: false },
+  { key: 'casamento', label: 'Certidão de casamento', required: false, received: false },
+  { key: 'vacina_filhos', label: 'Cartão de vacinação (filhos < 7)', required: false, received: false },
+  { key: 'exame_admissional', label: 'Exame médico admissional (ASO)', required: true, received: false },
+  { key: 'conta_bancaria', label: 'Dados bancários / chave PIX', required: true, received: false },
+];
+
+// Checklist padrão de integração
+const DEFAULT_ONBOARDING_CHECKLIST = [
+  { key: 'assinatura_contrato', label: 'Contrato de trabalho assinado', done: false },
+  { key: 'assinatura_ctps', label: 'Anotação na CTPS', done: false },
+  { key: 'exame_admissional', label: 'Exame admissional realizado (apto)', done: false },
+  { key: 'entrega_epi', label: 'Entrega de EPIs', done: false },
+  { key: 'entrega_uniforme', label: 'Entrega de uniformes', done: false },
+  { key: 'entrega_cracha', label: 'Entrega de crachá', done: false },
+  { key: 'entrega_equipamentos', label: 'Entrega de equipamentos (notebook/celular)', done: false },
+  { key: 'cadastro_biometria', label: 'Cadastro biométrico (facial/digital)', done: false },
+  { key: 'acesso_sistemas', label: 'Criação de acessos aos sistemas', done: false },
+  { key: 'apresentacao_equipe', label: 'Apresentação à equipe', done: false },
+  { key: 'treinamento_seguranca', label: 'Treinamento de segurança do trabalho', done: false },
+  { key: 'treinamento_lgpd', label: 'Treinamento LGPD', done: false },
+  { key: 'termo_confidencialidade', label: 'Termo de confidencialidade', done: false },
+  { key: 'manual_colaborador', label: 'Manual do colaborador entregue', done: false },
+  { key: 'esocial_s2200', label: 'Evento eSocial S-2200 enviado', done: false },
+];
+
+// Listar processos
+router.get('/onboarding', async (req, res) => {
+  try {
+    await ensureOnboardingTables();
+    const orgId = req.query.org_id || await getUserOrgId(req.userId);
+    if (!orgId) return res.json([]);
+    const { status } = req.query;
+    let sql = `SELECT o.*,
+                 (SELECT COUNT(*) FROM jsonb_array_elements(o.documents) d WHERE (d->>'received')::boolean = true) as docs_received,
+                 (SELECT COUNT(*) FROM jsonb_array_elements(o.documents) d WHERE (d->>'required')::boolean = true) as docs_required,
+                 (SELECT COUNT(*) FROM jsonb_array_elements(o.checklist) c WHERE (c->>'done')::boolean = true) as checklist_done,
+                 (SELECT COUNT(*) FROM jsonb_array_elements(o.checklist) c) as checklist_total
+               FROM rh_onboarding o WHERE o.organization_id = $1`;
+    const params = [orgId]; let idx = 2;
+    if (status) { sql += ` AND o.status = $${idx++}`; params.push(status); }
+    sql += ` ORDER BY o.admission_date DESC`;
+    res.json((await query(sql, params)).rows);
+  } catch (err) { logError('rh.onboarding.list', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+router.get('/onboarding/:id', async (req, res) => {
+  try {
+    await ensureOnboardingTables();
+    const r = await query(`SELECT * FROM rh_onboarding WHERE id = $1`, [req.params.id]);
+    if (!r.rows[0]) return res.status(404).json({ error: 'Não encontrado' });
+    res.json(r.rows[0]);
+  } catch (err) { logError('rh.onboarding.detail', err); res.status(500).json({ error: 'Erro' }); }
+});
+
+// Criar processo de admissão
+router.post('/onboarding', async (req, res) => {
+  try {
+    await ensureOnboardingTables();
+    const orgId = req.body.organization_id || await getUserOrgId(req.userId);
+    const d = req.body;
+    if (!d.candidate_name || !d.admission_date)
+      return res.status(400).json({ error: 'Nome do candidato e data de admissão são obrigatórios' });
+
+    const docs = d.documents || DEFAULT_ONBOARDING_DOCS;
+    const checklist = d.checklist || DEFAULT_ONBOARDING_CHECKLIST;
+
+    const r = await query(
+      `INSERT INTO rh_onboarding (organization_id, candidate_name, candidate_email, candidate_phone, candidate_cpf,
+        position, department_id, branch_id, company_id, admission_date, probation_end_date, salary,
+        buddy_id, manager_id, exam_scheduled_at, integration_scheduled_at, documents, checklist, current_step, status, notes, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,'dados','em_andamento',$19,$20) RETURNING *`,
+      [orgId, d.candidate_name, d.candidate_email || null, d.candidate_phone || null, d.candidate_cpf || null,
+        d.position || null, d.department_id || null, d.branch_id || null, d.company_id || null,
+        d.admission_date, d.probation_end_date || null, d.salary || 0,
+        d.buddy_id || null, d.manager_id || null, d.exam_scheduled_at || null, d.integration_scheduled_at || null,
+        JSON.stringify(docs), JSON.stringify(checklist), d.notes || null, req.userId]
+    );
+    await auditLog(orgId, 'onboarding', r.rows[0].id, 'create',
+      [{ field: 'admission', oldVal: null, newVal: `${d.candidate_name} - ${d.admission_date}` }], req.userId);
+    res.json(r.rows[0]);
+  } catch (err) { logError('rh.onboarding.create', err); res.status(500).json({ error: err.message || 'Erro ao criar admissão' }); }
+});
+
+// Atualizar processo
+router.put('/onboarding/:id', async (req, res) => {
+  try {
+    await ensureOnboardingTables();
+    const cur = (await query(`SELECT * FROM rh_onboarding WHERE id = $1`, [req.params.id])).rows[0];
+    if (!cur) return res.status(404).json({ error: 'Não encontrado' });
+    if (cur.status === 'concluido') return res.status(400).json({ error: 'Admissão já concluída' });
+    const d = req.body;
+    const merged = { ...cur, ...d };
+    const r = await query(
+      `UPDATE rh_onboarding SET candidate_name=$2, candidate_email=$3, candidate_phone=$4, candidate_cpf=$5,
+        position=$6, department_id=$7, branch_id=$8, company_id=$9, admission_date=$10, probation_end_date=$11,
+        salary=$12, buddy_id=$13, manager_id=$14, exam_scheduled_at=$15, exam_done_at=$16, exam_result=$17, exam_file_url=$18,
+        integration_scheduled_at=$19, integration_done_at=$20, documents=$21, checklist=$22, current_step=$23,
+        notes=$24, updated_at=NOW() WHERE id=$1 RETURNING *`,
+      [req.params.id, merged.candidate_name, merged.candidate_email, merged.candidate_phone, merged.candidate_cpf,
+        merged.position, merged.department_id, merged.branch_id, merged.company_id,
+        merged.admission_date, merged.probation_end_date, merged.salary,
+        merged.buddy_id, merged.manager_id, merged.exam_scheduled_at, merged.exam_done_at, merged.exam_result, merged.exam_file_url,
+        merged.integration_scheduled_at, merged.integration_done_at,
+        JSON.stringify(Array.isArray(merged.documents) ? merged.documents : (typeof merged.documents === 'string' ? JSON.parse(merged.documents) : DEFAULT_ONBOARDING_DOCS)),
+        JSON.stringify(Array.isArray(merged.checklist) ? merged.checklist : (typeof merged.checklist === 'string' ? JSON.parse(merged.checklist) : DEFAULT_ONBOARDING_CHECKLIST)),
+        merged.current_step || 'dados', merged.notes]
+    );
+    res.json(r.rows[0]);
+  } catch (err) { logError('rh.onboarding.update', err); res.status(500).json({ error: err.message || 'Erro' }); }
+});
+
+// Finalizar: cria employee e vincula
+router.post('/onboarding/:id/finish', async (req, res) => {
+  try {
+    await ensureOnboardingTables();
+    const cur = (await query(`SELECT * FROM rh_onboarding WHERE id = $1`, [req.params.id])).rows[0];
+    if (!cur) return res.status(404).json({ error: 'Não encontrado' });
+    if (cur.status === 'concluido') return res.status(400).json({ error: 'Já concluído' });
+
+    const docs = Array.isArray(cur.documents) ? cur.documents : (typeof cur.documents === 'string' ? JSON.parse(cur.documents) : []);
+    const cl = Array.isArray(cur.checklist) ? cur.checklist : (typeof cur.checklist === 'string' ? JSON.parse(cur.checklist) : []);
+    const docsPending = docs.filter(d => d.required && !d.received);
+    const clPending = cl.filter(c => !c.done);
+    if ((docsPending.length || clPending.length) && !req.body.force) {
+      return res.status(400).json({
+        error: `${docsPending.length} documentos obrigatórios e ${clPending.length} itens de integração pendentes`,
+        documents_pending: docsPending, checklist_pending: clPending,
+      });
+    }
+
+    let employeeId = cur.employee_id;
+    if (!employeeId) {
+      const emp = await query(
+        `INSERT INTO employees (organization_id, full_name, email, phone, cpf, position,
+          department_id, branch_id, company_id, admission_date, probation_end_date, salary, status, created_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'ativo',$13) RETURNING id`,
+        [cur.organization_id, cur.candidate_name, cur.candidate_email, cur.candidate_phone, cur.candidate_cpf,
+          cur.position, cur.department_id, cur.branch_id, cur.company_id,
+          cur.admission_date, cur.probation_end_date, cur.salary, req.userId]);
+      employeeId = emp.rows[0].id;
+    }
+
+    await query(
+      `UPDATE rh_onboarding SET status='concluido', completed_at=NOW(), employee_id=$2, updated_at=NOW() WHERE id=$1`,
+      [req.params.id, employeeId]);
+    await auditLog(cur.organization_id, 'onboarding', cur.id, 'complete',
+      [{ field: 'status', oldVal: cur.status, newVal: 'concluido' }], req.userId);
+
+    res.json({ ok: true, employee_id: employeeId });
+  } catch (err) { logError('rh.onboarding.finish', err); res.status(500).json({ error: err.message || 'Erro ao finalizar' }); }
+});
+
+router.post('/onboarding/:id/cancel', async (req, res) => {
+  try {
+    await ensureOnboardingTables();
+    await query(
+      `UPDATE rh_onboarding SET status='cancelado', notes = COALESCE(notes,'') || E'\nCancelado: ' || $2, updated_at=NOW() WHERE id=$1`,
+      [req.params.id, req.body.reason || 'sem motivo']);
+    res.json({ ok: true });
+  } catch (err) { logError('rh.onboarding.cancel', err); res.status(500).json({ error: 'Erro' }); }
+});
+
 export default router;

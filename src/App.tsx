@@ -74,6 +74,7 @@ import RHBancoHoras from "./pages/RHBancoHoras";
 import RHEscalas from "./pages/RHEscalas";
 import RHFeriasColetivas from "./pages/RHFeriasColetivas";
 import RHDesligamento from "./pages/RHDesligamento";
+import RHAdmissao from "./pages/RHAdmissao";
 import RHEspelhoDigital from "./pages/RHEspelhoDigital";
 
 
@@ -350,6 +351,7 @@ const App = () => (
             <Route path="/rh/escalas" element={<ProtectedRoute><RHEscalas /></ProtectedRoute>} />
             <Route path="/rh/ferias-coletivas" element={<ProtectedRoute><RHFeriasColetivas /></ProtectedRoute>} />
             <Route path="/rh/desligamento" element={<ProtectedRoute><RHDesligamento /></ProtectedRoute>} />
+            <Route path="/rh/admissao" element={<ProtectedRoute><RHAdmissao /></ProtectedRoute>} />
             <Route path="/rh/espelho-digital" element={<ProtectedRoute><RHEspelhoDigital /></ProtectedRoute>} />
 
 
