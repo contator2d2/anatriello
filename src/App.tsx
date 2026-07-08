@@ -504,6 +504,7 @@ const App = () => (
             <Route path="/smartroute/relatorios" element={<ProtectedRoute><SmartRouteRelatorios /></ProtectedRoute>} />
             <Route path="/smartroute/configuracoes" element={<ProtectedRoute><SmartRouteConfiguracoes /></ProtectedRoute>} />
             <Route path="/smartroute/checklists" element={<ProtectedRoute><SmartRouteChecklists /></ProtectedRoute>} />
+            <Route path="/smartroute/documentacao" element={<ProtectedRoute><SmartRouteDocumentacao /></ProtectedRoute>} />
             <Route path="/track/:token" element={<TrackingPage />} />
 
             {/* SmartRoute AI - Driver App */}
