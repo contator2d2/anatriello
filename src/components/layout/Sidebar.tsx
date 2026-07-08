@@ -145,6 +145,7 @@ const getNavSections = (hasConnections: boolean): NavSection[] => [
       { name: "Banco de Horas", href: "/rh/banco-horas", icon: Clock, pageKey: 'rh_banco_horas', moduleKey: 'rh' },
       { name: "Escalas", href: "/rh/escalas", icon: CalendarDays, pageKey: 'rh_escalas', moduleKey: 'rh' },
       { name: "Espelho Digital", href: "/rh/espelho-digital", icon: FileText, pageKey: 'rh_espelho_digital', moduleKey: 'rh' },
+      { name: "Férias Coletivas", href: "/rh/ferias-coletivas", icon: CalendarDays, pageKey: 'rh_ferias_coletivas', moduleKey: 'rh' },
 
 
 
