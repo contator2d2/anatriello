@@ -199,6 +199,8 @@ export default function EntregadorRota() {
           <DialogFooter><Button variant="outline" onClick={() => setFailOpen(null)}>Cancelar</Button><Button variant="destructive" onClick={doFail}>Registrar</Button></DialogFooter>
         </DialogContent>
       </Dialog>
+      <DriverBottomNav />
     </div>
+
   );
 }
