@@ -119,3 +119,20 @@ export function useRouteJourneyEvents(routeId?: string) {
     enabled: !!routeId,
   });
 }
+
+export function useSRMonitor() {
+  return useQuery<any>({
+    queryKey: ['sr-monitor'],
+    queryFn: () => api('/api/smartroute/monitor'),
+    refetchInterval: 15_000,
+  });
+}
+
+export function useSRStopSummary(stopId?: string) {
+  return useQuery<any>({
+    queryKey: ['sr-stop-summary', stopId],
+    queryFn: () => api(`/api/smartroute/stops/${stopId}/summary`),
+    enabled: !!stopId,
+  });
+}
+

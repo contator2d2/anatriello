@@ -177,6 +177,7 @@ const getNavSections = (hasConnections: boolean): NavSection[] => [
     items: [
       { name: "Dashboard", href: "/smartroute", icon: LayoutDashboard, pageKey: 'sr_dashboard' },
       { name: "Mapa ao Vivo", href: "/smartroute/mapa", icon: Map, pageKey: 'sr_mapa' },
+      { name: "Torre de Controle", href: "/smartroute/monitoramento", icon: Radio, pageKey: 'sr_mapa' },
       { name: "Rotas", href: "/smartroute/rotas", icon: RouteIcon, pageKey: 'sr_rotas' },
       { name: "Pedidos", href: "/smartroute/pedidos", icon: Package, pageKey: 'sr_pedidos' },
       { name: "PDVs / Clientes", href: "/smartroute/pdvs", icon: Store, pageKey: 'sr_pdvs' },

@@ -1032,6 +1032,154 @@ router.get('/ops-metrics', async (req, res) => {
   } catch (e) { logError('sr.ops-metrics', e); res.status(500).json({ error: e.message }); }
 });
 
+// ============ TORRE DE CONTROLE AO VIVO (Onda 3) ============
+// Snapshot consolidado: motoristas, paradas ativas, alertas de atraso/GPS, feed de eventos.
+router.get('/monitor', async (req, res) => {
+  try {
+    const org = orgId(req);
+    const today = new Date().toISOString().slice(0, 10);
+    const staleGpsMin = Number(req.query.stale_gps_min) || 5;
+    const stopSlaMin = Number(req.query.stop_sla_min) || 30;
+    const routeSlaHrs = Number(req.query.route_sla_hrs) || 12;
+
+    const [drivers, activeStops, events, kpis] = await Promise.all([
+      query(
+        `SELECT d.id, d.full_name, d.current_lat, d.current_lng, d.current_status, d.last_location_at,
+                v.plate, v.model,
+                r.id AS route_id, r.code AS route_code, r.status AS route_status,
+                r.started_at, r.completed_stops, r.total_stops,
+                EXTRACT(EPOCH FROM (NOW() - d.last_location_at))::int AS gps_age_sec,
+                EXTRACT(EPOCH FROM (NOW() - r.started_at))::int AS route_age_sec
+         FROM smartroute_drivers d
+         LEFT JOIN smartroute_vehicles v ON v.id=d.vehicle_id
+         LEFT JOIN smartroute_routes r ON r.driver_id=d.id AND r.planned_date=$2 AND r.status IN ('em_andamento','planejada')
+         WHERE d.organization_id=$1 AND d.active=true
+         ORDER BY (d.current_status='em_rota') DESC, d.full_name`,
+        [org, today]
+      ),
+      query(
+        `SELECT s.id, s.sequence, s.state, s.status, s.arrived_at,
+                EXTRACT(EPOCH FROM (NOW() - s.arrived_at))::int AS elapsed_sec,
+                p.name AS pdv_name, p.address AS pdv_address, p.city AS pdv_city,
+                r.id AS route_id, r.code AS route_code,
+                d.full_name AS driver_name
+         FROM smartroute_route_stops s
+         JOIN smartroute_routes r ON r.id=s.route_id
+         LEFT JOIN smartroute_pdvs p ON p.id=s.pdv_id
+         LEFT JOIN smartroute_drivers d ON d.id=r.driver_id
+         WHERE r.organization_id=$1 AND s.state='em_atendimento'
+         ORDER BY s.arrived_at ASC NULLS LAST`,
+        [org]
+      ),
+      query(
+        `SELECT e.id, e.event_type, e.created_at, e.payload, e.lat, e.lng,
+                r.code AS route_code, d.full_name AS driver_name,
+                s.sequence AS stop_seq, p.name AS pdv_name
+         FROM smartroute_journey_events e
+         LEFT JOIN smartroute_routes r ON r.id=e.route_id
+         LEFT JOIN smartroute_drivers d ON d.id=e.driver_id
+         LEFT JOIN smartroute_route_stops s ON s.id=e.stop_id
+         LEFT JOIN smartroute_pdvs p ON p.id=s.pdv_id
+         WHERE e.organization_id=$1 AND e.created_at >= NOW() - INTERVAL '6 hours'
+         ORDER BY e.created_at DESC
+         LIMIT 60`,
+        [org]
+      ),
+      query(
+        `SELECT
+           (SELECT COUNT(*)::int FROM smartroute_drivers WHERE organization_id=$1 AND current_status='em_rota' AND active=true) AS drivers_em_rota,
+           (SELECT COUNT(*)::int FROM smartroute_route_stops s JOIN smartroute_routes r ON r.id=s.route_id WHERE r.organization_id=$1 AND s.state='em_atendimento') AS stops_em_atendimento,
+           (SELECT COUNT(*)::int FROM smartroute_route_stops s JOIN smartroute_routes r ON r.id=s.route_id WHERE r.organization_id=$1 AND r.planned_date=$2 AND s.status='concluida') AS stops_concluidas_hoje,
+           (SELECT COUNT(*)::int FROM smartroute_route_stops s JOIN smartroute_routes r ON r.id=s.route_id WHERE r.organization_id=$1 AND r.planned_date=$2 AND s.status='nao_entregue') AS stops_nao_entregues_hoje,
+           (SELECT COUNT(*)::int FROM smartroute_stop_occurrences WHERE organization_id=$1 AND created_at::date=$2) AS occ_hoje`,
+        [org, today]
+      ),
+    ]);
+
+    const alerts = [];
+    for (const s of activeStops.rows) {
+      if ((s.elapsed_sec || 0) >= stopSlaMin * 60) {
+        alerts.push({
+          type: 'stop_slow',
+          severity: s.elapsed_sec >= stopSlaMin * 120 ? 'high' : 'medium',
+          driver_name: s.driver_name, route_code: s.route_code,
+          pdv_name: s.pdv_name, stop_id: s.id, route_id: s.route_id,
+          message: `Parada em atendimento há ${Math.round(s.elapsed_sec / 60)} min`,
+          elapsed_sec: s.elapsed_sec,
+        });
+      }
+    }
+    for (const d of drivers.rows) {
+      if (d.current_status === 'em_rota' && d.gps_age_sec != null && d.gps_age_sec >= staleGpsMin * 60) {
+        alerts.push({
+          type: 'stale_gps', severity: d.gps_age_sec >= staleGpsMin * 180 ? 'high' : 'medium',
+          driver_name: d.full_name, route_code: d.route_code,
+          message: `Sem sinal GPS há ${Math.round(d.gps_age_sec / 60)} min`,
+          driver_id: d.id, route_id: d.route_id, elapsed_sec: d.gps_age_sec,
+        });
+      }
+      if (d.route_age_sec != null && d.route_age_sec >= routeSlaHrs * 3600 && d.route_status === 'em_andamento') {
+        alerts.push({
+          type: 'route_overtime', severity: 'high',
+          driver_name: d.full_name, route_code: d.route_code,
+          message: `Jornada em andamento há ${(d.route_age_sec / 3600).toFixed(1)}h sem finalizar`,
+          driver_id: d.id, route_id: d.route_id, elapsed_sec: d.route_age_sec,
+        });
+      }
+    }
+    alerts.sort((a, b) => (b.severity === 'high' ? 1 : 0) - (a.severity === 'high' ? 1 : 0) || (b.elapsed_sec || 0) - (a.elapsed_sec || 0));
+
+    res.json({
+      generated_at: new Date().toISOString(),
+      thresholds: { stale_gps_min: staleGpsMin, stop_sla_min: stopSlaMin, route_sla_hrs: routeSlaHrs },
+      kpis: kpis.rows[0] || {},
+      drivers: drivers.rows,
+      active_stops: activeStops.rows,
+      alerts,
+      recent_events: events.rows,
+    });
+  } catch (e) { logError('sr.monitor', e); res.status(500).json({ error: e.message }); }
+});
+
+// ============ DETALHES DE UMA PARADA (para Replay/Torre) ============
+router.get('/stops/:id/summary', async (req, res) => {
+  try {
+    const org = orgId(req);
+    const [stop, checklist, media, occ, ocr] = await Promise.all([
+      query(
+        `SELECT s.*, p.name AS pdv_name, p.address AS pdv_address, p.city AS pdv_city,
+                p.lat AS pdv_lat, p.lng AS pdv_lng,
+                r.code AS route_code, d.full_name AS driver_name
+         FROM smartroute_route_stops s
+         JOIN smartroute_routes r ON r.id=s.route_id
+         LEFT JOIN smartroute_pdvs p ON p.id=s.pdv_id
+         LEFT JOIN smartroute_drivers d ON d.id=r.driver_id
+         WHERE s.id=$1 AND r.organization_id=$2`, [req.params.id, org]),
+      query(
+        `SELECT r.*, i.label, i.kind, i.required
+         FROM smartroute_stop_checklist_responses r
+         JOIN smartroute_checklist_template_items i ON i.id=r.item_id
+         WHERE r.stop_id=$1 ORDER BY i.seq ASC`, [req.params.id]),
+      query(
+        `SELECT id, kind, url, created_at FROM smartroute_stop_media
+         WHERE stop_id=$1 ORDER BY created_at ASC`, [req.params.id]),
+      query(
+        `SELECT * FROM smartroute_stop_occurrences WHERE stop_id=$1 ORDER BY created_at ASC`, [req.params.id]),
+      query(
+        `SELECT * FROM smartroute_stop_ocr_results WHERE stop_id=$1 ORDER BY created_at ASC`, [req.params.id]),
+    ]);
+    if (!stop.rows[0]) return res.status(404).json({ error: 'Parada não encontrada' });
+    res.json({
+      stop: stop.rows[0],
+      checklist: checklist.rows,
+      media: media.rows,
+      occurrences: occ.rows,
+      ocr: ocr.rows,
+    });
+  } catch (e) { logError('sr.stop.summary', e); res.status(500).json({ error: e.message }); }
+});
+
 export default router;
+
 
 

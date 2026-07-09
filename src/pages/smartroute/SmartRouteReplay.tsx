@@ -2,13 +2,14 @@ import { MainLayout } from "@/components/layout/MainLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useParams, Link } from "react-router-dom";
 import { useSRReplay } from "@/hooks/use-smartroute";
-import { useRouteJourneyEvents } from "@/hooks/use-smartroute-checklists";
+import { useRouteJourneyEvents, useSRStopSummary } from "@/hooks/use-smartroute-checklists";
 import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { ArrowLeft, Play, Pause, RotateCcw } from "lucide-react";
+import { ArrowLeft, Play, Pause, RotateCcw, CheckCircle2 } from "lucide-react";
 
 export default function SmartRouteReplay() {
   const { id } = useParams<{ id: string }>();
@@ -19,6 +20,8 @@ export default function SmartRouteReplay() {
   const trailRef = useRef<L.Polyline | null>(null);
   const cursorRef = useRef<L.CircleMarker | null>(null);
   const [idx, setIdx] = useState(0);
+  const [selectedStop, setSelectedStop] = useState<string | null>(null);
+  const { data: stopDetail } = useSRStopSummary(selectedStop || undefined);
 
   const [playing, setPlaying] = useState(false);
 
@@ -34,11 +37,14 @@ export default function SmartRouteReplay() {
 
   useEffect(() => {
     const m = mapRef.current; if (!m || !data) return;
-    // Stops markers
+    // Stops markers (clicáveis para abrir detalhes)
     (data.stops || []).forEach((s: any) => {
       if (s.pdv_lat && s.pdv_lng) {
-        L.circleMarker([s.pdv_lat, s.pdv_lng], { radius: 8, color: "#3b82f6", fillColor: "#3b82f6", fillOpacity: 0.8 })
-          .bindTooltip(`#${s.sequence} · ${s.pdv_name}`).addTo(m);
+        const color = s.status === "concluida" ? "#10b981" : s.status === "nao_entregue" ? "#ef4444" : "#3b82f6";
+        L.circleMarker([s.pdv_lat, s.pdv_lng], { radius: 9, color, fillColor: color, fillOpacity: 0.85 })
+          .bindTooltip(`#${s.sequence} · ${s.pdv_name} · clique para detalhes`)
+          .on("click", () => setSelectedStop(s.id))
+          .addTo(m);
       }
     });
     const pts = geoEvents.map((e: any) => [e.lat, e.lng] as [number, number]);
@@ -109,6 +115,56 @@ export default function SmartRouteReplay() {
           </CardContent>
         </Card>
       </div>
+
+      <Dialog open={!!selectedStop} onOpenChange={(o) => !o && setSelectedStop(null)}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Detalhes da parada</DialogTitle></DialogHeader>
+          {stopDetail?.stop ? (
+            <div className="space-y-4 text-sm">
+              <div>
+                <div className="font-medium">#{stopDetail.stop.sequence} · {stopDetail.stop.pdv_name}</div>
+                <div className="text-xs text-muted-foreground">{stopDetail.stop.pdv_address} · {stopDetail.stop.pdv_city}</div>
+                <Badge variant="outline" className="mt-1">{stopDetail.stop.status}</Badge>
+              </div>
+              {stopDetail.checklist?.length > 0 && (
+                <div>
+                  <div className="font-medium text-xs uppercase text-muted-foreground mb-2">Checklist</div>
+                  {stopDetail.checklist.map((c: any) => (
+                    <div key={c.id} className="flex items-start gap-2 text-xs border rounded p-2 mb-1">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                      <div className="flex-1">
+                        <div className="font-medium">{c.label}</div>
+                        <div className="text-muted-foreground">{JSON.stringify(c.value)}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {stopDetail.occurrences?.length > 0 && (
+                <div>
+                  <div className="font-medium text-xs uppercase text-muted-foreground mb-2">Ocorrências</div>
+                  {stopDetail.occurrences.map((o: any) => (
+                    <div key={o.id} className="text-xs border-l-2 border-red-500 pl-2 mb-1"><b>{o.type}</b> — {o.reason}</div>
+                  ))}
+                </div>
+              )}
+              {stopDetail.media?.length > 0 && (
+                <div>
+                  <div className="font-medium text-xs uppercase text-muted-foreground mb-2">Mídias ({stopDetail.media.length})</div>
+                  <div className="grid grid-cols-4 gap-2">
+                    {stopDetail.media.map((m: any) => (
+                      <a key={m.id} href={m.url} target="_blank" rel="noreferrer">
+                        <img src={m.url} alt="" className="w-full h-20 object-cover rounded" />
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : <p className="text-sm text-muted-foreground">Carregando…</p>}
+        </DialogContent>
+      </Dialog>
     </MainLayout>
   );
 }
+
