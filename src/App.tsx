@@ -211,6 +211,8 @@ import SmartRouteCDs from "./pages/smartroute/SmartRouteCDs";
 import SmartRouteChecklists from "./pages/smartroute/SmartRouteChecklists";
 import SmartRouteDocumentacao from "./pages/smartroute/SmartRouteDocumentacao";
 import SmartRouteMonitoramento from "./pages/smartroute/SmartRouteMonitoramento";
+import SmartRouteOcorrencias from "./pages/smartroute/SmartRouteOcorrencias";
+
 import TrackingPage from "./pages/TrackingPage";
 import { DriverAuthProvider } from "./contexts/DriverAuthContext";
 import EntregadorLogin from "./pages/entregador/EntregadorLogin";
@@ -509,6 +511,8 @@ const App = () => (
             <Route path="/smartroute/checklists" element={<ProtectedRoute><SmartRouteChecklists /></ProtectedRoute>} />
             <Route path="/smartroute/documentacao" element={<ProtectedRoute><SmartRouteDocumentacao /></ProtectedRoute>} />
             <Route path="/smartroute/monitoramento" element={<ProtectedRoute><SmartRouteMonitoramento /></ProtectedRoute>} />
+            <Route path="/smartroute/ocorrencias" element={<ProtectedRoute><SmartRouteOcorrencias /></ProtectedRoute>} />
+
             <Route path="/track/:token" element={<TrackingPage />} />
 
             {/* SmartRoute AI - Driver App */}

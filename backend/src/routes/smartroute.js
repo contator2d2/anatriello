@@ -242,6 +242,54 @@ export async function ensureSmartRouteTables() {
     CREATE INDEX IF NOT EXISTS idx_sr_occ_stop ON smartroute_stop_occurrences(stop_id);
     CREATE INDEX IF NOT EXISTS idx_sr_occ_org ON smartroute_stop_occurrences(organization_id, created_at DESC);
 
+    -- Onda 4: enriquecimento de ocorrências (status, SLA, atribuição, resolução)
+    ALTER TABLE smartroute_stop_occurrences ADD COLUMN IF NOT EXISTS code TEXT;
+    ALTER TABLE smartroute_stop_occurrences ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'aberta';
+    ALTER TABLE smartroute_stop_occurrences ADD COLUMN IF NOT EXISTS sla_target_min INTEGER;
+    ALTER TABLE smartroute_stop_occurrences ADD COLUMN IF NOT EXISTS sla_deadline_at TIMESTAMPTZ;
+    ALTER TABLE smartroute_stop_occurrences ADD COLUMN IF NOT EXISTS sla_breached BOOLEAN DEFAULT false;
+    ALTER TABLE smartroute_stop_occurrences ADD COLUMN IF NOT EXISTS assigned_to UUID;
+    ALTER TABLE smartroute_stop_occurrences ADD COLUMN IF NOT EXISTS assigned_at TIMESTAMPTZ;
+    ALTER TABLE smartroute_stop_occurrences ADD COLUMN IF NOT EXISTS resolution TEXT;
+    ALTER TABLE smartroute_stop_occurrences ADD COLUMN IF NOT EXISTS resolved_by UUID;
+    ALTER TABLE smartroute_stop_occurrences ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMPTZ;
+    ALTER TABLE smartroute_stop_occurrences ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+    CREATE INDEX IF NOT EXISTS idx_sr_occ_status ON smartroute_stop_occurrences(organization_id, status, created_at DESC);
+
+    -- Catálogo configurável de tipos de ocorrência (com SLA por tipo)
+    CREATE TABLE IF NOT EXISTS smartroute_occurrence_types (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id UUID NOT NULL,
+      code TEXT NOT NULL,
+      label TEXT NOT NULL,
+      description TEXT,
+      severity TEXT DEFAULT 'medium',       -- low | medium | high
+      sla_target_min INTEGER DEFAULT 60,    -- prazo em minutos para resolução
+      require_photo BOOLEAN DEFAULT true,
+      require_description BOOLEAN DEFAULT true,
+      blocks_checkout BOOLEAN DEFAULT false,
+      color TEXT DEFAULT '#f59e0b',
+      icon TEXT DEFAULT 'alert-triangle',
+      active BOOLEAN DEFAULT true,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE (organization_id, code)
+    );
+    CREATE INDEX IF NOT EXISTS idx_sr_occ_types_org ON smartroute_occurrence_types(organization_id, active);
+
+    -- Comentários / follow-ups em ocorrências
+    CREATE TABLE IF NOT EXISTS smartroute_occurrence_comments (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      occurrence_id UUID NOT NULL REFERENCES smartroute_stop_occurrences(id) ON DELETE CASCADE,
+      organization_id UUID NOT NULL,
+      author_id UUID,
+      author_name TEXT,
+      body TEXT NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_sr_occ_cmt ON smartroute_occurrence_comments(occurrence_id, created_at ASC);
+
+
     -- Configurações operacionais por organização
     CREATE TABLE IF NOT EXISTS smartroute_org_operation_settings (
       organization_id UUID PRIMARY KEY,
@@ -1179,7 +1227,304 @@ router.get('/stops/:id/summary', async (req, res) => {
   } catch (e) { logError('sr.stop.summary', e); res.status(500).json({ error: e.message }); }
 });
 
+
+// ============ ONDA 4 — OCORRÊNCIAS & SLA ============
+
+// Seed default types for org if empty
+async function ensureDefaultOccurrenceTypes(org) {
+  const r = await query(`SELECT COUNT(*)::int AS n FROM smartroute_occurrence_types WHERE organization_id=$1`, [org]);
+  if ((r.rows[0]?.n || 0) > 0) return;
+  const seeds = [
+    ['danificado', 'Produto danificado', 'high', 120, true, true, true, '#ef4444'],
+    ['vencido', 'Produto vencido', 'high', 60, true, true, true, '#dc2626'],
+    ['recusado', 'Recusa de recebimento', 'medium', 60, true, true, false, '#f59e0b'],
+    ['cliente_ausente', 'Cliente ausente', 'medium', 30, true, false, false, '#f97316'],
+    ['cliente_fechado', 'Estabelecimento fechado', 'medium', 30, true, false, false, '#f97316'],
+    ['divergencia_nota', 'Divergência na nota fiscal', 'high', 90, true, true, true, '#dc2626'],
+    ['avaria_transporte', 'Avaria em transporte', 'high', 120, true, true, false, '#b91c1c'],
+    ['atraso', 'Atraso na entrega', 'low', 240, false, true, false, '#eab308'],
+    ['equipamento', 'Problema com equipamento (freezer/rack)', 'medium', 180, true, true, false, '#8b5cf6'],
+    ['outro', 'Outro', 'low', 240, false, true, false, '#6b7280'],
+  ];
+  for (const [code, label, severity, sla, ph, desc, blocks, color] of seeds) {
+    await query(
+      `INSERT INTO smartroute_occurrence_types
+         (organization_id, code, label, severity, sla_target_min, require_photo, require_description, blocks_checkout, color)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       ON CONFLICT (organization_id, code) DO NOTHING`,
+      [org, code, label, severity, sla, ph, desc, blocks, color]);
+  }
+}
+
+// ----- Catálogo de tipos
+router.get('/occurrence-types', async (req, res) => {
+  try {
+    const org = orgId(req);
+    await ensureDefaultOccurrenceTypes(org);
+    const r = await query(
+      `SELECT * FROM smartroute_occurrence_types WHERE organization_id=$1 ORDER BY active DESC, label`, [org]);
+    res.json(r.rows);
+  } catch (e) { logError('sr.occ-types.list', e); res.status(500).json({ error: e.message }); }
+});
+
+router.post('/occurrence-types', async (req, res) => {
+  try {
+    const b = req.body || {};
+    if (!b.code || !b.label) return res.status(400).json({ error: 'code e label são obrigatórios' });
+    const r = await query(
+      `INSERT INTO smartroute_occurrence_types
+        (organization_id, code, label, description, severity, sla_target_min, require_photo, require_description, blocks_checkout, color, icon, active)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,COALESCE($12,true))
+       RETURNING *`,
+      [orgId(req), b.code, b.label, b.description || null, b.severity || 'medium',
+       b.sla_target_min ?? 60, b.require_photo ?? true, b.require_description ?? true,
+       b.blocks_checkout ?? false, b.color || '#f59e0b', b.icon || 'alert-triangle', b.active]);
+    res.json(r.rows[0]);
+  } catch (e) { logError('sr.occ-types.create', e); res.status(500).json({ error: e.message }); }
+});
+
+router.put('/occurrence-types/:id', async (req, res) => {
+  try {
+    const b = req.body || {};
+    const r = await query(
+      `UPDATE smartroute_occurrence_types SET
+         label=COALESCE($3,label), description=COALESCE($4,description),
+         severity=COALESCE($5,severity), sla_target_min=COALESCE($6,sla_target_min),
+         require_photo=COALESCE($7,require_photo), require_description=COALESCE($8,require_description),
+         blocks_checkout=COALESCE($9,blocks_checkout), color=COALESCE($10,color),
+         icon=COALESCE($11,icon), active=COALESCE($12,active), updated_at=NOW()
+       WHERE id=$1 AND organization_id=$2 RETURNING *`,
+      [req.params.id, orgId(req), b.label, b.description, b.severity, b.sla_target_min,
+       b.require_photo, b.require_description, b.blocks_checkout, b.color, b.icon, b.active]);
+    if (!r.rows[0]) return res.status(404).json({ error: 'Tipo não encontrado' });
+    res.json(r.rows[0]);
+  } catch (e) { logError('sr.occ-types.update', e); res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/occurrence-types/:id', async (req, res) => {
+  try {
+    await query(`UPDATE smartroute_occurrence_types SET active=false, updated_at=NOW()
+                 WHERE id=$1 AND organization_id=$2`, [req.params.id, orgId(req)]);
+    res.json({ ok: true });
+  } catch (e) { logError('sr.occ-types.delete', e); res.status(500).json({ error: e.message }); }
+});
+
+// ----- Listagem/filtro de ocorrências
+router.get('/occurrences', async (req, res) => {
+  try {
+    const org = orgId(req);
+    const { status, type, severity, driver_id, from, to, sla, q, limit } = req.query;
+    const where = ['o.organization_id=$1'];
+    const params = [org];
+    let i = 2;
+    if (status)   { where.push(`o.status=$${i++}`); params.push(status); }
+    if (type)     { where.push(`o.type=$${i++}`); params.push(type); }
+    if (severity) { where.push(`o.severity=$${i++}`); params.push(severity); }
+    if (driver_id){ where.push(`o.driver_id=$${i++}`); params.push(driver_id); }
+    if (from)     { where.push(`o.created_at >= $${i++}`); params.push(from); }
+    if (to)       { where.push(`o.created_at <= $${i++}`); params.push(to); }
+    if (sla === 'breached')  where.push(`o.sla_breached=true`);
+    if (sla === 'in_sla')    where.push(`o.sla_breached=false`);
+    if (q) { where.push(`(o.description ILIKE $${i} OR p.name ILIKE $${i})`); params.push(`%${q}%`); i++; }
+
+    const lim = Math.min(Number(limit) || 200, 500);
+    const r = await query(
+      `SELECT o.*, p.name AS pdv_name, p.city AS pdv_city,
+              r.code AS route_code, d.full_name AS driver_name, s.sequence AS stop_seq,
+              CASE WHEN o.status IN ('aberta','em_analise') AND o.sla_deadline_at IS NOT NULL
+                     AND o.sla_deadline_at < NOW() THEN true ELSE o.sla_breached END AS sla_breached_now,
+              GREATEST(0, EXTRACT(EPOCH FROM (COALESCE(o.resolved_at, NOW()) - o.created_at))/60)::int AS age_min
+         FROM smartroute_stop_occurrences o
+         LEFT JOIN smartroute_route_stops s ON s.id=o.stop_id
+         LEFT JOIN smartroute_routes r ON r.id=s.route_id
+         LEFT JOIN smartroute_pdvs p ON p.id=s.pdv_id
+         LEFT JOIN smartroute_drivers d ON d.id=o.driver_id
+         WHERE ${where.join(' AND ')}
+         ORDER BY o.created_at DESC
+         LIMIT ${lim}`,
+      params);
+    res.json(r.rows);
+  } catch (e) { logError('sr.occ.list', e); res.status(500).json({ error: e.message }); }
+});
+
+router.get('/occurrences/:id', async (req, res) => {
+  try {
+    const org = orgId(req);
+    const [occ, media, comments, stop] = await Promise.all([
+      query(
+        `SELECT o.*, p.name AS pdv_name, p.address AS pdv_address, p.city AS pdv_city,
+                r.code AS route_code, d.full_name AS driver_name
+           FROM smartroute_stop_occurrences o
+           LEFT JOIN smartroute_route_stops s ON s.id=o.stop_id
+           LEFT JOIN smartroute_routes r ON r.id=s.route_id
+           LEFT JOIN smartroute_pdvs p ON p.id=s.pdv_id
+           LEFT JOIN smartroute_drivers d ON d.id=o.driver_id
+           WHERE o.id=$1 AND o.organization_id=$2`, [req.params.id, org]),
+      query(
+        `SELECT id, kind, url, created_at FROM smartroute_stop_media
+           WHERE id = ANY(
+             SELECT UNNEST(media_ids) FROM smartroute_stop_occurrences WHERE id=$1
+           ) OR stop_id = (SELECT stop_id FROM smartroute_stop_occurrences WHERE id=$1)
+           ORDER BY created_at ASC`, [req.params.id]),
+      query(
+        `SELECT * FROM smartroute_occurrence_comments
+           WHERE occurrence_id=$1 ORDER BY created_at ASC`, [req.params.id]),
+      query(
+        `SELECT s.id, s.sequence, s.state, s.status, s.arrived_at, s.checkin_at, s.completed_at
+           FROM smartroute_route_stops s
+           JOIN smartroute_stop_occurrences o ON o.stop_id=s.id
+           WHERE o.id=$1`, [req.params.id]),
+    ]);
+    if (!occ.rows[0]) return res.status(404).json({ error: 'Ocorrência não encontrada' });
+    res.json({ occurrence: occ.rows[0], media: media.rows, comments: comments.rows, stop: stop.rows[0] || null });
+  } catch (e) { logError('sr.occ.detail', e); res.status(500).json({ error: e.message }); }
+});
+
+// Update status / atribuição / resolução
+router.put('/occurrences/:id', async (req, res) => {
+  try {
+    const b = req.body || {};
+    const setResolved = b.status === 'resolvida' || b.status === 'descartada';
+    const r = await query(
+      `UPDATE smartroute_stop_occurrences SET
+         status = COALESCE($3, status),
+         severity = COALESCE($4, severity),
+         assigned_to = COALESCE($5, assigned_to),
+         assigned_at = CASE WHEN $5 IS NOT NULL AND assigned_at IS NULL THEN NOW() ELSE assigned_at END,
+         resolution = COALESCE($6, resolution),
+         resolved_by = CASE WHEN $7::boolean THEN COALESCE($8, resolved_by) ELSE resolved_by END,
+         resolved_at = CASE WHEN $7::boolean AND resolved_at IS NULL THEN NOW() ELSE resolved_at END,
+         sla_breached = CASE
+             WHEN $7::boolean AND sla_deadline_at IS NOT NULL AND NOW() > sla_deadline_at THEN true
+             WHEN $7::boolean THEN false
+             ELSE sla_breached
+         END,
+         updated_at = NOW()
+       WHERE id=$1 AND organization_id=$2
+       RETURNING *`,
+      [req.params.id, orgId(req), b.status, b.severity, b.assigned_to || null,
+       b.resolution || null, setResolved, req.user?.id || null]);
+    if (!r.rows[0]) return res.status(404).json({ error: 'Ocorrência não encontrada' });
+    if (b.comment) {
+      await query(
+        `INSERT INTO smartroute_occurrence_comments (occurrence_id, organization_id, author_id, author_name, body)
+         VALUES ($1,$2,$3,$4,$5)`,
+        [req.params.id, orgId(req), req.user?.id || null, req.user?.name || req.user?.email || 'Sistema', b.comment]);
+    }
+    res.json(r.rows[0]);
+  } catch (e) { logError('sr.occ.update', e); res.status(500).json({ error: e.message }); }
+});
+
+router.post('/occurrences/:id/comments', async (req, res) => {
+  try {
+    const { body } = req.body || {};
+    if (!body) return res.status(400).json({ error: 'body obrigatório' });
+    const r = await query(
+      `INSERT INTO smartroute_occurrence_comments (occurrence_id, organization_id, author_id, author_name, body)
+       VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+      [req.params.id, orgId(req), req.user?.id || null, req.user?.name || req.user?.email || 'Sistema', body]);
+    res.json(r.rows[0]);
+  } catch (e) { logError('sr.occ.comment', e); res.status(500).json({ error: e.message }); }
+});
+
+// Marca SLA vencido em lote (útil chamar via cron/refresh do frontend)
+router.post('/occurrences/refresh-sla', async (req, res) => {
+  try {
+    const r = await query(
+      `UPDATE smartroute_stop_occurrences
+         SET sla_breached=true, updated_at=NOW()
+       WHERE organization_id=$1 AND status IN ('aberta','em_analise')
+         AND sla_deadline_at IS NOT NULL AND sla_deadline_at < NOW()
+         AND sla_breached=false
+       RETURNING id`, [orgId(req)]);
+    res.json({ updated: r.rowCount });
+  } catch (e) { logError('sr.occ.refresh-sla', e); res.status(500).json({ error: e.message }); }
+});
+
+// ----- Métricas de SLA
+router.get('/sla-metrics', async (req, res) => {
+  try {
+    const org = orgId(req);
+    const days = Math.max(1, Math.min(Number(req.query.days) || 30, 180));
+    const since = `CURRENT_DATE - INTERVAL '${days} days'`;
+
+    const [totals, byStatus, bySeverity, byType, mttr, topDrivers, stageAvg, trend] = await Promise.all([
+      query(
+        `SELECT
+           COUNT(*)::int AS total,
+           COUNT(*) FILTER (WHERE status IN ('aberta','em_analise'))::int AS abertas,
+           COUNT(*) FILTER (WHERE status='resolvida')::int AS resolvidas,
+           COUNT(*) FILTER (WHERE status='descartada')::int AS descartadas,
+           COUNT(*) FILTER (WHERE sla_breached=true OR (status IN ('aberta','em_analise') AND sla_deadline_at < NOW()))::int AS breached,
+           COUNT(*) FILTER (WHERE severity='high')::int AS high_severity
+         FROM smartroute_stop_occurrences
+         WHERE organization_id=$1 AND created_at >= ${since}`, [org]),
+      query(
+        `SELECT status, COUNT(*)::int AS n FROM smartroute_stop_occurrences
+         WHERE organization_id=$1 AND created_at >= ${since}
+         GROUP BY status`, [org]),
+      query(
+        `SELECT severity, COUNT(*)::int AS n FROM smartroute_stop_occurrences
+         WHERE organization_id=$1 AND created_at >= ${since}
+         GROUP BY severity`, [org]),
+      query(
+        `SELECT o.type,
+                COALESCE(t.label, o.type) AS label,
+                COUNT(*)::int AS n,
+                COUNT(*) FILTER (WHERE o.sla_breached=true)::int AS breached
+         FROM smartroute_stop_occurrences o
+         LEFT JOIN smartroute_occurrence_types t ON t.organization_id=o.organization_id AND t.code=o.type
+         WHERE o.organization_id=$1 AND o.created_at >= ${since}
+         GROUP BY o.type, t.label ORDER BY n DESC LIMIT 10`, [org]),
+      query(
+        `SELECT AVG(EXTRACT(EPOCH FROM (resolved_at - created_at))/60)::int AS mttr_min
+         FROM smartroute_stop_occurrences
+         WHERE organization_id=$1 AND status='resolvida' AND created_at >= ${since}`, [org]),
+      query(
+        `SELECT d.id, d.full_name, COUNT(o.*)::int AS n,
+                COUNT(*) FILTER (WHERE o.sla_breached=true)::int AS breached
+         FROM smartroute_stop_occurrences o
+         JOIN smartroute_drivers d ON d.id=o.driver_id
+         WHERE o.organization_id=$1 AND o.created_at >= ${since}
+         GROUP BY d.id, d.full_name ORDER BY n DESC LIMIT 10`, [org]),
+      query(
+        `SELECT
+           AVG(EXTRACT(EPOCH FROM (s.checkin_at - s.arrived_at)))::int AS avg_arrival_to_checkin_sec,
+           AVG(EXTRACT(EPOCH FROM (s.completed_at - s.checkin_at)))::int AS avg_service_sec,
+           AVG(EXTRACT(EPOCH FROM (s.completed_at - s.arrived_at)))::int AS avg_total_sec,
+           COUNT(*)::int AS stops
+         FROM smartroute_route_stops s
+         JOIN smartroute_routes r ON r.id=s.route_id
+         WHERE r.organization_id=$1 AND r.planned_date >= ${since}
+           AND s.arrived_at IS NOT NULL AND s.completed_at IS NOT NULL`, [org]),
+      query(
+        `SELECT date_trunc('day', created_at)::date AS d,
+                COUNT(*)::int AS n,
+                COUNT(*) FILTER (WHERE sla_breached=true)::int AS breached
+         FROM smartroute_stop_occurrences
+         WHERE organization_id=$1 AND created_at >= ${since}
+         GROUP BY d ORDER BY d ASC`, [org]),
+    ]);
+
+    const t = totals.rows[0] || {};
+    const sla_compliance = t.total > 0 ? Math.round(((t.total - t.breached) / t.total) * 100) : 100;
+
+    res.json({
+      period_days: days,
+      totals: { ...t, sla_compliance_pct: sla_compliance },
+      by_status: byStatus.rows,
+      by_severity: bySeverity.rows,
+      top_types: byType.rows,
+      top_drivers: topDrivers.rows,
+      mttr_min: mttr.rows[0]?.mttr_min || 0,
+      stage_avg: stageAvg.rows[0] || {},
+      trend: trend.rows,
+    });
+  } catch (e) { logError('sr.sla.metrics', e); res.status(500).json({ error: e.message }); }
+});
+
 export default router;
+
 
 
 
