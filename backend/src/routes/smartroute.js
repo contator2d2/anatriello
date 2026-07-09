@@ -242,6 +242,54 @@ export async function ensureSmartRouteTables() {
     CREATE INDEX IF NOT EXISTS idx_sr_occ_stop ON smartroute_stop_occurrences(stop_id);
     CREATE INDEX IF NOT EXISTS idx_sr_occ_org ON smartroute_stop_occurrences(organization_id, created_at DESC);
 
+    -- Onda 4: enriquecimento de ocorrências (status, SLA, atribuição, resolução)
+    ALTER TABLE smartroute_stop_occurrences ADD COLUMN IF NOT EXISTS code TEXT;
+    ALTER TABLE smartroute_stop_occurrences ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'aberta';
+    ALTER TABLE smartroute_stop_occurrences ADD COLUMN IF NOT EXISTS sla_target_min INTEGER;
+    ALTER TABLE smartroute_stop_occurrences ADD COLUMN IF NOT EXISTS sla_deadline_at TIMESTAMPTZ;
+    ALTER TABLE smartroute_stop_occurrences ADD COLUMN IF NOT EXISTS sla_breached BOOLEAN DEFAULT false;
+    ALTER TABLE smartroute_stop_occurrences ADD COLUMN IF NOT EXISTS assigned_to UUID;
+    ALTER TABLE smartroute_stop_occurrences ADD COLUMN IF NOT EXISTS assigned_at TIMESTAMPTZ;
+    ALTER TABLE smartroute_stop_occurrences ADD COLUMN IF NOT EXISTS resolution TEXT;
+    ALTER TABLE smartroute_stop_occurrences ADD COLUMN IF NOT EXISTS resolved_by UUID;
+    ALTER TABLE smartroute_stop_occurrences ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMPTZ;
+    ALTER TABLE smartroute_stop_occurrences ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+    CREATE INDEX IF NOT EXISTS idx_sr_occ_status ON smartroute_stop_occurrences(organization_id, status, created_at DESC);
+
+    -- Catálogo configurável de tipos de ocorrência (com SLA por tipo)
+    CREATE TABLE IF NOT EXISTS smartroute_occurrence_types (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id UUID NOT NULL,
+      code TEXT NOT NULL,
+      label TEXT NOT NULL,
+      description TEXT,
+      severity TEXT DEFAULT 'medium',       -- low | medium | high
+      sla_target_min INTEGER DEFAULT 60,    -- prazo em minutos para resolução
+      require_photo BOOLEAN DEFAULT true,
+      require_description BOOLEAN DEFAULT true,
+      blocks_checkout BOOLEAN DEFAULT false,
+      color TEXT DEFAULT '#f59e0b',
+      icon TEXT DEFAULT 'alert-triangle',
+      active BOOLEAN DEFAULT true,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE (organization_id, code)
+    );
+    CREATE INDEX IF NOT EXISTS idx_sr_occ_types_org ON smartroute_occurrence_types(organization_id, active);
+
+    -- Comentários / follow-ups em ocorrências
+    CREATE TABLE IF NOT EXISTS smartroute_occurrence_comments (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      occurrence_id UUID NOT NULL REFERENCES smartroute_stop_occurrences(id) ON DELETE CASCADE,
+      organization_id UUID NOT NULL,
+      author_id UUID,
+      author_name TEXT,
+      body TEXT NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_sr_occ_cmt ON smartroute_occurrence_comments(occurrence_id, created_at ASC);
+
+
     -- Configurações operacionais por organização
     CREATE TABLE IF NOT EXISTS smartroute_org_operation_settings (
       organization_id UUID PRIMARY KEY,
