@@ -32,6 +32,7 @@ export default function SmartRouteRotas() {
   const del = useSRDeleteRoute();
   const optimize = useSROptimizeRoute();
   const optimizeAdv = useSROptimizeAdvanced();
+  const reopt = useSRReoptimize();
   const { data: depots = [] } = useSRDepots();
 
   const [open, setOpen] = useState(false);
