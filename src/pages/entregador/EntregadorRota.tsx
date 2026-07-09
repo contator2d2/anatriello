@@ -10,6 +10,8 @@ import { ArrowLeft, MapPin, Phone, Camera, CheckCircle2, XCircle, Play, Flag, Na
 import { toast } from "sonner";
 import { useDriverAuth, driverApi } from "@/contexts/DriverAuthContext";
 import SignatureCanvas from "react-signature-canvas";
+import DriverBottomNav from "@/components/entregador/DriverBottomNav";
+
 
 
 const statusColor: Record<string, string> = { pendente: "bg-slate-200", em_atendimento: "bg-amber-200", concluida: "bg-emerald-200", nao_entregue: "bg-red-200" };
