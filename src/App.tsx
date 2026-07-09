@@ -221,6 +221,11 @@ import EntregadorLogin from "./pages/entregador/EntregadorLogin";
 import EntregadorHome from "./pages/entregador/EntregadorHome";
 import EntregadorRota from "./pages/entregador/EntregadorRota";
 import EntregadorEntrega from "./pages/entregador/EntregadorEntrega";
+import EntregadorPonto from "./pages/entregador/EntregadorPonto";
+import EntregadorAvaria from "./pages/entregador/EntregadorAvaria";
+import EntregadorDevolucao from "./pages/entregador/EntregadorDevolucao";
+import EntregadorHistorico from "./pages/entregador/EntregadorHistorico";
+
 import CentralApps from "./pages/CentralApps";
 
 
@@ -525,6 +530,11 @@ const App = () => (
             <Route path="/entregador/home" element={<DriverAuthProvider><EntregadorHome /></DriverAuthProvider>} />
             <Route path="/entregador/rota/:id" element={<DriverAuthProvider><EntregadorRota /></DriverAuthProvider>} />
             <Route path="/entregador/entrega/:id" element={<DriverAuthProvider><EntregadorEntrega /></DriverAuthProvider>} />
+            <Route path="/entregador/ponto" element={<DriverAuthProvider><EntregadorPonto /></DriverAuthProvider>} />
+            <Route path="/entregador/avaria" element={<DriverAuthProvider><EntregadorAvaria /></DriverAuthProvider>} />
+            <Route path="/entregador/devolucao" element={<DriverAuthProvider><EntregadorDevolucao /></DriverAuthProvider>} />
+            <Route path="/entregador/historico" element={<DriverAuthProvider><EntregadorHistorico /></DriverAuthProvider>} />
+
             <Route path="/api-docs" element={<ApiDocumentation />} />
             <Route path="/f/:slug" element={<PublicFormPage />} />
             <Route path="/assinar/:token" element={<AssinarDocumento />} />

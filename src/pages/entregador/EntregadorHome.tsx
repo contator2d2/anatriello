@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Truck, MapPin, LogOut, Route as RouteIcon, ChevronRight } from "lucide-react";
 import { useDriverAuth, driverApi } from "@/contexts/DriverAuthContext";
+import DriverBottomNav from "@/components/entregador/DriverBottomNav";
+
 
 export default function EntregadorHome() {
   const { driver, logout, loading } = useDriverAuth();
@@ -34,7 +36,7 @@ export default function EntregadorHome() {
   if (!driver) return <Navigate to="/entregador/login" replace />;
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-8">
+    <div className="min-h-screen bg-slate-50 pb-24">
       <div className="bg-gradient-to-br from-blue-600 to-indigo-700 text-white p-4 pb-8">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -76,6 +78,9 @@ export default function EntregadorHome() {
           </CardContent>
         </Card>
       </div>
+
+      <DriverBottomNav />
     </div>
   );
 }
+

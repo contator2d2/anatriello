@@ -616,5 +616,181 @@ router.post('/location', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ============================================================
+// Bottom-nav features: Ponto (timeclock), Avarias, Devoluções
+// ============================================================
+async function ensureDriverOpsTables() {
+  await query(`
+    CREATE TABLE IF NOT EXISTS smartroute_driver_timeclock (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id UUID NOT NULL,
+      driver_id UUID NOT NULL,
+      kind TEXT NOT NULL CHECK (kind IN ('entrada','pausa','retorno','saida')),
+      punched_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      lat DOUBLE PRECISION, lng DOUBLE PRECISION,
+      photo_url TEXT, notes TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_srdt_driver_day ON smartroute_driver_timeclock(driver_id, punched_at);
+
+    CREATE TABLE IF NOT EXISTS smartroute_cargo_damages (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id UUID NOT NULL,
+      driver_id UUID NOT NULL,
+      route_id UUID, stop_id UUID,
+      damage_type TEXT NOT NULL,
+      severity TEXT NOT NULL DEFAULT 'media',
+      description TEXT,
+      photos JSONB DEFAULT '[]'::jsonb,
+      lat DOUBLE PRECISION, lng DOUBLE PRECISION,
+      status TEXT NOT NULL DEFAULT 'aberto',
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_srcd_driver ON smartroute_cargo_damages(driver_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_srcd_org ON smartroute_cargo_damages(organization_id, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS smartroute_delivery_returns (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id UUID NOT NULL,
+      driver_id UUID NOT NULL,
+      route_id UUID, stop_id UUID,
+      reason TEXT NOT NULL,
+      items JSONB DEFAULT '[]'::jsonb,
+      photos JSONB DEFAULT '[]'::jsonb,
+      receiver_name TEXT,
+      lat DOUBLE PRECISION, lng DOUBLE PRECISION,
+      status TEXT NOT NULL DEFAULT 'registrada',
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_srdr_driver ON smartroute_delivery_returns(driver_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_srdr_org ON smartroute_delivery_returns(organization_id, created_at DESC);
+  `);
+}
+let _driverOpsReady = false;
+router.use(async (_req, _res, next) => {
+  try { if (!_driverOpsReady) { await ensureDriverOpsTables(); _driverOpsReady = true; } next(); }
+  catch (e) { next(e); }
+});
+
+// -------- Timeclock --------
+router.post('/timeclock/punch', async (req, res) => {
+  try {
+    const { kind, lat, lng, photo_url, notes } = req.body || {};
+    if (!['entrada','pausa','retorno','saida'].includes(kind))
+      return res.status(400).json({ error: 'kind inválido' });
+    const r = await query(
+      `INSERT INTO smartroute_driver_timeclock (organization_id, driver_id, kind, lat, lng, photo_url, notes)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [req.organizationId, req.driverId, kind, lat, lng, photo_url, notes]);
+    const statusMap = { entrada:'disponivel', pausa:'pausa', retorno:'disponivel', saida:'offline' };
+    await query(`UPDATE smartroute_drivers SET current_status=$2 WHERE id=$1`,
+      [req.driverId, statusMap[kind]]);
+    try {
+      await logEvent({
+        routeId: null, stopId: null, driverId: req.driverId, organizationId: req.organizationId,
+        eventType: `timeclock_${kind}`, payload: { kind }, lat, lng,
+      });
+    } catch { /* noop */ }
+    res.json(r.rows[0]);
+  } catch (e) { logError('driver.timeclock.punch', e); res.status(500).json({ error: e.message }); }
+});
+
+router.get('/timeclock/today', async (req, res) => {
+  try {
+    const r = await query(
+      `SELECT * FROM smartroute_driver_timeclock
+       WHERE driver_id=$1 AND punched_at::date = (NOW() AT TIME ZONE 'America/Sao_Paulo')::date
+       ORDER BY punched_at`, [req.driverId]);
+    res.json(r.rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// -------- Avarias --------
+router.post('/damages', async (req, res) => {
+  try {
+    const { stop_id, route_id, damage_type, severity, description, photos, lat, lng } = req.body || {};
+    if (!damage_type) return res.status(400).json({ error: 'damage_type obrigatório' });
+    if (!photos || !Array.isArray(photos) || !photos.length)
+      return res.status(400).json({ error: 'Ao menos 1 foto é obrigatória' });
+    const r = await query(
+      `INSERT INTO smartroute_cargo_damages
+        (organization_id, driver_id, route_id, stop_id, damage_type, severity, description, photos, lat, lng)
+       VALUES ($1,$2,$3,$4,$5,COALESCE($6,'media'),$7,$8::jsonb,$9,$10) RETURNING *`,
+      [req.organizationId, req.driverId, route_id || null, stop_id || null,
+       damage_type, severity, description || null, JSON.stringify(photos), lat, lng]);
+    try {
+      await logEvent({
+        routeId: route_id || null, stopId: stop_id || null, driverId: req.driverId,
+        organizationId: req.organizationId, eventType: 'cargo_damage',
+        payload: { damage_type, severity, description, photos_count: photos.length }, lat, lng,
+      });
+    } catch { /* noop */ }
+    res.json(r.rows[0]);
+  } catch (e) { logError('driver.damages.create', e); res.status(500).json({ error: e.message }); }
+});
+
+router.get('/damages/mine', async (req, res) => {
+  try {
+    const r = await query(
+      `SELECT * FROM smartroute_cargo_damages WHERE driver_id=$1 ORDER BY created_at DESC LIMIT 100`,
+      [req.driverId]);
+    res.json(r.rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// -------- Devoluções --------
+router.post('/returns', async (req, res) => {
+  try {
+    const { stop_id, route_id, reason, items, photos, receiver_name, lat, lng } = req.body || {};
+    if (!reason) return res.status(400).json({ error: 'reason obrigatório' });
+    const r = await query(
+      `INSERT INTO smartroute_delivery_returns
+        (organization_id, driver_id, route_id, stop_id, reason, items, photos, receiver_name, lat, lng)
+       VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8,$9,$10) RETURNING *`,
+      [req.organizationId, req.driverId, route_id || null, stop_id || null,
+       reason, JSON.stringify(items || []), JSON.stringify(photos || []),
+       receiver_name || null, lat, lng]);
+    try {
+      await logEvent({
+        routeId: route_id || null, stopId: stop_id || null, driverId: req.driverId,
+        organizationId: req.organizationId, eventType: 'delivery_return',
+        payload: { reason, items_count: (items || []).length }, lat, lng,
+      });
+    } catch { /* noop */ }
+    res.json(r.rows[0]);
+  } catch (e) { logError('driver.returns.create', e); res.status(500).json({ error: e.message }); }
+});
+
+router.get('/returns/mine', async (req, res) => {
+  try {
+    const r = await query(
+      `SELECT * FROM smartroute_delivery_returns WHERE driver_id=$1 ORDER BY created_at DESC LIMIT 100`,
+      [req.driverId]);
+    res.json(r.rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// -------- Consolidated history --------
+router.get('/history', async (req, res) => {
+  try {
+    const [tc, dm, rt] = await Promise.all([
+      query(`SELECT id, 'ponto'::text AS kind, kind AS subtype, punched_at AS at, NULL::text AS description
+             FROM smartroute_driver_timeclock WHERE driver_id=$1
+             ORDER BY punched_at DESC LIMIT 30`, [req.driverId]),
+      query(`SELECT id, 'avaria'::text AS kind, damage_type AS subtype, created_at AS at, description
+             FROM smartroute_cargo_damages WHERE driver_id=$1
+             ORDER BY created_at DESC LIMIT 30`, [req.driverId]),
+      query(`SELECT id, 'devolucao'::text AS kind, reason AS subtype, created_at AS at, reason AS description
+             FROM smartroute_delivery_returns WHERE driver_id=$1
+             ORDER BY created_at DESC LIMIT 30`, [req.driverId]),
+    ]);
+    const all = [...tc.rows, ...dm.rows, ...rt.rows]
+      .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
+      .slice(0, 60);
+    res.json(all);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 export default router;
+
 

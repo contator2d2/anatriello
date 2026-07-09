@@ -10,6 +10,8 @@ import { ArrowLeft, MapPin, Phone, Camera, CheckCircle2, XCircle, Play, Flag, Na
 import { toast } from "sonner";
 import { useDriverAuth, driverApi } from "@/contexts/DriverAuthContext";
 import SignatureCanvas from "react-signature-canvas";
+import DriverBottomNav from "@/components/entregador/DriverBottomNav";
+
 
 
 const statusColor: Record<string, string> = { pendente: "bg-slate-200", em_atendimento: "bg-amber-200", concluida: "bg-emerald-200", nao_entregue: "bg-red-200" };
@@ -108,7 +110,7 @@ export default function EntregadorRota() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-20">
+    <div className="min-h-screen bg-slate-50 pb-24">
       <div className="bg-gradient-to-br from-blue-600 to-indigo-700 text-white p-4">
         <div className="flex items-center gap-3">
           <Link to="/entregador/home" className="p-2 -ml-2 rounded hover:bg-white/10"><ArrowLeft className="w-5 h-5" /></Link>
@@ -197,6 +199,8 @@ export default function EntregadorRota() {
           <DialogFooter><Button variant="outline" onClick={() => setFailOpen(null)}>Cancelar</Button><Button variant="destructive" onClick={doFail}>Registrar</Button></DialogFooter>
         </DialogContent>
       </Dialog>
+      <DriverBottomNav />
     </div>
+
   );
 }
