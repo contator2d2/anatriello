@@ -212,6 +212,7 @@ import SmartRouteChecklists from "./pages/smartroute/SmartRouteChecklists";
 import SmartRouteDocumentacao from "./pages/smartroute/SmartRouteDocumentacao";
 import SmartRouteMonitoramento from "./pages/smartroute/SmartRouteMonitoramento";
 import SmartRouteOcorrencias from "./pages/smartroute/SmartRouteOcorrencias";
+import SmartRoutePosAnalise from "./pages/smartroute/SmartRoutePosAnalise";
 
 import TrackingPage from "./pages/TrackingPage";
 import { DriverAuthProvider } from "./contexts/DriverAuthContext";
