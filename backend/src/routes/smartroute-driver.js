@@ -251,19 +251,39 @@ router.post('/stops/:id/occurrence', async (req, res) => {
   try {
     const { type, description, severity, lat, lng, media_ids } = req.body || {};
     if (!type) return res.status(400).json({ error: 'type é obrigatório' });
+    // Enriquecer a partir do catálogo (Onda 4): SLA e severidade padrão do tipo
+    const catalog = await query(
+      `SELECT code, severity, sla_target_min, require_photo, require_description
+         FROM smartroute_occurrence_types
+        WHERE organization_id=$1 AND code=$2 AND active=true LIMIT 1`,
+      [req.organizationId, type]);
+    const cat = catalog.rows[0] || {};
+    const finalSeverity = severity || cat.severity || 'medium';
+    const slaMin = cat.sla_target_min ?? null;
+    if (cat.require_description && !description) {
+      return res.status(400).json({ error: 'Descrição obrigatória para este tipo de ocorrência' });
+    }
+    if (cat.require_photo && (!media_ids || media_ids.length === 0)) {
+      return res.status(400).json({ error: 'Foto obrigatória para este tipo de ocorrência' });
+    }
     const r = await query(
       `INSERT INTO smartroute_stop_occurrences
-         (organization_id, stop_id, driver_id, type, description, severity, lat, lng, media_ids)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
-      [req.organizationId, req.params.id, req.driverId, type, description || null,
-        severity || 'medium', lat ?? null, lng ?? null, media_ids || []]);
+         (organization_id, stop_id, driver_id, type, code, description, severity, lat, lng, media_ids,
+          sla_target_min, sla_deadline_at, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,
+               CASE WHEN $11::int IS NOT NULL THEN NOW() + ($11 || ' minutes')::interval ELSE NULL END,
+               'aberta')
+       RETURNING *`,
+      [req.organizationId, req.params.id, req.driverId, type, cat.code || type,
+       description || null, finalSeverity, lat ?? null, lng ?? null, media_ids || [], slaMin]);
     await logEvent({
       organizationId: req.organizationId, driverId: req.driverId, stopId: req.params.id,
-      eventType: 'occurrence_added', payload: { type, severity }, lat, lng,
+      eventType: 'occurrence_added', payload: { type, severity: finalSeverity, sla_target_min: slaMin }, lat, lng,
     });
     res.json(r.rows[0]);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
+
 
 // Assinatura do cliente (registra como mídia kind=signature)
 router.post('/stops/:id/signature', async (req, res) => {
