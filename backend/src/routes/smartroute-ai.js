@@ -566,4 +566,168 @@ router.delete('/advisor/:id', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ============ ONDA 5: ANÁLISE PÓS-ROTA ============
+router.post('/routes/:id/post-analysis', async (req, res) => {
+  try {
+    const org = req.organizationId;
+    const rid = req.params.id;
+
+    const rr = await query(
+      `SELECT r.*, d.full_name AS driver_name, d.cpf AS driver_cpf,
+              v.plate, v.model AS vehicle_model, v.capacity_kg, v.capacity_m3, v.km_per_liter
+       FROM smartroute_routes r
+       LEFT JOIN smartroute_drivers d ON d.id=r.driver_id
+       LEFT JOIN smartroute_vehicles v ON v.id=r.vehicle_id
+       WHERE r.id=$1 AND r.organization_id=$2`, [rid, org]);
+    if (!rr.rows[0]) return res.status(404).json({ error: 'Rota não encontrada' });
+    const route = rr.rows[0];
+
+    const stops = await query(
+      `SELECT s.id, s.sequence, s.status, s.state, s.arrived_at, s.departed_at, s.eta_min,
+              s.notes, s.pdv_name
+       FROM smartroute_route_stops s
+       WHERE s.route_id=$1 ORDER BY s.sequence`, [rid]);
+
+    const stopIds = stops.rows.map((s) => s.id);
+    const [occRes, alertsRes, chkRes, chkTplRes, evtRes] = await Promise.all([
+      stopIds.length
+        ? query(`SELECT stop_id, type_code, severity, status, sla_deadline, resolved_at
+                 FROM smartroute_stop_occurrences WHERE stop_id = ANY($1::uuid[])`, [stopIds])
+        : Promise.resolve({ rows: [] }),
+      query(`SELECT type, severity, title, message, created_at, resolved
+             FROM smartroute_alerts WHERE route_id=$1 ORDER BY created_at`, [rid]),
+      stopIds.length
+        ? query(`SELECT stop_id, item_id, template_id, value, ok
+                 FROM smartroute_stop_checklist_responses WHERE stop_id = ANY($1::uuid[])`, [stopIds])
+        : Promise.resolve({ rows: [] }),
+      query(`SELECT ti.id, ti.template_id, ti.required, ti.label
+             FROM smartroute_checklist_template_items ti
+             JOIN smartroute_checklist_templates t ON t.id = ti.template_id
+             WHERE t.organization_id=$1`, [org]).catch(() => ({ rows: [] })),
+      query(`SELECT event_type, COUNT(*)::int n FROM smartroute_events
+             WHERE route_id=$1 GROUP BY event_type`, [rid]),
+    ]);
+
+    const done = stops.rows.filter((s) => s.status === 'concluida').length;
+    const failed = stops.rows.filter((s) => s.status === 'nao_entregue').length;
+    const total = stops.rows.length;
+    const successRate = total ? Math.round((done / total) * 100) : 0;
+
+    const serviceTimes = stops.rows
+      .filter((s) => s.arrived_at && s.departed_at)
+      .map((s) => (new Date(s.departed_at) - new Date(s.arrived_at)) / 60000);
+    const avgServiceMin = serviceTimes.length
+      ? Math.round(serviceTimes.reduce((a, b) => a + b, 0) / serviceTimes.length)
+      : null;
+
+    const etaDeltas = stops.rows
+      .filter((s) => s.arrived_at && s.eta_min != null && route.started_at)
+      .map((s) => (new Date(s.arrived_at) - new Date(route.started_at)) / 60000 - Number(s.eta_min || 0));
+    const avgEtaDelta = etaDeltas.length
+      ? Math.round(etaDeltas.reduce((a, b) => a + b, 0) / etaDeltas.length)
+      : null;
+
+    const occByType = {}; const occBySeverity = {}; let slaBreaches = 0;
+    for (const o of occRes.rows) {
+      occByType[o.type_code || 'outro'] = (occByType[o.type_code || 'outro'] || 0) + 1;
+      occBySeverity[o.severity || 'info'] = (occBySeverity[o.severity || 'info'] || 0) + 1;
+      if (o.sla_deadline && o.resolved_at && new Date(o.resolved_at) > new Date(o.sla_deadline)) slaBreaches++;
+      else if (o.sla_deadline && !o.resolved_at && new Date() > new Date(o.sla_deadline)) slaBreaches++;
+    }
+
+    const requiredIds = new Set(chkTplRes.rows.filter((i) => i.required).map((i) => i.id));
+    const respondedRequired = new Set(
+      chkRes.rows.filter((r) => requiredIds.has(r.item_id) && r.value !== null).map((r) => `${r.stop_id}:${r.item_id}`)
+    );
+    const expectedRequired = stopIds.length * requiredIds.size;
+    const checklistCompliance = expectedRequired
+      ? Math.round((respondedRequired.size / expectedRequired) * 100)
+      : null;
+
+    const durationMin = route.started_at && route.ended_at
+      ? Math.round((new Date(route.ended_at) - new Date(route.started_at)) / 60000)
+      : null;
+
+    const metrics = {
+      rota: {
+        codigo: route.code, status: route.status,
+        planejada_em: route.planned_date, iniciada_em: route.started_at, encerrada_em: route.ended_at,
+        duracao_min: durationMin, km_total: route.total_distance_km,
+        combustivel_l: route.estimated_fuel_liters, custo_brl: route.estimated_cost_brl,
+      },
+      motorista: { nome: route.driver_name, cpf: route.driver_cpf },
+      veiculo: { placa: route.plate, modelo: route.vehicle_model, capacidade_kg: route.capacity_kg, capacidade_m3: route.capacity_m3 },
+      paradas: {
+        total, concluidas: done, nao_entregues: failed,
+        taxa_sucesso_pct: successRate,
+        tempo_medio_atendimento_min: avgServiceMin,
+        atraso_medio_vs_eta_min: avgEtaDelta,
+      },
+      checklist: { aderencia_pct: checklistCompliance, itens_obrigatorios: requiredIds.size },
+      ocorrencias: { por_tipo: occByType, por_severidade: occBySeverity, sla_estourados: slaBreaches, total: occRes.rows.length },
+      alertas: alertsRes.rows.map((a) => ({ tipo: a.type, severidade: a.severity, titulo: a.title, resolvido: a.resolved })),
+      eventos: evtRes.rows,
+      paradas_detalhe: stops.rows.map((s) => ({
+        seq: s.sequence, pdv: s.pdv_name, status: s.status,
+        chegada: s.arrived_at, saida: s.departed_at, eta_min: s.eta_min, notas: s.notes,
+      })),
+    };
+
+    const system = 'Você é um analista sênior de operações logísticas no Brasil. Analise a execução de uma rota concluída e gere um relatório objetivo e acionável em português do Brasil. Responda APENAS com JSON válido.';
+    const prompt = `Analise a execução da rota abaixo e produza um relatório pós-rota.
+
+MÉTRICAS:
+${JSON.stringify(metrics, null, 2)}
+
+Responda APENAS com JSON no formato:
+{
+  "resumo_executivo": "2-3 frases sobre a execução",
+  "score_execucao": 0-100,
+  "produtividade": {"nota": 0-100, "comentario": "curto"},
+  "cumprimento_checklist": {"nota": 0-100, "comentario": "curto"},
+  "qualidade_atendimento": {"nota": 0-100, "comentario": "curto"},
+  "pontos_positivos": ["..."],
+  "gargalos": [{"titulo": "curto", "descricao": "onde ocorreu", "impacto": "curto"}],
+  "ocorrencias_criticas": ["..."],
+  "recomendacoes": [{"prioridade": "alta|media|baixa", "titulo": "curto", "acao": "acionável"}],
+  "aprendizados_para_proxima_rota": ["..."]
+}`;
+
+    const raw = await callTextAI({ system, prompt, maxTokens: 1800 });
+    const parsed = parseJSONish(raw);
+    parsed.metricas_calculadas = metrics;
+
+    const title = parsed.resumo_executivo?.slice(0, 200) || `Análise pós-rota ${route.code}`;
+    const ins = await query(
+      `INSERT INTO smartroute_ai_recommendations (organization_id, route_id, scope, title, body, data, created_by)
+       VALUES ($1,$2,'pos_rota',$3,$4,$5,$6) RETURNING *`,
+      [org, rid, title, raw, parsed, req.userId]
+    );
+    res.json({ ...ins.rows[0], parsed, metrics });
+  } catch (e) { logError('post-analysis', e); res.status(500).json({ error: e.message }); }
+});
+
+router.get('/routes/:id/post-analysis', async (req, res) => {
+  try {
+    const r = await query(
+      `SELECT * FROM smartroute_ai_recommendations
+       WHERE organization_id=$1 AND route_id=$2 AND scope='pos_rota'
+       ORDER BY created_at DESC`, [req.organizationId, req.params.id]);
+    res.json(r.rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/post-analyses', async (req, res) => {
+  try {
+    const r = await query(
+      `SELECT rec.*, rt.code AS route_code, rt.planned_date, d.full_name AS driver_name
+       FROM smartroute_ai_recommendations rec
+       LEFT JOIN smartroute_routes rt ON rt.id = rec.route_id
+       LEFT JOIN smartroute_drivers d ON d.id = rt.driver_id
+       WHERE rec.organization_id=$1 AND rec.scope='pos_rota'
+       ORDER BY rec.created_at DESC LIMIT 100`, [req.organizationId]);
+    res.json(r.rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 export default router;
