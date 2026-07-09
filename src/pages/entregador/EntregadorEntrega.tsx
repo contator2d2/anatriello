@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import SignatureCanvas from "react-signature-canvas";
 import {
   ArrowLeft, MapPin, Phone, Navigation, Camera, CheckCircle2,
-  AlertTriangle, FileText, PenLine, Eraser, Package, Clock, ShieldCheck,
+  AlertTriangle, FileText, PenLine, Eraser, Package, Clock, ShieldCheck, Download, IdCard,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -55,6 +55,7 @@ export default function EntregadorEntrega() {
   const [occSeverity, setOccSeverity] = useState<"low" | "medium" | "high">("medium");
   const [occDesc, setOccDesc] = useState("");
   const [receiver, setReceiver] = useState("");
+  const [receiverDoc, setReceiverDoc] = useState("");
   const [notes, setNotes] = useState("");
   const [nextDialogOpen, setNextDialogOpen] = useState(false);
   const sigRef = useRef<SignatureCanvas>(null);
@@ -76,6 +77,22 @@ export default function EntregadorEntrega() {
   const media = (stop.media || []) as Array<{ id: string; kind: string; url: string }>;
   const has = (k: string) => media.some((m) => m.kind === k);
   const settings = stop.operation || {};
+  const pod = (stop.pod || {}) as { required?: boolean; type?: string };
+  const docLabel = (pod.type || settings.receiver_document_type || "cpf").toUpperCase();
+  const existingDoc = stop.receiver_document as string | null;
+  const receiptUrl = stop.receipt_url as string | null;
+
+  const formatDoc = (v: string) => {
+    const t = pod.type || settings.receiver_document_type || "cpf";
+    const d = v.replace(/\D/g, "");
+    if (t === "cpf") {
+      return d.slice(0, 11)
+        .replace(/^(\d{3})(\d)/, "$1.$2")
+        .replace(/^(\d{3})\.(\d{3})(\d)/, "$1.$2.$3")
+        .replace(/\.(\d{3})(\d)/, ".$1-$2");
+    }
+    return v.slice(0, 20);
+  };
 
   const handleNavigate = async () => {
     const pos = await getPos();
@@ -121,8 +138,18 @@ export default function EntregadorEntrega() {
 
   const handleCheckout = async () => {
     const pos = await getPos();
+    if (pod.required && !existingDoc && !receiverDoc.trim()) {
+      toast.error(`${docLabel} do recebedor é obrigatório nesta entrega`);
+      return;
+    }
     try {
-      await doCheckout.mutateAsync({ ...pos, receiver_name: receiver || undefined, notes: notes || undefined });
+      await doCheckout.mutateAsync({
+        ...pos,
+        receiver_name: receiver || undefined,
+        notes: notes || undefined,
+        receiver_document: receiverDoc ? receiverDoc.replace(/\s+/g, "") : undefined,
+        receiver_document_type: receiverDoc ? (pod.type || settings.receiver_document_type || "cpf") : undefined,
+      });
       toast.success("Entrega finalizada");
       const nxt = await nextStop.refetch();
       if (nxt.data?.done) {
@@ -135,6 +162,21 @@ export default function EntregadorEntrega() {
       const blockers: string[] = e?.data?.blockers || [];
       if (blockers.length) toast.error(`Pendências: ${blockers.join(" · ")}`);
       else toast.error(e?.message || "Falha no check-out");
+    }
+  };
+
+  const downloadReceipt = async () => {
+    try {
+      const token = localStorage.getItem("smartroute_driver_token");
+      const r = await fetch(`/api/smartroute/driver/stops/${id}/receipt.pdf`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+      if (!r.ok) throw new Error("Erro ao gerar comprovante");
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank");
+    } catch (e: any) {
+      toast.error(e?.message || "Falha ao baixar comprovante");
     }
   };
 
@@ -278,6 +320,27 @@ export default function EntregadorEntrega() {
                   <label className="text-sm">Nome de quem recebeu</label>
                   <Input value={receiver} onChange={(e) => setReceiver(e.target.value)} placeholder="Ex.: João Silva" />
                 </div>
+
+                {/* Documento do recebedor — opcional; obrigatório quando pod.required */}
+                {(pod.required || existingDoc) && (
+                  <div>
+                    <label className="text-sm flex items-center gap-1">
+                      <IdCard className="w-3 h-3" />
+                      {docLabel} do recebedor{pod.required ? "*" : " (opcional)"}
+                    </label>
+                    <Input
+                      value={existingDoc || receiverDoc}
+                      disabled={!!existingDoc}
+                      onChange={(e) => setReceiverDoc(formatDoc(e.target.value))}
+                      placeholder={pod.type === "rg" ? "00.000.000-0" : "000.000.000-00"}
+                      inputMode="numeric"
+                    />
+                    {existingDoc && (
+                      <div className="text-xs text-emerald-700 mt-1">Documento registrado</div>
+                    )}
+                  </div>
+                )}
+
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="text-sm">Assinatura do cliente*</label>
@@ -308,6 +371,7 @@ export default function EntregadorEntrega() {
                   {settings.require_facade_photo && <Requisito ok={has("facade")} label="Foto da fachada" />}
                   {settings.require_invoice_photo && <Requisito ok={has("invoice")} label="Foto da nota fiscal" />}
                   {settings.require_signature && <Requisito ok={has("signature")} label="Assinatura do cliente" />}
+                  {pod.required && <Requisito ok={!!existingDoc || !!receiverDoc.trim()} label={`${docLabel} do recebedor`} />}
                 </ul>
                 <div>
                   <label className="text-sm">Observações finais</label>
@@ -320,6 +384,11 @@ export default function EntregadorEntrega() {
                   <CheckCircle2 className="w-4 h-4 mr-1" />
                   {stop.state === "COMPLETED" ? "Entrega concluída" : "Concluir entrega e liberar próxima"}
                 </Button>
+                {(stop.state === "COMPLETED" || receiptUrl) && (
+                  <Button variant="outline" className="w-full" onClick={downloadReceipt}>
+                    <Download className="w-4 h-4 mr-1" /> Baixar comprovante (PDF)
+                  </Button>
+                )}
                 {stop.duration_ms && (
                   <div className="text-xs text-center text-muted-foreground flex items-center gap-1 justify-center">
                     <Clock className="w-3 h-3" /> Duração: {Math.round(stop.duration_ms / 60000)} min

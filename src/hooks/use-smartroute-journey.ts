@@ -12,6 +12,8 @@ export interface OperationSettings {
   allow_checkout_with_occurrence: boolean;
   require_signature: boolean;
   require_invoice_photo: boolean;
+  require_receiver_document?: boolean;
+  receiver_document_type?: 'cpf' | 'rg' | 'other';
 }
 
 export function useJourneyToday() {
@@ -90,6 +92,7 @@ export function useStopCheckout(stopId: string) {
     mutationFn: (body: {
       lat?: number; lng?: number; signature_url?: string;
       receiver_name?: string; notes?: string;
+      receiver_document?: string; receiver_document_type?: string;
     }) => driverApi(`${BASE}/stops/${stopId}/checkout`, { method: 'POST', body }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['sr-stop', stopId] }),
   });

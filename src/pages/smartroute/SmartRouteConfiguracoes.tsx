@@ -261,6 +261,7 @@ function OperationTab() {
           ["require_facade_photo", "Exigir foto da fachada"],
           ["require_invoice_photo", "Exigir foto da nota fiscal"],
           ["require_signature", "Exigir assinatura do cliente"],
+          ["require_receiver_document", "Exigir documento (CPF/RG) do recebedor por padrão"],
           ["require_vehicle_checklist", "Exigir checklist do veículo no início do dia"],
           ["allow_checkout_with_occurrence", "Permitir check-out com ocorrência"],
         ].map(([k, l]) => (
@@ -269,6 +270,25 @@ function OperationTab() {
             <Switch checked={!!cur[k]} onCheckedChange={(v) => setForm({ ...form, [k]: v })} />
           </div>
         ))}
+        {cur.require_receiver_document && (
+          <div className="border-t pt-3">
+            <Label>Tipo de documento solicitado</Label>
+            <Select
+              value={cur.receiver_document_type || "cpf"}
+              onValueChange={(v) => setForm({ ...form, receiver_document_type: v })}
+            >
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="cpf">CPF</SelectItem>
+                <SelectItem value="rg">RG</SelectItem>
+                <SelectItem value="other">Outro</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground mt-1">
+              Padrão global. Rotas ou paradas específicas podem sobrescrever este comportamento.
+            </p>
+          </div>
+        )}
         <Button onClick={submit} disabled={save.isPending}>Salvar operação</Button>
       </CardContent>
     </Card>
