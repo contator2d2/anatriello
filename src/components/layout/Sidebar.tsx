@@ -182,6 +182,7 @@ const getNavSections = (hasConnections: boolean): NavSection[] => [
       { name: "Análise Pós-Rota", href: "/smartroute/pos-analise", icon: Sparkles, pageKey: 'sr_ia' },
 
       { name: "Rotas", href: "/smartroute/rotas", icon: RouteIcon, pageKey: 'sr_rotas' },
+      { name: "Planejador IA", href: "/smartroute/planejador", icon: Sparkles, pageKey: 'sr_rotas' },
       { name: "Pedidos", href: "/smartroute/pedidos", icon: Package, pageKey: 'sr_pedidos' },
       { name: "PDVs / Clientes", href: "/smartroute/pdvs", icon: Store, pageKey: 'sr_pdvs' },
       { name: "Frota", href: "/smartroute/frota", icon: Truck, pageKey: 'sr_frota' },

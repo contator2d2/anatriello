@@ -10,10 +10,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Trash2, Route as RouteIcon, Wand2, Eye, Sparkles, FileText, PlayCircle } from "lucide-react";
+import { Plus, Trash2, Route as RouteIcon, Wand2, Eye, Sparkles, FileText, PlayCircle, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { useSRRoutes, useSRSaveRoute, useSRDeleteRoute, useSRDrivers, useSRVehicles, useSROrders, useSROptimizeRoute, useSRRoute } from "@/hooks/use-smartroute";
 import { useSROptimizeAdvanced } from "@/hooks/use-smartroute-ai";
+import { useSRReoptimize } from "@/hooks/use-smartroute-planner";
 import { useSRDepots } from "@/hooks/use-smartroute-depots";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -31,6 +32,7 @@ export default function SmartRouteRotas() {
   const del = useSRDeleteRoute();
   const optimize = useSROptimizeRoute();
   const optimizeAdv = useSROptimizeAdvanced();
+  const reopt = useSRReoptimize();
   const { data: depots = [] } = useSRDepots();
 
   const [open, setOpen] = useState(false);
@@ -129,6 +131,7 @@ export default function SmartRouteRotas() {
                     <Button size="icon" variant="ghost" onClick={() => setViewId(r.id)}><Eye className="w-4 h-4" /></Button>
                     <Button size="icon" variant="ghost" title="Otimizar (rápido)" onClick={() => optimize.mutate(r.id, { onSuccess: () => toast.success("Sequência otimizada") })}><Wand2 className="w-4 h-4" /></Button>
                     <Button size="icon" variant="ghost" title="Otimizar IA" onClick={() => optimizeAdv.mutate(r.id, { onSuccess: (d: any) => toast.success(`IA: ${d.sequenced} paradas · ${d.total_km}km${d.estimated_cost_brl ? ` · R$ ${d.estimated_cost_brl}` : ""}`, { description: d.warnings?.length ? d.warnings.join(" | ") : undefined }) })}><Sparkles className="w-4 h-4 text-primary" /></Button>
+                    <Button size="icon" variant="ghost" title="Re-otimizar em tempo real (mantém concluídas)" onClick={() => reopt.mutate(r.id, { onSuccess: (d: any) => toast.success(`Re-otimizada · ${d.resequenced} pendentes${d.warnings?.length ? ` · ${d.warnings.length} avisos` : ""}`, { description: `Mantidas ${d.kept_completed} concluídas` }) })}><RefreshCw className="w-4 h-4" /></Button>
                     <Button size="icon" variant="ghost" title="Romaneio PDF" onClick={() => romaneioPDF(r)}><FileText className="w-4 h-4" /></Button>
                     <Button size="icon" variant="ghost" title="Copiar links de rastreio" onClick={() => shareTrackingLinks(r)}>🔗</Button>
                     <Link to={`/smartroute/replay/${r.id}`}><Button size="icon" variant="ghost" title="Replay"><PlayCircle className="w-4 h-4" /></Button></Link>

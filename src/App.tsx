@@ -213,6 +213,7 @@ import SmartRouteDocumentacao from "./pages/smartroute/SmartRouteDocumentacao";
 import SmartRouteMonitoramento from "./pages/smartroute/SmartRouteMonitoramento";
 import SmartRouteOcorrencias from "./pages/smartroute/SmartRouteOcorrencias";
 import SmartRoutePosAnalise from "./pages/smartroute/SmartRoutePosAnalise";
+import SmartRoutePlanejador from "./pages/smartroute/SmartRoutePlanejador";
 
 import TrackingPage from "./pages/TrackingPage";
 import { DriverAuthProvider } from "./contexts/DriverAuthContext";
@@ -514,6 +515,7 @@ const App = () => (
             <Route path="/smartroute/monitoramento" element={<ProtectedRoute><SmartRouteMonitoramento /></ProtectedRoute>} />
             <Route path="/smartroute/ocorrencias" element={<ProtectedRoute><SmartRouteOcorrencias /></ProtectedRoute>} />
             <Route path="/smartroute/pos-analise" element={<ProtectedRoute><SmartRoutePosAnalise /></ProtectedRoute>} />
+            <Route path="/smartroute/planejador" element={<ProtectedRoute><SmartRoutePlanejador /></ProtectedRoute>} />
 
             <Route path="/track/:token" element={<TrackingPage />} />
 
