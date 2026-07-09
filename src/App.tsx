@@ -210,6 +210,7 @@ import SmartRouteConfiguracoes from "./pages/smartroute/SmartRouteConfiguracoes"
 import SmartRouteCDs from "./pages/smartroute/SmartRouteCDs";
 import SmartRouteChecklists from "./pages/smartroute/SmartRouteChecklists";
 import SmartRouteDocumentacao from "./pages/smartroute/SmartRouteDocumentacao";
+import SmartRouteMonitoramento from "./pages/smartroute/SmartRouteMonitoramento";
 import TrackingPage from "./pages/TrackingPage";
 import { DriverAuthProvider } from "./contexts/DriverAuthContext";
 import EntregadorLogin from "./pages/entregador/EntregadorLogin";
