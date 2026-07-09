@@ -80,3 +80,25 @@ export function useSRDeleteAdvisor() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['sr-advisor'] }),
   });
 }
+
+// ============ ONDA 5: ANÁLISE PÓS-ROTA ============
+export function useSRPostAnalyses() {
+  return useQuery<any[]>({ queryKey: ['sr-post-analyses'], queryFn: () => api(`${BASE}/post-analyses`) });
+}
+export function useSRRoutePostAnalyses(routeId?: string) {
+  return useQuery<any[]>({
+    queryKey: ['sr-post-analysis', routeId],
+    queryFn: () => api(`${BASE}/routes/${routeId}/post-analysis`),
+    enabled: !!routeId,
+  });
+}
+export function useSRRunPostAnalysis() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (routeId: string) => api(`${BASE}/routes/${routeId}/post-analysis`, { method: 'POST', body: {} }),
+    onSuccess: (_, id) => {
+      qc.invalidateQueries({ queryKey: ['sr-post-analyses'] });
+      qc.invalidateQueries({ queryKey: ['sr-post-analysis', id] });
+    },
+  });
+}
