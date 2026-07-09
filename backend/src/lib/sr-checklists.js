@@ -72,47 +72,88 @@ export async function getPendingRequiredItems(stopId, organizationId) {
   return required.filter((i) => !done.has(i.id)).map((i) => i.label);
 }
 
-// ============ OCR via Lovable AI Gateway (OpenAI/Gemini multimodal) ============
-export async function ocrProductImage(imageDataUrl, { model } = {}) {
-  const key = process.env.LOVABLE_API_KEY;
-  if (!key) throw new Error('LOVABLE_API_KEY não configurado');
+// ============ OCR via provedor configurado (OpenAI / Gemini / OpenRouter) ============
+// Usa a configuração global da Anatriello (Superadmin → IA Anatriello).
+import { loadDocValidationConfig } from '../routes/ayratech-ai.js';
 
-  const chosen = model || 'google/gemini-2.5-flash';
-  const prompt =
-    'Você é um extrator de dados de embalagens de produtos. Analise a imagem e retorne APENAS um JSON válido no formato:\n' +
-    '{"product":"","brand":"","code":"","ean":"","batch":"","manufactured_at":"YYYY-MM-DD","expires_at":"YYYY-MM-DD","confidence":0.0}\n' +
-    'Use null para campos ausentes. Não escreva nada fora do JSON.';
+const OCR_PROMPT =
+  'Você é um extrator de dados de embalagens de produtos. Analise a imagem e retorne APENAS um JSON válido no formato:\n' +
+  '{"product":"","brand":"","code":"","ean":"","batch":"","manufactured_at":"YYYY-MM-DD","expires_at":"YYYY-MM-DD","confidence":0.0}\n' +
+  'Use null para campos ausentes. Não escreva nada fora do JSON.';
 
-  const res = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${key}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: chosen,
+function parseJsonLoose(content) {
+  try { return JSON.parse(content); }
+  catch {
+    const m = content.match(/\{[\s\S]*\}/);
+    return m ? JSON.parse(m[0]) : {};
+  }
+}
+
+export async function ocrProductImage(imageDataUrl, { model: overrideModel } = {}) {
+  const cfg = await loadDocValidationConfig();
+  if (!cfg?.apiKey) {
+    throw new Error('IA não configurada. Configure em Superadmin → IA Anatriello (OpenAI recomendado para OCR).');
+  }
+  if (cfg.enabled === false) throw new Error('IA desativada nas configurações da Anatriello');
+
+  const provider = cfg.provider || 'openai';
+  const model = overrideModel || cfg.model || (provider === 'openai' ? 'gpt-4o' : provider === 'gemini' ? 'gemini-2.5-pro' : 'openai/gpt-4o');
+
+  let url, headers, body;
+  if (provider === 'openai') {
+    url = 'https://api.openai.com/v1/chat/completions';
+    headers = { Authorization: `Bearer ${cfg.apiKey}`, 'Content-Type': 'application/json' };
+    body = {
+      model,
       messages: [
         { role: 'system', content: 'Retorne apenas JSON.' },
         { role: 'user', content: [
-          { type: 'text', text: prompt },
+          { type: 'text', text: OCR_PROMPT },
           { type: 'image_url', image_url: { url: imageDataUrl } },
         ]},
       ],
       response_format: { type: 'json_object' },
-    }),
-  });
+    };
+  } else if (provider === 'openrouter') {
+    url = 'https://openrouter.ai/api/v1/chat/completions';
+    headers = { Authorization: `Bearer ${cfg.apiKey}`, 'Content-Type': 'application/json' };
+    body = {
+      model,
+      messages: [
+        { role: 'system', content: 'Retorne apenas JSON.' },
+        { role: 'user', content: [
+          { type: 'text', text: OCR_PROMPT },
+          { type: 'image_url', image_url: { url: imageDataUrl } },
+        ]},
+      ],
+      response_format: { type: 'json_object' },
+    };
+  } else if (provider === 'gemini') {
+    // Converte data URL em inlineData
+    let mimeType = 'image/jpeg', data = imageDataUrl;
+    const m = /^data:([^;]+);base64,(.+)$/.exec(imageDataUrl);
+    if (m) { mimeType = m[1]; data = m[2]; }
+    url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${cfg.apiKey}`;
+    headers = { 'Content-Type': 'application/json' };
+    body = {
+      contents: [{ role: 'user', parts: [
+        { text: OCR_PROMPT },
+        { inlineData: { mimeType, data } },
+      ]}],
+      generationConfig: { responseMimeType: 'application/json' },
+    };
+  } else {
+    throw new Error(`Provedor de IA não suportado: ${provider}`);
+  }
 
+  const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
   if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`AI Gateway ${res.status}: ${body.slice(0, 300)}`);
+    const txt = await res.text();
+    throw new Error(`${provider} ${res.status}: ${txt.slice(0, 300)}`);
   }
   const data = await res.json();
-  const content = data.choices?.[0]?.message?.content || '{}';
-  let parsed;
-  try { parsed = JSON.parse(content); }
-  catch {
-    const m = content.match(/\{[\s\S]*\}/);
-    parsed = m ? JSON.parse(m[0]) : {};
-  }
-  return parsed;
+  const content = provider === 'gemini'
+    ? (data.candidates?.[0]?.content?.parts?.[0]?.text || '{}')
+    : (data.choices?.[0]?.message?.content || '{}');
+  return parseJsonLoose(content);
 }
