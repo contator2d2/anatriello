@@ -6,9 +6,11 @@
 
 import express from 'express';
 import { query } from '../db.js';
+import { authenticate } from '../middleware/auth.js';
 import { logError } from '../logger.js';
 
 const router = express.Router();
+router.use(authenticate);
 
 // ---------- utils ----------
 const R_KM = 6371;
