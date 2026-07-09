@@ -72,6 +72,7 @@ import smartrouteAIRoutes from './routes/smartroute-ai.js';
 import smartroutePublicRoutes from './routes/smartroute-public.js';
 import smartrouteReportsRoutes from './routes/smartroute-reports.js';
 import smartrouteOpsRoutes from './routes/smartroute-ops.js';
+import smartroutePlannerRoutes from './routes/smartroute-planner.js';
 
 import promoterLeavesRoutes from './routes/promoter-leaves.js';
 import accessControlDashboardRoutes from './routes/access-control-dashboard.js';
