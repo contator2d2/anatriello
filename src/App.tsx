@@ -513,6 +513,7 @@ const App = () => (
             <Route path="/smartroute/documentacao" element={<ProtectedRoute><SmartRouteDocumentacao /></ProtectedRoute>} />
             <Route path="/smartroute/monitoramento" element={<ProtectedRoute><SmartRouteMonitoramento /></ProtectedRoute>} />
             <Route path="/smartroute/ocorrencias" element={<ProtectedRoute><SmartRouteOcorrencias /></ProtectedRoute>} />
+            <Route path="/smartroute/pos-analise" element={<ProtectedRoute><SmartRoutePosAnalise /></ProtectedRoute>} />
 
             <Route path="/track/:token" element={<TrackingPage />} />
 
