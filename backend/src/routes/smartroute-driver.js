@@ -7,9 +7,10 @@ import { logError } from '../logger.js';
 import { ensureSmartRouteTables } from './smartroute.js';
 import {
   distanceMeters, getOperationSettings, computeCheckoutBlockers,
-  logEvent, buildNavLink,
+  logEvent, buildNavLink, effectivePodDocument,
 } from '../lib/sr-journey.js';
 import { resolveTemplatesForStop, ocrProductImage } from '../lib/sr-checklists.js';
+import { generatePodReceiptPDF } from '../lib/sr-pod-receipt.js';
 
 const router = express.Router();
 router.use(async (req, res, next) => { try { await ensureSmartRouteTables(); next(); } catch (e) { next(e); } });
@@ -406,7 +407,10 @@ router.post('/stops/:id/ocr', async (req, res) => {
 
 router.post('/stops/:id/checkout', async (req, res) => {
   try {
-    const { lat, lng, signature_url, receiver_name, notes } = req.body || {};
+    const {
+      lat, lng, signature_url, receiver_name, notes,
+      receiver_document, receiver_document_type,
+    } = req.body || {};
 
     // Grava assinatura recebida no mesmo payload (compat com fluxo antigo)
     if (signature_url) {
@@ -414,6 +418,18 @@ router.post('/stops/:id/checkout', async (req, res) => {
         `INSERT INTO smartroute_stop_media (organization_id, stop_id, kind, url, lat, lng)
          VALUES ($1,$2,'signature',$3,$4,$5)`,
         [req.organizationId, req.params.id, signature_url, lat ?? null, lng ?? null]);
+    }
+
+    // Persiste documento do recebedor ANTES de validar bloqueios
+    if (receiver_document || receiver_document_type) {
+      const docClean = receiver_document ? String(receiver_document).replace(/\s+/g, '').slice(0, 32) : null;
+      await query(
+        `UPDATE smartroute_route_stops
+           SET receiver_document = COALESCE($2, receiver_document),
+               receiver_document_type = COALESCE($3, receiver_document_type),
+               updated_at = NOW()
+         WHERE id=$1`,
+        [req.params.id, docClean, receiver_document_type || null]);
     }
 
     // Bloqueios
@@ -457,8 +473,23 @@ router.post('/stops/:id/checkout', async (req, res) => {
       routeId: s.rows[0].route_id, stopId: req.params.id,
       eventType: 'stop_checkout', payload: { duration_ms: s.rows[0].duration_ms }, lat, lng,
     });
-    res.json({ ok: true, duration_ms: s.rows[0].duration_ms });
+
+    // Marca disponibilidade do comprovante PDF (URL relativa ao driver)
+    const receiptUrl = `/api/smartroute/driver/stops/${req.params.id}/receipt.pdf`;
+    await query(`UPDATE smartroute_route_stops SET receipt_url=$2 WHERE id=$1`, [req.params.id, receiptUrl]);
+
+    res.json({ ok: true, duration_ms: s.rows[0].duration_ms, receipt_url: receiptUrl });
   } catch (e) { logError('sr.driver.checkout', e); res.status(500).json({ error: e.message }); }
+});
+
+// Comprovante de entrega em PDF (POD)
+router.get('/stops/:id/receipt.pdf', async (req, res) => {
+  try {
+    const buf = await generatePodReceiptPDF(req.params.id);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="pod-${req.params.id}.pdf"`);
+    res.send(buf);
+  } catch (e) { logError('sr.driver.receipt', e); res.status(500).json({ error: e.message }); }
 });
 
 // Detalhe da entrega com mídias, ocorrências e link de navegação
@@ -468,7 +499,8 @@ router.get('/stops/:id', async (req, res) => {
       `SELECT s.*, p.name AS pdv_name, p.address AS pdv_address, p.city AS pdv_city,
               p.lat AS pdv_lat, p.lng AS pdv_lng, p.contact_name, p.contact_phone,
               o.order_number, o.weight_kg, o.volume_m3, o.value_cents, o.items, o.notes AS order_notes,
-              r.code AS route_code, r.status AS route_status
+              r.code AS route_code, r.status AS route_status,
+              r.pod_require_document AS route_pod_require_document
        FROM smartroute_route_stops s
        LEFT JOIN smartroute_pdvs p ON p.id=s.pdv_id
        LEFT JOIN smartroute_orders o ON o.id=s.order_id
@@ -482,11 +514,17 @@ router.get('/stops/:id', async (req, res) => {
     const occ = await query(
       `SELECT * FROM smartroute_stop_occurrences WHERE stop_id=$1 ORDER BY created_at`, [req.params.id]);
     const settings = await getOperationSettings(req.organizationId);
+    const pod = effectivePodDocument(
+      s,
+      { pod_require_document: s.route_pod_require_document },
+      settings
+    );
     res.json({
       ...s,
       media: media.rows,
       occurrences: occ.rows,
       operation: settings,
+      pod,
       nav_link: buildNavLink({ lat: s.pdv_lat, lng: s.pdv_lng, preferred: settings.preferred_nav_app }),
     });
   } catch (e) { res.status(500).json({ error: e.message }); }

@@ -44,6 +44,8 @@ export async function getOperationSettings(organizationId) {
     allow_checkout_with_occurrence: true,
     require_signature: true,
     require_invoice_photo: true,
+    require_receiver_document: false,
+    receiver_document_type: 'cpf',
   };
 }
 
@@ -54,8 +56,9 @@ export async function upsertOperationSettings(organizationId, patch) {
     `INSERT INTO smartroute_org_operation_settings (
        organization_id, max_checkin_distance_m, require_facade_photo,
        require_vehicle_checklist, preferred_nav_app,
-       allow_checkout_with_occurrence, require_signature, require_invoice_photo
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+       allow_checkout_with_occurrence, require_signature, require_invoice_photo,
+       require_receiver_document, receiver_document_type
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
      ON CONFLICT (organization_id) DO UPDATE SET
        max_checkin_distance_m = EXCLUDED.max_checkin_distance_m,
        require_facade_photo = EXCLUDED.require_facade_photo,
@@ -64,6 +67,8 @@ export async function upsertOperationSettings(organizationId, patch) {
        allow_checkout_with_occurrence = EXCLUDED.allow_checkout_with_occurrence,
        require_signature = EXCLUDED.require_signature,
        require_invoice_photo = EXCLUDED.require_invoice_photo,
+       require_receiver_document = EXCLUDED.require_receiver_document,
+       receiver_document_type = EXCLUDED.receiver_document_type,
        updated_at = NOW()
      RETURNING *`,
     [
@@ -75,18 +80,31 @@ export async function upsertOperationSettings(organizationId, patch) {
       merged.allow_checkout_with_occurrence,
       merged.require_signature,
       merged.require_invoice_photo,
+      !!merged.require_receiver_document,
+      merged.receiver_document_type || 'cpf',
     ]
   );
   return r.rows[0];
+}
+
+// Regra POD: por parada > por rota > default org
+export function effectivePodDocument(stop, route, settings) {
+  const stopFlag = stop?.pod_require_document;
+  const routeFlag = route?.pod_require_document;
+  const required =
+    stopFlag != null ? !!stopFlag :
+    routeFlag != null ? !!routeFlag :
+    !!settings?.require_receiver_document;
+  return { required, type: settings?.receiver_document_type || 'cpf' };
 }
 
 // Verifica pendências obrigatórias antes do check-out
 export async function computeCheckoutBlockers(stopId, organizationId) {
   const settings = await getOperationSettings(organizationId);
   const stop = await query(
-    `SELECT s.*, o.id AS order_id
+    `SELECT s.*, r.pod_require_document AS route_pod_require_document
      FROM smartroute_route_stops s
-     LEFT JOIN smartroute_orders o ON o.id=s.order_id
+     LEFT JOIN smartroute_routes r ON r.id=s.route_id
      WHERE s.id=$1`, [stopId]
   );
   if (!stop.rows[0]) return ['Entrega não encontrada'];
@@ -103,6 +121,16 @@ export async function computeCheckoutBlockers(stopId, organizationId) {
   if (settings.require_facade_photo && !has('facade')) blockers.push('Foto da fachada obrigatória');
   if (settings.require_invoice_photo && !has('invoice')) blockers.push('Foto da nota fiscal obrigatória');
   if (settings.require_signature && !has('signature')) blockers.push('Assinatura do cliente obrigatória');
+
+  // POD: documento do recebedor quando exigido
+  const pod = effectivePodDocument(
+    st,
+    { pod_require_document: st.route_pod_require_document },
+    settings
+  );
+  if (pod.required && !st.receiver_document) {
+    blockers.push(`${(pod.type || 'cpf').toUpperCase()} do recebedor obrigatório`);
+  }
 
   // Itens obrigatórios do checklist configurável
   try {

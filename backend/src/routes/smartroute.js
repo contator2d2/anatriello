@@ -208,6 +208,15 @@ export async function ensureSmartRouteTables() {
     ALTER TABLE smartroute_route_stops ADD COLUMN IF NOT EXISTS template_snapshot_id UUID;
     ALTER TABLE smartroute_route_stops ADD COLUMN IF NOT EXISTS occurrence_summary TEXT;
 
+    -- === Onda 7 (POD): CPF/RG opcional por rota/parada + comprovante ===
+    ALTER TABLE smartroute_route_stops ADD COLUMN IF NOT EXISTS pod_require_document BOOLEAN;
+    ALTER TABLE smartroute_route_stops ADD COLUMN IF NOT EXISTS receiver_document TEXT;
+    ALTER TABLE smartroute_route_stops ADD COLUMN IF NOT EXISTS receiver_document_type TEXT;
+    ALTER TABLE smartroute_route_stops ADD COLUMN IF NOT EXISTS receipt_url TEXT;
+    ALTER TABLE smartroute_routes ADD COLUMN IF NOT EXISTS pod_require_document BOOLEAN;
+    ALTER TABLE smartroute_org_operation_settings ADD COLUMN IF NOT EXISTS require_receiver_document BOOLEAN DEFAULT false;
+    ALTER TABLE smartroute_org_operation_settings ADD COLUMN IF NOT EXISTS receiver_document_type TEXT DEFAULT 'cpf';
+
     -- Mídias ricas (foto/vídeo/áudio/assinatura) com EXIF
     CREATE TABLE IF NOT EXISTS smartroute_stop_media (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
