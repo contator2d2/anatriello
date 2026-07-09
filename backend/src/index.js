@@ -486,6 +486,7 @@ app.use('/api/smartroute/driver', smartrouteDriverRoutes);
 app.use('/api/smartroute/ai', smartrouteAIRoutes);
 app.use('/api/smartroute/reports', smartrouteReportsRoutes);
 app.use('/api/smartroute/ops', smartrouteOpsRoutes);
+app.use('/api/smartroute/planner', smartroutePlannerRoutes);
 app.use('/api/smartroute', smartrouteRoutes);
 
 
