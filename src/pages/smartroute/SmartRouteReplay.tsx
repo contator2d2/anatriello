@@ -2,13 +2,14 @@ import { MainLayout } from "@/components/layout/MainLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useParams, Link } from "react-router-dom";
 import { useSRReplay } from "@/hooks/use-smartroute";
-import { useRouteJourneyEvents } from "@/hooks/use-smartroute-checklists";
+import { useRouteJourneyEvents, useSRStopSummary } from "@/hooks/use-smartroute-checklists";
 import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { ArrowLeft, Play, Pause, RotateCcw } from "lucide-react";
+import { ArrowLeft, Play, Pause, RotateCcw, CheckCircle2 } from "lucide-react";
 
 export default function SmartRouteReplay() {
   const { id } = useParams<{ id: string }>();
@@ -19,6 +20,8 @@ export default function SmartRouteReplay() {
   const trailRef = useRef<L.Polyline | null>(null);
   const cursorRef = useRef<L.CircleMarker | null>(null);
   const [idx, setIdx] = useState(0);
+  const [selectedStop, setSelectedStop] = useState<string | null>(null);
+  const { data: stopDetail } = useSRStopSummary(selectedStop || undefined);
 
   const [playing, setPlaying] = useState(false);
 
@@ -34,11 +37,14 @@ export default function SmartRouteReplay() {
 
   useEffect(() => {
     const m = mapRef.current; if (!m || !data) return;
-    // Stops markers
+    // Stops markers (clicáveis para abrir detalhes)
     (data.stops || []).forEach((s: any) => {
       if (s.pdv_lat && s.pdv_lng) {
-        L.circleMarker([s.pdv_lat, s.pdv_lng], { radius: 8, color: "#3b82f6", fillColor: "#3b82f6", fillOpacity: 0.8 })
-          .bindTooltip(`#${s.sequence} · ${s.pdv_name}`).addTo(m);
+        const color = s.status === "concluida" ? "#10b981" : s.status === "nao_entregue" ? "#ef4444" : "#3b82f6";
+        L.circleMarker([s.pdv_lat, s.pdv_lng], { radius: 9, color, fillColor: color, fillOpacity: 0.85 })
+          .bindTooltip(`#${s.sequence} · ${s.pdv_name} · clique para detalhes`)
+          .on("click", () => setSelectedStop(s.id))
+          .addTo(m);
       }
     });
     const pts = geoEvents.map((e: any) => [e.lat, e.lng] as [number, number]);
