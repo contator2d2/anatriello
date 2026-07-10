@@ -21,7 +21,7 @@ import {
 import { useCompanies } from "@/hooks/use-companies";
 import { useScheduleTemplates } from "@/hooks/use-timeclock";
 import { useUpload } from "@/hooks/use-upload";
-import { formatPhone, onlyDigits } from "@/lib/br-utils";
+import { formatCpf, formatPhone, onlyDigits } from "@/lib/br-utils";
 import {
   UserPlus, Plus, FileText, Check, Loader2, ClipboardCheck, FileCheck, GraduationCap,
   Trash2, Users, Upload, AlertTriangle, ExternalLink, ArrowLeft, ArrowRight, KeyRound, Fingerprint, Clock,
@@ -369,16 +369,17 @@ export default function RHAdmissao() {
               </div>
               <div>
                 <Label>Telefone / WhatsApp</Label>
-                <Input
-                  placeholder="(11) 90000-0000"
-                  inputMode="tel"
-                  value={formatPhone(form.candidate_phone)}
-                  onChange={(e) => setForm({ ...form, candidate_phone: onlyDigits(e.target.value) })}
+                <MaskedPhoneInput
+                  value={form.candidate_phone}
+                  onValueChange={(value) => setForm({ ...form, candidate_phone: value })}
                 />
               </div>
               <div>
                 <Label>CPF</Label>
-                <Input value={form.candidate_cpf} onChange={(e) => setForm({ ...form, candidate_cpf: e.target.value })} />
+                <MaskedCpfInput
+                  value={form.candidate_cpf}
+                  onValueChange={(value) => setForm({ ...form, candidate_cpf: value })}
+                />
               </div>
               <div>
                 <Label>Cargo</Label>
@@ -616,7 +617,12 @@ export default function RHAdmissao() {
               </DialogFooter>
             </>
           ) : (
-            <div className="flex justify-center p-6"><Loader2 className="animate-spin" /></div>
+            <>
+              <DialogHeader>
+                <DialogTitle className="sr-only">Carregando admissão</DialogTitle>
+              </DialogHeader>
+              <div className="flex justify-center p-6"><Loader2 className="animate-spin" /></div>
+            </>
           )}
         </DialogContent>
       </Dialog>
@@ -625,6 +631,94 @@ export default function RHAdmissao() {
 }
 
 // ============ STEP COMPONENTS ============
+
+function MaskedPhoneInput({
+  value,
+  disabled,
+  onValueChange,
+  onCommit,
+}: {
+  value: any;
+  disabled?: boolean;
+  onValueChange?: (digits: string) => void;
+  onCommit?: (digits: string) => void;
+}) {
+  const normalize = (v: any) => onlyDigits(v).slice(0, 11);
+  const [local, setLocal] = useState(formatPhone(normalize(value)));
+  const focused = useRef(false);
+
+  useEffect(() => {
+    if (!focused.current) setLocal(formatPhone(normalize(value)));
+  }, [value]);
+
+  return (
+    <Input
+      placeholder="(11) 90000-0000"
+      inputMode="tel"
+      autoComplete="tel"
+      maxLength={15}
+      value={local}
+      disabled={disabled}
+      onFocus={() => { focused.current = true; }}
+      onChange={(e) => {
+        const digits = normalize(e.target.value);
+        setLocal(formatPhone(digits));
+        onValueChange?.(digits);
+      }}
+      onBlur={() => {
+        focused.current = false;
+        const digits = normalize(local);
+        const formatted = formatPhone(digits);
+        setLocal(formatted);
+        onCommit?.(digits);
+      }}
+    />
+  );
+}
+
+function MaskedCpfInput({
+  value,
+  disabled,
+  onValueChange,
+  onCommit,
+}: {
+  value: any;
+  disabled?: boolean;
+  onValueChange?: (digits: string) => void;
+  onCommit?: (digits: string) => void;
+}) {
+  const normalize = (v: any) => onlyDigits(v).slice(0, 11);
+  const [local, setLocal] = useState(formatCpf(normalize(value)));
+  const focused = useRef(false);
+
+  useEffect(() => {
+    if (!focused.current) setLocal(formatCpf(normalize(value)));
+  }, [value]);
+
+  return (
+    <Input
+      placeholder="000.000.000-00"
+      inputMode="numeric"
+      autoComplete="off"
+      maxLength={14}
+      value={local}
+      disabled={disabled}
+      onFocus={() => { focused.current = true; }}
+      onChange={(e) => {
+        const digits = normalize(e.target.value);
+        setLocal(formatCpf(digits));
+        onValueChange?.(digits);
+      }}
+      onBlur={() => {
+        focused.current = false;
+        const digits = normalize(local);
+        const formatted = formatCpf(digits);
+        setLocal(formatted);
+        onCommit?.(digits);
+      }}
+    />
+  );
+}
 
 function SalaryInput({ value, disabled, onCommit }: { value: any; disabled?: boolean; onCommit: (n: number) => void }) {
   const toStr = (v: any) => {
@@ -658,6 +752,13 @@ function AddressBlock({ data, disabled, onChange }: { data: any; disabled?: bool
     const d = String(v || "").replace(/\D/g, "").slice(0, 8);
     return d.length > 5 ? `${d.slice(0, 5)}-${d.slice(5)}` : d;
   };
+  const [cepInput, setCepInput] = useState(fmtCep(data.zip_code || ""));
+  const cepFocused = useRef(false);
+
+  useEffect(() => {
+    if (!cepFocused.current) setCepInput(fmtCep(data.zip_code || ""));
+  }, [data.zip_code]);
+
   const lookupCep = async (raw: string) => {
     const cep = String(raw || "").replace(/\D/g, "");
     if (cep.length !== 8) return;
@@ -676,6 +777,14 @@ function AddressBlock({ data, disabled, onChange }: { data: any; disabled?: bool
       });
     } catch { /* ignore */ } finally { setLoadingCep(false); }
   };
+
+  const commitCep = (raw = cepInput) => {
+    const v = fmtCep(raw);
+    setCepInput(v);
+    onChange({ zip_code: v });
+    if (v.replace(/\D/g, "").length === 8) lookupCep(v);
+  };
+
   return (
     <>
       <div>
@@ -683,14 +792,20 @@ function AddressBlock({ data, disabled, onChange }: { data: any; disabled?: bool
         <div className="relative">
           <Input
             placeholder="00000-000"
-            value={fmtCep(data.zip_code || "")}
+            inputMode="numeric"
+            maxLength={9}
+            value={cepInput}
             disabled={disabled}
+            onFocus={() => { cepFocused.current = true; }}
             onChange={(e) => {
               const v = fmtCep(e.target.value);
-              onChange({ zip_code: v });
+              setCepInput(v);
               if (v.replace(/\D/g, "").length === 8) lookupCep(v);
             }}
-            onBlur={(e) => lookupCep(e.target.value)}
+            onBlur={() => {
+              cepFocused.current = false;
+              commitCep();
+            }}
           />
           {loadingCep && <Loader2 className="w-4 h-4 animate-spin absolute right-2 top-2.5 text-muted-foreground" />}
         </div>
@@ -742,11 +857,17 @@ function StepDados({ detail, update, positions, departments, branches, companies
       <div><Label>E-mail</Label><Input value={detail.candidate_email || ""} disabled={disabled}
         onChange={(e) => update({ candidate_email: e.target.value })} /></div>
       <div><Label>Telefone / WhatsApp</Label>
-        <Input value={formatPhone(detail.candidate_phone || "")} disabled={disabled}
-          placeholder="(11) 90000-0000" inputMode="tel"
-          onChange={(e) => update({ candidate_phone: onlyDigits(e.target.value) })} /></div>
-      <div><Label>CPF</Label><Input value={detail.candidate_cpf || ""} disabled={disabled}
-        onChange={(e) => update({ candidate_cpf: e.target.value })} /></div>
+        <MaskedPhoneInput
+          value={detail.candidate_phone || ""}
+          disabled={disabled}
+          onCommit={(value) => update({ candidate_phone: value })}
+        /></div>
+      <div><Label>CPF</Label>
+        <MaskedCpfInput
+          value={detail.candidate_cpf || ""}
+          disabled={disabled}
+          onCommit={(value) => update({ candidate_cpf: value })}
+        /></div>
       <div>
         <Label>Cargo</Label>
         <Select
