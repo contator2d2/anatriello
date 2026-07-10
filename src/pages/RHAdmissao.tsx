@@ -686,11 +686,13 @@ function StepDados({ detail, update, positions, departments, branches, companies
       </div>
       <div>
         <Label>Salário (R$)</Label>
-        <Input type="number" step="0.01" placeholder="0,00"
-          value={detail.salary === 0 || detail.salary === null ? "" : detail.salary}
+        <SalaryInput
+          value={detail.salary}
           disabled={disabled}
-          onChange={(e) => update({ salary: e.target.value === "" ? 0 : Number(e.target.value) })} />
+          onCommit={(n) => update({ salary: n })}
+        />
       </div>
+
       <div>
         <Label>Gestor imediato</Label>
         <Select value={detail.manager_id || "none"} disabled={disabled}
