@@ -647,6 +647,85 @@ function SalaryInput({ value, disabled, onCommit }: { value: any; disabled?: boo
   );
 }
 
+function AddressBlock({ data, disabled, onChange }: { data: any; disabled?: boolean; onChange: (patch: any) => void }) {
+  const [loadingCep, setLoadingCep] = useState(false);
+  const fmtCep = (v: string) => {
+    const d = String(v || "").replace(/\D/g, "").slice(0, 8);
+    return d.length > 5 ? `${d.slice(0, 5)}-${d.slice(5)}` : d;
+  };
+  const lookupCep = async (raw: string) => {
+    const cep = String(raw || "").replace(/\D/g, "");
+    if (cep.length !== 8) return;
+    setLoadingCep(true);
+    try {
+      const r = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+      const j = await r.json();
+      if (j.erro) return;
+      onChange({
+        zip_code: fmtCep(cep),
+        address: j.logradouro || data.address || "",
+        neighborhood: j.bairro || data.neighborhood || "",
+        city: j.localidade || data.city || "",
+        state: j.uf || data.state || "",
+        complement: data.complement || j.complemento || "",
+      });
+    } catch { /* ignore */ } finally { setLoadingCep(false); }
+  };
+  return (
+    <>
+      <div>
+        <Label>CEP</Label>
+        <div className="relative">
+          <Input
+            placeholder="00000-000"
+            value={fmtCep(data.zip_code || "")}
+            disabled={disabled}
+            onChange={(e) => {
+              const v = fmtCep(e.target.value);
+              onChange({ zip_code: v });
+              if (v.replace(/\D/g, "").length === 8) lookupCep(v);
+            }}
+            onBlur={(e) => lookupCep(e.target.value)}
+          />
+          {loadingCep && <Loader2 className="w-4 h-4 animate-spin absolute right-2 top-2.5 text-muted-foreground" />}
+        </div>
+      </div>
+      <div>
+        <Label>Endereço</Label>
+        <Input value={data.address || ""} disabled={disabled}
+          onChange={(e) => onChange({ address: e.target.value })} />
+      </div>
+      <div>
+        <Label>Número</Label>
+        <Input value={data.address_number || ""} disabled={disabled}
+          onChange={(e) => onChange({ address_number: e.target.value })} />
+      </div>
+      <div>
+        <Label>Complemento</Label>
+        <Input value={data.complement || ""} disabled={disabled}
+          onChange={(e) => onChange({ complement: e.target.value })} />
+      </div>
+      <div>
+        <Label>Bairro</Label>
+        <Input value={data.neighborhood || ""} disabled={disabled}
+          onChange={(e) => onChange({ neighborhood: e.target.value })} />
+      </div>
+      <div>
+        <Label>Cidade</Label>
+        <Input value={data.city || ""} disabled={disabled}
+          onChange={(e) => onChange({ city: e.target.value })} />
+      </div>
+      <div>
+        <Label>UF</Label>
+        <Input maxLength={2} value={data.state || ""} disabled={disabled}
+          onChange={(e) => onChange({ state: e.target.value.toUpperCase().slice(0, 2) })} />
+      </div>
+    </>
+  );
+}
+
+
+
 
 function StepDados({ detail, update, positions, departments, branches, companies, employees }: any) {
   const disabled = detail.status !== "em_andamento";
