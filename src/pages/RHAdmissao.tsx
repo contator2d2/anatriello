@@ -767,16 +767,58 @@ function SalaryInput({ value, disabled, onCommit }: { value: any; disabled?: boo
 
 function AddressBlock({ data, disabled, onChange }: { data: any; disabled?: boolean; onChange: (patch: any) => void }) {
   const [loadingCep, setLoadingCep] = useState(false);
+  const [cities, setCities] = useState<string[]>([]);
+  const [loadingCities, setLoadingCities] = useState(false);
+  const [draft, setDraft] = useState<any>(() => getAddressDraft(data));
+  const focusedField = useRef<string | null>(null);
   const fmtCep = (v: string) => {
     const d = String(v || "").replace(/\D/g, "").slice(0, 8);
     return d.length > 5 ? `${d.slice(0, 5)}-${d.slice(5)}` : d;
   };
-  const [cepInput, setCepInput] = useState(fmtCep(data.zip_code || ""));
-  const cepFocused = useRef(false);
 
   useEffect(() => {
-    if (!cepFocused.current) setCepInput(fmtCep(data.zip_code || ""));
-  }, [data.zip_code]);
+    setDraft((cur: any) => {
+      const next = { ...cur };
+      ADDRESS_FIELDS.forEach((key) => {
+        if (focusedField.current !== key) next[key] = key === "zip_code" ? fmtCep(data?.[key] || "") : data?.[key] || "";
+      });
+      return next;
+    });
+  }, [data.zip_code, data.address, data.address_number, data.complement, data.neighborhood, data.city, data.state]);
+
+  useEffect(() => {
+    const uf = String(draft.state || "").toUpperCase();
+    if (!uf || uf.length !== 2) {
+      setCities([]);
+      return;
+    }
+    let alive = true;
+    setLoadingCities(true);
+    fetch(`https://servicodados.ibge.gov.br/api/v1/localidades/estados/${uf}/municipios?orderBy=nome`)
+      .then((r) => r.ok ? r.json() : [])
+      .then((rows) => {
+        if (!alive) return;
+        setCities(Array.isArray(rows) ? rows.map((x: any) => x.nome).filter(Boolean) : []);
+      })
+      .catch(() => { if (alive) setCities([]); })
+      .finally(() => { if (alive) setLoadingCities(false); });
+    return () => { alive = false; };
+  }, [draft.state]);
+
+  const setField = (key: string, value: string) => {
+    setDraft((cur: any) => ({ ...cur, [key]: key === "zip_code" ? fmtCep(value) : value }));
+  };
+
+  const commit = (patch: any) => {
+    setDraft((cur: any) => ({ ...cur, ...patch }));
+    onChange(patch);
+  };
+
+  const commitField = (key: string, value = draft[key]) => {
+    const nextValue = key === "zip_code" ? fmtCep(value) : value;
+    setDraft((cur: any) => ({ ...cur, [key]: nextValue }));
+    if (nextValue !== (data?.[key] || "")) onChange({ [key]: nextValue });
+  };
 
   const lookupCep = async (raw: string) => {
     const cep = String(raw || "").replace(/\D/g, "");
@@ -786,22 +828,15 @@ function AddressBlock({ data, disabled, onChange }: { data: any; disabled?: bool
       const r = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
       const j = await r.json();
       if (j.erro) return;
-      onChange({
+      commit({
         zip_code: fmtCep(cep),
-        address: j.logradouro || data.address || "",
-        neighborhood: j.bairro || data.neighborhood || "",
-        city: j.localidade || data.city || "",
-        state: j.uf || data.state || "",
-        complement: data.complement || j.complemento || "",
+        address: j.logradouro || draft.address || "",
+        neighborhood: j.bairro || draft.neighborhood || "",
+        city: j.localidade || draft.city || "",
+        state: j.uf || draft.state || "",
+        complement: draft.complement || j.complemento || "",
       });
     } catch { /* ignore */ } finally { setLoadingCep(false); }
-  };
-
-  const commitCep = (raw = cepInput) => {
-    const v = fmtCep(raw);
-    setCepInput(v);
-    onChange({ zip_code: v });
-    if (v.replace(/\D/g, "").length === 8) lookupCep(v);
   };
 
   return (
@@ -813,17 +848,17 @@ function AddressBlock({ data, disabled, onChange }: { data: any; disabled?: bool
             placeholder="00000-000"
             inputMode="numeric"
             maxLength={9}
-            value={cepInput}
+            value={draft.zip_code || ""}
             disabled={disabled}
-            onFocus={() => { cepFocused.current = true; }}
+            onFocus={() => { focusedField.current = "zip_code"; }}
             onChange={(e) => {
               const v = fmtCep(e.target.value);
-              setCepInput(v);
+              setField("zip_code", v);
               if (v.replace(/\D/g, "").length === 8) lookupCep(v);
             }}
             onBlur={() => {
-              cepFocused.current = false;
-              commitCep();
+              focusedField.current = null;
+              commitField("zip_code", fmtCep(draft.zip_code || ""));
             }}
           />
           {loadingCep && <Loader2 className="w-4 h-4 animate-spin absolute right-2 top-2.5 text-muted-foreground" />}
@@ -831,51 +866,67 @@ function AddressBlock({ data, disabled, onChange }: { data: any; disabled?: bool
       </div>
       <div>
         <Label>Endereço</Label>
-        <BufferedInput value={data.address || ""} disabled={disabled}
-          onCommit={(v) => onChange({ address: v })} />
+        <Input value={draft.address || ""} disabled={disabled}
+          onFocus={() => { focusedField.current = "address"; }}
+          onChange={(e) => setField("address", e.target.value)}
+          onBlur={() => { focusedField.current = null; commitField("address"); }} />
       </div>
       <div>
         <Label>Número</Label>
-        <BufferedInput value={data.address_number || ""} disabled={disabled}
-          onCommit={(v) => onChange({ address_number: v })} />
+        <Input value={draft.address_number || ""} disabled={disabled} inputMode="text" autoComplete="address-line2"
+          onFocus={() => { focusedField.current = "address_number"; }}
+          onChange={(e) => setField("address_number", e.target.value)}
+          onBlur={() => { focusedField.current = null; commitField("address_number"); }} />
       </div>
       <div>
         <Label>Complemento</Label>
-        <BufferedInput value={data.complement || ""} disabled={disabled}
-          onCommit={(v) => onChange({ complement: v })} />
+        <Input value={draft.complement || ""} disabled={disabled}
+          onFocus={() => { focusedField.current = "complement"; }}
+          onChange={(e) => setField("complement", e.target.value)}
+          onBlur={() => { focusedField.current = null; commitField("complement"); }} />
       </div>
       <div>
         <Label>Bairro</Label>
-        <BufferedInput value={data.neighborhood || ""} disabled={disabled}
-          onCommit={(v) => onChange({ neighborhood: v })} />
-      </div>
-      <div>
-        <Label>Cidade</Label>
-        <BufferedInput value={data.city || ""} disabled={disabled}
-          onCommit={(v) => onChange({ city: v })} />
+        <Input value={draft.neighborhood || ""} disabled={disabled}
+          onFocus={() => { focusedField.current = "neighborhood"; }}
+          onChange={(e) => setField("neighborhood", e.target.value)}
+          onBlur={() => { focusedField.current = null; commitField("neighborhood"); }} />
       </div>
       <div>
         <Label>UF</Label>
-        <BufferedInput maxLength={2} value={data.state || ""} disabled={disabled}
-          onCommit={(v) => onChange({ state: String(v).toUpperCase().slice(0, 2) })} />
+        <Select
+          value={draft.state || "none"}
+          disabled={disabled}
+          onValueChange={(v) => {
+            const state = v === "none" ? "" : v;
+            commit({ state, city: "" });
+          }}
+        >
+          <SelectTrigger><SelectValue placeholder="Selecione o estado" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">—</SelectItem>
+            {BRAZIL_STATES.map((s) => <SelectItem key={s.uf} value={s.uf}>{s.uf} — {s.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </div>
+      <div>
+        <Label>Cidade</Label>
+        <Select
+          value={draft.city || "none"}
+          disabled={disabled || !draft.state || loadingCities}
+          onValueChange={(v) => commit({ city: v === "none" ? "" : v })}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder={!draft.state ? "Selecione a UF" : loadingCities ? "Carregando cidades..." : "Selecione a cidade"} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">—</SelectItem>
+            {draft.city && !cities.includes(draft.city) && <SelectItem value={draft.city}>{draft.city}</SelectItem>}
+            {cities.map((city) => <SelectItem key={city} value={city}>{city}</SelectItem>)}
+          </SelectContent>
+        </Select>
       </div>
     </>
-  );
-}
-
-function BufferedInput({ value, onCommit, disabled, maxLength }: { value: string; onCommit: (v: string) => void; disabled?: boolean; maxLength?: number }) {
-  const [local, setLocal] = useState(value ?? "");
-  const focused = useRef(false);
-  useEffect(() => { if (!focused.current) setLocal(value ?? ""); }, [value]);
-  return (
-    <Input
-      value={local}
-      disabled={disabled}
-      maxLength={maxLength}
-      onFocus={() => { focused.current = true; }}
-      onChange={(e) => setLocal(e.target.value)}
-      onBlur={() => { focused.current = false; if (local !== (value ?? "")) onCommit(local); }}
-    />
   );
 }
 
