@@ -21,7 +21,7 @@ import {
 import { useCompanies } from "@/hooks/use-companies";
 import { useScheduleTemplates } from "@/hooks/use-timeclock";
 import { useUpload } from "@/hooks/use-upload";
-import { formatPhone } from "@/lib/br-utils";
+import { formatPhone, onlyDigits } from "@/lib/br-utils";
 import {
   UserPlus, Plus, FileText, Check, Loader2, ClipboardCheck, FileCheck, GraduationCap,
   Trash2, Users, Upload, AlertTriangle, ExternalLink, ArrowLeft, ArrowRight, KeyRound, Fingerprint, Clock,
@@ -371,8 +371,9 @@ export default function RHAdmissao() {
                 <Label>Telefone / WhatsApp</Label>
                 <Input
                   placeholder="(11) 90000-0000"
+                  inputMode="tel"
                   value={formatPhone(form.candidate_phone)}
-                  onChange={(e) => setForm({ ...form, candidate_phone: e.target.value })}
+                  onChange={(e) => setForm({ ...form, candidate_phone: onlyDigits(e.target.value) })}
                 />
               </div>
               <div>
@@ -742,8 +743,8 @@ function StepDados({ detail, update, positions, departments, branches, companies
         onChange={(e) => update({ candidate_email: e.target.value })} /></div>
       <div><Label>Telefone / WhatsApp</Label>
         <Input value={formatPhone(detail.candidate_phone || "")} disabled={disabled}
-          placeholder="(11) 90000-0000"
-          onChange={(e) => update({ candidate_phone: e.target.value })} /></div>
+          placeholder="(11) 90000-0000" inputMode="tel"
+          onChange={(e) => update({ candidate_phone: onlyDigits(e.target.value) })} /></div>
       <div><Label>CPF</Label><Input value={detail.candidate_cpf || ""} disabled={disabled}
         onChange={(e) => update({ candidate_cpf: e.target.value })} /></div>
       <div>
