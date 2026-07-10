@@ -21,10 +21,25 @@ import {
 import { useCompanies } from "@/hooks/use-companies";
 import { useScheduleTemplates } from "@/hooks/use-timeclock";
 import { useUpload } from "@/hooks/use-upload";
+import { formatPhone } from "@/lib/br-utils";
 import {
   UserPlus, Plus, FileText, Check, Loader2, ClipboardCheck, FileCheck, GraduationCap,
   Trash2, Users, Upload, AlertTriangle, ExternalLink, ArrowLeft, ArrowRight, KeyRound, Fingerprint, Clock,
 } from "lucide-react";
+
+// Soma meses a uma data ISO (yyyy-mm-dd) mantendo formato ISO.
+function addMonthsISO(iso: string, months: number): string {
+  if (!iso) return "";
+  const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
+  const dt = new Date(Date.UTC(y, (m - 1) + months, d));
+  return dt.toISOString().slice(0, 10);
+}
+
+// Colaborador em experiência? (probation_end_date > hoje)
+const inProbation = (iso?: string) => {
+  if (!iso) return false;
+  return new Date(iso.slice(0, 10) + "T23:59:59").getTime() >= Date.now();
+};
 
 const STATUS_COLOR: Record<string, string> = {
   em_andamento: "bg-yellow-100 text-yellow-800",
@@ -95,8 +110,8 @@ export default function RHAdmissao() {
     candidate_name: "", candidate_email: "", candidate_phone: "", candidate_cpf: "",
     position: "", position_id: "", department_id: "", branch_id: "", company_id: "",
     admission_date: todayISO(),
-    probation_end_date: "",
-    salary: "", // string vazia — sem "0" travado
+    probation_end_date: addMonthsISO(todayISO(), 3), // sugerido: 3 meses (CLT)
+    salary: "",
     buddy_id: "", manager_id: "",
     notes: "",
   };
@@ -104,14 +119,21 @@ export default function RHAdmissao() {
   const [newPosDialog, setNewPosDialog] = useState(false);
   const [newPos, setNewPos] = useState({ name: "", department_id: "" });
 
+  // Cargos: catálogo + cargos já em uso por colaboradores existentes (distintos)
+  const mergedPositions = useMemo(() => {
+    const map = new Map<string, { id: string; name: string; fromCatalog: boolean }>();
+    (positions || []).forEach((p: any) => map.set(p.name.toLowerCase(), { id: p.id, name: p.name, fromCatalog: true }));
+    (employees || []).forEach((e: any) => {
+      const n = (e.position || "").trim();
+      if (n && !map.has(n.toLowerCase())) map.set(n.toLowerCase(), { id: `emp:${n}`, name: n, fromCatalog: false });
+    });
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [positions, employees]);
+
   const kpis = useMemo(() => ({
     em_andamento: list.filter((o: any) => o.status === "em_andamento").length,
     com_pendencias: list.filter((o: any) => o.status === "em_andamento" && computePending(o).length > 0).length,
-    proximas: list.filter((o: any) => {
-      if (o.status !== "em_andamento") return false;
-      const days = Math.ceil((new Date(o.admission_date).getTime() - Date.now()) / 86400000);
-      return days >= 0 && days <= 7;
-    }).length,
+    em_experiencia: list.filter((o: any) => o.status === "concluido" && inProbation(o.probation_end_date)).length,
     concluido_mes: list.filter((o: any) =>
       o.status === "concluido" && new Date(o.completed_at || o.admission_date).getMonth() === new Date().getMonth()).length,
   }), [list]);
@@ -126,7 +148,7 @@ export default function RHAdmissao() {
       const r: any = await createMut.mutateAsync(payload);
       toast({ title: "Admissão criada", description: "Continue o processo pelo wizard." });
       setOpenNew(false); setForm(emptyForm);
-      setDetailId(r.id); setWizardStep(1);
+      setDetailId(r.id); setWizardStep(0);
     } catch (e: any) {
       toast({ title: "Erro", description: e.message, variant: "destructive" });
     }
@@ -230,7 +252,7 @@ export default function RHAdmissao() {
           {[
             { l: "Em andamento", v: kpis.em_andamento, i: ClipboardCheck, c: "text-primary" },
             { l: "Com pendências", v: kpis.com_pendencias, i: AlertTriangle, c: "text-amber-600" },
-            { l: "Próximos 7 dias", v: kpis.proximas, i: GraduationCap, c: "text-blue-600" },
+            { l: "Em experiência", v: kpis.em_experiencia, i: GraduationCap, c: "text-blue-600" },
             { l: "Concluídas no mês", v: kpis.concluido_mes, i: Check, c: "text-green-600" },
           ].map((k) => (
             <Card key={k.l}>
@@ -280,16 +302,21 @@ export default function RHAdmissao() {
                     const pend = o.status === "em_andamento" ? computePending(o) : [];
                     const daysLeft = Math.ceil((new Date(o.admission_date).getTime() - Date.now()) / 86400000);
                     return (
-                      <TableRow key={o.id} className="cursor-pointer" onClick={() => { setDetailId(o.id); setWizardStep(1); }}>
+                      <TableRow key={o.id} className="cursor-pointer" onClick={() => { setDetailId(o.id); setWizardStep(0); }}>
                         <TableCell className="font-medium">
                           {o.candidate_name}
-                          <div className="text-xs text-muted-foreground">{o.candidate_email || o.candidate_phone || "—"}</div>
+                          <div className="text-xs text-muted-foreground">{o.candidate_email || (o.candidate_phone ? formatPhone(o.candidate_phone) : "—")}</div>
                         </TableCell>
                         <TableCell>{o.position || "—"}</TableCell>
                         <TableCell>
                           {fmtDate(o.admission_date)}
                           {o.status === "em_andamento" && daysLeft >= 0 && daysLeft <= 7 && (
                             <div className="text-[10px] text-amber-600 font-medium">em {daysLeft}d</div>
+                          )}
+                          {o.status === "concluido" && inProbation(o.probation_end_date) && (
+                            <div className="text-[10px] text-blue-600 font-medium">
+                              experiência até {fmtDate(o.probation_end_date)}
+                            </div>
                           )}
                         </TableCell>
                         <TableCell>
@@ -339,8 +366,12 @@ export default function RHAdmissao() {
                 <Input type="email" value={form.candidate_email} onChange={(e) => setForm({ ...form, candidate_email: e.target.value })} />
               </div>
               <div>
-                <Label>Telefone</Label>
-                <Input value={form.candidate_phone} onChange={(e) => setForm({ ...form, candidate_phone: e.target.value })} />
+                <Label>Telefone / WhatsApp</Label>
+                <Input
+                  placeholder="(11) 90000-0000"
+                  value={formatPhone(form.candidate_phone)}
+                  onChange={(e) => setForm({ ...form, candidate_phone: e.target.value })}
+                />
               </div>
               <div>
                 <Label>CPF</Label>
@@ -348,23 +379,30 @@ export default function RHAdmissao() {
               </div>
               <div>
                 <Label>Cargo</Label>
-                <div className="flex gap-1">
-                  <Select
-                    value={form.position_id || "none"}
-                    onValueChange={(v) => {
-                      if (v === "__new") { setNewPosDialog(true); return; }
-                      const p = positions.find((x: any) => x.id === v);
-                      setForm({ ...form, position_id: v === "none" ? "" : v, position: p ? p.name : "" });
-                    }}
-                  >
-                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">—</SelectItem>
-                      {positions.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
-                      <SelectItem value="__new" className="text-primary">+ Cadastrar novo cargo</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                <Select
+                  value={form.position_id || (form.position ? `name:${form.position}` : "none")}
+                  onValueChange={(v) => {
+                    if (v === "__new") { setNewPosDialog(true); return; }
+                    if (v === "none") { setForm({ ...form, position_id: "", position: "" }); return; }
+                    if (v.startsWith("name:")) {
+                      setForm({ ...form, position_id: "", position: v.slice(5) });
+                      return;
+                    }
+                    const p = mergedPositions.find((x) => x.id === v);
+                    setForm({ ...form, position_id: p?.fromCatalog ? v : "", position: p?.name || "" });
+                  }}
+                >
+                  <SelectTrigger><SelectValue placeholder="Selecione ou cadastre" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">—</SelectItem>
+                    {mergedPositions.map((p) => (
+                      <SelectItem key={p.id} value={p.fromCatalog ? p.id : `name:${p.name}`}>
+                        {p.name} {!p.fromCatalog && <span className="text-[10px] text-muted-foreground ml-1">(em uso)</span>}
+                      </SelectItem>
+                    ))}
+                    <SelectItem value="__new" className="text-primary">+ Cadastrar novo cargo</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div className="col-span-2">
                 <Label>Empresa *</Label>
@@ -398,11 +436,24 @@ export default function RHAdmissao() {
               </div>
               <div>
                 <Label>Data de admissão *</Label>
-                <Input type="date" value={form.admission_date} onChange={(e) => setForm({ ...form, admission_date: e.target.value })} />
+                <Input type="date" value={form.admission_date}
+                  onChange={(e) => {
+                    const prevAuto = addMonthsISO(form.admission_date, 3);
+                    const shouldResync = !form.probation_end_date || form.probation_end_date === prevAuto;
+                    setForm({
+                      ...form,
+                      admission_date: e.target.value,
+                      probation_end_date: shouldResync ? addMonthsISO(e.target.value, 3) : form.probation_end_date,
+                    });
+                  }} />
               </div>
               <div>
-                <Label>Fim da experiência</Label>
-                <Input type="date" value={form.probation_end_date} onChange={(e) => setForm({ ...form, probation_end_date: e.target.value })} />
+                <Label>Fim do contrato de experiência</Label>
+                <Input type="date" value={form.probation_end_date}
+                  onChange={(e) => setForm({ ...form, probation_end_date: e.target.value })} />
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  Sugerido: 3 meses (CLT). {form.probation_end_date && `Término em ${fmtDate(form.probation_end_date)}.`}
+                </p>
               </div>
               <div>
                 <Label>Salário (R$)</Label>
@@ -495,7 +546,7 @@ export default function RHAdmissao() {
               {/* STEP 0: Dados */}
               {wizardStep === 0 && (
                 <StepDados detail={detail} update={(patch) => updateMut.mutate({ id: detail.id, ...patch })}
-                  positions={positions} departments={departments} branches={branches} companies={companies} employees={employees} />
+                  positions={mergedPositions} departments={departments} branches={branches} companies={companies} employees={employees} />
               )}
 
               {/* STEP 1: Documentos */}
@@ -577,21 +628,31 @@ function StepDados({ detail, update, positions, departments, branches, companies
           onChange={(e) => update({ candidate_name: e.target.value })} /></div>
       <div><Label>E-mail</Label><Input value={detail.candidate_email || ""} disabled={disabled}
         onChange={(e) => update({ candidate_email: e.target.value })} /></div>
-      <div><Label>Telefone</Label><Input value={detail.candidate_phone || ""} disabled={disabled}
-        onChange={(e) => update({ candidate_phone: e.target.value })} /></div>
+      <div><Label>Telefone / WhatsApp</Label>
+        <Input value={formatPhone(detail.candidate_phone || "")} disabled={disabled}
+          placeholder="(11) 90000-0000"
+          onChange={(e) => update({ candidate_phone: e.target.value })} /></div>
       <div><Label>CPF</Label><Input value={detail.candidate_cpf || ""} disabled={disabled}
         onChange={(e) => update({ candidate_cpf: e.target.value })} /></div>
       <div>
         <Label>Cargo</Label>
-        <Select value={detail.position_id || "none"} disabled={disabled}
+        <Select
+          value={detail.position_id || (detail.position ? `name:${detail.position}` : "none")}
+          disabled={disabled}
           onValueChange={(v) => {
+            if (v === "none") { update({ position_id: null, position: null }); return; }
+            if (v.startsWith("name:")) { update({ position_id: null, position: v.slice(5) }); return; }
             const p = positions.find((x: any) => x.id === v);
-            update({ position_id: v === "none" ? null : v, position: p ? p.name : detail.position });
+            update({ position_id: p?.fromCatalog ? v : null, position: p?.name || detail.position });
           }}>
           <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="none">—</SelectItem>
-            {positions.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+            {positions.map((p: any) => (
+              <SelectItem key={p.id} value={p.fromCatalog ? p.id : `name:${p.name}`}>
+                {p.name}{!p.fromCatalog && <span className="text-[10px] text-muted-foreground ml-1">(em uso)</span>}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>
@@ -607,9 +668,22 @@ function StepDados({ detail, update, positions, departments, branches, companies
         </Select>
       </div>
       <div><Label>Data admissão</Label><Input type="date" value={detail.admission_date?.slice(0, 10) || ""} disabled={disabled}
-        onChange={(e) => update({ admission_date: e.target.value })} /></div>
-      <div><Label>Fim experiência</Label><Input type="date" value={detail.probation_end_date?.slice(0, 10) || ""} disabled={disabled}
-        onChange={(e) => update({ probation_end_date: e.target.value })} /></div>
+        onChange={(e) => {
+          const prev = detail.admission_date?.slice(0, 10) || "";
+          const prevAuto = prev ? addMonthsISO(prev, 3) : "";
+          const curEnd = detail.probation_end_date?.slice(0, 10) || "";
+          const shouldResync = !curEnd || curEnd === prevAuto;
+          update({
+            admission_date: e.target.value,
+            ...(shouldResync ? { probation_end_date: addMonthsISO(e.target.value, 3) } : {}),
+          });
+        }} /></div>
+      <div>
+        <Label>Fim do contrato de experiência</Label>
+        <Input type="date" value={detail.probation_end_date?.slice(0, 10) || ""} disabled={disabled}
+          onChange={(e) => update({ probation_end_date: e.target.value })} />
+        <p className="text-[10px] text-muted-foreground mt-1">Sugerido: 3 meses (CLT).</p>
+      </div>
       <div>
         <Label>Salário (R$)</Label>
         <Input type="number" step="0.01" placeholder="0,00"
