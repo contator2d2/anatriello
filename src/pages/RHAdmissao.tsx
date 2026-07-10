@@ -475,6 +475,10 @@ export default function RHAdmissao() {
                   </SelectContent>
                 </Select>
               </div>
+              <div className="col-span-2 border-t pt-2 mt-1">
+                <p className="text-xs font-semibold text-muted-foreground mb-2">Endereço residencial</p>
+              </div>
+              <AddressBlock data={form} onChange={(patch) => setForm({ ...form, ...patch })} />
             </div>
             <div>
               <Label>Observações</Label>
