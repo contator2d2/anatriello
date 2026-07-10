@@ -148,7 +148,7 @@ export default function RHAdmissao() {
       const r: any = await createMut.mutateAsync(payload);
       toast({ title: "Admissão criada", description: "Continue o processo pelo wizard." });
       setOpenNew(false); setForm(emptyForm);
-      setDetailId(r.id); setWizardStep(1);
+      setDetailId(r.id); setWizardStep(0);
     } catch (e: any) {
       toast({ title: "Erro", description: e.message, variant: "destructive" });
     }
