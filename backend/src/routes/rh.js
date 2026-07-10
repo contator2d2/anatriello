@@ -3490,6 +3490,7 @@ router.put('/onboarding/:id', async (req, res) => {
         salary=$13, buddy_id=$14, manager_id=$15, exam_scheduled_at=$16, exam_done_at=$17, exam_result=$18, exam_file_url=$19,
         integration_scheduled_at=$20, integration_done_at=$21, documents=$22, checklist=$23, access_config=$24,
         schedule_template_id=$25, schedule_start_date=$26, current_step=$27,
+        zip_code=$29, address=$30, address_number=$31, complement=$32, neighborhood=$33, city=$34, state=$35,
         notes=$28, updated_at=NOW() WHERE id=$1 RETURNING *`,
       [req.params.id, merged.candidate_name, merged.candidate_email, merged.candidate_phone, merged.candidate_cpf,
         merged.position, merged.position_id || null, merged.department_id, merged.branch_id, merged.company_id,
@@ -3500,8 +3501,11 @@ router.put('/onboarding/:id', async (req, res) => {
         JSON.stringify(Array.isArray(merged.checklist) ? merged.checklist : (typeof merged.checklist === 'string' ? JSON.parse(merged.checklist) : DEFAULT_ONBOARDING_CHECKLIST)),
         JSON.stringify(typeof merged.access_config === 'object' && merged.access_config !== null ? merged.access_config : (typeof merged.access_config === 'string' ? JSON.parse(merged.access_config) : {})),
         merged.schedule_template_id || null, merged.schedule_start_date || null,
-        merged.current_step || 'dados', merged.notes]
+        merged.current_step || 'dados', merged.notes,
+        merged.zip_code || null, merged.address || null, merged.address_number || null, merged.complement || null,
+        merged.neighborhood || null, merged.city || null, merged.state || null]
     );
+
     res.json(r.rows[0]);
   } catch (err) { logError('rh.onboarding.update', err); res.status(500).json({ error: err.message || 'Erro' }); }
 });
