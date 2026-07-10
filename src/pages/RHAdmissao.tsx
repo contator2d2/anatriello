@@ -619,6 +619,33 @@ export default function RHAdmissao() {
 
 // ============ STEP COMPONENTS ============
 
+function SalaryInput({ value, disabled, onCommit }: { value: any; disabled?: boolean; onCommit: (n: number) => void }) {
+  const toStr = (v: any) => {
+    if (v === null || v === undefined || v === "") return "";
+    const n = Number(v);
+    if (!isFinite(n) || n === 0) return "";
+    return String(n);
+  };
+  const [local, setLocal] = useState<string>(toStr(value));
+  const focused = useRef(false);
+  useEffect(() => { if (!focused.current) setLocal(toStr(value)); }, [value]);
+  return (
+    <Input
+      type="number" step="0.01" inputMode="decimal" placeholder="0,00"
+      value={local}
+      disabled={disabled}
+      onFocus={() => { focused.current = true; }}
+      onChange={(e) => setLocal(e.target.value)}
+      onBlur={() => {
+        focused.current = false;
+        const n = local === "" ? 0 : Number(local);
+        onCommit(isFinite(n) ? n : 0);
+      }}
+    />
+  );
+}
+
+
 function StepDados({ detail, update, positions, departments, branches, companies, employees }: any) {
   const disabled = detail.status !== "em_andamento";
   return (
