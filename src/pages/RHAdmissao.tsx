@@ -302,16 +302,21 @@ export default function RHAdmissao() {
                     const pend = o.status === "em_andamento" ? computePending(o) : [];
                     const daysLeft = Math.ceil((new Date(o.admission_date).getTime() - Date.now()) / 86400000);
                     return (
-                      <TableRow key={o.id} className="cursor-pointer" onClick={() => { setDetailId(o.id); setWizardStep(1); }}>
+                      <TableRow key={o.id} className="cursor-pointer" onClick={() => { setDetailId(o.id); setWizardStep(0); }}>
                         <TableCell className="font-medium">
                           {o.candidate_name}
-                          <div className="text-xs text-muted-foreground">{o.candidate_email || o.candidate_phone || "—"}</div>
+                          <div className="text-xs text-muted-foreground">{o.candidate_email || (o.candidate_phone ? formatPhone(o.candidate_phone) : "—")}</div>
                         </TableCell>
                         <TableCell>{o.position || "—"}</TableCell>
                         <TableCell>
                           {fmtDate(o.admission_date)}
                           {o.status === "em_andamento" && daysLeft >= 0 && daysLeft <= 7 && (
                             <div className="text-[10px] text-amber-600 font-medium">em {daysLeft}d</div>
+                          )}
+                          {o.status === "concluido" && inProbation(o.probation_end_date) && (
+                            <div className="text-[10px] text-blue-600 font-medium">
+                              experiência até {fmtDate(o.probation_end_date)}
+                            </div>
                           )}
                         </TableCell>
                         <TableCell>
