@@ -812,37 +812,54 @@ function AddressBlock({ data, disabled, onChange }: { data: any; disabled?: bool
       </div>
       <div>
         <Label>Endereço</Label>
-        <Input value={data.address || ""} disabled={disabled}
-          onChange={(e) => onChange({ address: e.target.value })} />
+        <BufferedInput value={data.address || ""} disabled={disabled}
+          onCommit={(v) => onChange({ address: v })} />
       </div>
       <div>
         <Label>Número</Label>
-        <Input value={data.address_number || ""} disabled={disabled}
-          onChange={(e) => onChange({ address_number: e.target.value })} />
+        <BufferedInput value={data.address_number || ""} disabled={disabled}
+          onCommit={(v) => onChange({ address_number: v })} />
       </div>
       <div>
         <Label>Complemento</Label>
-        <Input value={data.complement || ""} disabled={disabled}
-          onChange={(e) => onChange({ complement: e.target.value })} />
+        <BufferedInput value={data.complement || ""} disabled={disabled}
+          onCommit={(v) => onChange({ complement: v })} />
       </div>
       <div>
         <Label>Bairro</Label>
-        <Input value={data.neighborhood || ""} disabled={disabled}
-          onChange={(e) => onChange({ neighborhood: e.target.value })} />
+        <BufferedInput value={data.neighborhood || ""} disabled={disabled}
+          onCommit={(v) => onChange({ neighborhood: v })} />
       </div>
       <div>
         <Label>Cidade</Label>
-        <Input value={data.city || ""} disabled={disabled}
-          onChange={(e) => onChange({ city: e.target.value })} />
+        <BufferedInput value={data.city || ""} disabled={disabled}
+          onCommit={(v) => onChange({ city: v })} />
       </div>
       <div>
         <Label>UF</Label>
-        <Input maxLength={2} value={data.state || ""} disabled={disabled}
-          onChange={(e) => onChange({ state: e.target.value.toUpperCase().slice(0, 2) })} />
+        <BufferedInput maxLength={2} value={data.state || ""} disabled={disabled}
+          onCommit={(v) => onChange({ state: String(v).toUpperCase().slice(0, 2) })} />
       </div>
     </>
   );
 }
+
+function BufferedInput({ value, onCommit, disabled, maxLength }: { value: string; onCommit: (v: string) => void; disabled?: boolean; maxLength?: number }) {
+  const [local, setLocal] = useState(value ?? "");
+  const focused = useRef(false);
+  useEffect(() => { if (!focused.current) setLocal(value ?? ""); }, [value]);
+  return (
+    <Input
+      value={local}
+      disabled={disabled}
+      maxLength={maxLength}
+      onFocus={() => { focused.current = true; }}
+      onChange={(e) => setLocal(e.target.value)}
+      onBlur={() => { focused.current = false; if (local !== (value ?? "")) onCommit(local); }}
+    />
+  );
+}
+
 
 
 
