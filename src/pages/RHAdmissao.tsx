@@ -436,11 +436,24 @@ export default function RHAdmissao() {
               </div>
               <div>
                 <Label>Data de admissão *</Label>
-                <Input type="date" value={form.admission_date} onChange={(e) => setForm({ ...form, admission_date: e.target.value })} />
+                <Input type="date" value={form.admission_date}
+                  onChange={(e) => {
+                    const prevAuto = addMonthsISO(form.admission_date, 3);
+                    const shouldResync = !form.probation_end_date || form.probation_end_date === prevAuto;
+                    setForm({
+                      ...form,
+                      admission_date: e.target.value,
+                      probation_end_date: shouldResync ? addMonthsISO(e.target.value, 3) : form.probation_end_date,
+                    });
+                  }} />
               </div>
               <div>
-                <Label>Fim da experiência</Label>
-                <Input type="date" value={form.probation_end_date} onChange={(e) => setForm({ ...form, probation_end_date: e.target.value })} />
+                <Label>Fim do contrato de experiência</Label>
+                <Input type="date" value={form.probation_end_date}
+                  onChange={(e) => setForm({ ...form, probation_end_date: e.target.value })} />
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  Sugerido: 3 meses (CLT). {form.probation_end_date && `Término em ${fmtDate(form.probation_end_date)}.`}
+                </p>
               </div>
               <div>
                 <Label>Salário (R$)</Label>
