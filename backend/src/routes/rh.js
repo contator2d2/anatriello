@@ -3317,6 +3317,7 @@ async function ensureOnboardingTables() {
       candidate_phone TEXT,
       candidate_cpf TEXT,
       position TEXT,
+      position_id UUID,
       department_id UUID,
       branch_id UUID,
       company_id UUID,
@@ -3333,6 +3334,9 @@ async function ensureOnboardingTables() {
       integration_done_at TIMESTAMPTZ,
       documents JSONB DEFAULT '[]'::jsonb,
       checklist JSONB DEFAULT '[]'::jsonb,
+      access_config JSONB DEFAULT '{}'::jsonb,
+      schedule_template_id TEXT,
+      schedule_start_date DATE,
       current_step TEXT DEFAULT 'dados',
       status TEXT DEFAULT 'em_andamento',
       completed_at TIMESTAMPTZ,
@@ -3342,9 +3346,15 @@ async function ensureOnboardingTables() {
       updated_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
+  // Idempotent add for existing installs
+  await query(`ALTER TABLE rh_onboarding ADD COLUMN IF NOT EXISTS position_id UUID`).catch(()=>{});
+  await query(`ALTER TABLE rh_onboarding ADD COLUMN IF NOT EXISTS access_config JSONB DEFAULT '{}'::jsonb`).catch(()=>{});
+  await query(`ALTER TABLE rh_onboarding ADD COLUMN IF NOT EXISTS schedule_template_id TEXT`).catch(()=>{});
+  await query(`ALTER TABLE rh_onboarding ADD COLUMN IF NOT EXISTS schedule_start_date DATE`).catch(()=>{});
   await query(`CREATE INDEX IF NOT EXISTS idx_onboarding_org ON rh_onboarding(organization_id, admission_date DESC)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_onboarding_status ON rh_onboarding(organization_id, status)`);
 }
+
 
 // Documentos obrigatórios padrão (CLT + eSocial)
 const DEFAULT_ONBOARDING_DOCS = [
