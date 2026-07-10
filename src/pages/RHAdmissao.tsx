@@ -546,7 +546,7 @@ export default function RHAdmissao() {
               {/* STEP 0: Dados */}
               {wizardStep === 0 && (
                 <StepDados detail={detail} update={(patch) => updateMut.mutate({ id: detail.id, ...patch })}
-                  positions={positions} departments={departments} branches={branches} companies={companies} employees={employees} />
+                  positions={mergedPositions} departments={departments} branches={branches} companies={companies} employees={employees} />
               )}
 
               {/* STEP 1: Documentos */}
