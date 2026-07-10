@@ -110,8 +110,8 @@ export default function RHAdmissao() {
     candidate_name: "", candidate_email: "", candidate_phone: "", candidate_cpf: "",
     position: "", position_id: "", department_id: "", branch_id: "", company_id: "",
     admission_date: todayISO(),
-    probation_end_date: "",
-    salary: "", // string vazia — sem "0" travado
+    probation_end_date: addMonthsISO(todayISO(), 3), // sugerido: 3 meses (CLT)
+    salary: "",
     buddy_id: "", manager_id: "",
     notes: "",
   };
