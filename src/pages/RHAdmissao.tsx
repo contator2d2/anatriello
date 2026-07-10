@@ -252,7 +252,7 @@ export default function RHAdmissao() {
           {[
             { l: "Em andamento", v: kpis.em_andamento, i: ClipboardCheck, c: "text-primary" },
             { l: "Com pendências", v: kpis.com_pendencias, i: AlertTriangle, c: "text-amber-600" },
-            { l: "Próximos 7 dias", v: kpis.proximas, i: GraduationCap, c: "text-blue-600" },
+            { l: "Em experiência", v: kpis.em_experiencia, i: GraduationCap, c: "text-blue-600" },
             { l: "Concluídas no mês", v: kpis.concluido_mes, i: Check, c: "text-green-600" },
           ].map((k) => (
             <Card key={k.l}>
