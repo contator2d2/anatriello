@@ -113,8 +113,10 @@ export default function RHAdmissao() {
     probation_end_date: addMonthsISO(todayISO(), 3), // sugerido: 3 meses (CLT)
     salary: "",
     buddy_id: "", manager_id: "",
+    zip_code: "", address: "", address_number: "", complement: "", neighborhood: "", city: "", state: "",
     notes: "",
   };
+
   const [form, setForm] = useState<any>(emptyForm);
   const [newPosDialog, setNewPosDialog] = useState(false);
   const [newPos, setNewPos] = useState({ name: "", department_id: "" });
