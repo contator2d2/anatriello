@@ -366,8 +366,12 @@ export default function RHAdmissao() {
                 <Input type="email" value={form.candidate_email} onChange={(e) => setForm({ ...form, candidate_email: e.target.value })} />
               </div>
               <div>
-                <Label>Telefone</Label>
-                <Input value={form.candidate_phone} onChange={(e) => setForm({ ...form, candidate_phone: e.target.value })} />
+                <Label>Telefone / WhatsApp</Label>
+                <Input
+                  placeholder="(11) 90000-0000"
+                  value={formatPhone(form.candidate_phone)}
+                  onChange={(e) => setForm({ ...form, candidate_phone: e.target.value })}
+                />
               </div>
               <div>
                 <Label>CPF</Label>
@@ -375,23 +379,30 @@ export default function RHAdmissao() {
               </div>
               <div>
                 <Label>Cargo</Label>
-                <div className="flex gap-1">
-                  <Select
-                    value={form.position_id || "none"}
-                    onValueChange={(v) => {
-                      if (v === "__new") { setNewPosDialog(true); return; }
-                      const p = positions.find((x: any) => x.id === v);
-                      setForm({ ...form, position_id: v === "none" ? "" : v, position: p ? p.name : "" });
-                    }}
-                  >
-                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">—</SelectItem>
-                      {positions.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
-                      <SelectItem value="__new" className="text-primary">+ Cadastrar novo cargo</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                <Select
+                  value={form.position_id || (form.position ? `name:${form.position}` : "none")}
+                  onValueChange={(v) => {
+                    if (v === "__new") { setNewPosDialog(true); return; }
+                    if (v === "none") { setForm({ ...form, position_id: "", position: "" }); return; }
+                    if (v.startsWith("name:")) {
+                      setForm({ ...form, position_id: "", position: v.slice(5) });
+                      return;
+                    }
+                    const p = mergedPositions.find((x) => x.id === v);
+                    setForm({ ...form, position_id: p?.fromCatalog ? v : "", position: p?.name || "" });
+                  }}
+                >
+                  <SelectTrigger><SelectValue placeholder="Selecione ou cadastre" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">—</SelectItem>
+                    {mergedPositions.map((p) => (
+                      <SelectItem key={p.id} value={p.fromCatalog ? p.id : `name:${p.name}`}>
+                        {p.name} {!p.fromCatalog && <span className="text-[10px] text-muted-foreground ml-1">(em uso)</span>}
+                      </SelectItem>
+                    ))}
+                    <SelectItem value="__new" className="text-primary">+ Cadastrar novo cargo</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div className="col-span-2">
                 <Label>Empresa *</Label>
