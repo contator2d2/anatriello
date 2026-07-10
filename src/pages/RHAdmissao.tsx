@@ -628,21 +628,31 @@ function StepDados({ detail, update, positions, departments, branches, companies
           onChange={(e) => update({ candidate_name: e.target.value })} /></div>
       <div><Label>E-mail</Label><Input value={detail.candidate_email || ""} disabled={disabled}
         onChange={(e) => update({ candidate_email: e.target.value })} /></div>
-      <div><Label>Telefone</Label><Input value={detail.candidate_phone || ""} disabled={disabled}
-        onChange={(e) => update({ candidate_phone: e.target.value })} /></div>
+      <div><Label>Telefone / WhatsApp</Label>
+        <Input value={formatPhone(detail.candidate_phone || "")} disabled={disabled}
+          placeholder="(11) 90000-0000"
+          onChange={(e) => update({ candidate_phone: e.target.value })} /></div>
       <div><Label>CPF</Label><Input value={detail.candidate_cpf || ""} disabled={disabled}
         onChange={(e) => update({ candidate_cpf: e.target.value })} /></div>
       <div>
         <Label>Cargo</Label>
-        <Select value={detail.position_id || "none"} disabled={disabled}
+        <Select
+          value={detail.position_id || (detail.position ? `name:${detail.position}` : "none")}
+          disabled={disabled}
           onValueChange={(v) => {
+            if (v === "none") { update({ position_id: null, position: null }); return; }
+            if (v.startsWith("name:")) { update({ position_id: null, position: v.slice(5) }); return; }
             const p = positions.find((x: any) => x.id === v);
-            update({ position_id: v === "none" ? null : v, position: p ? p.name : detail.position });
+            update({ position_id: p?.fromCatalog ? v : null, position: p?.name || detail.position });
           }}>
           <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="none">—</SelectItem>
-            {positions.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+            {positions.map((p: any) => (
+              <SelectItem key={p.id} value={p.fromCatalog ? p.id : `name:${p.name}`}>
+                {p.name}{!p.fromCatalog && <span className="text-[10px] text-muted-foreground ml-1">(em uso)</span>}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>
@@ -658,9 +668,22 @@ function StepDados({ detail, update, positions, departments, branches, companies
         </Select>
       </div>
       <div><Label>Data admissão</Label><Input type="date" value={detail.admission_date?.slice(0, 10) || ""} disabled={disabled}
-        onChange={(e) => update({ admission_date: e.target.value })} /></div>
-      <div><Label>Fim experiência</Label><Input type="date" value={detail.probation_end_date?.slice(0, 10) || ""} disabled={disabled}
-        onChange={(e) => update({ probation_end_date: e.target.value })} /></div>
+        onChange={(e) => {
+          const prev = detail.admission_date?.slice(0, 10) || "";
+          const prevAuto = prev ? addMonthsISO(prev, 3) : "";
+          const curEnd = detail.probation_end_date?.slice(0, 10) || "";
+          const shouldResync = !curEnd || curEnd === prevAuto;
+          update({
+            admission_date: e.target.value,
+            ...(shouldResync ? { probation_end_date: addMonthsISO(e.target.value, 3) } : {}),
+          });
+        }} /></div>
+      <div>
+        <Label>Fim do contrato de experiência</Label>
+        <Input type="date" value={detail.probation_end_date?.slice(0, 10) || ""} disabled={disabled}
+          onChange={(e) => update({ probation_end_date: e.target.value })} />
+        <p className="text-[10px] text-muted-foreground mt-1">Sugerido: 3 meses (CLT).</p>
+      </div>
       <div>
         <Label>Salário (R$)</Label>
         <Input type="number" step="0.01" placeholder="0,00"
