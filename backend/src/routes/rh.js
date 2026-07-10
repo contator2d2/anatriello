@@ -3454,14 +3454,18 @@ router.post('/onboarding', async (req, res) => {
       `INSERT INTO rh_onboarding (organization_id, candidate_name, candidate_email, candidate_phone, candidate_cpf,
         position, position_id, department_id, branch_id, company_id, admission_date, probation_end_date, salary,
         buddy_id, manager_id, exam_scheduled_at, integration_scheduled_at, documents, checklist, access_config,
-        schedule_template_id, schedule_start_date, current_step, status, notes, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,'dados','em_andamento',$23,$24) RETURNING *`,
+        schedule_template_id, schedule_start_date,
+        zip_code, address, address_number, complement, neighborhood, city, state,
+        current_step, status, notes, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,'dados','em_andamento',$30,$31) RETURNING *`,
       [orgId, d.candidate_name, d.candidate_email || null, d.candidate_phone || null, d.candidate_cpf || null,
         d.position || null, d.position_id || null, d.department_id || null, d.branch_id || null, d.company_id || null,
         d.admission_date, d.probation_end_date || null, d.salary || 0,
         d.buddy_id || null, d.manager_id || null, d.exam_scheduled_at || null, d.integration_scheduled_at || null,
         JSON.stringify(docs), JSON.stringify(checklist), JSON.stringify(accessConfig),
         d.schedule_template_id || null, d.schedule_start_date || null,
+        d.zip_code || null, d.address || null, d.address_number || null, d.complement || null,
+        d.neighborhood || null, d.city || null, d.state || null,
         d.notes || null, req.userId]
     );
     await auditLog(orgId, 'onboarding', r.rows[0].id, 'create',
@@ -3476,6 +3480,7 @@ router.put('/onboarding/:id', async (req, res) => {
     await ensureOnboardingTables();
     const cur = (await query(`SELECT * FROM rh_onboarding WHERE id = $1`, [req.params.id])).rows[0];
     if (!cur) return res.status(404).json({ error: 'Não encontrado' });
+
     if (cur.status === 'concluido') return res.status(400).json({ error: 'Admissão já concluída' });
     const d = req.body;
     const merged = { ...cur, ...d };
