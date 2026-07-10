@@ -3440,17 +3440,21 @@ router.post('/onboarding', async (req, res) => {
 
     const docs = d.documents || DEFAULT_ONBOARDING_DOCS;
     const checklist = d.checklist || DEFAULT_ONBOARDING_CHECKLIST;
+    const accessConfig = d.access_config || { systems: DEFAULT_ACCESS_SYSTEMS, biometry: { registered: false }, timeclock: { registered: false } };
 
     const r = await query(
       `INSERT INTO rh_onboarding (organization_id, candidate_name, candidate_email, candidate_phone, candidate_cpf,
-        position, department_id, branch_id, company_id, admission_date, probation_end_date, salary,
-        buddy_id, manager_id, exam_scheduled_at, integration_scheduled_at, documents, checklist, current_step, status, notes, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,'dados','em_andamento',$19,$20) RETURNING *`,
+        position, position_id, department_id, branch_id, company_id, admission_date, probation_end_date, salary,
+        buddy_id, manager_id, exam_scheduled_at, integration_scheduled_at, documents, checklist, access_config,
+        schedule_template_id, schedule_start_date, current_step, status, notes, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,'dados','em_andamento',$23,$24) RETURNING *`,
       [orgId, d.candidate_name, d.candidate_email || null, d.candidate_phone || null, d.candidate_cpf || null,
-        d.position || null, d.department_id || null, d.branch_id || null, d.company_id || null,
+        d.position || null, d.position_id || null, d.department_id || null, d.branch_id || null, d.company_id || null,
         d.admission_date, d.probation_end_date || null, d.salary || 0,
         d.buddy_id || null, d.manager_id || null, d.exam_scheduled_at || null, d.integration_scheduled_at || null,
-        JSON.stringify(docs), JSON.stringify(checklist), d.notes || null, req.userId]
+        JSON.stringify(docs), JSON.stringify(checklist), JSON.stringify(accessConfig),
+        d.schedule_template_id || null, d.schedule_start_date || null,
+        d.notes || null, req.userId]
     );
     await auditLog(orgId, 'onboarding', r.rows[0].id, 'create',
       [{ field: 'admission', oldVal: null, newVal: `${d.candidate_name} - ${d.admission_date}` }], req.userId);
@@ -3469,22 +3473,26 @@ router.put('/onboarding/:id', async (req, res) => {
     const merged = { ...cur, ...d };
     const r = await query(
       `UPDATE rh_onboarding SET candidate_name=$2, candidate_email=$3, candidate_phone=$4, candidate_cpf=$5,
-        position=$6, department_id=$7, branch_id=$8, company_id=$9, admission_date=$10, probation_end_date=$11,
-        salary=$12, buddy_id=$13, manager_id=$14, exam_scheduled_at=$15, exam_done_at=$16, exam_result=$17, exam_file_url=$18,
-        integration_scheduled_at=$19, integration_done_at=$20, documents=$21, checklist=$22, current_step=$23,
-        notes=$24, updated_at=NOW() WHERE id=$1 RETURNING *`,
+        position=$6, position_id=$7, department_id=$8, branch_id=$9, company_id=$10, admission_date=$11, probation_end_date=$12,
+        salary=$13, buddy_id=$14, manager_id=$15, exam_scheduled_at=$16, exam_done_at=$17, exam_result=$18, exam_file_url=$19,
+        integration_scheduled_at=$20, integration_done_at=$21, documents=$22, checklist=$23, access_config=$24,
+        schedule_template_id=$25, schedule_start_date=$26, current_step=$27,
+        notes=$28, updated_at=NOW() WHERE id=$1 RETURNING *`,
       [req.params.id, merged.candidate_name, merged.candidate_email, merged.candidate_phone, merged.candidate_cpf,
-        merged.position, merged.department_id, merged.branch_id, merged.company_id,
+        merged.position, merged.position_id || null, merged.department_id, merged.branch_id, merged.company_id,
         merged.admission_date, merged.probation_end_date, merged.salary,
         merged.buddy_id, merged.manager_id, merged.exam_scheduled_at, merged.exam_done_at, merged.exam_result, merged.exam_file_url,
         merged.integration_scheduled_at, merged.integration_done_at,
         JSON.stringify(Array.isArray(merged.documents) ? merged.documents : (typeof merged.documents === 'string' ? JSON.parse(merged.documents) : DEFAULT_ONBOARDING_DOCS)),
         JSON.stringify(Array.isArray(merged.checklist) ? merged.checklist : (typeof merged.checklist === 'string' ? JSON.parse(merged.checklist) : DEFAULT_ONBOARDING_CHECKLIST)),
+        JSON.stringify(typeof merged.access_config === 'object' && merged.access_config !== null ? merged.access_config : (typeof merged.access_config === 'string' ? JSON.parse(merged.access_config) : {})),
+        merged.schedule_template_id || null, merged.schedule_start_date || null,
         merged.current_step || 'dados', merged.notes]
     );
     res.json(r.rows[0]);
   } catch (err) { logError('rh.onboarding.update', err); res.status(500).json({ error: err.message || 'Erro' }); }
 });
+
 
 // Finalizar: cria employee e vincula
 router.post('/onboarding/:id/finish', async (req, res) => {
