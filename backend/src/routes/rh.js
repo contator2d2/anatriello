@@ -3534,13 +3534,18 @@ router.post('/onboarding/:id/finish', async (req, res) => {
     if (!employeeId) {
       const emp = await query(
         `INSERT INTO employees (organization_id, full_name, email, phone, cpf, position,
-          department_id, branch_id, company_id, admission_date, probation_end_date, salary, status, created_by)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'ativo',$13) RETURNING id`,
+          department_id, branch_id, company_id, admission_date, probation_end_date, salary,
+          zip_code, address, address_number, complement, neighborhood, city, state,
+          status, created_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,'ativo',$20) RETURNING id`,
         [cur.organization_id, cur.candidate_name, cur.candidate_email, cur.candidate_phone, cur.candidate_cpf,
           cur.position, cur.department_id, cur.branch_id, cur.company_id,
-          cur.admission_date, cur.probation_end_date, cur.salary, req.userId]);
+          cur.admission_date, cur.probation_end_date, cur.salary,
+          cur.zip_code, cur.address, cur.address_number, cur.complement, cur.neighborhood, cur.city, cur.state,
+          req.userId]);
       employeeId = emp.rows[0].id;
     }
+
 
     await query(
       `UPDATE rh_onboarding SET status='concluido', completed_at=NOW(), employee_id=$2, updated_at=NOW() WHERE id=$1`,
