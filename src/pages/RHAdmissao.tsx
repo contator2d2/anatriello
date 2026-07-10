@@ -119,14 +119,21 @@ export default function RHAdmissao() {
   const [newPosDialog, setNewPosDialog] = useState(false);
   const [newPos, setNewPos] = useState({ name: "", department_id: "" });
 
+  // Cargos: catálogo + cargos já em uso por colaboradores existentes (distintos)
+  const mergedPositions = useMemo(() => {
+    const map = new Map<string, { id: string; name: string; fromCatalog: boolean }>();
+    (positions || []).forEach((p: any) => map.set(p.name.toLowerCase(), { id: p.id, name: p.name, fromCatalog: true }));
+    (employees || []).forEach((e: any) => {
+      const n = (e.position || "").trim();
+      if (n && !map.has(n.toLowerCase())) map.set(n.toLowerCase(), { id: `emp:${n}`, name: n, fromCatalog: false });
+    });
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [positions, employees]);
+
   const kpis = useMemo(() => ({
     em_andamento: list.filter((o: any) => o.status === "em_andamento").length,
     com_pendencias: list.filter((o: any) => o.status === "em_andamento" && computePending(o).length > 0).length,
-    proximas: list.filter((o: any) => {
-      if (o.status !== "em_andamento") return false;
-      const days = Math.ceil((new Date(o.admission_date).getTime() - Date.now()) / 86400000);
-      return days >= 0 && days <= 7;
-    }).length,
+    em_experiencia: list.filter((o: any) => o.status === "concluido" && inProbation(o.probation_end_date)).length,
     concluido_mes: list.filter((o: any) =>
       o.status === "concluido" && new Date(o.completed_at || o.admission_date).getMonth() === new Date().getMonth()).length,
   }), [list]);
