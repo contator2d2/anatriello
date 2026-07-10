@@ -816,9 +816,14 @@ function StepDados({ detail, update, positions, departments, branches, companies
           </SelectContent>
         </Select>
       </div>
+      <div className="col-span-2 border-t pt-2 mt-1">
+        <p className="text-xs font-semibold text-muted-foreground mb-2">Endereço residencial</p>
+      </div>
+      <AddressBlock data={detail} disabled={disabled} onChange={(patch) => update(patch)} />
       <div className="col-span-2"><Label>Observações</Label>
         <Textarea rows={2} value={detail.notes || ""} disabled={disabled}
           onChange={(e) => update({ notes: e.target.value })} /></div>
+
     </div>
   );
 }
