@@ -838,11 +838,28 @@ function AddressBlock({ data, disabled, onChange }: { data: any; disabled?: bool
       <div>
         <Label>UF</Label>
         <BufferedInput maxLength={2} value={data.state || ""} disabled={disabled}
-          onChange={(e) => onChange({ state: e.target.value.toUpperCase().slice(0, 2) })} />
+          onCommit={(v) => onChange({ state: String(v).toUpperCase().slice(0, 2) })} />
       </div>
     </>
   );
 }
+
+function BufferedInput({ value, onCommit, disabled, maxLength }: { value: string; onCommit: (v: string) => void; disabled?: boolean; maxLength?: number }) {
+  const [local, setLocal] = useState(value ?? "");
+  const focused = useRef(false);
+  useEffect(() => { if (!focused.current) setLocal(value ?? ""); }, [value]);
+  return (
+    <Input
+      value={local}
+      disabled={disabled}
+      maxLength={maxLength}
+      onFocus={() => { focused.current = true; }}
+      onChange={(e) => setLocal(e.target.value)}
+      onBlur={() => { focused.current = false; if (local !== (value ?? "")) onCommit(local); }}
+    />
+  );
+}
+
 
 
 
