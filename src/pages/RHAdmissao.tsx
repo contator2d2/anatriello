@@ -21,10 +21,25 @@ import {
 import { useCompanies } from "@/hooks/use-companies";
 import { useScheduleTemplates } from "@/hooks/use-timeclock";
 import { useUpload } from "@/hooks/use-upload";
+import { formatPhone } from "@/lib/br-utils";
 import {
   UserPlus, Plus, FileText, Check, Loader2, ClipboardCheck, FileCheck, GraduationCap,
   Trash2, Users, Upload, AlertTriangle, ExternalLink, ArrowLeft, ArrowRight, KeyRound, Fingerprint, Clock,
 } from "lucide-react";
+
+// Soma meses a uma data ISO (yyyy-mm-dd) mantendo formato ISO.
+function addMonthsISO(iso: string, months: number): string {
+  if (!iso) return "";
+  const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
+  const dt = new Date(Date.UTC(y, (m - 1) + months, d));
+  return dt.toISOString().slice(0, 10);
+}
+
+// Colaborador em experiência? (probation_end_date > hoje)
+const inProbation = (iso?: string) => {
+  if (!iso) return false;
+  return new Date(iso.slice(0, 10) + "T23:59:59").getTime() >= Date.now();
+};
 
 const STATUS_COLOR: Record<string, string> = {
   em_andamento: "bg-yellow-100 text-yellow-800",
