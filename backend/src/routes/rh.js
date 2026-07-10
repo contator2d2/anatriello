@@ -3374,7 +3374,7 @@ const DEFAULT_ONBOARDING_DOCS = [
   { key: 'conta_bancaria', label: 'Dados bancários / chave PIX', required: true, received: false },
 ];
 
-// Checklist padrão de integração
+// Checklist padrão de integração (com campos received_at/done_at editáveis)
 const DEFAULT_ONBOARDING_CHECKLIST = [
   { key: 'assinatura_contrato', label: 'Contrato de trabalho assinado', done: false },
   { key: 'assinatura_ctps', label: 'Anotação na CTPS', done: false },
@@ -3383,8 +3383,6 @@ const DEFAULT_ONBOARDING_CHECKLIST = [
   { key: 'entrega_uniforme', label: 'Entrega de uniformes', done: false },
   { key: 'entrega_cracha', label: 'Entrega de crachá', done: false },
   { key: 'entrega_equipamentos', label: 'Entrega de equipamentos (notebook/celular)', done: false },
-  { key: 'cadastro_biometria', label: 'Cadastro biométrico (facial/digital)', done: false },
-  { key: 'acesso_sistemas', label: 'Criação de acessos aos sistemas', done: false },
   { key: 'apresentacao_equipe', label: 'Apresentação à equipe', done: false },
   { key: 'treinamento_seguranca', label: 'Treinamento de segurança do trabalho', done: false },
   { key: 'treinamento_lgpd', label: 'Treinamento LGPD', done: false },
@@ -3392,6 +3390,15 @@ const DEFAULT_ONBOARDING_CHECKLIST = [
   { key: 'manual_colaborador', label: 'Manual do colaborador entregue', done: false },
   { key: 'esocial_s2200', label: 'Evento eSocial S-2200 enviado', done: false },
 ];
+
+// Sistemas de acesso padrão
+const DEFAULT_ACCESS_SYSTEMS = [
+  { key: 'app_colaborador', label: 'App do Colaborador', granted: false },
+  { key: 'app_gestor', label: 'App do Gestor (se aplicável)', granted: false },
+  { key: 'email_corp', label: 'E-mail corporativo', granted: false },
+  { key: 'sistemas_internos', label: 'Sistemas internos (ERP/CRM)', granted: false },
+];
+
 
 // Listar processos
 router.get('/onboarding', async (req, res) => {
