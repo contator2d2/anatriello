@@ -3351,8 +3351,16 @@ async function ensureOnboardingTables() {
   await query(`ALTER TABLE rh_onboarding ADD COLUMN IF NOT EXISTS access_config JSONB DEFAULT '{}'::jsonb`).catch(()=>{});
   await query(`ALTER TABLE rh_onboarding ADD COLUMN IF NOT EXISTS schedule_template_id TEXT`).catch(()=>{});
   await query(`ALTER TABLE rh_onboarding ADD COLUMN IF NOT EXISTS schedule_start_date DATE`).catch(()=>{});
+  await query(`ALTER TABLE rh_onboarding ADD COLUMN IF NOT EXISTS zip_code TEXT`).catch(()=>{});
+  await query(`ALTER TABLE rh_onboarding ADD COLUMN IF NOT EXISTS address TEXT`).catch(()=>{});
+  await query(`ALTER TABLE rh_onboarding ADD COLUMN IF NOT EXISTS address_number TEXT`).catch(()=>{});
+  await query(`ALTER TABLE rh_onboarding ADD COLUMN IF NOT EXISTS complement TEXT`).catch(()=>{});
+  await query(`ALTER TABLE rh_onboarding ADD COLUMN IF NOT EXISTS neighborhood TEXT`).catch(()=>{});
+  await query(`ALTER TABLE rh_onboarding ADD COLUMN IF NOT EXISTS city TEXT`).catch(()=>{});
+  await query(`ALTER TABLE rh_onboarding ADD COLUMN IF NOT EXISTS state TEXT`).catch(()=>{});
   await query(`CREATE INDEX IF NOT EXISTS idx_onboarding_org ON rh_onboarding(organization_id, admission_date DESC)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_onboarding_status ON rh_onboarding(organization_id, status)`);
+
 }
 
 
