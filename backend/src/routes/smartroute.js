@@ -397,9 +397,62 @@ export async function ensureSmartRouteTables() {
     );
     CREATE INDEX IF NOT EXISTS idx_sr_jev_route ON smartroute_journey_events(route_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_sr_jev_org ON smartroute_journey_events(organization_id, created_at DESC);
+
+    -- === Rotas fixas (templates) + escala + fechamento diário ===
+    ALTER TABLE smartroute_routes ADD COLUMN IF NOT EXISTS is_template BOOLEAN DEFAULT false;
+    ALTER TABLE smartroute_routes ADD COLUMN IF NOT EXISTS default_driver_id UUID;
+    ALTER TABLE smartroute_routes ADD COLUMN IF NOT EXISTS default_vehicle_id UUID;
+    ALTER TABLE smartroute_routes ADD COLUMN IF NOT EXISTS owner_user_id UUID;
+    ALTER TABLE smartroute_routes ADD COLUMN IF NOT EXISTS parent_route_id UUID;
+    ALTER TABLE smartroute_routes ADD COLUMN IF NOT EXISTS route_day_id UUID;
+
+    ALTER TABLE smartroute_orders ADD COLUMN IF NOT EXISTS route_id UUID;
+    ALTER TABLE smartroute_orders ADD COLUMN IF NOT EXISTS pdv_window TEXT;
+    ALTER TABLE smartroute_orders ADD COLUMN IF NOT EXISTS owner_user_id UUID;
+
+    CREATE TABLE IF NOT EXISTS smartroute_route_pdvs (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      route_id UUID NOT NULL REFERENCES smartroute_routes(id) ON DELETE CASCADE,
+      pdv_id UUID NOT NULL REFERENCES smartroute_pdvs(id) ON DELETE CASCADE,
+      sequence INTEGER DEFAULT 0,
+      window TEXT DEFAULT 'qualquer',
+      notes TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(route_id, pdv_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_sr_rpdv_route ON smartroute_route_pdvs(route_id, sequence);
+
+    CREATE TABLE IF NOT EXISTS smartroute_route_schedule (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      route_id UUID NOT NULL REFERENCES smartroute_routes(id) ON DELETE CASCADE,
+      weekday INTEGER NOT NULL,
+      driver_id UUID,
+      vehicle_id UUID,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(route_id, weekday)
+    );
+
+    CREATE TABLE IF NOT EXISTS smartroute_route_days (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      route_id UUID NOT NULL REFERENCES smartroute_routes(id) ON DELETE CASCADE,
+      date DATE NOT NULL,
+      status TEXT DEFAULT 'aberta',
+      driver_ids UUID[] DEFAULT '{}'::uuid[],
+      vehicle_id UUID,
+      closed_at TIMESTAMPTZ,
+      closed_by UUID,
+      reopened_at TIMESTAMPTZ,
+      daily_route_ids UUID[] DEFAULT '{}'::uuid[],
+      notes TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(route_id, date)
+    );
+    CREATE INDEX IF NOT EXISTS idx_sr_rday ON smartroute_route_days(route_id, date);
   `);
   ensured = true;
 }
+
 
 router.use(authenticate);
 router.use(async (req, res, next) => { try { await ensureSmartRouteTables(); next(); } catch (e) { next(e); } });
