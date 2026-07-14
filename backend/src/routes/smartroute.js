@@ -1592,7 +1592,271 @@ router.get('/sla-metrics', async (req, res) => {
   } catch (e) { logError('sr.sla.metrics', e); res.status(500).json({ error: e.message }); }
 });
 
+// ============================================================
+// ============ ROTAS FIXAS: PDVs, ESCALA, ROTA DO DIA =========
+// ============================================================
+
+// -------- PDVs fixos da rota --------
+router.get('/routes/:id/pdvs', async (req, res) => {
+  try {
+    const r = await query(
+      `SELECT rp.*, p.name AS pdv_name, p.address, p.city, p.state, p.contact_name, p.contact_phone, p.lat, p.lng
+       FROM smartroute_route_pdvs rp
+       JOIN smartroute_pdvs p ON p.id=rp.pdv_id
+       WHERE rp.route_id=$1 ORDER BY rp.sequence, p.name`, [req.params.id]);
+    res.json(r.rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+router.post('/routes/:id/pdvs', async (req, res) => {
+  try {
+    const b = req.body || {};
+    if (!b.pdv_id) return res.status(400).json({ error: 'pdv_id obrigatório' });
+    // pega sequence próximo
+    const s = await query(`SELECT COALESCE(MAX(sequence),0)+1 AS n FROM smartroute_route_pdvs WHERE route_id=$1`, [req.params.id]);
+    const r = await query(
+      `INSERT INTO smartroute_route_pdvs (route_id, pdv_id, sequence, window, notes)
+       VALUES ($1,$2,COALESCE($3,$4),COALESCE($5,'qualquer'),$6)
+       ON CONFLICT (route_id, pdv_id) DO UPDATE SET
+         sequence=COALESCE(EXCLUDED.sequence, smartroute_route_pdvs.sequence),
+         window=COALESCE(EXCLUDED.window, smartroute_route_pdvs.window),
+         notes=COALESCE(EXCLUDED.notes, smartroute_route_pdvs.notes)
+       RETURNING *`,
+      [req.params.id, b.pdv_id, b.sequence || null, s.rows[0].n, b.window || null, b.notes || null]
+    );
+    res.json(r.rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+router.put('/routes/:id/pdvs/reorder', async (req, res) => {
+  try {
+    const ids = req.body?.pdv_ids || [];
+    for (let i = 0; i < ids.length; i++) {
+      await query(`UPDATE smartroute_route_pdvs SET sequence=$1 WHERE route_id=$2 AND pdv_id=$3`, [i + 1, req.params.id, ids[i]]);
+    }
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+router.put('/routes/:id/pdvs/:pdvId', async (req, res) => {
+  try {
+    const b = req.body || {};
+    const r = await query(
+      `UPDATE smartroute_route_pdvs SET window=COALESCE($3,window), notes=COALESCE($4,notes), sequence=COALESCE($5,sequence)
+       WHERE route_id=$1 AND pdv_id=$2 RETURNING *`,
+      [req.params.id, req.params.pdvId, b.window || null, b.notes || null, b.sequence || null]
+    );
+    res.json(r.rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+router.delete('/routes/:id/pdvs/:pdvId', async (req, res) => {
+  try {
+    await query(`DELETE FROM smartroute_route_pdvs WHERE route_id=$1 AND pdv_id=$2`, [req.params.id, req.params.pdvId]);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// -------- Escala semanal --------
+router.get('/routes/:id/schedule', async (req, res) => {
+  try {
+    const r = await query(
+      `SELECT s.*, d.full_name AS driver_name, v.plate AS vehicle_plate
+       FROM smartroute_route_schedule s
+       LEFT JOIN smartroute_drivers d ON d.id=s.driver_id
+       LEFT JOIN smartroute_vehicles v ON v.id=s.vehicle_id
+       WHERE s.route_id=$1 ORDER BY s.weekday`, [req.params.id]);
+    res.json(r.rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+router.put('/routes/:id/schedule', async (req, res) => {
+  try {
+    const entries = req.body?.entries || []; // [{weekday, driver_id, vehicle_id}]
+    await query(`DELETE FROM smartroute_route_schedule WHERE route_id=$1`, [req.params.id]);
+    for (const e of entries) {
+      if (e.driver_id || e.vehicle_id) {
+        await query(
+          `INSERT INTO smartroute_route_schedule (route_id, weekday, driver_id, vehicle_id)
+           VALUES ($1,$2,$3,$4)`,
+          [req.params.id, e.weekday, e.driver_id || null, e.vehicle_id || null]
+        );
+      }
+    }
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// -------- Rota do Dia (auto-cria se não existe) --------
+async function ensureRouteDay(routeId, date) {
+  const existing = await query(`SELECT * FROM smartroute_route_days WHERE route_id=$1 AND date=$2`, [routeId, date]);
+  if (existing.rows[0]) return existing.rows[0];
+  // herda escala do weekday + fallback do default_driver do template
+  const wd = new Date(date + 'T12:00:00').getDay();
+  const sch = await query(`SELECT driver_id, vehicle_id FROM smartroute_route_schedule WHERE route_id=$1 AND weekday=$2`, [routeId, wd]);
+  const tmpl = await query(`SELECT default_driver_id, default_vehicle_id FROM smartroute_routes WHERE id=$1`, [routeId]);
+  const drv = sch.rows[0]?.driver_id || tmpl.rows[0]?.default_driver_id || null;
+  const veh = sch.rows[0]?.vehicle_id || tmpl.rows[0]?.default_vehicle_id || null;
+  const drvArr = drv ? [drv] : [];
+  const ins = await query(
+    `INSERT INTO smartroute_route_days (route_id, date, status, driver_ids, vehicle_id)
+     VALUES ($1,$2,'aberta',$3::uuid[],$4) RETURNING *`,
+    [routeId, date, drvArr, veh]
+  );
+  return ins.rows[0];
+}
+
+router.get('/routes/:id/day', async (req, res) => {
+  try {
+    const org = orgId(req);
+    const date = req.query.date || new Date().toISOString().slice(0, 10);
+    const rt = await query(`SELECT * FROM smartroute_routes WHERE id=$1 AND organization_id=$2`, [req.params.id, org]);
+    if (!rt.rows[0]) return res.status(404).json({ error: 'Rota não encontrada' });
+    const day = await ensureRouteDay(req.params.id, date);
+    const orders = await query(
+      `SELECT o.*, p.name AS pdv_name, p.address AS pdv_address, p.lat AS pdv_lat, p.lng AS pdv_lng,
+              rp.sequence AS pdv_sequence, rp.window AS route_pdv_window
+       FROM smartroute_orders o
+       LEFT JOIN smartroute_pdvs p ON p.id=o.pdv_id
+       LEFT JOIN smartroute_route_pdvs rp ON rp.route_id=o.route_id AND rp.pdv_id=o.pdv_id
+       WHERE o.route_id=$1 AND o.delivery_date=$2
+       ORDER BY
+         CASE COALESCE(o.pdv_window,'qualquer')
+           WHEN 'manha' THEN 1 WHEN 'tarde' THEN 2 WHEN 'noite' THEN 3 ELSE 4 END,
+         rp.sequence NULLS LAST, o.created_at`,
+      [req.params.id, date]);
+    // enriquece drivers/vehicle
+    const drvs = day.driver_ids?.length
+      ? (await query(`SELECT id, full_name, phone FROM smartroute_drivers WHERE id = ANY($1::uuid[])`, [day.driver_ids])).rows
+      : [];
+    const veh = day.vehicle_id ? (await query(`SELECT id, plate, model FROM smartroute_vehicles WHERE id=$1`, [day.vehicle_id])).rows[0] : null;
+    res.json({ route: rt.rows[0], day, orders: orders.rows, drivers: drvs, vehicle: veh });
+  } catch (e) { logError('sr.route.day', e); res.status(500).json({ error: e.message }); }
+});
+
+router.post('/routes/:id/day/:date/drivers', async (req, res) => {
+  try {
+    const day = await ensureRouteDay(req.params.id, req.params.date);
+    const { driver_ids, vehicle_id } = req.body || {};
+    await query(
+      `UPDATE smartroute_route_days SET driver_ids=COALESCE($2::uuid[],driver_ids), vehicle_id=COALESCE($3,vehicle_id), updated_at=NOW() WHERE id=$1`,
+      [day.id, Array.isArray(driver_ids) ? driver_ids : null, vehicle_id || null]
+    );
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/routes/:id/day/:date/close', async (req, res) => {
+  try {
+    const org = orgId(req);
+    const day = await ensureRouteDay(req.params.id, req.params.date);
+    if (day.status === 'fechada' || day.status === 'em_andamento' || day.status === 'concluida') {
+      return res.status(400).json({ error: 'Rota do dia já está fechada' });
+    }
+    if (!day.driver_ids?.length) return res.status(400).json({ error: 'Defina ao menos 1 entregador antes de fechar' });
+
+    // pega pedidos e template
+    const tmpl = (await query(`SELECT * FROM smartroute_routes WHERE id=$1`, [req.params.id])).rows[0];
+    const orders = (await query(
+      `SELECT o.*, rp.sequence AS pdv_sequence
+       FROM smartroute_orders o
+       LEFT JOIN smartroute_route_pdvs rp ON rp.route_id=o.route_id AND rp.pdv_id=o.pdv_id
+       WHERE o.route_id=$1 AND o.delivery_date=$2
+       ORDER BY
+         CASE COALESCE(o.pdv_window,'qualquer') WHEN 'manha' THEN 1 WHEN 'tarde' THEN 2 WHEN 'noite' THEN 3 ELSE 4 END,
+         rp.sequence NULLS LAST, o.created_at`, [req.params.id, req.params.date])).rows;
+    if (!orders.length) return res.status(400).json({ error: 'Sem pedidos para esta data' });
+
+    // divide pedidos entre entregadores (round-robin simples)
+    const drivers = day.driver_ids;
+    const buckets = drivers.map(() => []);
+    orders.forEach((o, i) => buckets[i % drivers.length].push(o));
+
+    const createdRouteIds = [];
+    for (let idx = 0; idx < drivers.length; idx++) {
+      const bucket = buckets[idx];
+      if (!bucket.length) continue;
+      const code = `${tmpl.code || 'RT'}-${req.params.date}-${idx + 1}`;
+      const dayRoute = await query(
+        `INSERT INTO smartroute_routes
+           (organization_id, code, driver_id, vehicle_id, planned_date, status,
+            depot_id, depot_lat, depot_lng, total_stops, is_template, parent_route_id, route_day_id, notes)
+         VALUES ($1,$2,$3,$4,$5,'planejada',$6,$7,$8,$9,false,$10,$11,$12) RETURNING id`,
+        [org, code, drivers[idx], day.vehicle_id || tmpl.default_vehicle_id, req.params.date,
+         tmpl.depot_id, tmpl.depot_lat, tmpl.depot_lng, bucket.length, req.params.id, day.id, tmpl.notes]
+      );
+      const rid = dayRoute.rows[0].id;
+      createdRouteIds.push(rid);
+      for (let i = 0; i < bucket.length; i++) {
+        const o = bucket[i];
+        const st = await query(
+          `INSERT INTO smartroute_route_stops (route_id, order_id, pdv_id, sequence)
+           VALUES ($1,$2,$3,$4) RETURNING id`, [rid, o.id, o.pdv_id, i + 1]
+        );
+        await query(`UPDATE smartroute_orders SET status='em_rota', route_stop_id=$2, updated_at=NOW() WHERE id=$1`, [o.id, st.rows[0].id]);
+      }
+    }
+
+    await query(
+      `UPDATE smartroute_route_days SET status='fechada', closed_at=NOW(), closed_by=$2, daily_route_ids=$3::uuid[], updated_at=NOW() WHERE id=$1`,
+      [day.id, req.user?.id || null, createdRouteIds]
+    );
+    res.json({ ok: true, daily_route_ids: createdRouteIds });
+  } catch (e) { logError('sr.route.day.close', e); res.status(500).json({ error: e.message }); }
+});
+
+router.post('/routes/:id/day/:date/reopen', async (req, res) => {
+  try {
+    const day = (await query(`SELECT * FROM smartroute_route_days WHERE route_id=$1 AND date=$2`, [req.params.id, req.params.date])).rows[0];
+    if (!day) return res.status(404).json({ error: 'Rota do dia não encontrada' });
+    // reverte: apaga daily routes/stops e devolve orders ao pool 'pendente'
+    for (const rid of (day.daily_route_ids || [])) {
+      await query(`UPDATE smartroute_orders SET status='pendente', route_stop_id=NULL WHERE route_stop_id IN (SELECT id FROM smartroute_route_stops WHERE route_id=$1)`, [rid]);
+      await query(`DELETE FROM smartroute_routes WHERE id=$1`, [rid]);
+    }
+    await query(
+      `UPDATE smartroute_route_days SET status='aberta', reopened_at=NOW(), daily_route_ids='{}'::uuid[], closed_at=NULL, closed_by=NULL, updated_at=NOW() WHERE id=$1`,
+      [day.id]
+    );
+    res.json({ ok: true });
+  } catch (e) { logError('sr.route.day.reopen', e); res.status(500).json({ error: e.message }); }
+});
+
+// Marca route como template (para migração de rotas antigas → templates)
+router.post('/routes/:id/mark-template', async (req, res) => {
+  try {
+    await query(`UPDATE smartroute_routes SET is_template=true, updated_at=NOW() WHERE id=$1 AND organization_id=$2`, [req.params.id, orgId(req)]);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Cria rota template (mais simples que /routes original)
+router.post('/routes/template', async (req, res) => {
+  try {
+    const b = req.body || {};
+    const code = b.code || `TMPL-${Date.now().toString(36).toUpperCase()}`;
+    const r = await query(
+      `INSERT INTO smartroute_routes (organization_id, code, is_template, default_driver_id, default_vehicle_id, owner_user_id, notes, status, planned_date)
+       VALUES ($1,$2,true,$3,$4,$5,$6,'template',CURRENT_DATE) RETURNING *`,
+      [orgId(req), code, b.default_driver_id || null, b.default_vehicle_id || null, req.user?.id || null, b.notes || null]
+    );
+    res.json(r.rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Lista somente templates
+router.get('/routes-templates', async (req, res) => {
+  try {
+    const r = await query(
+      `SELECT r.*,
+              (SELECT COUNT(*)::int FROM smartroute_route_pdvs WHERE route_id=r.id) AS pdvs_count,
+              d.full_name AS default_driver_name, v.plate AS default_vehicle_plate
+       FROM smartroute_routes r
+       LEFT JOIN smartroute_drivers d ON d.id=r.default_driver_id
+       LEFT JOIN smartroute_vehicles v ON v.id=r.default_vehicle_id
+       WHERE r.organization_id=$1 AND r.is_template=true
+       ORDER BY r.code`, [orgId(req)]);
+    res.json(r.rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 export default router;
+
 
 
 
