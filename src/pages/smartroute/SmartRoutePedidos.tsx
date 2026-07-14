@@ -12,6 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Plus, Edit, Trash2, Package } from "lucide-react";
 import { toast } from "sonner";
 import { useSROrders, useSRSaveOrder, useSRDeleteOrder, useSRPdvs } from "@/hooks/use-smartroute";
+import { useSRTemplates, useSRRoutePdvs } from "@/hooks/use-smartroute-daily";
 
 const brl = (c: number) => `R$ ${((c || 0) / 100).toFixed(2).replace('.', ',')}`;
 const statusColor: Record<string, string> = { pendente: "bg-slate-200", em_rota: "bg-blue-200", entregue: "bg-emerald-200", devolvido: "bg-red-200" };
