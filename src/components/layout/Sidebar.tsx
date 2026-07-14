@@ -181,7 +181,9 @@ const getNavSections = (hasConnections: boolean): NavSection[] => [
       { name: "Ocorrências & SLA", href: "/smartroute/ocorrencias", icon: AlertTriangle, pageKey: 'sr_mapa' },
       { name: "Análise Pós-Rota", href: "/smartroute/pos-analise", icon: Sparkles, pageKey: 'sr_ia' },
 
-      { name: "Rotas", href: "/smartroute/rotas", icon: RouteIcon, pageKey: 'sr_rotas' },
+      { name: "Rotas Montadas", href: "/smartroute/rotas-montadas", icon: RouteIcon, pageKey: 'sr_rotas' },
+      { name: "Rota do Dia", href: "/smartroute/rota-do-dia", icon: RouteIcon, pageKey: 'sr_rotas' },
+      { name: "Rotas (Legado)", href: "/smartroute/rotas", icon: RouteIcon, pageKey: 'sr_rotas' },
       { name: "Planejador IA", href: "/smartroute/planejador", icon: Sparkles, pageKey: 'sr_rotas' },
       { name: "Pedidos", href: "/smartroute/pedidos", icon: Package, pageKey: 'sr_pedidos' },
       { name: "PDVs / Clientes", href: "/smartroute/pdvs", icon: Store, pageKey: 'sr_pdvs' },

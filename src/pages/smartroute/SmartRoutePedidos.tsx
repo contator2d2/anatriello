@@ -12,18 +12,21 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Plus, Edit, Trash2, Package } from "lucide-react";
 import { toast } from "sonner";
 import { useSROrders, useSRSaveOrder, useSRDeleteOrder, useSRPdvs } from "@/hooks/use-smartroute";
+import { useSRTemplates, useSRRoutePdvs } from "@/hooks/use-smartroute-daily";
 
 const brl = (c: number) => `R$ ${((c || 0) / 100).toFixed(2).replace('.', ',')}`;
 const statusColor: Record<string, string> = { pendente: "bg-slate-200", em_rota: "bg-blue-200", entregue: "bg-emerald-200", devolvido: "bg-red-200" };
 
 export default function SmartRoutePedidos() {
   const [filter, setFilter] = useState<any>({});
-  const { data = [] } = useSROrders(filter);
-  const { data: pdvs = [] } = useSRPdvs();
-  const save = useSRSaveOrder();
-  const del = useSRDeleteOrder();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<any>({});
+  const { data = [] } = useSROrders(filter);
+  const { data: pdvs = [] } = useSRPdvs();
+  const { data: templates = [] } = useSRTemplates();
+  const { data: routePdvs = [] } = useSRRoutePdvs(form.route_id);
+  const save = useSRSaveOrder();
+  const del = useSRDeleteOrder();
 
   const onSave = async () => {
     if (!form.pdv_id) return toast.error("Selecione o PDV");
@@ -93,17 +96,34 @@ export default function SmartRoutePedidos() {
             <DialogHeader><DialogTitle>{form.id ? "Editar pedido" : "Novo pedido"}</DialogTitle></DialogHeader>
             <div className="grid grid-cols-2 gap-3">
               <div className="col-span-2">
-                <Label>PDV*</Label>
-                <Select value={form.pdv_id || ""} onValueChange={(v) => setForm({ ...form, pdv_id: v })}>
-                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                <Label>Rota fixa</Label>
+                <Select value={form.route_id || "__none"} onValueChange={(v) => setForm({ ...form, route_id: v === "__none" ? null : v, pdv_id: undefined, pdv_window: undefined })}>
+                  <SelectTrigger><SelectValue placeholder="Sem rota (pedido avulso)" /></SelectTrigger>
                   <SelectContent>
-                    {pdvs.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                    <SelectItem value="__none">Sem rota</SelectItem>
+                    {templates.map((t: any) => <SelectItem key={t.id} value={t.id}>{t.code}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
+              <div className="col-span-2">
+                <Label>PDV*</Label>
+                <Select value={form.pdv_id || ""} onValueChange={(v) => {
+                  const rp = routePdvs.find((x: any) => x.pdv_id === v);
+                  setForm({ ...form, pdv_id: v, pdv_window: rp?.window || null });
+                }}>
+                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                  <SelectContent>
+                    {(form.route_id ? routePdvs.map((rp: any) => ({ id: rp.pdv_id, name: rp.pdv_name })) : pdvs).map((p: any) => (
+                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {form.pdv_window && <p className="text-xs text-muted-foreground mt-1">Janela do PDV: {form.pdv_window}</p>}
+              </div>
               <div><Label>Nº pedido</Label><Input value={form.order_number || ""} onChange={(e) => setForm({ ...form, order_number: e.target.value })} /></div>
-              <div><Label>Data entrega</Label><Input type="date" value={form.delivery_date?.slice(0, 10) || ""} onChange={(e) => setForm({ ...form, delivery_date: e.target.value })} /></div>
+              <div><Label>Data entrega*</Label><Input type="date" value={form.delivery_date?.slice(0, 10) || ""} onChange={(e) => setForm({ ...form, delivery_date: e.target.value })} /></div>
               <div><Label>Peso (kg)</Label><Input type="number" step="0.01" value={form.weight_kg || ""} onChange={(e) => setForm({ ...form, weight_kg: +e.target.value })} /></div>
+
               <div><Label>Volume (m³)</Label><Input type="number" step="0.001" value={form.volume_m3 || ""} onChange={(e) => setForm({ ...form, volume_m3: +e.target.value })} /></div>
               <div><Label>Valor (R$)</Label><Input type="number" step="0.01" value={form.value_cents ? form.value_cents / 100 : ""} onChange={(e) => setForm({ ...form, value_cents: Math.round(+e.target.value * 100) })} /></div>
               <div><Label>Prioridade (1-10)</Label><Input type="number" min={1} max={10} value={form.priority || 5} onChange={(e) => setForm({ ...form, priority: +e.target.value })} /></div>

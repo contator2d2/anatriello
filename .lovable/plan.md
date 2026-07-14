@@ -1,64 +1,67 @@
+# SmartRoute – Rotas fixas + escala + fechamento diário
 
-## Objetivo
+Modelo novo: **rota é permanente** (não vira template). Cada dia ela tem um "estado do dia" (aberta/fechada) e uma escala de entregador(es). Pedidos são anexados à rota apontando uma data-alvo; no dia da entrega a rota é fechada e vai pro app do entregador.
 
-Deixar o app do entregador com barra inferior (padrão promotor) e habilitar 4 funções operacionais que geram registro no sistema:
+## 1. Modelo de dados
 
-1. Check-in de parada (já existe — só ganha atalho na bottom nav)
-2. Ponto (bater ponto de jornada — entrada, pausa, retorno, saída)
-3. Avarias (dano na carga/embalagem, com foto e vínculo opcional à parada/rota)
-4. Devolução (recusa/troca do cliente, itens devolvidos, motivo, foto)
+Novas colunas / tabelas em `backend/schema-routes-phase4.sql` (migration incremental):
 
-Cada evento fica salvo em tabela dedicada e aparece no monitoramento (Torre) e nos relatórios da rota.
+**`smartroute_routes`** (existente – adicionar):
+- `is_template boolean default true` — marca que é rota-mestre permanente
+- `default_driver_id uuid` — entregador padrão
+- `default_vehicle_id uuid`
+- `owner_user_id uuid` — vendedor/supervisor responsável (opcional)
 
-## UX do app
+**`smartroute_route_pdvs`** (nova) — PDVs fixos da rota:
+- `route_id`, `pdv_id`, `sequence int`, `window` enum(`manha`,`tarde`,`noite`,`qualquer`), `notes`
 
-- Nova `DriverBottomNav` fixa em todas as telas autenticadas do entregador (`/entregador/*`) com 5 ícones:
-  Início · Ponto · Avaria · Devolução · Histórico
-- Telas novas: `EntregadorPonto`, `EntregadorAvaria`, `EntregadorDevolucao`, `EntregadorHistorico`.
-- Fluxo padrão de cada registro: escolher rota/parada atual (opcional), foto obrigatória, motivo/tipo, observação, GPS automático → confirmação com toast.
+**`smartroute_route_schedule`** (nova) — escala semanal do entregador:
+- `route_id`, `weekday 0-6`, `driver_id`, `vehicle_id`
 
-## Backend
+**`smartroute_route_days`** (nova) — instância diária (criada on-demand):
+- `route_id`, `date`, `status` (`aberta`,`fechada`,`em_andamento`,`concluida`), `driver_ids uuid[]` (permite 2+), `vehicle_id`, `closed_at`, `closed_by`, `reopened_at`
 
-Novas tabelas em `smartroute-driver.js` (via ensureTables no boot da rota):
+**`smartroute_orders`** (existente – adicionar):
+- `route_id uuid` (rota-mestre)
+- `delivery_date date` (data-alvo)
+- `pdv_window` copiada do PDV no momento do lançamento (só pra ordenar)
+- `owner_user_id uuid` (vendedor que lançou)
 
-```text
-smartroute_driver_timeclock       (punches: entrada/pausa/retorno/saida + gps + foto)
-smartroute_cargo_damages          (avarias com stop_id opcional, tipo, severidade, fotos, gps)
-smartroute_delivery_returns       (devoluções com stop_id, motivo, itens jsonb, fotos, gps)
-```
+Sequência do dia = ordena por `pdv_window` (manhã→tarde→noite→qualquer) + `sequence` do PDV na rota.
 
-Endpoints (prefix `/api/smartroute/driver`):
+## 2. Backend (`backend/src/routes/smartroute-planner.js` + novo `smartroute-daily.js`)
 
-- `POST /timeclock/punch` `{ kind, lat, lng, photo? }` · `GET /timeclock/today`
-- `POST /damages` `{ stop_id?, route_id?, type, severity, description, photos[], lat, lng }` · `GET /damages/mine`
-- `POST /returns` `{ stop_id, reason, items[], photos[], lat, lng }` · `GET /returns/mine`
-- `GET /history?date=` — lista consolidada dos últimos eventos do entregador
+Endpoints novos:
+- `GET/POST/PUT/DELETE /routes/:id/pdvs` — CRUD de PDVs fixos da rota
+- `GET/PUT /routes/:id/schedule` — escala semanal
+- `GET /routes/:id/day?date=YYYY-MM-DD` — retorna instância do dia (cria se não existir, herdando escala + entregador padrão)
+- `POST /routes/:id/day/:date/close` — fecha a rota do dia (supervisor)
+- `POST /routes/:id/day/:date/reopen` — reabre
+- `POST /routes/:id/day/:date/drivers` — adiciona/troca entregador(es)
+- `POST /orders` (ajustar) — aceita `route_id + delivery_date + pdv_id`; grava `pdv_window`
 
-Todos exigem o middleware `driverAuth` já existente e escrevem em `smartroute_journey_events` para aparecer no Replay/Torre.
+App entregador (`/api/smartroute/driver/routes`) passa a listar `smartroute_route_days` onde `driver_ids` contém o motorista logado e `status in ('fechada','em_andamento')`.
 
-## Integração com o sistema
+## 3. Frontend
 
-- `SmartRouteMonitoramento` (Torre): novo filtro/aba mostrando avarias e devoluções em tempo real.
-- `SmartRouteOcorrencias`: passa a agregar avarias/devoluções (mesma view de KPIs).
-- `RHPontoMonitor`: os punches do entregador aparecem como fonte "SmartRoute" no monitor de ponto para conferência do RH (leitura simples, sem duplicar cartão).
+- **`src/pages/smartroute/RotasMontadas.tsx`** (novo) — lista rotas-mestre, editor de PDVs fixos (drag para sequência, seletor de janela), aba "Escala semanal".
+- **`src/pages/smartroute/RotaDoDia.tsx`** (novo) — para uma rota + data: mostra pedidos anexados, janela de cada PDV, botão **Fechar rota**, **Reabrir**, **Adicionar entregador**.
+- **Lançamento de pedido** (existente `SmartRouteOrders`): campo "Rota" + "Data da entrega" + PDV filtrado pelos PDVs da rota; janela vem preenchida.
+- **Sidebar SmartRoute**: item "Rotas Montadas" e "Rota do Dia".
 
-## Arquivos previstos
+## 4. Regras
 
-Frontend
-- `src/components/entregador/DriverBottomNav.tsx` (novo)
-- `src/pages/entregador/EntregadorPonto.tsx` (novo)
-- `src/pages/entregador/EntregadorAvaria.tsx` (novo)
-- `src/pages/entregador/EntregadorDevolucao.tsx` (novo)
-- `src/pages/entregador/EntregadorHistorico.tsx` (novo)
-- `src/pages/entregador/EntregadorHome.tsx` (adiciona bottom nav + cards de resumo)
-- `src/pages/entregador/EntregadorRota.tsx` / `EntregadorEntrega.tsx` (bottom nav + atalhos)
-- `src/App.tsx` (novas rotas `/entregador/ponto|avaria|devolucao|historico`)
+- Janela do PDV **só ordena** — não bloqueia.
+- Fechamento: qualquer supervisor pode fechar/reabrir manualmente. Pode rodar um cron opcional depois; por ora, manual.
+- Um entregador pode servir várias rotas (sem restrição de vínculo exclusivo).
+- Enquanto `status='aberta'`, vendedores continuam anexando pedidos. Ao fechar, snapshot vai pro app; alterações posteriores exigem reabrir.
 
-Backend
-- `backend/src/routes/smartroute-driver.js` (ensureTables + novos endpoints)
-- `backend/src/routes/smartroute-ops.js` (leitura consolidada p/ Torre — pequeno ajuste)
+## 5. Compatibilidade
 
-## Fora do escopo
+Rotas antigas migram com `is_template=true`. Pedidos existentes ganham `delivery_date = scheduled_date` da rota (fallback hoje). Nada é deletado.
 
-- Aprovação/fluxo financeiro de devolução (fica só o registro operacional).
-- Integração eSocial do ponto do entregador (usa somente o monitor operacional).
+## Fora do escopo agora
+
+- Espelho da nota fiscal (só solicitação de rota, como você pediu).
+- Importação em massa de pedidos (fase futura).
+- Restrição de visibilidade por vendedor (você confirmou que vendedor vê tudo).
