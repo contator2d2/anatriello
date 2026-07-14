@@ -117,7 +117,7 @@ Aba **Simulação**: escolha um PDV/pedido e visualize exatamente qual checklist
 
 ### 5.4 OCR de Embalagens
 
-Itens do tipo `ocr` disparam análise por IA (Gemini/OpenAI via Lovable AI Gateway) após a foto. O retorno é um JSON estruturado:
+Itens do tipo `ocr` disparam análise por IA (Gemini/OpenAI, configurável em Superadmin → IA Anatriello) após a foto. O retorno é um JSON estruturado:
 
 ```json
 {
