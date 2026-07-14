@@ -19,14 +19,14 @@ const statusColor: Record<string, string> = { pendente: "bg-slate-200", em_rota:
 
 export default function SmartRoutePedidos() {
   const [filter, setFilter] = useState<any>({});
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState<any>({});
   const { data = [] } = useSROrders(filter);
   const { data: pdvs = [] } = useSRPdvs();
   const { data: templates = [] } = useSRTemplates();
   const { data: routePdvs = [] } = useSRRoutePdvs(form.route_id);
   const save = useSRSaveOrder();
   const del = useSRDeleteOrder();
-  const [open, setOpen] = useState(false);
-  const [form, setForm] = useState<any>({});
 
   const onSave = async () => {
     if (!form.pdv_id) return toast.error("Selecione o PDV");
