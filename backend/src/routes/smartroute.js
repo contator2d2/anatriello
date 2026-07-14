@@ -706,10 +706,15 @@ router.get('/orders', async (req, res) => {
 router.post('/orders', async (req, res) => {
   try {
     const b = req.body || {};
+    let pdv_window = b.pdv_window || null;
+    if (b.route_id && b.pdv_id && !pdv_window) {
+      const w = await query(`SELECT window FROM smartroute_route_pdvs WHERE route_id=$1 AND pdv_id=$2`, [b.route_id, b.pdv_id]);
+      pdv_window = w.rows[0]?.window || 'qualquer';
+    }
     const r = await query(
-      `INSERT INTO smartroute_orders (organization_id, pdv_id, order_number, weight_kg, volume_m3, value_cents, items, priority, delivery_date, status, notes)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,COALESCE($10,'pendente'),$11) RETURNING *`,
-      [orgId(req), b.pdv_id, b.order_number, b.weight_kg || 0, b.volume_m3 || 0, b.value_cents || 0, JSON.stringify(b.items || []), b.priority || 5, b.delivery_date || null, b.status, b.notes]
+      `INSERT INTO smartroute_orders (organization_id, pdv_id, order_number, weight_kg, volume_m3, value_cents, items, priority, delivery_date, status, notes, route_id, pdv_window, owner_user_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,COALESCE($10,'pendente'),$11,$12,$13,$14) RETURNING *`,
+      [orgId(req), b.pdv_id, b.order_number, b.weight_kg || 0, b.volume_m3 || 0, b.value_cents || 0, JSON.stringify(b.items || []), b.priority || 5, b.delivery_date || null, b.status, b.notes, b.route_id || null, pdv_window, req.user?.id || null]
     );
     res.json(r.rows[0]);
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -721,13 +726,15 @@ router.put('/orders/:id', async (req, res) => {
       `UPDATE smartroute_orders SET pdv_id=COALESCE($3,pdv_id), order_number=COALESCE($4,order_number),
         weight_kg=COALESCE($5,weight_kg), volume_m3=COALESCE($6,volume_m3), value_cents=COALESCE($7,value_cents),
         items=COALESCE($8,items), priority=COALESCE($9,priority), delivery_date=$10,
-        status=COALESCE($11,status), notes=COALESCE($12,notes), updated_at=NOW()
+        status=COALESCE($11,status), notes=COALESCE($12,notes),
+        route_id=COALESCE($13,route_id), pdv_window=COALESCE($14,pdv_window), updated_at=NOW()
        WHERE id=$1 AND organization_id=$2 RETURNING *`,
-      [req.params.id, orgId(req), b.pdv_id, b.order_number, b.weight_kg, b.volume_m3, b.value_cents, b.items ? JSON.stringify(b.items) : null, b.priority, b.delivery_date || null, b.status, b.notes]
+      [req.params.id, orgId(req), b.pdv_id, b.order_number, b.weight_kg, b.volume_m3, b.value_cents, b.items ? JSON.stringify(b.items) : null, b.priority, b.delivery_date || null, b.status, b.notes, b.route_id || null, b.pdv_window || null]
     );
     res.json(r.rows[0]);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
+
 router.delete('/orders/:id', async (req, res) => {
   try { await query(`DELETE FROM smartroute_orders WHERE id=$1 AND organization_id=$2`, [req.params.id, orgId(req)]); res.json({ ok: true }); }
   catch (e) { res.status(500).json({ error: e.message }); }
