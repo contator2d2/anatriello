@@ -97,10 +97,10 @@ export default function SmartRoutePedidos() {
             <div className="grid grid-cols-2 gap-3">
               <div className="col-span-2">
                 <Label>Rota fixa</Label>
-                <Select value={form.route_id || ""} onValueChange={(v) => setForm({ ...form, route_id: v || null, pdv_id: undefined, pdv_window: undefined })}>
+                <Select value={form.route_id || "__none"} onValueChange={(v) => setForm({ ...form, route_id: v === "__none" ? null : v, pdv_id: undefined, pdv_window: undefined })}>
                   <SelectTrigger><SelectValue placeholder="Sem rota (pedido avulso)" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Sem rota</SelectItem>
+                    <SelectItem value="__none">Sem rota</SelectItem>
                     {templates.map((t: any) => <SelectItem key={t.id} value={t.id}>{t.code}</SelectItem>)}
                   </SelectContent>
                 </Select>
