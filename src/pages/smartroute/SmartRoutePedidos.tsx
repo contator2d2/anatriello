@@ -21,6 +21,8 @@ export default function SmartRoutePedidos() {
   const [filter, setFilter] = useState<any>({});
   const { data = [] } = useSROrders(filter);
   const { data: pdvs = [] } = useSRPdvs();
+  const { data: templates = [] } = useSRTemplates();
+  const { data: routePdvs = [] } = useSRRoutePdvs(form.route_id);
   const save = useSRSaveOrder();
   const del = useSRDeleteOrder();
   const [open, setOpen] = useState(false);
