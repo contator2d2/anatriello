@@ -198,6 +198,8 @@ import SmartRouteDashboard from "./pages/smartroute/SmartRouteDashboard";
 import SmartRouteMapa from "./pages/smartroute/SmartRouteMapa";
 import SmartRouteRotas from "./pages/smartroute/SmartRouteRotas";
 import SmartRoutePedidos from "./pages/smartroute/SmartRoutePedidos";
+import SmartRouteRotasMontadas from "./pages/smartroute/SmartRouteRotasMontadas";
+import SmartRouteRotaDoDia from "./pages/smartroute/SmartRouteRotaDoDia";
 import SmartRoutePDVs from "./pages/smartroute/SmartRoutePDVs";
 import SmartRouteFrota from "./pages/smartroute/SmartRouteFrota";
 import SmartRouteMotoristas from "./pages/smartroute/SmartRouteMotoristas";
