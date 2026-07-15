@@ -371,21 +371,28 @@ export default function SmartRouteSimulador() {
           </div>
 
           {/* Mapa do trajeto */}
-          <TrajectoryMap depot={depot} stops={computed.stops} />
+          <TrajectoryMap depot={depot} stops={computed.stops} geometry={osrm?.geometry || null} />
 
           <Card>
             <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
               <div>
                 <CardTitle className="text-base">Sequência simulada</CardTitle>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Início {startHour} · Fim previsto <b>{fmtHM((parseInt(startHour.slice(0,2))||8)*60 + (parseInt(startHour.slice(3,5))||0) + computed.totals.totalMin)}</b>
+                  Saída do CD <b>{fmtHM(computed.departureFromCD)}</b>
+                  {" "}· Fim previsto <b>{fmtHM(computed.departureFromCD + computed.totals.totalMin)}</b>
                   {" "}· Duração total <b>{fmtDur(computed.totals.totalMin)}</b>
                   {" "}· Retorno ao CD <b>{computed.returnLeg.km.toFixed(1)} km</b> ({fmtHM(computed.returnLeg.arrival)})
+                  {departureShifted > 0 && (
+                    <Badge className="ml-2 bg-sky-100 text-sky-700 gap-1">
+                      <Clock className="w-3 h-3" /> Saída adiada +{fmtDur(departureShifted)} p/ chegar na janela
+                    </Badge>
+                  )}
                   {dirty && <Badge className="ml-2 bg-amber-100 text-amber-700">Alterações não salvas</Badge>}
                   {locked && <Badge className="ml-2 bg-blue-100 text-blue-700">Rota publicada · edição bloqueada</Badge>}
                   {violations > 0 && <Badge className="ml-2 bg-red-100 text-red-700 gap-1"><AlertTriangle className="w-3 h-3" /> {violations} PDV(s) fora da janela</Badge>}
                 </p>
               </div>
+
               <div className="flex gap-2 flex-wrap">
                 <Button variant="outline" size="sm" onClick={applyAutoSort} disabled={locked}>
                   <Sparkles className="w-4 h-4 mr-1" /> Reorganizar por janela
