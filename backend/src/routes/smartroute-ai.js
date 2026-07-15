@@ -825,8 +825,11 @@ router.get('/prompts', async (req, res) => {
   try {
     await ensureTables();
     const org = req.organizationId;
-    const r = await query(`SELECT key, instructions, updated_at, updated_by FROM smartroute_ai_prompts WHERE organization_id=$1`, [org]);
-    const byKey = Object.fromEntries(r.rows.map((x) => [x.key, x]));
+    let byKey = {};
+    try {
+      const r = await query(`SELECT key, instructions, updated_at, updated_by FROM smartroute_ai_prompts WHERE organization_id=$1`, [org]);
+      byKey = Object.fromEntries(r.rows.map((x) => [x.key, x]));
+    } catch (e) { logError('prompts.list.read', e); }
     const out = Object.entries(AI_PROMPT_DEFS).map(([key, def]) => ({
       key,
       label: def.label,
@@ -836,8 +839,17 @@ router.get('/prompts', async (req, res) => {
       updated_at: byKey[key]?.updated_at || null,
     }));
     res.json(out);
-  } catch (e) { logError('prompts.list', e); res.status(500).json({ error: e.message }); }
+  } catch (e) {
+    logError('prompts.list', e);
+    // Fallback: sempre devolve defaults para a UI não ficar vazia
+    const out = Object.entries(AI_PROMPT_DEFS).map(([key, def]) => ({
+      key, label: def.label, description: def.description,
+      system_default: def.system_default, instructions: '', updated_at: null,
+    }));
+    res.json(out);
+  }
 });
+
 
 router.put('/prompts/:key', async (req, res) => {
   try {
