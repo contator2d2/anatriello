@@ -109,7 +109,8 @@ export default function SmartRoutePedidos() {
                 <Label>PDV*</Label>
                 <Select value={form.pdv_id || ""} onValueChange={(v) => {
                   const rp = routePdvs.find((x: any) => x.pdv_id === v);
-                  setForm({ ...form, pdv_id: v, pdv_window: rp?.window || null });
+                  const pdv = pdvs.find((x: any) => x.id === v);
+                  setForm({ ...form, pdv_id: v, pdv_window: rp?.window || pdv?.delivery_window || null });
                 }}>
                   <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                   <SelectContent>
@@ -118,11 +119,23 @@ export default function SmartRoutePedidos() {
                     ))}
                   </SelectContent>
                 </Select>
-                {form.pdv_window && <p className="text-xs text-muted-foreground mt-1">Janela do PDV: {form.pdv_window}</p>}
+                {(() => {
+                  const pdv = pdvs.find((x: any) => x.id === form.pdv_id);
+                  if (!pdv || !form.delivery_date) return form.pdv_window ? <p className="text-xs text-muted-foreground mt-1">Janela: {form.pdv_window}</p> : null;
+                  const wd = new Date(form.delivery_date + "T12:00:00-03:00").getDay();
+                  const allowed = pdv.allowed_weekdays || [0,1,2,3,4,5,6];
+                  const ok = allowed.includes(wd);
+                  return (
+                    <p className={`text-xs mt-1 ${ok ? "text-muted-foreground" : "text-amber-600 font-medium"}`}>
+                      Janela: {pdv.delivery_window || "qualquer"} · {ok ? "PDV aceita nesse dia" : "⚠ PDV não aceita entrega neste dia da semana — IA irá bloquear"}
+                    </p>
+                  );
+                })()}
               </div>
               <div><Label>Nº pedido</Label><Input value={form.order_number || ""} onChange={(e) => setForm({ ...form, order_number: e.target.value })} /></div>
               <div><Label>Data entrega*</Label><Input type="date" value={form.delivery_date?.slice(0, 10) || ""} onChange={(e) => setForm({ ...form, delivery_date: e.target.value })} /></div>
               <div><Label>Peso (kg)</Label><Input type="number" step="0.01" value={form.weight_kg || ""} onChange={(e) => setForm({ ...form, weight_kg: +e.target.value })} /></div>
+
 
               <div><Label>Volume (m³)</Label><Input type="number" step="0.001" value={form.volume_m3 || ""} onChange={(e) => setForm({ ...form, volume_m3: +e.target.value })} /></div>
               <div><Label>Valor (R$)</Label><Input type="number" step="0.01" value={form.value_cents ? form.value_cents / 100 : ""} onChange={(e) => setForm({ ...form, value_cents: Math.round(+e.target.value * 100) })} /></div>
