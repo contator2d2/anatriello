@@ -47,6 +47,9 @@ export default function SmartRouteGestorIA() {
             </h1>
             <p className="text-sm text-muted-foreground">Recomendações estratégicas e operacionais baseadas nos dados reais da sua operação.</p>
           </div>
+          <Button asChild variant="outline" size="sm">
+            <Link to="/smartroute/prompts"><Settings2 className="w-4 h-4 mr-2" /> Ajustar inteligência</Link>
+          </Button>
         </div>
 
         <Card>
