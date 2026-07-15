@@ -20,11 +20,19 @@ import { SimulationRunnerDialog } from "@/components/smartroute/SimulationRunner
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
-const WIN_META: Record<string, { label: string; icon: any; color: string }> = {
-  manha: { label: "Manhã", icon: Sun, color: "bg-amber-100 text-amber-700" },
-  tarde: { label: "Tarde", icon: Sunset, color: "bg-orange-100 text-orange-700" },
-  noite: { label: "Noite", icon: Moon, color: "bg-indigo-100 text-indigo-700" },
-  qualquer: { label: "—", icon: Clock, color: "bg-slate-100 text-slate-700" },
+const WIN_META: Record<string, { label: string; icon: any; color: string; hex: string }> = {
+  manha: { label: "Manhã", icon: Sun, color: "bg-amber-100 text-amber-700", hex: "#f59e0b" },
+  tarde: { label: "Tarde", icon: Sunset, color: "bg-orange-100 text-orange-700", hex: "#fb923c" },
+  noite: { label: "Noite", icon: Moon, color: "bg-indigo-100 text-indigo-700", hex: "#6366f1" },
+  qualquer: { label: "—", icon: Clock, color: "bg-slate-100 text-slate-700", hex: "#64748b" },
+};
+
+// Faixas horárias por janela (minutos desde 00:00)
+const WIN_BOUNDS: Record<string, { start: number; end: number; order: number }> = {
+  manha:    { start: 8 * 60,  end: 12 * 60, order: 1 },
+  tarde:    { start: 13 * 60, end: 18 * 60, order: 2 },
+  noite:    { start: 18 * 60, end: 22 * 60, order: 3 },
+  qualquer: { start: 0,       end: 24 * 60, order: 4 },
 };
 
 // km/min médios em cidade
