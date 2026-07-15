@@ -725,6 +725,14 @@ app.listen(PORT, () => {
       timezone: 'America/Sao_Paulo'
     });
     console.log('⭐ Promoter score calculator started - runs every 6 hours');
+
+    // SmartRoute IA - otimização noturna 20h America/Sao_Paulo para D+1
+    cron.schedule('0 20 * * *', async () => {
+      try { await runNightlyOptimizer(); }
+      catch (error) { console.error('🌙 [CRON] Erro na otimização noturna SmartRoute:', error); }
+    }, { timezone: 'America/Sao_Paulo' });
+    console.log('🌙 SmartRoute IA nightly optimizer started - runs at 20:00 (America/Sao_Paulo)');
+
   }).catch((error) => {
     databaseInitError = error?.message || 'Database initialization failed';
     console.error('🛑 Database initialization crashed. API remains online in degraded mode:', error);
