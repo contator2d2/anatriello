@@ -98,9 +98,9 @@ async function fetchOsrmSegment(from: { lat: number; lng: number }, to: { lat: n
   const url = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson&steps=false`;
   try {
     const ctrl = new AbortController();
-    const to = setTimeout(() => ctrl.abort(), 12000);
+    const timer = setTimeout(() => ctrl.abort(), 12000);
     const r = await fetch(url, { signal: ctrl.signal });
-    clearTimeout(to);
+    clearTimeout(timer);
     if (!r.ok) throw new Error("OSRM indisponível");
     const j = await r.json();
     const route = j?.routes?.[0];
