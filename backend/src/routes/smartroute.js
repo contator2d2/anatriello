@@ -851,9 +851,13 @@ router.put('/routes/:id', async (req, res) => {
     const b = req.body || {};
     const r = await query(
       `UPDATE smartroute_routes SET driver_id=$3, vehicle_id=$4, planned_date=COALESCE($5,planned_date),
-        status=COALESCE($6,status), depot_lat=$7, depot_lng=$8, notes=COALESCE($9,notes), updated_at=NOW()
+        status=COALESCE($6,status), depot_lat=$7, depot_lng=$8, notes=COALESCE($9,notes),
+        default_driver_id=COALESCE($10,default_driver_id), default_vehicle_id=COALESCE($11,default_vehicle_id),
+        upsell_time_min=COALESCE($12,upsell_time_min), updated_at=NOW()
        WHERE id=$1 AND organization_id=$2 RETURNING *`,
-      [req.params.id, orgId(req), b.driver_id || null, b.vehicle_id || null, b.planned_date || null, b.status, b.depot_lat, b.depot_lng, b.notes]
+      [req.params.id, orgId(req), b.driver_id || null, b.vehicle_id || null, b.planned_date || null, b.status, b.depot_lat, b.depot_lng, b.notes,
+       b.default_driver_id ?? null, b.default_vehicle_id ?? null,
+       (b.upsell_time_min === undefined || b.upsell_time_min === null || b.upsell_time_min === '') ? null : +b.upsell_time_min]
     );
     res.json(r.rows[0]);
   } catch (e) { res.status(500).json({ error: e.message }); }
