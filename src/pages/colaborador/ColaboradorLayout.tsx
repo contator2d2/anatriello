@@ -37,7 +37,7 @@ export function ColaboradorLayout({ children, title, showBack, rightSlot, bg = "
 
   return (
     <div className={cn("min-h-screen flex flex-col", bg === "navy" ? "bg-[#0a1128] text-white" : "bg-[#f4f6fb] text-[#0f172a]")}>
-      {/* Branded top bar — always visible */}
+      {!hideTopBar && (
       <div className={cn(
         "sticky top-0 z-30 px-3 pt-[env(safe-area-inset-top)] pb-2 flex items-center gap-2 border-b",
         bg === "navy" ? "bg-[#0a1128] border-white/10" : "bg-white border-slate-100"
@@ -57,6 +57,7 @@ export function ColaboradorLayout({ children, title, showBack, rightSlot, bg = "
           </span>
         )}
       </div>
+      )}
 
       {title && (
         <header className={cn(
