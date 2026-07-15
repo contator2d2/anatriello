@@ -582,20 +582,25 @@ function TrajectoryMap({ depot, stops, geometry }: { depot: { lat?: number; lng?
       bounds.push([o.pdv_lat, o.pdv_lng]);
     });
 
-    // Retorno ao CD
+    // Retorno ao CD (fallback straight-line)
     if (depot.lat && depot.lng && path.length > 1) {
       path.push([depot.lat, depot.lng]);
     }
 
-    if (path.length >= 2) {
-      L.polyline(path, { color: "#6366f1", weight: 4, opacity: 0.75, dashArray: "6,6" }).addTo(layer);
+    // Se temos geometria real do OSRM, desenha o trajeto por ruas; senão, linha reta pontilhada.
+    if (geometry && geometry.length >= 2) {
+      L.polyline(geometry, { color: "#6366f1", weight: 5, opacity: 0.85 }).addTo(layer);
+      geometry.forEach((p) => bounds.push(p));
+    } else if (path.length >= 2) {
+      L.polyline(path, { color: "#6366f1", weight: 4, opacity: 0.6, dashArray: "6,6" }).addTo(layer);
     }
 
     if (bounds.length) {
       map.invalidateSize();
       map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
     }
-  }, [depot.lat, depot.lng, stops]);
+  }, [depot.lat, depot.lng, stops, geometry]);
+
 
   return (
     <Card>
