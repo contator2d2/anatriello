@@ -1999,13 +1999,18 @@ async function optimizeRouteDay(organization_id, route_id, date, actor = 'manual
     }
   }
 
-  // Ordenação: janela → horário exato da janela → nearest-neighbor por PDV
+  const routeSeedR = await query(
+    `SELECT depot_lat, depot_lng FROM smartroute_routes WHERE id=$1 AND organization_id=$2`,
+    [route_id, organization_id]
+  );
+
+  // Ordenação: horário exato da janela → nearest-neighbor por PDV, partindo sempre do CD
   const byWindow = new Map();
   for (const o of eligible) {
     const rank = WINDOW_RANK[o.window] ?? 4;
-    const start = o.window_start_min ?? (o.window === 'tarde' ? 13 * 60 : o.window === 'noite' ? 18 * 60 : o.window === 'manha' ? 8 * 60 : 0);
+    const start = o.window_start_min ?? (o.window === 'tarde' ? 13 * 60 : o.window === 'noite' ? 18 * 60 : o.window === 'manha' ? 8 * 60 : 24 * 60);
     const end = o.window_end_min ?? (o.window === 'tarde' ? 18 * 60 : o.window === 'noite' ? 22 * 60 : o.window === 'manha' ? 12 * 60 : 24 * 60);
-    const key = `${rank}:${start}:${end}`;
+    const key = `${start}:${end}:${rank}`;
     if (!byWindow.has(key)) byWindow.set(key, []);
     byWindow.get(key).push(o);
   }
@@ -2015,7 +2020,9 @@ async function optimizeRouteDay(organization_id, route_id, date, actor = 'manual
   });
 
   const sequence = [];
-  let cursor = null;
+  let cursor = routeSeedR.rows[0]?.depot_lat && routeSeedR.rows[0]?.depot_lng
+    ? { lat: routeSeedR.rows[0].depot_lat, lng: routeSeedR.rows[0].depot_lng }
+    : null;
   for (const w of sortedWindows) {
     const pool = byWindow.get(w);
     while (pool.length) {
