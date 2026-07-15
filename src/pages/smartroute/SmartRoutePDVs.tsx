@@ -24,6 +24,7 @@ const WEEKDAYS = [
 export default function SmartRoutePDVs() {
   const { data = [] } = useSRPdvs();
   const { data: checklists = [] } = useSRChecklistTemplates();
+  const { data: routes = [] } = useSRTemplates();
   const save = useSRSavePdv();
   const del = useSRDeletePdv();
   const [open, setOpen] = useState(false);
