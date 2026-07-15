@@ -120,7 +120,7 @@ export default function ColaboradorHome() {
     <ColaboradorLayout bg="light" hideTopBar>
       {/* HERO — deep navy with subtle radial glow */}
       <div
-        className="relative overflow-hidden text-white px-5 pt-[calc(env(safe-area-inset-top)+18px)] pb-16 rounded-b-[28px]"
+        className="relative overflow-hidden text-white px-5 pt-[calc(env(safe-area-inset-top)+18px)] pb-8 rounded-b-[28px]"
         style={{
           background:
             "radial-gradient(120% 80% at 100% 0%, rgba(59,130,246,0.18) 0%, rgba(10,17,40,0) 55%), linear-gradient(180deg, #0a1128 0%, #0d1a3d 100%)",
@@ -181,7 +181,7 @@ export default function ColaboradorHome() {
       </div>
 
       {/* CONTENT (overlaps hero) */}
-      <div className="px-4 -mt-10 space-y-4 pb-6">
+      <div className="px-4 mt-4 space-y-4 pb-6">
         {/* Horário card */}
         <div className="bg-white rounded-2xl p-4 shadow-[0_10px_30px_-15px_rgba(15,23,42,0.15)] flex items-center gap-3">
           <div className="h-12 w-12 rounded-2xl bg-orange-50 text-[#f97316] flex items-center justify-center">
