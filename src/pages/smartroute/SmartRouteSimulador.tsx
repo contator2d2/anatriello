@@ -17,6 +17,7 @@ import {
 import { toast } from "sonner";
 import { useSRTemplates, useSRRouteDay, useSRSaveDaySequence } from "@/hooks/use-smartroute-daily";
 import { SimulationRunnerDialog } from "@/components/smartroute/SimulationRunnerDialog";
+import { api } from "@/lib/api";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -114,6 +115,15 @@ async function fetchOsrmSegment(from: { lat: number; lng: number }, to: { lat: n
 
 async function fetchOsrmRoute(points: Array<{ lat: number; lng: number; label?: string }>): Promise<OsrmResult | null> {
   if (points.length < 2) return null;
+  try {
+    return await api<OsrmResult>("/api/smartroute/routes/street-route", {
+      method: "POST",
+      body: { points },
+      silent: true,
+    });
+  } catch {
+    // Fallback local para não travar o simulador caso o proxy de rotas esteja indisponível.
+  }
   const legs: OsrmLeg[] = [];
   const geometry: [number, number][] = [];
   let fallbackLegs = 0;
