@@ -225,12 +225,12 @@ export default function SmartRouteSimulador() {
   };
   const reset = () => {
     if (data?.orders) {
-      const sorted = autoSortByWindow(data.orders, { lat: route?.depot_lat, lng: route?.depot_lng });
+      const sorted = autoSortByWindow(data.orders, depot);
       setOrder(sorted); setDirty(false);
     }
   };
   const applyAutoSort = () => {
-    const sorted = autoSortByWindow(order, { lat: route?.depot_lat, lng: route?.depot_lng });
+    const sorted = autoSortByWindow(order, depot);
     setOrder(sorted); setDirty(true);
     toast.success("Sequência reorganizada respeitando as janelas de cada PDV");
   };
@@ -275,7 +275,7 @@ export default function SmartRouteSimulador() {
     };
 
     const simulate = (departure: number) => {
-      let cursor = { lat: route?.depot_lat, lng: route?.depot_lng };
+      let cursor = { lat: depot.lat, lng: depot.lng };
       let t = departure;
       let totalKm = 0, totalTravel = 0, totalService = 0, totalUpsell = 0, totalChecklist = 0, totalWait = 0;
       const stops = order.map((o, idx) => {
@@ -303,8 +303,8 @@ export default function SmartRouteSimulador() {
         };
       });
       // Retorno ao CD (última leg do OSRM)
-      const returnKm = legKm(order.length, cursor, { lat: route?.depot_lat, lng: route?.depot_lng });
-      const returnTravel = legMin(order.length, cursor, { lat: route?.depot_lat, lng: route?.depot_lng });
+      const returnKm = legKm(order.length, cursor, { lat: depot.lat, lng: depot.lng });
+      const returnTravel = legMin(order.length, cursor, { lat: depot.lat, lng: depot.lng });
       totalKm += returnKm; totalTravel += returnTravel;
       const totalMin = totalTravel + totalService + totalChecklist + totalUpsell + totalWait;
       return {
@@ -325,7 +325,7 @@ export default function SmartRouteSimulador() {
     }
     // Se ajustou, roda passada 2
     return adjustedDeparture !== startMin ? simulate(adjustedDeparture) : first;
-  }, [order, startHour, autoDeparture, osrm, route?.depot_lat, route?.depot_lng, upsellMin]);
+  }, [order, startHour, autoDeparture, osrm, depot.lat, depot.lng, upsellMin]);
 
   const departureShifted = computed.departureFromCD - ((parseInt(startHour.slice(0,2))||8)*60 + (parseInt(startHour.slice(3,5))||0));
 
