@@ -344,6 +344,7 @@ export default function SmartRouteSimulador() {
 
   const status = data?.day?.status;
   const locked = ["publicada", "em_andamento", "concluida"].includes(status || "");
+  const hasDepotCoordinates = !!depot.lat && !!depot.lng;
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
@@ -406,6 +407,18 @@ export default function SmartRouteSimulador() {
         <div className="text-center py-12 text-muted-foreground">Carregando…</div>
       ) : !order.length ? (
         <div className="text-center py-12 text-sm text-muted-foreground">Nenhum pedido lançado para esta data.</div>
+      ) : !hasDepotCoordinates ? (
+        <Card>
+          <CardContent className="p-10 text-center space-y-3">
+            <div className="mx-auto w-12 h-12 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center">
+              <Warehouse className="w-6 h-6" />
+            </div>
+            <div className="font-semibold">CD sem coordenadas</div>
+            <p className="text-sm text-muted-foreground max-w-md mx-auto">
+              Cadastre ou atualize a geolocalização do Centro de Distribuição para a simulação calcular CD → PDVs → retorno ao CD.
+            </p>
+          </CardContent>
+        </Card>
       ) : !showResult ? (
         <Card>
           <CardContent className="p-10 text-center space-y-4">
