@@ -77,6 +77,9 @@ function DayDetails({ routeId, date }: { routeId: string; date: string }) {
   const setDrivers = useSRSetDayDrivers();
   const closeDay = useSRCloseDay();
   const reopenDay = useSRReopenDay();
+  const optimize = useSROptimizeDay();
+  const publish = useSRPublishDay();
+
 
   const [driverIds, setDriverIds] = useState<string[]>([]);
   const [vehicleId, setVehicleId] = useState<string>("");
