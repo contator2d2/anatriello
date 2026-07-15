@@ -35,7 +35,7 @@ const WIN_BOUNDS: Record<string, { start: number; end: number; order: number }> 
   qualquer: { start: 0,       end: 24 * 60, order: 4 },
 };
 
-// km/min médios em cidade
+// km/min médios em cidade (fallback quando OSRM indisponível)
 const AVG_SPEED_KMH = 30;
 // tempo por item de checklist (min)
 const CHECKLIST_ITEM_MIN = 0.5;
@@ -56,6 +56,33 @@ function fmtDur(min: number) {
   const m = Math.round(min);
   return m >= 60 ? `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}` : `${m}min`;
 }
+
+// OSRM público — calcula rota real por ruas (como Uber/iFood).
+// Retorna distância (km) e duração (min) por trecho + geometria para o mapa.
+type OsrmLeg = { km: number; min: number };
+type OsrmResult = { legs: OsrmLeg[]; geometry: [number, number][] };
+async function fetchOsrmRoute(points: Array<{ lat: number; lng: number }>): Promise<OsrmResult | null> {
+  if (points.length < 2) return null;
+  const coords = points.map((p) => `${p.lng},${p.lat}`).join(";");
+  const url = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson&steps=false`;
+  try {
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), 12000);
+    const r = await fetch(url, { signal: ctrl.signal });
+    clearTimeout(to);
+    if (!r.ok) return null;
+    const j = await r.json();
+    const route = j?.routes?.[0];
+    if (!route) return null;
+    const legs: OsrmLeg[] = (route.legs || []).map((l: any) => ({
+      km: (l.distance || 0) / 1000,
+      min: (l.duration || 0) / 60,
+    }));
+    const geometry: [number, number][] = (route.geometry?.coordinates || []).map((c: [number, number]) => [c[1], c[0]]);
+    return { legs, geometry };
+  } catch { return null; }
+}
+
 
 export default function SmartRouteSimulador() {
   const [params, setParams] = useSearchParams();
