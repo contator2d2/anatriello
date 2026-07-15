@@ -882,15 +882,23 @@ router.post('/routes', async (req, res) => {
 router.put('/routes/:id', async (req, res) => {
   try {
     const b = req.body || {};
+    let depotLat = b.depot_lat;
+    let depotLng = b.depot_lng;
+    let depotId = b.depot_id || null;
+    if (depotId) {
+      const d = await query(`SELECT lat, lng FROM smartroute_depots WHERE id=$1 AND organization_id=$2 AND active=true`, [depotId, orgId(req)]);
+      if (d.rows[0]) { depotLat = d.rows[0].lat; depotLng = d.rows[0].lng; }
+    }
     const r = await query(
       `UPDATE smartroute_routes SET driver_id=$3, vehicle_id=$4, planned_date=COALESCE($5,planned_date),
-        status=COALESCE($6,status), depot_lat=$7, depot_lng=$8, notes=COALESCE($9,notes),
+        status=COALESCE($6,status), depot_lat=COALESCE($7,depot_lat), depot_lng=COALESCE($8,depot_lng), notes=COALESCE($9,notes),
         default_driver_id=COALESCE($10,default_driver_id), default_vehicle_id=COALESCE($11,default_vehicle_id),
-        upsell_time_min=COALESCE($12,upsell_time_min), updated_at=NOW()
+        upsell_time_min=COALESCE($12,upsell_time_min), depot_id=COALESCE($13,depot_id), updated_at=NOW()
        WHERE id=$1 AND organization_id=$2 RETURNING *`,
-      [req.params.id, orgId(req), b.driver_id || null, b.vehicle_id || null, b.planned_date || null, b.status, b.depot_lat, b.depot_lng, b.notes,
+      [req.params.id, orgId(req), b.driver_id || null, b.vehicle_id || null, b.planned_date || null, b.status, depotLat, depotLng, b.notes,
        b.default_driver_id ?? null, b.default_vehicle_id ?? null,
-       (b.upsell_time_min === undefined || b.upsell_time_min === null || b.upsell_time_min === '') ? null : +b.upsell_time_min]
+       (b.upsell_time_min === undefined || b.upsell_time_min === null || b.upsell_time_min === '') ? null : +b.upsell_time_min,
+       depotId]
     );
     res.json(r.rows[0]);
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -1773,7 +1781,11 @@ router.get('/routes/:id/day', async (req, res) => {
   try {
     const org = orgId(req);
     const date = req.query.date || new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
-    const rt = await query(`SELECT * FROM smartroute_routes WHERE id=$1 AND organization_id=$2`, [req.params.id, org]);
+    const rt = await query(
+      `SELECT r.*, d.name AS depot_name
+         FROM smartroute_routes r
+         LEFT JOIN smartroute_depots d ON d.id=r.depot_id
+        WHERE r.id=$1 AND r.organization_id=$2`, [req.params.id, org]);
     if (!rt.rows[0]) return res.status(404).json({ error: 'Rota não encontrada' });
     const day = await ensureRouteDay(req.params.id, date);
     const orders = await query(
@@ -1912,10 +1924,21 @@ router.post('/routes/template', async (req, res) => {
   try {
     const b = req.body || {};
     const code = b.code || `TMPL-${Date.now().toString(36).toUpperCase()}`;
+    let depotId = b.depot_id || null;
+    let depotLat = null;
+    let depotLng = null;
+    if (!depotId) {
+      const def = await query(`SELECT id, lat, lng FROM smartroute_depots WHERE organization_id=$1 AND active=true ORDER BY is_default DESC, name LIMIT 1`, [orgId(req)]);
+      if (def.rows[0]) { depotId = def.rows[0].id; depotLat = def.rows[0].lat; depotLng = def.rows[0].lng; }
+    } else {
+      const d = await query(`SELECT lat, lng FROM smartroute_depots WHERE id=$1 AND organization_id=$2 AND active=true`, [depotId, orgId(req)]);
+      if (d.rows[0]) { depotLat = d.rows[0].lat; depotLng = d.rows[0].lng; }
+    }
     const r = await query(
-      `INSERT INTO smartroute_routes (organization_id, code, is_template, default_driver_id, default_vehicle_id, owner_user_id, notes, status, planned_date, upsell_time_min)
-       VALUES ($1,$2,true,$3,$4,$5,$6,'template',CURRENT_DATE,$7) RETURNING *`,
-      [orgId(req), code, b.default_driver_id || null, b.default_vehicle_id || null, req.user?.id || null, b.notes || null, Number.isFinite(+b.upsell_time_min) ? +b.upsell_time_min : 0]
+      `INSERT INTO smartroute_routes (organization_id, code, is_template, default_driver_id, default_vehicle_id, owner_user_id, notes, status, planned_date, upsell_time_min, depot_id, depot_lat, depot_lng)
+       VALUES ($1,$2,true,$3,$4,$5,$6,'template',CURRENT_DATE,$7,$8,$9,$10) RETURNING *`,
+      [orgId(req), code, b.default_driver_id || null, b.default_vehicle_id || null, req.user?.id || null, b.notes || null, Number.isFinite(+b.upsell_time_min) ? +b.upsell_time_min : 0,
+       depotId, depotLat, depotLng]
     );
     res.json(r.rows[0]);
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -1927,10 +1950,12 @@ router.get('/routes-templates', async (req, res) => {
     const r = await query(
       `SELECT r.*,
               (SELECT COUNT(*)::int FROM smartroute_route_pdvs WHERE route_id=r.id) AS pdvs_count,
-              d.full_name AS default_driver_name, v.plate AS default_vehicle_plate
+              d.full_name AS default_driver_name, v.plate AS default_vehicle_plate,
+              dep.name AS depot_name
        FROM smartroute_routes r
        LEFT JOIN smartroute_drivers d ON d.id=r.default_driver_id
        LEFT JOIN smartroute_vehicles v ON v.id=r.default_vehicle_id
+       LEFT JOIN smartroute_depots dep ON dep.id=r.depot_id
        WHERE r.organization_id=$1 AND r.is_template=true
        ORDER BY r.code`, [orgId(req)]);
     res.json(r.rows);
