@@ -31,13 +31,13 @@ export default function SmartRoutePDVs() {
   const openForm = (row: any = {}) => {
     setForm({
       delivery_window: "qualquer",
-      allowed_weekdays: [1, 2, 3, 4, 5],
       service_time_min: 15,
       ...row,
       allowed_weekdays: row?.allowed_weekdays || [1, 2, 3, 4, 5],
     });
     setOpen(true);
   };
+
 
   const toggleWd = (n: number) => {
     const arr: number[] = form.allowed_weekdays || [];
