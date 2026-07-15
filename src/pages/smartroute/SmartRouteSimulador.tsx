@@ -520,7 +520,7 @@ function StatCard({ icon: Icon, label, value, highlight }: any) {
   );
 }
 
-function TrajectoryMap({ depot, stops }: { depot: { lat?: number; lng?: number; name?: string }; stops: any[] }) {
+function TrajectoryMap({ depot, stops, geometry }: { depot: { lat?: number; lng?: number; name?: string }; stops: any[]; geometry: [number, number][] | null }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const layerRef = useRef<L.LayerGroup | null>(null);
