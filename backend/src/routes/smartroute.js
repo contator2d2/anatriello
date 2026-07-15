@@ -1792,7 +1792,7 @@ router.get('/routes/:id/day', async (req, res) => {
          LEFT JOIN LATERAL (
            SELECT id, name, lat, lng
              FROM smartroute_depots
-            WHERE organization_id=r.organization_id AND active=true
+             WHERE organization_id=r.organization_id AND COALESCE(active,true)=true
             ORDER BY is_default DESC, name
             LIMIT 1
          ) def ON true
@@ -1832,6 +1832,38 @@ router.get('/routes/:id/day', async (req, res) => {
     const veh = day.vehicle_id ? (await query(`SELECT id, plate, model FROM smartroute_vehicles WHERE id=$1`, [day.vehicle_id])).rows[0] : null;
     res.json({ route: rt.rows[0], day, orders: orders.rows, drivers: drvs, vehicle: veh });
   } catch (e) { logError('sr.route.day', e); res.status(500).json({ error: e.message }); }
+});
+
+router.post('/routes/street-route', async (req, res) => {
+  try {
+    const points = Array.isArray(req.body?.points) ? req.body.points : [];
+    if (points.length < 2) return res.status(400).json({ error: 'Informe ao menos origem e destino' });
+    const normalized = points.map((p) => ({
+      lat: toCoord(p.lat),
+      lng: toCoord(p.lng),
+      label: p.label || null,
+    }));
+    if (normalized.some((p) => !hasCoord(p))) {
+      return res.status(400).json({ error: 'Todos os pontos precisam de latitude e longitude' });
+    }
+
+    const legs = [];
+    const geometry = [];
+    let fallbackLegs = 0;
+    for (let i = 0; i < normalized.length - 1; i++) {
+      const from = normalized[i];
+      const to = normalized[i + 1];
+      const result = await fetchOsrmLeg(from, to);
+      if (!result.ok) fallbackLegs++;
+      legs.push({ ...result.leg, fromLabel: from.label, toLabel: to.label });
+      result.geometry.forEach((point, idx) => {
+        if (i > 0 && idx === 0) return;
+        geometry.push(point);
+      });
+    }
+
+    res.json({ legs, geometry, fallbackLegs });
+  } catch (e) { logError('sr.streetRoute', e); res.status(500).json({ error: e.message }); }
 });
 
 router.post('/routes/:id/day/:date/drivers', async (req, res) => {
@@ -2008,6 +2040,43 @@ function haversineKm(a, b) {
   const dLat = toRad(b.lat - a.lat), dLng = toRad(b.lng - a.lng);
   const s = Math.sin(dLat/2)**2 + Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*Math.sin(dLng/2)**2;
   return 2 * R * Math.asin(Math.sqrt(s));
+}
+
+const AVG_ROUTE_SPEED_KMH = 30;
+const toCoord = (value) => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+};
+const hasCoord = (point) => toCoord(point?.lat) !== null && toCoord(point?.lng) !== null;
+async function fetchOsrmLeg(from, to) {
+  const fromLat = toCoord(from.lat), fromLng = toCoord(from.lng);
+  const toLat = toCoord(to.lat), toLng = toCoord(to.lng);
+  const fallbackKm = haversineKm({ lat: fromLat, lng: fromLng }, { lat: toLat, lng: toLng });
+  const fallback = {
+    leg: { km: fallbackKm, min: (fallbackKm / AVG_ROUTE_SPEED_KMH) * 60, fallback: true },
+    geometry: [[fromLat, fromLng], [toLat, toLng]],
+    ok: false,
+  };
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 12000);
+    const coords = `${fromLng},${fromLat};${toLng},${toLat}`;
+    const response = await fetch(`https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson&steps=false`, { signal: ctrl.signal });
+    clearTimeout(timer);
+    if (!response.ok) return fallback;
+    const data = await response.json();
+    const route = data?.routes?.[0];
+    const rawLeg = route?.legs?.[0];
+    const geometry = route?.geometry?.coordinates;
+    if (!route || !rawLeg || !Array.isArray(geometry) || geometry.length < 2) return fallback;
+    return {
+      leg: { km: Number(rawLeg.distance || 0) / 1000, min: Number(rawLeg.duration || 0) / 60 },
+      geometry: geometry.map((c) => [c[1], c[0]]),
+      ok: true,
+    };
+  } catch {
+    return fallback;
+  }
 }
 
 async function optimizeRouteDay(organization_id, route_id, date, actor = 'manual') {

@@ -16,7 +16,9 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useSRTemplates, useSRRouteDay, useSRSaveDaySequence } from "@/hooks/use-smartroute-daily";
+import { useSRDepots } from "@/hooks/use-smartroute-depots";
 import { SimulationRunnerDialog } from "@/components/smartroute/SimulationRunnerDialog";
+import { api } from "@/lib/api";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -96,9 +98,9 @@ async function fetchOsrmSegment(from: { lat: number; lng: number }, to: { lat: n
   const url = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson&steps=false`;
   try {
     const ctrl = new AbortController();
-    const to = setTimeout(() => ctrl.abort(), 12000);
+    const timer = setTimeout(() => ctrl.abort(), 12000);
     const r = await fetch(url, { signal: ctrl.signal });
-    clearTimeout(to);
+    clearTimeout(timer);
     if (!r.ok) throw new Error("OSRM indisponível");
     const j = await r.json();
     const route = j?.routes?.[0];
@@ -114,6 +116,15 @@ async function fetchOsrmSegment(from: { lat: number; lng: number }, to: { lat: n
 
 async function fetchOsrmRoute(points: Array<{ lat: number; lng: number; label?: string }>): Promise<OsrmResult | null> {
   if (points.length < 2) return null;
+  try {
+    return await api<OsrmResult>("/api/smartroute/routes/street-route", {
+      method: "POST",
+      body: { points },
+      silent: true,
+    });
+  } catch {
+    // Fallback local para não travar o simulador caso o proxy de rotas esteja indisponível.
+  }
   const legs: OsrmLeg[] = [];
   const geometry: [number, number][] = [];
   let fallbackLegs = 0;
@@ -135,6 +146,7 @@ async function fetchOsrmRoute(points: Array<{ lat: number; lng: number; label?: 
 export default function SmartRouteSimulador() {
   const [params, setParams] = useSearchParams();
   const { data: templates = [] } = useSRTemplates();
+  const { data: depots = [] } = useSRDepots();
   const routeId = params.get("route") || "";
   const date = params.get("date") || todaySaoPaulo();
   const setP = (k: string, v: string) => { const p = new URLSearchParams(params); p.set(k, v); setParams(p, { replace: true }); };
@@ -152,6 +164,14 @@ export default function SmartRouteSimulador() {
   const [osrm, setOsrm] = useState<OsrmResult | null>(null);
   const [osrmLoading, setOsrmLoading] = useState(false);
 
+  const route = data?.route;
+  const upsellMin = Number(route?.upsell_time_min || 0);
+  const fallbackDepot = depots.find((d: any) => d.id === route?.depot_id) || depots.find((d: any) => d.is_default) || depots[0];
+  const depot = {
+    lat: route?.depot_lat ?? fallbackDepot?.lat,
+    lng: route?.depot_lng ?? fallbackDepot?.lng,
+    name: route?.depot_name || fallbackDepot?.name || "Centro de Distribuição",
+  };
 
   // Reordena automaticamente respeitando a janela de entrega do PDV.
   // Agrupa por janela (manhã → tarde → noite → qualquer) e, dentro de cada grupo,
@@ -186,21 +206,17 @@ export default function SmartRouteSimulador() {
 
   useEffect(() => {
     if (data?.orders) {
-      const sorted = autoSortByWindow(data.orders, { lat: data?.route?.depot_lat, lng: data?.route?.depot_lng });
+      const sorted = autoSortByWindow(data.orders, depot);
       setOrder(sorted);
       setDirty(false);
     }
-  }, [data?.orders, data?.route?.depot_lat, data?.route?.depot_lng]);
+  }, [data?.orders, depot.lat, depot.lng]);
 
   const runSimulation = async () => {
     setShowResult(false);
     setSimOpen(true);
     try { await refetch(); } catch {}
   };
-
-  const route = data?.route;
-  const upsellMin = Number(route?.upsell_time_min || 0);
-  const depot = { lat: route?.depot_lat, lng: route?.depot_lng, name: route?.depot_name || "Centro de Distribuição" };
 
   const move = (i: number, dir: -1 | 1) => {
     const j = i + dir; if (j < 0 || j >= order.length) return;
@@ -209,12 +225,12 @@ export default function SmartRouteSimulador() {
   };
   const reset = () => {
     if (data?.orders) {
-      const sorted = autoSortByWindow(data.orders, { lat: route?.depot_lat, lng: route?.depot_lng });
+      const sorted = autoSortByWindow(data.orders, depot);
       setOrder(sorted); setDirty(false);
     }
   };
   const applyAutoSort = () => {
-    const sorted = autoSortByWindow(order, { lat: route?.depot_lat, lng: route?.depot_lng });
+    const sorted = autoSortByWindow(order, depot);
     setOrder(sorted); setDirty(true);
     toast.success("Sequência reorganizada respeitando as janelas de cada PDV");
   };
@@ -259,7 +275,7 @@ export default function SmartRouteSimulador() {
     };
 
     const simulate = (departure: number) => {
-      let cursor = { lat: route?.depot_lat, lng: route?.depot_lng };
+      let cursor = { lat: depot.lat, lng: depot.lng };
       let t = departure;
       let totalKm = 0, totalTravel = 0, totalService = 0, totalUpsell = 0, totalChecklist = 0, totalWait = 0;
       const stops = order.map((o, idx) => {
@@ -287,8 +303,8 @@ export default function SmartRouteSimulador() {
         };
       });
       // Retorno ao CD (última leg do OSRM)
-      const returnKm = legKm(order.length, cursor, { lat: route?.depot_lat, lng: route?.depot_lng });
-      const returnTravel = legMin(order.length, cursor, { lat: route?.depot_lat, lng: route?.depot_lng });
+      const returnKm = legKm(order.length, cursor, { lat: depot.lat, lng: depot.lng });
+      const returnTravel = legMin(order.length, cursor, { lat: depot.lat, lng: depot.lng });
       totalKm += returnKm; totalTravel += returnTravel;
       const totalMin = totalTravel + totalService + totalChecklist + totalUpsell + totalWait;
       return {
@@ -309,7 +325,7 @@ export default function SmartRouteSimulador() {
     }
     // Se ajustou, roda passada 2
     return adjustedDeparture !== startMin ? simulate(adjustedDeparture) : first;
-  }, [order, startHour, autoDeparture, osrm, route?.depot_lat, route?.depot_lng, upsellMin]);
+  }, [order, startHour, autoDeparture, osrm, depot.lat, depot.lng, upsellMin]);
 
   const departureShifted = computed.departureFromCD - ((parseInt(startHour.slice(0,2))||8)*60 + (parseInt(startHour.slice(3,5))||0));
 
@@ -328,6 +344,7 @@ export default function SmartRouteSimulador() {
 
   const status = data?.day?.status;
   const locked = ["publicada", "em_andamento", "concluida"].includes(status || "");
+  const hasDepotCoordinates = !!depot.lat && !!depot.lng;
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
@@ -390,6 +407,18 @@ export default function SmartRouteSimulador() {
         <div className="text-center py-12 text-muted-foreground">Carregando…</div>
       ) : !order.length ? (
         <div className="text-center py-12 text-sm text-muted-foreground">Nenhum pedido lançado para esta data.</div>
+      ) : !hasDepotCoordinates ? (
+        <Card>
+          <CardContent className="p-10 text-center space-y-3">
+            <div className="mx-auto w-12 h-12 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center">
+              <Warehouse className="w-6 h-6" />
+            </div>
+            <div className="font-semibold">CD sem coordenadas</div>
+            <p className="text-sm text-muted-foreground max-w-md mx-auto">
+              Cadastre ou atualize a geolocalização do Centro de Distribuição para a simulação calcular CD → PDVs → retorno ao CD.
+            </p>
+          </CardContent>
+        </Card>
       ) : !showResult ? (
         <Card>
           <CardContent className="p-10 text-center space-y-4">
