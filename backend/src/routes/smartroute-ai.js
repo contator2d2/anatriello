@@ -75,11 +75,33 @@ async function ensureTables() {
       PRIMARY KEY (organization_id, key)
     );
 
-    ALTER TABLE smartroute_orders ADD COLUMN IF NOT EXISTS time_window_start TIME;
-    ALTER TABLE smartroute_orders ADD COLUMN IF NOT EXISTS time_window_end TIME;
-    ALTER TABLE smartroute_orders ADD COLUMN IF NOT EXISTS service_time_min INTEGER DEFAULT 15;
+    ALTER TABLE IF EXISTS smartroute_orders ADD COLUMN IF NOT EXISTS time_window_start TIME;
+    ALTER TABLE IF EXISTS smartroute_orders ADD COLUMN IF NOT EXISTS time_window_end TIME;
+    ALTER TABLE IF EXISTS smartroute_orders ADD COLUMN IF NOT EXISTS service_time_min INTEGER DEFAULT 15;
   `);
   ensured = true;
+}
+
+async function resolveOrganizationId(req) {
+  if (req.organizationId) return req.organizationId;
+  if (req.user?.organization_id) return req.user.organization_id;
+  if (!req.userId) return null;
+
+  const result = await query(
+    `SELECT organization_id
+       FROM organization_members
+      WHERE user_id = $1
+      ORDER BY CASE role
+        WHEN 'owner' THEN 1
+        WHEN 'admin' THEN 2
+        WHEN 'manager' THEN 3
+        WHEN 'agent' THEN 4
+        ELSE 5
+      END
+      LIMIT 1`,
+    [req.userId]
+  );
+  return result.rows[0]?.organization_id || null;
 }
 
 // ---------- Custom prompts (per-org overrides) ----------
@@ -231,7 +253,19 @@ async function createAlert(a) {
 
 // ---------- Middleware ----------
 router.use(authenticate);
-router.use(async (_req, _res, next) => { await ensureTables(); next(); });
+router.use(async (req, res, next) => {
+  try {
+    req.organizationId = await resolveOrganizationId(req);
+    if (!req.organizationId) {
+      return res.status(403).json({ error: 'Organização não encontrada para o usuário' });
+    }
+    await ensureTables();
+    next();
+  } catch (e) {
+    logError('smartroute-ai.prepare', e);
+    res.status(500).json({ error: 'Erro ao preparar SmartRoute AI', details: e.message });
+  }
+});
 
 // ============ FASE 2: OCR / VISION ============
 router.post('/ocr/batch-expiry', async (req, res) => {
