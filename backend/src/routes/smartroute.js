@@ -720,9 +720,9 @@ router.post('/pdvs', async (req, res) => {
   try {
     const b = req.body || {};
     const r = await query(
-      `INSERT INTO smartroute_pdvs (organization_id, name, cnpj, address, city, state, zip, lat, lng, contact_name, contact_phone, delivery_window_start, delivery_window_end, notes, active, delivery_window, allowed_weekdays, service_time_min, checklist_template_id, route_template_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,COALESCE($15,true),COALESCE($16,'qualquer'),COALESCE($17,'{0,1,2,3,4,5,6}'::int[]),COALESCE($18,15),$19,$20) RETURNING *`,
-      [orgId(req), b.name, b.cnpj, b.address, b.city, b.state, b.zip, b.lat, b.lng, b.contact_name, b.contact_phone, b.delivery_window_start, b.delivery_window_end, b.notes, b.active, b.delivery_window, b.allowed_weekdays, b.service_time_min, b.checklist_template_id, b.route_template_id || null]
+      `INSERT INTO smartroute_pdvs (organization_id, name, cnpj, address, city, state, zip, lat, lng, contact_name, contact_phone, delivery_window_start, delivery_window_end, notes, active, delivery_window, allowed_weekdays, service_time_min, checklist_template_id, route_template_id, contacts)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,COALESCE($15,true),COALESCE($16,'qualquer'),COALESCE($17,'{0,1,2,3,4,5,6}'::int[]),COALESCE($18,15),$19,$20,COALESCE($21::jsonb,'[]'::jsonb)) RETURNING *`,
+      [orgId(req), b.name, b.cnpj, b.address, b.city, b.state, b.zip, b.lat, b.lng, b.contact_name, b.contact_phone, b.delivery_window_start, b.delivery_window_end, b.notes, b.active, b.delivery_window, b.allowed_weekdays, b.service_time_min, b.checklist_template_id, b.route_template_id || null, b.contacts ? JSON.stringify(b.contacts) : null]
     );
     res.json(r.rows[0]);
   } catch (e) { res.status(500).json({ error: e.message }); }
