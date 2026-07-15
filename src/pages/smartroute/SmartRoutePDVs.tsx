@@ -14,6 +14,7 @@ import { Plus, Edit, Trash2, Store } from "lucide-react";
 import { toast } from "sonner";
 import { useSRPdvs, useSRSavePdv, useSRDeletePdv } from "@/hooks/use-smartroute";
 import { useSRChecklistTemplates } from "@/hooks/use-smartroute-daily";
+import { useSRGeocodeDepot } from "@/hooks/use-smartroute-depots";
 
 const WEEKDAYS = [
   { n: 0, l: "Dom" }, { n: 1, l: "Seg" }, { n: 2, l: "Ter" },
