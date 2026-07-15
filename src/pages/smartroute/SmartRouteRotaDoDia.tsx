@@ -183,6 +183,11 @@ function DayDetails({ routeId, date }: { routeId: string; date: string }) {
             )}
           </div>
           <div className="flex gap-2 flex-wrap">
+            <Button asChild variant="outline">
+              <Link to={`/smartroute/simulador?route=${routeId}&date=${date}`}>
+                <Sparkles className="w-4 h-4 mr-1" /> Simulador
+              </Link>
+            </Button>
             {!isPublished && (
               <Button variant="outline" onClick={doOptimize} disabled={optimize.isPending || !orders.length}>
                 <Sparkles className="w-4 h-4 mr-1" /> {isOptimized ? "Reotimizar" : "Otimizar com IA"}
