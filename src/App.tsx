@@ -518,6 +518,7 @@ const App = () => (
             <Route path="/smartroute/motoristas" element={<ProtectedRoute><SmartRouteMotoristas /></ProtectedRoute>} />
             <Route path="/smartroute/ia" element={<ProtectedRoute><SmartRouteIA /></ProtectedRoute>} />
             <Route path="/smartroute/gestor-ia" element={<ProtectedRoute><SmartRouteGestorIA /></ProtectedRoute>} />
+            <Route path="/smartroute/prompts" element={<ProtectedRoute><SmartRoutePrompts /></ProtectedRoute>} />
             <Route path="/smartroute/replay/:id" element={<ProtectedRoute><SmartRouteReplay /></ProtectedRoute>} />
             <Route path="/smartroute/integracoes" element={<ProtectedRoute><SmartRouteIntegracoes /></ProtectedRoute>} />
             <Route path="/smartroute/relatorios" element={<ProtectedRoute><SmartRouteRelatorios /></ProtectedRoute>} />
