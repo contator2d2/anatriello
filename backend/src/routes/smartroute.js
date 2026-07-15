@@ -398,7 +398,7 @@ export async function ensureSmartRouteTables() {
     CREATE INDEX IF NOT EXISTS idx_sr_jev_route ON smartroute_journey_events(route_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_sr_jev_org ON smartroute_journey_events(organization_id, created_at DESC);
 
-    -- === Rotas fixas (templates) + escala + fechamento diário ===
+    -- === Rotas dinâmicas + IA noturna ===
     ALTER TABLE smartroute_routes ADD COLUMN IF NOT EXISTS is_template BOOLEAN DEFAULT false;
     ALTER TABLE smartroute_routes ADD COLUMN IF NOT EXISTS default_driver_id UUID;
     ALTER TABLE smartroute_routes ADD COLUMN IF NOT EXISTS default_vehicle_id UUID;
@@ -409,7 +409,28 @@ export async function ensureSmartRouteTables() {
     ALTER TABLE smartroute_orders ADD COLUMN IF NOT EXISTS route_id UUID;
     ALTER TABLE smartroute_orders ADD COLUMN IF NOT EXISTS pdv_window TEXT;
     ALTER TABLE smartroute_orders ADD COLUMN IF NOT EXISTS owner_user_id UUID;
+    ALTER TABLE smartroute_orders ADD COLUMN IF NOT EXISTS sequence INTEGER;
 
+    -- Regras por PDV (janela + dias permitidos + tempo de descarga + checklist)
+    ALTER TABLE smartroute_pdvs ADD COLUMN IF NOT EXISTS delivery_window TEXT DEFAULT 'qualquer';
+    ALTER TABLE smartroute_pdvs ADD COLUMN IF NOT EXISTS allowed_weekdays INTEGER[] DEFAULT '{0,1,2,3,4,5,6}'::int[];
+    ALTER TABLE smartroute_pdvs ADD COLUMN IF NOT EXISTS service_time_min INTEGER DEFAULT 15;
+    ALTER TABLE smartroute_pdvs ADD COLUMN IF NOT EXISTS checklist_template_id UUID;
+
+    -- Templates de checklist por PDV (pdv_id nulo = template global padrão)
+    CREATE TABLE IF NOT EXISTS smartroute_pdv_checklists (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id UUID NOT NULL,
+      pdv_id UUID REFERENCES smartroute_pdvs(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      is_default BOOLEAN DEFAULT false,
+      items JSONB DEFAULT '[]'::jsonb,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_sr_pdvchk_org ON smartroute_pdv_checklists(organization_id);
+
+    -- Mantém tabelas antigas mas não obrigatórias
     CREATE TABLE IF NOT EXISTS smartroute_route_pdvs (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       route_id UUID NOT NULL REFERENCES smartroute_routes(id) ON DELETE CASCADE,
@@ -420,8 +441,6 @@ export async function ensureSmartRouteTables() {
       created_at TIMESTAMPTZ DEFAULT NOW(),
       UNIQUE(route_id, pdv_id)
     );
-    CREATE INDEX IF NOT EXISTS idx_sr_rpdv_route ON smartroute_route_pdvs(route_id, sequence);
-
     CREATE TABLE IF NOT EXISTS smartroute_route_schedule (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       route_id UUID NOT NULL REFERENCES smartroute_routes(id) ON DELETE CASCADE,
@@ -432,6 +451,7 @@ export async function ensureSmartRouteTables() {
       UNIQUE(route_id, weekday)
     );
 
+    -- Instância diária de rota (agora é o resultado da IA)
     CREATE TABLE IF NOT EXISTS smartroute_route_days (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       route_id UUID NOT NULL REFERENCES smartroute_routes(id) ON DELETE CASCADE,
@@ -448,10 +468,17 @@ export async function ensureSmartRouteTables() {
       updated_at TIMESTAMPTZ DEFAULT NOW(),
       UNIQUE(route_id, date)
     );
+    ALTER TABLE smartroute_route_days ADD COLUMN IF NOT EXISTS optimized_at TIMESTAMPTZ;
+    ALTER TABLE smartroute_route_days ADD COLUMN IF NOT EXISTS optimized_by TEXT;
+    ALTER TABLE smartroute_route_days ADD COLUMN IF NOT EXISTS stops_summary JSONB DEFAULT '{}'::jsonb;
+    ALTER TABLE smartroute_route_days ADD COLUMN IF NOT EXISTS published_at TIMESTAMPTZ;
+
     CREATE INDEX IF NOT EXISTS idx_sr_rday ON smartroute_route_days(route_id, date);
+    CREATE INDEX IF NOT EXISTS idx_sr_orders_route_date ON smartroute_orders(route_id, delivery_date, sequence);
   `);
   ensured = true;
 }
+
 
 
 router.use(authenticate);
