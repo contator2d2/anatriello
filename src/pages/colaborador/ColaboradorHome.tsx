@@ -120,7 +120,7 @@ export default function ColaboradorHome() {
     <ColaboradorLayout bg="light" hideTopBar>
       {/* HERO — deep navy with subtle radial glow */}
       <div
-        className="relative overflow-hidden text-white px-5 pt-[calc(env(safe-area-inset-top)+18px)] pb-16 rounded-b-[28px]"
+        className="relative overflow-hidden text-white px-5 pt-[calc(env(safe-area-inset-top)+18px)] pb-8 rounded-b-[28px]"
         style={{
           background:
             "radial-gradient(120% 80% at 100% 0%, rgba(59,130,246,0.18) 0%, rgba(10,17,40,0) 55%), linear-gradient(180deg, #0a1128 0%, #0d1a3d 100%)",
