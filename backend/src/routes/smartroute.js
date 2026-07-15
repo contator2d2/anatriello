@@ -1885,7 +1885,218 @@ router.get('/routes-templates', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// =====================================================================
+// ============ OTIMIZAÇÃO IA DA ROTA DO DIA ============
+// =====================================================================
+// Algoritmo: janela do PDV (manhã=1, tarde=2, noite=3, qualquer=4) →
+// nearest-neighbor por coordenadas → tempo de descarga por PDV.
+// Respeita allowed_weekdays (pedidos em dias não permitidos ficam
+// marcados como bloqueados e não entram na sequência).
+
+const WINDOW_RANK = { manha: 1, tarde: 2, noite: 3, qualquer: 4 };
+function haversineKm(a, b) {
+  if (!a?.lat || !b?.lat) return 999;
+  const R = 6371, toRad = (v) => (v * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat), dLng = toRad(b.lng - a.lng);
+  const s = Math.sin(dLat/2)**2 + Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*Math.sin(dLng/2)**2;
+  return 2 * R * Math.asin(Math.sqrt(s));
+}
+
+async function optimizeRouteDay(organization_id, route_id, date, actor = 'manual') {
+  // Garante instância do dia
+  await query(
+    `INSERT INTO smartroute_route_days (route_id, date, status)
+     VALUES ($1,$2,'aberta') ON CONFLICT (route_id, date) DO NOTHING`,
+    [route_id, date]
+  );
+
+  const weekday = new Date(date + 'T12:00:00-03:00').getDay();
+
+  const ordersR = await query(
+    `SELECT o.id, o.pdv_id, o.pdv_window, o.priority, o.notes, o.order_number,
+            p.name AS pdv_name, p.lat, p.lng, p.delivery_window, p.allowed_weekdays,
+            p.service_time_min, p.checklist_template_id
+       FROM smartroute_orders o
+       LEFT JOIN smartroute_pdvs p ON p.id = o.pdv_id
+      WHERE o.organization_id=$1 AND o.route_id=$2 AND o.delivery_date=$3
+        AND o.status IN ('pendente','planejado','em_rota')`,
+    [organization_id, route_id, date]
+  );
+
+  const eligible = [];
+  const blocked = [];
+  for (const o of ordersR.rows) {
+    const allowed = Array.isArray(o.allowed_weekdays) ? o.allowed_weekdays : [0,1,2,3,4,5,6];
+    if (!allowed.includes(weekday)) blocked.push({ ...o, reason: 'dia_nao_permitido' });
+    else eligible.push({ ...o, window: (o.pdv_window || o.delivery_window || 'qualquer') });
+  }
+
+  // Ordenação: janela → nearest-neighbor por PDV
+  const byWindow = new Map();
+  for (const o of eligible) {
+    const w = WINDOW_RANK[o.window] ?? 4;
+    if (!byWindow.has(w)) byWindow.set(w, []);
+    byWindow.get(w).push(o);
+  }
+  const sortedWindows = [...byWindow.keys()].sort((a,b) => a-b);
+
+  const sequence = [];
+  let cursor = null;
+  for (const w of sortedWindows) {
+    const pool = byWindow.get(w);
+    while (pool.length) {
+      let bestIdx = 0;
+      if (cursor) {
+        let bestDist = Infinity;
+        pool.forEach((p, i) => {
+          const d = haversineKm(cursor, p);
+          if (d < bestDist) { bestDist = d; bestIdx = i; }
+        });
+      }
+      const picked = pool.splice(bestIdx, 1)[0];
+      sequence.push(picked);
+      if (picked.lat && picked.lng) cursor = { lat: picked.lat, lng: picked.lng };
+    }
+  }
+
+  // Persiste sequência nos pedidos
+  for (let i = 0; i < sequence.length; i++) {
+    await query(`UPDATE smartroute_orders SET sequence=$1, status='planejado' WHERE id=$2`, [i+1, sequence[i].id]);
+  }
+  for (const b of blocked) {
+    await query(`UPDATE smartroute_orders SET sequence=NULL WHERE id=$1`, [b.id]);
+  }
+
+  // Atribui motorista/veículo padrão se ainda não houver
+  const routeR = await query(
+    `SELECT default_driver_id, default_vehicle_id FROM smartroute_routes WHERE id=$1`,
+    [route_id]
+  );
+  const rt = routeR.rows[0] || {};
+  const dayR = await query(`SELECT driver_ids, vehicle_id FROM smartroute_route_days WHERE route_id=$1 AND date=$2`, [route_id, date]);
+  const current = dayR.rows[0] || {};
+  const nextDrivers = (current.driver_ids && current.driver_ids.length) ? current.driver_ids : (rt.default_driver_id ? [rt.default_driver_id] : []);
+  const nextVehicle = current.vehicle_id || rt.default_vehicle_id || null;
+
+  const summary = {
+    stops: sequence.length,
+    blocked: blocked.length,
+    weekday,
+    optimized_by: actor,
+  };
+
+  await query(
+    `UPDATE smartroute_route_days
+       SET status = CASE WHEN status='publicada' THEN 'publicada' ELSE 'otimizada' END,
+           driver_ids=$3, vehicle_id=$4,
+           optimized_at=NOW(), optimized_by=$5, stops_summary=$6, updated_at=NOW()
+     WHERE route_id=$1 AND date=$2`,
+    [route_id, date, nextDrivers, nextVehicle, actor, JSON.stringify(summary)]
+  );
+
+  return { sequence, blocked, summary, drivers: nextDrivers, vehicle_id: nextVehicle };
+}
+
+// Otimizar rota do dia (uma rota específica)
+router.post('/routes/:id/day/:date/optimize', async (req, res) => {
+  try {
+    const result = await optimizeRouteDay(orgId(req), req.params.id, req.params.date, req.user?.email || 'manual');
+    res.json({ ok: true, ...result });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Publicar rota do dia → vai para o app do entregador
+router.post('/routes/:id/day/:date/publish', async (req, res) => {
+  try {
+    await query(
+      `UPDATE smartroute_route_days SET status='publicada', published_at=NOW(), closed_at=NOW(), closed_by=$3, updated_at=NOW()
+        WHERE route_id=$1 AND date=$2`,
+      [req.params.id, req.params.date, req.user?.id || null]
+    );
+    await query(
+      `UPDATE smartroute_orders SET status='em_rota' WHERE route_id=$1 AND delivery_date=$2 AND status='planejado'`,
+      [req.params.id, req.params.date]
+    );
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Troca/adiciona motorista
+router.post('/routes/:id/day/:date/drivers', async (req, res) => {
+  try {
+    const ids = Array.isArray(req.body?.driver_ids) ? req.body.driver_ids : [];
+    await query(
+      `UPDATE smartroute_route_days SET driver_ids=$3, updated_at=NOW() WHERE route_id=$1 AND date=$2`,
+      [req.params.id, req.params.date, ids]
+    );
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ============ Templates de Checklist ============
+router.get('/pdv-checklists', async (req, res) => {
+  try {
+    const r = await query(`SELECT * FROM smartroute_pdv_checklists WHERE organization_id=$1 ORDER BY is_default DESC, name`, [orgId(req)]);
+    res.json(r.rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+router.post('/pdv-checklists', async (req, res) => {
+  try {
+    const b = req.body || {};
+    if (b.is_default) {
+      await query(`UPDATE smartroute_pdv_checklists SET is_default=false WHERE organization_id=$1`, [orgId(req)]);
+    }
+    const r = await query(
+      `INSERT INTO smartroute_pdv_checklists (organization_id, pdv_id, name, is_default, items)
+       VALUES ($1,$2,$3,COALESCE($4,false),COALESCE($5,'[]'::jsonb)) RETURNING *`,
+      [orgId(req), b.pdv_id || null, b.name, b.is_default, JSON.stringify(b.items || [])]
+    );
+    res.json(r.rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+router.put('/pdv-checklists/:id', async (req, res) => {
+  try {
+    const b = req.body || {};
+    if (b.is_default) {
+      await query(`UPDATE smartroute_pdv_checklists SET is_default=false WHERE organization_id=$1 AND id<>$2`, [orgId(req), req.params.id]);
+    }
+    const r = await query(
+      `UPDATE smartroute_pdv_checklists SET name=COALESCE($3,name), pdv_id=$4, is_default=COALESCE($5,is_default), items=COALESCE($6,items), updated_at=NOW()
+        WHERE id=$1 AND organization_id=$2 RETURNING *`,
+      [req.params.id, orgId(req), b.name, b.pdv_id || null, b.is_default, b.items ? JSON.stringify(b.items) : null]
+    );
+    res.json(r.rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+router.delete('/pdv-checklists/:id', async (req, res) => {
+  try { await query(`DELETE FROM smartroute_pdv_checklists WHERE id=$1 AND organization_id=$2`, [req.params.id, orgId(req)]); res.json({ ok: true }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// =====================================================================
+// Nightly optimizer - roda para todas as orgs, para D+1
+// Chamado pelo cron em index.js (20h America/Sao_Paulo)
+// =====================================================================
+export async function runNightlyOptimizer() {
+  await ensureSmartRouteTables();
+  const tomorrow = new Date(Date.now() + 24*60*60*1000).toISOString().slice(0,10);
+  const targets = await query(
+    `SELECT DISTINCT o.organization_id, o.route_id
+       FROM smartroute_orders o
+      WHERE o.delivery_date=$1 AND o.route_id IS NOT NULL AND o.status IN ('pendente','planejado')`,
+    [tomorrow]
+  );
+  let ok = 0, err = 0;
+  for (const t of targets.rows) {
+    try { await optimizeRouteDay(t.organization_id, t.route_id, tomorrow, 'cron-nightly'); ok++; }
+    catch (e) { err++; console.error('[smartroute-nightly] falhou rota', t.route_id, e.message); }
+  }
+  console.log(`🌙 [SmartRoute IA] Otimização noturna para ${tomorrow}: ${ok} rotas OK, ${err} erros`);
+  return { date: tomorrow, ok, err };
+}
+
 export default router;
+
 
 
 
