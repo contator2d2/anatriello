@@ -428,3 +428,97 @@ function StatCard({ icon: Icon, label, value, highlight }: any) {
     </Card>
   );
 }
+
+function TrajectoryMap({ depot, stops }: { depot: { lat?: number; lng?: number; name?: string }; stops: any[] }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<L.Map | null>(null);
+  const layerRef = useRef<L.LayerGroup | null>(null);
+
+  useEffect(() => {
+    if (!containerRef.current || mapRef.current) return;
+    const map = L.map(containerRef.current, { zoomControl: true }).setView([-23.5505, -46.6333], 11);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19, attribution: "© OpenStreetMap",
+    }).addTo(map);
+    layerRef.current = L.layerGroup().addTo(map);
+    mapRef.current = map;
+    return () => { map.remove(); mapRef.current = null; };
+  }, []);
+
+  useEffect(() => {
+    const layer = layerRef.current, map = mapRef.current;
+    if (!layer || !map) return;
+    layer.clearLayers();
+
+    const path: [number, number][] = [];
+    const bounds: [number, number][] = [];
+
+    if (depot.lat && depot.lng) {
+      const depotIcon = L.divIcon({
+        className: "",
+        html: `<div style="background:#111827;color:#fff;width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3);font-size:11px;font-weight:700">CD</div>`,
+        iconSize: [34, 34], iconAnchor: [17, 17],
+      });
+      L.marker([depot.lat, depot.lng], { icon: depotIcon })
+        .bindPopup(`<b>${depot.name || "Centro de Distribuição"}</b>`)
+        .addTo(layer);
+      path.push([depot.lat, depot.lng]);
+      bounds.push([depot.lat, depot.lng]);
+    }
+
+    stops.forEach((s, i) => {
+      const o = s.order;
+      if (!o.pdv_lat || !o.pdv_lng) return;
+      const meta = WIN_META[o.pdv_window || "qualquer"] || WIN_META.qualquer;
+      const isViolation = s.violation > 0;
+      const bg = isViolation ? "#dc2626" : meta.hex;
+      const icon = L.divIcon({
+        className: "",
+        html: `<div style="background:${bg};color:#fff;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3);font-size:12px;font-weight:700">${i + 1}</div>`,
+        iconSize: [30, 30], iconAnchor: [15, 15],
+      });
+      L.marker([o.pdv_lat, o.pdv_lng], { icon })
+        .bindPopup(
+          `<b>${i + 1}. ${o.pdv_name}</b><br/>` +
+          `Janela: <b>${meta.label}</b><br/>` +
+          `ETA: <b>${String(Math.floor(s.arrival / 60) % 24).padStart(2, "0")}:${String(Math.round(s.arrival) % 60).padStart(2, "0")}</b><br/>` +
+          `Trecho: ${s.km.toFixed(1)} km` +
+          (isViolation ? `<br/><span style="color:#dc2626"><b>⚠ Fora da janela</b></span>` : "") +
+          (s.wait > 0 ? `<br/><span style="color:#0284c7">⏳ Espera até abertura</span>` : "")
+        )
+        .addTo(layer);
+      path.push([o.pdv_lat, o.pdv_lng]);
+      bounds.push([o.pdv_lat, o.pdv_lng]);
+    });
+
+    // Retorno ao CD
+    if (depot.lat && depot.lng && path.length > 1) {
+      path.push([depot.lat, depot.lng]);
+    }
+
+    if (path.length >= 2) {
+      L.polyline(path, { color: "#6366f1", weight: 4, opacity: 0.75, dashArray: "6,6" }).addTo(layer);
+    }
+
+    if (bounds.length) {
+      map.invalidateSize();
+      map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
+    }
+  }, [depot.lat, depot.lng, stops]);
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base flex items-center gap-2">
+          <MapPin className="w-4 h-4" /> Trajeto no mapa
+        </CardTitle>
+        <p className="text-xs text-muted-foreground">
+          Saída do CD → paradas na ordem simulada → retorno ao CD. Pinos coloridos por janela; vermelho = fora da janela.
+        </p>
+      </CardHeader>
+      <CardContent className="p-2">
+        <div ref={containerRef} style={{ height: 420, width: "100%" }} className="rounded" />
+      </CardContent>
+    </Card>
+  );
+}
