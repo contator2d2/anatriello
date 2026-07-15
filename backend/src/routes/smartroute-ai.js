@@ -66,11 +66,58 @@ async function ensureTables() {
     );
     CREATE INDEX IF NOT EXISTS idx_sr_reco_org ON smartroute_ai_recommendations(organization_id, created_at DESC);
 
+    CREATE TABLE IF NOT EXISTS smartroute_ai_prompts (
+      organization_id UUID NOT NULL,
+      key TEXT NOT NULL,
+      instructions TEXT,
+      updated_by UUID,
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY (organization_id, key)
+    );
+
     ALTER TABLE smartroute_orders ADD COLUMN IF NOT EXISTS time_window_start TIME;
     ALTER TABLE smartroute_orders ADD COLUMN IF NOT EXISTS time_window_end TIME;
     ALTER TABLE smartroute_orders ADD COLUMN IF NOT EXISTS service_time_min INTEGER DEFAULT 15;
   `);
   ensured = true;
+}
+
+// ---------- Custom prompts (per-org overrides) ----------
+export const AI_PROMPT_DEFS = {
+  advisor: {
+    label: 'Gestor IA (recomendações)',
+    description: 'Como a IA deve analisar a operação e sugerir ações. Ex: priorize custo, foque em janela de horário, evite motoristas específicos.',
+    system_default: 'Você é um gestor sênior de logística e distribuição no Brasil, atuando como consultor operacional para a plataforma Anatriello SmartRoute AI. Analise dados operacionais reais e forneça recomendações práticas, específicas e priorizadas em português do Brasil. Sempre responda APENAS com JSON válido.',
+  },
+  post_route: {
+    label: 'Análise Pós-Rota',
+    description: 'Como avaliar a execução de rotas concluídas. Ex: peso maior em pontualidade, tolerância a atrasos, foco em checklist.',
+    system_default: 'Você é um analista sênior de operações logísticas no Brasil. Analise a execução de uma rota concluída e gere um relatório objetivo e acionável em português do Brasil. Responda APENAS com JSON válido.',
+  },
+  ocr_batch_expiry: {
+    label: 'OCR de Lote e Validade',
+    description: 'Regras extras para leitura de rótulos. Ex: aceitar formatos DD/MM/AA, ignorar códigos EAN, priorizar data mais próxima.',
+    system_default: 'Extrair informações de rótulos de produtos brasileiros com precisão. Responda apenas em JSON válido.',
+  },
+  shelf_analysis: {
+    label: 'Análise de Gôndola',
+    description: 'Como avaliar fotos de prateleiras. Ex: marcas prioritárias, critérios de share, tolerância a ruptura.',
+    system_default: 'Analista visual de merchandising no varejo brasileiro. Responda apenas em JSON válido.',
+  },
+};
+
+async function getCustomInstructions(org, key) {
+  if (!org) return '';
+  try {
+    await ensureTables();
+    const r = await query(`SELECT instructions FROM smartroute_ai_prompts WHERE organization_id=$1 AND key=$2`, [org, key]);
+    return (r.rows[0]?.instructions || '').trim();
+  } catch { return ''; }
+}
+
+function composeSystem(baseSystem, custom) {
+  if (!custom) return baseSystem;
+  return `${baseSystem}\n\n===== INSTRUÇÕES ADICIONAIS DO GESTOR (obedeça sempre) =====\n${custom}\n=====`;
 }
 
 // ---------- AI provider (OpenAI / Gemini / OpenRouter) ----------
