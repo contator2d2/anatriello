@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Plus, Edit, Trash2, Store } from "lucide-react";
 import { toast } from "sonner";
 import { useSRPdvs, useSRSavePdv, useSRDeletePdv } from "@/hooks/use-smartroute";
-import { useSRChecklistTemplates } from "@/hooks/use-smartroute-daily";
+import { useSRChecklistTemplates, useSRTemplates } from "@/hooks/use-smartroute-daily";
 import { useSRGeocodeDepot } from "@/hooks/use-smartroute-depots";
 
 const WEEKDAYS = [
@@ -24,6 +24,7 @@ const WEEKDAYS = [
 export default function SmartRoutePDVs() {
   const { data = [] } = useSRPdvs();
   const { data: checklists = [] } = useSRChecklistTemplates();
+  const { data: routes = [] } = useSRTemplates();
   const save = useSRSavePdv();
   const del = useSRDeletePdv();
   const [open, setOpen] = useState(false);
@@ -102,6 +103,7 @@ export default function SmartRoutePDVs() {
           <Table>
             <TableHeader><TableRow>
               <TableHead>Nome</TableHead><TableHead>Cidade</TableHead>
+              <TableHead>Rota fixa</TableHead>
               <TableHead>Janela</TableHead><TableHead>Dias</TableHead>
               <TableHead>Descarga</TableHead><TableHead>Checklist</TableHead>
               <TableHead></TableHead>
@@ -111,6 +113,10 @@ export default function SmartRoutePDVs() {
                 <TableRow key={p.id}>
                   <TableCell className="font-medium">{p.name}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">{p.city}{p.state ? `/${p.state}` : ""}</TableCell>
+                  <TableCell className="text-xs">
+                    {routes.find((r: any) => r.id === p.route_template_id)?.name
+                      || <span className="text-muted-foreground">—</span>}
+                  </TableCell>
                   <TableCell><Badge variant="outline">{winLabel(p.delivery_window)}</Badge></TableCell>
                   <TableCell className="text-xs">
                     {WEEKDAYS.map((w) => (
@@ -127,7 +133,7 @@ export default function SmartRoutePDVs() {
                   </TableCell>
                 </TableRow>
               ))}
-              {!data.length && <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">Nenhum PDV cadastrado.</TableCell></TableRow>}
+              {!data.length && <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">Nenhum PDV cadastrado.</TableCell></TableRow>}
             </TableBody>
           </Table>
         </CardContent></Card>
@@ -164,6 +170,23 @@ export default function SmartRoutePDVs() {
               <div><Label>Longitude</Label><Input type="number" step="any" value={form.lng || ""} onChange={(e) => setForm({ ...form, lng: +e.target.value })} /></div>
               <div><Label>Contato</Label><Input value={form.contact_name || ""} onChange={(e) => setForm({ ...form, contact_name: e.target.value })} /></div>
               <div><Label>Telefone contato</Label><Input value={form.contact_phone || ""} onChange={(e) => setForm({ ...form, contact_phone: e.target.value })} /></div>
+            </div>
+
+            <h3 className="text-sm font-semibold mt-4">Rota fixa (linha do caminhão)</h3>
+            <div className="grid grid-cols-1 gap-3">
+              <div>
+                <Label>Rota fixa vinculada</Label>
+                <Select value={form.route_template_id || "__none"} onValueChange={(v) => setForm({ ...form, route_template_id: v === "__none" ? null : v })}>
+                  <SelectTrigger><SelectValue placeholder="Sem rota fixa (legado)" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none">Sem rota fixa (legado)</SelectItem>
+                    {routes.map((r: any) => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Este PDV pertence à linha do caminhão selecionada. Uma rota pode ter centenas de PDVs; a IA monta a rota do dia apenas com os PDVs que tiverem pedidos.
+                </p>
+              </div>
             </div>
 
             <h3 className="text-sm font-semibold mt-4">Regras de recebimento (usadas pela IA)</h3>
