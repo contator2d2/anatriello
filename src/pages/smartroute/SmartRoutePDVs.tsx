@@ -172,6 +172,23 @@ export default function SmartRoutePDVs() {
               <div><Label>Telefone contato</Label><Input value={form.contact_phone || ""} onChange={(e) => setForm({ ...form, contact_phone: e.target.value })} /></div>
             </div>
 
+            <h3 className="text-sm font-semibold mt-4">Rota fixa (linha do caminhão)</h3>
+            <div className="grid grid-cols-1 gap-3">
+              <div>
+                <Label>Rota fixa vinculada</Label>
+                <Select value={form.route_template_id || "__none"} onValueChange={(v) => setForm({ ...form, route_template_id: v === "__none" ? null : v })}>
+                  <SelectTrigger><SelectValue placeholder="Sem rota fixa (legado)" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none">Sem rota fixa (legado)</SelectItem>
+                    {routes.map((r: any) => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Este PDV pertence à linha do caminhão selecionada. Uma rota pode ter centenas de PDVs; a IA monta a rota do dia apenas com os PDVs que tiverem pedidos.
+                </p>
+              </div>
+            </div>
+
             <h3 className="text-sm font-semibold mt-4">Regras de recebimento (usadas pela IA)</h3>
             <div className="grid grid-cols-2 gap-3">
               <div>
