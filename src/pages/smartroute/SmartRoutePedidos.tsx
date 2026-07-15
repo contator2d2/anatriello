@@ -124,18 +124,44 @@ export default function SmartRoutePedidos() {
               </div>
               <div className="col-span-2">
                 <Label>PDV*</Label>
-                <Select value={form.pdv_id || ""} onValueChange={(v) => {
-                  const rp = routePdvs.find((x: any) => x.pdv_id === v);
-                  const pdv = pdvs.find((x: any) => x.id === v);
-                  setForm({ ...form, pdv_id: v, pdv_window: rp?.delivery_window || rp?.window || pdv?.delivery_window || null });
-                }}>
-                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                  <SelectContent>
-                    {(form.route_id ? routePdvs.map((rp: any) => ({ id: rp.pdv_id, name: rp.pdv_name })) : pdvs).map((p: any) => (
-                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Popover open={pdvPickerOpen} onOpenChange={setPdvPickerOpen}>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" role="combobox" className="w-full justify-between font-normal">
+                      {selectedPdv ? selectedPdv.name : (form.route_id ? `Selecione (${availablePdvs.length} PDVs na rota)` : "Selecione ou busque um PDV")}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Digite o nome do PDV..." />
+                      <CommandList>
+                        <CommandEmpty>Nenhum PDV encontrado.</CommandEmpty>
+                        <CommandGroup>
+                          {availablePdvs.map((p: any) => (
+                            <CommandItem
+                              key={p.id}
+                              value={p.name}
+                              onSelect={() => {
+                                const rp = routePdvs.find((x: any) => x.pdv_id === p.id);
+                                setForm({ ...form, pdv_id: p.id, pdv_window: rp?.delivery_window || rp?.window || p.delivery_window || null });
+                                setPdvPickerOpen(false);
+                              }}
+                            >
+                              <Check className={cn("mr-2 h-4 w-4", form.pdv_id === p.id ? "opacity-100" : "opacity-0")} />
+                              <div className="flex flex-col">
+                                <span>{p.name}</span>
+                                {p.delivery_window && <span className="text-xs text-muted-foreground">Janela: {p.delivery_window}</span>}
+                              </div>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+                {form.route_id && !availablePdvs.length && (
+                  <p className="text-xs text-amber-600 mt-1">Nenhum PDV vinculado a essa rota fixa. Vincule PDVs em "Rotas Montadas" ou no cadastro do PDV.</p>
+                )}
                 {(() => {
                   const pdv = pdvs.find((x: any) => x.id === form.pdv_id);
                   if (!pdv || !form.delivery_date) return form.pdv_window ? <p className="text-xs text-muted-foreground mt-1">Janela: {form.pdv_window}</p> : null;
