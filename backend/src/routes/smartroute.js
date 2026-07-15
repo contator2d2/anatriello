@@ -405,6 +405,7 @@ export async function ensureSmartRouteTables() {
     ALTER TABLE smartroute_routes ADD COLUMN IF NOT EXISTS owner_user_id UUID;
     ALTER TABLE smartroute_routes ADD COLUMN IF NOT EXISTS parent_route_id UUID;
     ALTER TABLE smartroute_routes ADD COLUMN IF NOT EXISTS route_day_id UUID;
+    ALTER TABLE smartroute_routes ADD COLUMN IF NOT EXISTS upsell_time_min INTEGER DEFAULT 0;
 
     ALTER TABLE smartroute_orders ADD COLUMN IF NOT EXISTS route_id UUID;
     ALTER TABLE smartroute_orders ADD COLUMN IF NOT EXISTS pdv_window TEXT;
@@ -850,9 +851,13 @@ router.put('/routes/:id', async (req, res) => {
     const b = req.body || {};
     const r = await query(
       `UPDATE smartroute_routes SET driver_id=$3, vehicle_id=$4, planned_date=COALESCE($5,planned_date),
-        status=COALESCE($6,status), depot_lat=$7, depot_lng=$8, notes=COALESCE($9,notes), updated_at=NOW()
+        status=COALESCE($6,status), depot_lat=$7, depot_lng=$8, notes=COALESCE($9,notes),
+        default_driver_id=COALESCE($10,default_driver_id), default_vehicle_id=COALESCE($11,default_vehicle_id),
+        upsell_time_min=COALESCE($12,upsell_time_min), updated_at=NOW()
        WHERE id=$1 AND organization_id=$2 RETURNING *`,
-      [req.params.id, orgId(req), b.driver_id || null, b.vehicle_id || null, b.planned_date || null, b.status, b.depot_lat, b.depot_lng, b.notes]
+      [req.params.id, orgId(req), b.driver_id || null, b.vehicle_id || null, b.planned_date || null, b.status, b.depot_lat, b.depot_lng, b.notes,
+       b.default_driver_id ?? null, b.default_vehicle_id ?? null,
+       (b.upsell_time_min === undefined || b.upsell_time_min === null || b.upsell_time_min === '') ? null : +b.upsell_time_min]
     );
     res.json(r.rows[0]);
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -1740,16 +1745,25 @@ router.get('/routes/:id/day', async (req, res) => {
     const day = await ensureRouteDay(req.params.id, date);
     const orders = await query(
       `SELECT o.*, p.name AS pdv_name, p.address AS pdv_address, p.lat AS pdv_lat, p.lng AS pdv_lng,
+              COALESCE(p.service_time_min,15) AS pdv_service_time_min,
+              p.checklist_template_id AS pdv_checklist_template_id,
+              (SELECT COALESCE(jsonb_array_length(items),0)
+                 FROM smartroute_pdv_checklists c
+                WHERE c.organization_id=$3
+                  AND (c.pdv_id = o.pdv_id OR (c.pdv_id IS NULL AND c.is_default=true))
+                ORDER BY (c.pdv_id = o.pdv_id) DESC LIMIT 1) AS checklist_items_count,
               rp.sequence AS pdv_sequence, rp.window AS route_pdv_window
        FROM smartroute_orders o
        LEFT JOIN smartroute_pdvs p ON p.id=o.pdv_id
        LEFT JOIN smartroute_route_pdvs rp ON rp.route_id=o.route_id AND rp.pdv_id=o.pdv_id
        WHERE o.route_id=$1 AND o.delivery_date=$2
        ORDER BY
+         CASE WHEN o.sequence IS NOT NULL THEN 0 ELSE 1 END,
+         o.sequence NULLS LAST,
          CASE COALESCE(o.pdv_window,'qualquer')
            WHEN 'manha' THEN 1 WHEN 'tarde' THEN 2 WHEN 'noite' THEN 3 ELSE 4 END,
          rp.sequence NULLS LAST, o.created_at`,
-      [req.params.id, date]);
+      [req.params.id, date, org]);
     // enriquece drivers/vehicle
     const drvs = day.driver_ids?.length
       ? (await query(`SELECT id, full_name, phone FROM smartroute_drivers WHERE id = ANY($1::uuid[])`, [day.driver_ids])).rows
@@ -1861,9 +1875,9 @@ router.post('/routes/template', async (req, res) => {
     const b = req.body || {};
     const code = b.code || `TMPL-${Date.now().toString(36).toUpperCase()}`;
     const r = await query(
-      `INSERT INTO smartroute_routes (organization_id, code, is_template, default_driver_id, default_vehicle_id, owner_user_id, notes, status, planned_date)
-       VALUES ($1,$2,true,$3,$4,$5,$6,'template',CURRENT_DATE) RETURNING *`,
-      [orgId(req), code, b.default_driver_id || null, b.default_vehicle_id || null, req.user?.id || null, b.notes || null]
+      `INSERT INTO smartroute_routes (organization_id, code, is_template, default_driver_id, default_vehicle_id, owner_user_id, notes, status, planned_date, upsell_time_min)
+       VALUES ($1,$2,true,$3,$4,$5,$6,'template',CURRENT_DATE,$7) RETURNING *`,
+      [orgId(req), code, b.default_driver_id || null, b.default_vehicle_id || null, req.user?.id || null, b.notes || null, Number.isFinite(+b.upsell_time_min) ? +b.upsell_time_min : 0]
     );
     res.json(r.rows[0]);
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -2019,6 +2033,37 @@ router.post('/routes/:id/day/:date/publish', async (req, res) => {
     );
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Salvar sequência manual (simulador) → registra como oficial
+router.put('/routes/:id/day/:date/sequence', async (req, res) => {
+  try {
+    const org = orgId(req);
+    const ids = Array.isArray(req.body?.order_ids) ? req.body.order_ids : [];
+    if (!ids.length) return res.status(400).json({ error: 'order_ids vazio' });
+    // Garante dia
+    await query(
+      `INSERT INTO smartroute_route_days (route_id, date, status)
+       VALUES ($1,$2,'aberta') ON CONFLICT (route_id, date) DO NOTHING`,
+      [req.params.id, req.params.date]
+    );
+    for (let i = 0; i < ids.length; i++) {
+      await query(
+        `UPDATE smartroute_orders SET sequence=$1, status = CASE WHEN status='pendente' THEN 'planejado' ELSE status END
+           WHERE id=$2 AND organization_id=$3 AND route_id=$4 AND delivery_date=$5`,
+        [i + 1, ids[i], org, req.params.id, req.params.date]
+      );
+    }
+    const summary = { stops: ids.length, manual_override: true, saved_by: req.user?.email || 'manual' };
+    await query(
+      `UPDATE smartroute_route_days
+         SET status = CASE WHEN status IN ('publicada','em_andamento','concluida') THEN status ELSE 'otimizada' END,
+             optimized_at=NOW(), optimized_by=$3, stops_summary=$4, updated_at=NOW()
+       WHERE route_id=$1 AND date=$2`,
+      [req.params.id, req.params.date, req.user?.email || 'manual', JSON.stringify(summary)]
+    );
+    res.json({ ok: true, stops: ids.length });
+  } catch (e) { logError('sr.day.sequence', e); res.status(500).json({ error: e.message }); }
 });
 
 // Troca/adiciona motorista

@@ -146,6 +146,15 @@ export function useSRPublishDay() {
   });
 }
 
+export function useSRSaveDaySequence() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ routeId, date, order_ids }: any) =>
+      api(`${BASE}/routes/${routeId}/day/${date}/sequence`, { method: 'PUT', body: { order_ids } }),
+    onSuccess: (_, v: any) => qc.invalidateQueries({ queryKey: ['sr-route-day', v.routeId, v.date] }),
+  });
+}
+
 // -------- Templates de checklist (por PDV) --------
 export function useSRChecklistTemplates() {
   return useQuery<any[]>({ queryKey: ['sr-pdv-checklists'], queryFn: () => api(`${BASE}/pdv-checklists`) });
