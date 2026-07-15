@@ -40,6 +40,8 @@ const getDeviceInfo = () => ({
 });
 
 const ENV_API_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+const APP_LOGS_COOLDOWN_KEY = 'api-cooldown:/api/app-logs';
+const APP_LOGS_COOLDOWN_MS = 60 * 1000;
 
 const getAuthToken = (): string | null => {
   try {
@@ -55,17 +57,24 @@ const getAuthToken = (): string | null => {
 };
 
 const sendLogToBackend = async (payload: Record<string, unknown>) => {
+  const cooldownUntil = Number(sessionStorage.getItem(APP_LOGS_COOLDOWN_KEY) || 0);
+  if (Number.isFinite(cooldownUntil) && cooldownUntil > Date.now()) return;
+
   const url = `${ENV_API_URL}/api/app-logs`;
   const token = getAuthToken();
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  await fetch(url, {
+  const response = await fetch(url, {
     method: 'POST',
     headers,
     body: JSON.stringify(payload),
     keepalive: true,
   });
+
+  if (!response.ok && response.status >= 500) {
+    sessionStorage.setItem(APP_LOGS_COOLDOWN_KEY, String(Date.now() + APP_LOGS_COOLDOWN_MS));
+  }
 };
 
 export const logger = {
@@ -86,10 +95,7 @@ export const logger = {
       };
 
       await sendLogToBackend(payload);
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error('Failed to process log:', err);
-    }
+    } catch {}
   },
 
   debug(message: string, context?: any) {
