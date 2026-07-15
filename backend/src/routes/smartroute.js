@@ -419,6 +419,8 @@ export async function ensureSmartRouteTables() {
     ALTER TABLE smartroute_pdvs ADD COLUMN IF NOT EXISTS allowed_weekdays INTEGER[] DEFAULT '{0,1,2,3,4,5,6}'::int[];
     ALTER TABLE smartroute_pdvs ADD COLUMN IF NOT EXISTS service_time_min INTEGER DEFAULT 15;
     ALTER TABLE smartroute_pdvs ADD COLUMN IF NOT EXISTS checklist_template_id UUID;
+    ALTER TABLE smartroute_pdvs ADD COLUMN IF NOT EXISTS route_template_id UUID;
+    CREATE INDEX IF NOT EXISTS idx_sr_pdv_route_template ON smartroute_pdvs(route_template_id);
 
     -- Templates de checklist por PDV (pdv_id nulo = template global padrão)
     CREATE TABLE IF NOT EXISTS smartroute_pdv_checklists (
