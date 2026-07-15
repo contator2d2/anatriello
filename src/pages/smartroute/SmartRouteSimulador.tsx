@@ -87,29 +87,48 @@ function fmtDur(min: number) {
 }
 
 // OSRM público — calcula rota real por ruas (como Uber/iFood).
-// Retorna distância (km) e duração (min) por trecho + geometria para o mapa.
-type OsrmLeg = { km: number; min: number };
-type OsrmResult = { legs: OsrmLeg[]; geometry: [number, number][] };
-async function fetchOsrmRoute(points: Array<{ lat: number; lng: number }>): Promise<OsrmResult | null> {
-  if (points.length < 2) return null;
-  const coords = points.map((p) => `${p.lng},${p.lat}`).join(";");
+// A consulta é feita por trecho para garantir CD → PDV1, PDV1 → PDV2 e retorno ao CD,
+// evitando limite de waypoints/URL quando a rota tem muitas paradas.
+type OsrmLeg = { km: number; min: number; fallback?: boolean; fromLabel?: string; toLabel?: string };
+type OsrmResult = { legs: OsrmLeg[]; geometry: [number, number][]; fallbackLegs: number };
+async function fetchOsrmSegment(from: { lat: number; lng: number }, to: { lat: number; lng: number }): Promise<{ leg: OsrmLeg; geometry: [number, number][]; ok: boolean }> {
+  const coords = `${from.lng},${from.lat};${to.lng},${to.lat}`;
   const url = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson&steps=false`;
   try {
     const ctrl = new AbortController();
     const to = setTimeout(() => ctrl.abort(), 12000);
     const r = await fetch(url, { signal: ctrl.signal });
     clearTimeout(to);
-    if (!r.ok) return null;
+    if (!r.ok) throw new Error("OSRM indisponível");
     const j = await r.json();
     const route = j?.routes?.[0];
-    if (!route) return null;
-    const legs: OsrmLeg[] = (route.legs || []).map((l: any) => ({
-      km: (l.distance || 0) / 1000,
-      min: (l.duration || 0) / 60,
-    }));
+    if (!route) throw new Error("Rota OSRM vazia");
+    const rawLeg = route.legs?.[0] || {};
     const geometry: [number, number][] = (route.geometry?.coordinates || []).map((c: [number, number]) => [c[1], c[0]]);
-    return { legs, geometry };
-  } catch { return null; }
+    return { leg: { km: (rawLeg.distance || 0) / 1000, min: (rawLeg.duration || 0) / 60 }, geometry, ok: true };
+  } catch {
+    const km = haversineKm(from, to);
+    return { leg: { km, min: (km / AVG_SPEED_KMH) * 60, fallback: true }, geometry: [[from.lat, from.lng], [to.lat, to.lng]], ok: false };
+  }
+}
+
+async function fetchOsrmRoute(points: Array<{ lat: number; lng: number; label?: string }>): Promise<OsrmResult | null> {
+  if (points.length < 2) return null;
+  const legs: OsrmLeg[] = [];
+  const geometry: [number, number][] = [];
+  let fallbackLegs = 0;
+  for (let i = 0; i < points.length - 1; i++) {
+    const from = points[i];
+    const to = points[i + 1];
+    const res = await fetchOsrmSegment(from, to);
+    if (!res.ok) fallbackLegs++;
+    legs.push({ ...res.leg, fromLabel: from.label, toLabel: to.label });
+    res.geometry.forEach((p, idx) => {
+      if (i > 0 && idx === 0) return;
+      geometry.push(p);
+    });
+  }
+  return { legs, geometry, fallbackLegs };
 }
 
 
@@ -204,10 +223,10 @@ export default function SmartRouteSimulador() {
   useEffect(() => {
     const hasFullCoordinates = !!depot.lat && !!depot.lng && order.every((o) => !!o.pdv_lat && !!o.pdv_lng);
     if (!hasFullCoordinates) { setOsrm(null); return; }
-    const points: Array<{ lat: number; lng: number }> = [
-      { lat: depot.lat, lng: depot.lng },
-      ...order.map((o) => ({ lat: o.pdv_lat, lng: o.pdv_lng })),
-      { lat: depot.lat, lng: depot.lng },
+    const points: Array<{ lat: number; lng: number; label?: string }> = [
+      { lat: depot.lat, lng: depot.lng, label: "CD" },
+      ...order.map((o, idx) => ({ lat: o.pdv_lat, lng: o.pdv_lng, label: `${idx + 1}. ${o.pdv_name || "PDV"}` })),
+      { lat: depot.lat, lng: depot.lng, label: "Retorno ao CD" },
     ];
     let cancelled = false;
     setOsrm(null);
@@ -359,7 +378,7 @@ export default function SmartRouteSimulador() {
             Ajustar saída do CD automaticamente para chegar na janela do 1º PDV
           </label>
           <div className="text-xs text-muted-foreground pb-2">
-            Upsell/PDV: <b>{upsellMin} min</b> · Rota real: <b>{osrmLoading ? "calculando…" : osrm ? "por ruas (OSRM)" : "linha reta (fallback)"}</b>
+            Upsell/PDV: <b>{upsellMin} min</b> · Rota real: <b>{osrmLoading ? "calculando ruas…" : osrm ? (osrm.fallbackLegs ? `OSRM + fallback em ${osrm.fallbackLegs} trecho(s)` : "por ruas (OSRM)") : "aguardando coordenadas"}</b>
           </div>
 
         </CardContent>
@@ -386,6 +405,18 @@ export default function SmartRouteSimulador() {
             <Button onClick={runSimulation} className="bg-gradient-to-r from-indigo-500 to-sky-500 hover:from-indigo-600 hover:to-sky-600 text-white">
               <Sparkles className="w-4 h-4 mr-2" /> Rodar Simulação
             </Button>
+          </CardContent>
+        </Card>
+      ) : osrmLoading ? (
+        <Card>
+          <CardContent className="p-10 text-center space-y-3">
+            <div className="mx-auto w-12 h-12 rounded-2xl bg-sky-100 text-sky-700 flex items-center justify-center">
+              <RouteIcon className="w-6 h-6 animate-pulse" />
+            </div>
+            <div className="font-semibold">Calculando trajeto real por ruas</div>
+            <p className="text-sm text-muted-foreground max-w-md mx-auto">
+              Buscando cada trecho: CD → primeiro PDV, paradas intermediárias e retorno ao CD.
+            </p>
           </CardContent>
         </Card>
       ) : (
@@ -441,6 +472,23 @@ export default function SmartRouteSimulador() {
               </div>
             </CardHeader>
             <CardContent className="space-y-2">
+              {/* Saída do CD */}
+              <div className="border rounded-lg p-3 bg-slate-50">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center shrink-0">
+                    <Warehouse className="w-4 h-4" />
+                  </div>
+                  <div className="flex-1 text-sm">
+                    <b>Saída do CD</b> — {depot.name}
+                    <div className="text-xs text-muted-foreground">
+                      Início real da rota <span className="font-mono font-semibold">{fmtHM(computed.departureFromCD)}</span>
+                      {computed.stops[0] && (
+                        <> · 1º trecho até <b>{computed.stops[0].order.pdv_name}</b>: {computed.stops[0].km.toFixed(1)} km · {fmtDur(computed.stops[0].travel)}</>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
               {computed.stops.map((s, i) => {
                 const o = s.order;
                 const bounds = getWindowBounds(o);
@@ -467,7 +515,7 @@ export default function SmartRouteSimulador() {
                           <MapPin className="w-3 h-3" /> {o.pdv_address}
                         </div>
                         <div className="mt-2 grid grid-cols-2 md:grid-cols-5 gap-x-3 gap-y-1 text-xs">
-                          <span>🚚 {s.km.toFixed(1)} km · {fmtDur(s.travel)}</span>
+                          <span>🚚 {i === 0 ? "CD" : `PDV ${i}`} → PDV {i + 1}: {s.km.toFixed(1)} km · {fmtDur(s.travel)}</span>
                           <span>⏱ Serviço {fmtDur(s.service)}</span>
                           <span>📋 Checklist {fmtDur(s.checklist)} <span className="text-muted-foreground">({o.checklist_items_count || 0} itens)</span></span>
                           <span>💰 Upsell {fmtDur(s.upsell)}</span>
