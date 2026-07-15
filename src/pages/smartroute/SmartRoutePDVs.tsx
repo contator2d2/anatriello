@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Plus, Edit, Trash2, Store } from "lucide-react";
 import { toast } from "sonner";
 import { useSRPdvs, useSRSavePdv, useSRDeletePdv } from "@/hooks/use-smartroute";
-import { useSRChecklistTemplates } from "@/hooks/use-smartroute-daily";
+import { useSRChecklistTemplates, useSRTemplates } from "@/hooks/use-smartroute-daily";
 import { useSRGeocodeDepot } from "@/hooks/use-smartroute-depots";
 
 const WEEKDAYS = [
