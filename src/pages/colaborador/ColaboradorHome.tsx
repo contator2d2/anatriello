@@ -1,27 +1,26 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Bell, FileText, Umbrella, Gift, FolderOpen, Edit3, Clock, MessageSquare, ChevronRight, Megaphone, Loader2, Camera, MapPin, ShieldOff, ScanFace, FileSignature } from "lucide-react";
+import {
+  Bell, FileText, Calendar, Megaphone, DollarSign, Loader2, Camera, MapPin,
+  ShieldOff, ScanFace, ChevronRight, QrCode, Clock, CheckCircle2, Navigation,
+  ShieldCheck,
+} from "lucide-react";
 import { ColaboradorLayout } from "./ColaboradorLayout";
-import { usePromotorHome, usePromotorPunch, usePromotorNotifications, usePromotorMarkRead } from "@/hooks/use-promotor";
+import { usePromotorHome, usePromotorPunch, usePromotorNotifications } from "@/hooks/use-promotor";
 import { useColabAnnouncements, useColabMeFull } from "@/hooks/use-promotor";
 import { useCaps } from "@/hooks/use-colab-capabilities";
 import { FaceVerifyDialog } from "@/components/facial-recognition/FaceVerifyDialog";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
+import { useBranding } from "@/hooks/use-branding";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
-
-function saudacao() {
-  const h = new Date().getHours();
-  if (h < 12) return "Bom dia";
-  if (h < 18) return "Boa tarde";
-  return "Boa noite";
-}
+import anatrielloLogo from "@/assets/anatriello-logo.png.asset.json";
 
 const PUNCH_ORDER = ["entrada", "saida_intervalo", "retorno_intervalo", "saida"];
 const PUNCH_LABEL: Record<string, string> = {
-  entrada: "Entrada", saida_intervalo: "Início Almoço", retorno_intervalo: "Fim Almoço", saida: "Saída"
+  entrada: "Entrada", saida_intervalo: "Início Almoço", retorno_intervalo: "Fim Almoço", saida: "Saída",
 };
 
 export default function ColaboradorHome() {
@@ -31,9 +30,9 @@ export default function ColaboradorHome() {
   const { data: meFull } = useColabMeFull();
   const { data: announcements } = useColabAnnouncements();
   const { data: notifications } = usePromotorNotifications();
-  const markRead = usePromotorMarkRead();
   const punch = usePromotorPunch();
   const caps = useCaps();
+  const { branding } = useBranding() as any;
   const can = (c: string) => caps.includes(c);
   const [now, setNow] = useState(new Date());
   const [showFace, setShowFace] = useState(false);
@@ -63,16 +62,37 @@ export default function ColaboradorHome() {
 
   const employee = data?.employee || meFull?.employee;
   const punches = data?.today_punches || [];
-  const nextIdx = Math.min(punches.length, PUNCH_ORDER.length - 1);
   const nextType = PUNCH_ORDER[punches.length] || "extraordinaria";
-  const situacao = punches.length === 0 ? "Fora da jornada"
-    : punches.length === 4 ? "Jornada encerrada"
+  const jornadaEncerrada = punches.length >= 4;
+  const situacao = punches.length === 0 ? "Início de jornada"
+    : jornadaEncerrada ? "Jornada encerrada"
     : (punches[punches.length - 1]?.punch_type === "saida_intervalo" ? "Em almoço" : "Em jornada");
-  const entradaHora = punches.find((p: any) => p.punch_type === "entrada")?.punched_at;
-  const almocoHora = punches.find((p: any) => p.punch_type === "saida_intervalo")?.punched_at;
   const unreadCount = (notifications || []).filter((n: any) => !n.read).length;
   const facialRequired = employee?.facial_required === true || can("punch.facial_required");
   const canPunch = can("punch.register");
+
+  // Compute schedule / status pill
+  const schedule = employee?.schedule || employee?.work_schedule;
+  const scheduleText = schedule?.start && schedule?.end ? `${schedule.start} - ${schedule.end}` : "08:00 - 17:00";
+  const hourNow = now.getHours() + now.getMinutes() / 60;
+  const [sh, sm] = String(scheduleText).split(" - ")[0].split(":").map(Number);
+  const [eh, em] = String(scheduleText).split(" - ")[1].split(":").map(Number);
+  const withinWork = hourNow >= (sh + (sm||0)/60) && hourNow <= (eh + (em||0)/60);
+
+  const nextPaymentDate = data?.next_payment?.date || "25/07";
+  const nextPaymentLabel = data?.next_payment?.label || "Salário";
+  const nextPaymentPeriod = data?.next_payment?.period || format(now, "MMMM/yyyy", { locale: ptBR });
+  const daysToPay = (() => {
+    try {
+      const [d, m] = String(nextPaymentDate).split("/").map(Number);
+      const target = new Date(now.getFullYear(), (m || (now.getMonth() + 1)) - 1, d || 25);
+      if (target < now) target.setMonth(target.getMonth() + 1);
+      const diff = Math.ceil((target.getTime() - now.getTime()) / 86400000);
+      return diff;
+    } catch { return 10; }
+  })();
+
+  const compromissos: any[] = (data as any)?.today_events || [];
 
   async function doPunch(facialVerified = false, selfieDataUrl?: string) {
     if (!gps) { toast({ title: "Aguardando GPS", variant: "destructive" }); return; }
@@ -88,62 +108,133 @@ export default function ColaboradorHome() {
   }
 
   function handlePunchClick() {
-    if (punches.length >= 4) { toast({ title: "Jornada concluída" }); return; }
+    if (jornadaEncerrada) { toast({ title: "Jornada concluída" }); return; }
     if (facialRequired) setShowFace(true); else doPunch(false);
   }
 
+  const firstName = employee?.full_name?.split(" ")[0] || "Colaborador";
+  const role = employee?.worker_profile || employee?.role || "colaborador";
+  const logo = branding?.logo_topbar || branding?.logo || anatrielloLogo.url;
+
   return (
-    <ColaboradorLayout bg="light">
-      {/* Header */}
-      <div className="bg-[#0a1128] text-white px-5 pt-[calc(env(safe-area-inset-top)+16px)] pb-8 rounded-b-3xl">
-        <div className="flex items-start justify-between">
-          <div>
-            <p className="text-sm text-white/70">Olá,</p>
-            <h1 className="text-xl font-bold flex items-center gap-2">{employee?.full_name?.split(" ")[0] || "Colaborador"} <span>👋</span></h1>
-            <p className="text-xs text-white/60 mt-1">{saudacao()}! {format(now, "EEEE, dd/MM/yyyy", { locale: ptBR })}</p>
+    <ColaboradorLayout bg="light" hideTopBar>
+      {/* HERO — deep navy with subtle radial glow */}
+      <div
+        className="relative overflow-hidden text-white px-5 pt-[calc(env(safe-area-inset-top)+18px)] pb-16 rounded-b-[28px]"
+        style={{
+          background:
+            "radial-gradient(120% 80% at 100% 0%, rgba(59,130,246,0.18) 0%, rgba(10,17,40,0) 55%), linear-gradient(180deg, #0a1128 0%, #0d1a3d 100%)",
+        }}
+      >
+        {/* Decorative rings */}
+        <div className="absolute -top-16 -right-16 h-64 w-64 rounded-full border border-white/5" />
+        <div className="absolute -top-8 -right-8 h-40 w-40 rounded-full border border-white/5" />
+
+        <div className="relative flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-full bg-white/10 backdrop-blur flex items-center justify-center overflow-hidden ring-1 ring-white/15">
+              <img src={logo} alt="Logo" className="h-8 w-8 object-contain" />
+            </div>
+            <span className="text-[15px] font-semibold">{branding?.company_name || "Anatriello"}</span>
           </div>
-          <button className="relative p-2 rounded-full bg-white/10">
+          <button
+            onClick={() => nav("/colaborador/perfil")}
+            className="relative h-10 w-10 rounded-full bg-white/8 hover:bg-white/12 flex items-center justify-center ring-1 ring-white/10"
+          >
             <Bell className="h-5 w-5" />
             {unreadCount > 0 && (
-              <span className="absolute top-1 right-1 h-4 w-4 rounded-full bg-[#f97316] text-[10px] font-bold flex items-center justify-center">{unreadCount}</span>
+              <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-[#3b82f6] ring-2 ring-[#0a1128]" />
             )}
           </button>
         </div>
+
+        <div className="relative mt-6 flex items-start justify-between">
+          <div>
+            <h1 className="text-[26px] font-bold leading-tight">Olá, {firstName}! <span className="inline-block">👋</span></h1>
+            <p className="text-sm text-white/60 mt-0.5 capitalize">{role}</p>
+            <div className="flex items-center gap-2 mt-4">
+              <span className={cn(
+                "inline-flex items-center gap-1.5 text-[11px] font-semibold px-3 py-1.5 rounded-full border",
+                withinWork ? "border-emerald-400/40 text-emerald-300 bg-emerald-400/10" : "border-white/15 text-white/70 bg-white/5"
+              )}>
+                <CheckCircle2 className="h-3.5 w-3.5" /> {withinWork ? "OK" : "Fora"}
+              </span>
+              <span className={cn(
+                "inline-flex items-center gap-1.5 text-[11px] font-semibold px-3 py-1.5 rounded-full border",
+                gps ? "border-emerald-400/40 text-emerald-300 bg-emerald-400/10" : "border-white/15 text-white/60 bg-white/5"
+              )}>
+                <Navigation className="h-3.5 w-3.5" /> GPS
+              </span>
+            </div>
+          </div>
+          <div className="text-right">
+            <p className="text-xs text-white/60 capitalize">{format(now, "EEEE", { locale: ptBR })}</p>
+            <p className="text-lg font-bold">{format(now, "dd 'de' MMMM", { locale: ptBR })}</p>
+            <button
+              onClick={() => nav("/colaborador/biometria")}
+              className="mt-3 inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border border-white/15 bg-white/5 hover:bg-white/10 text-[12px] font-semibold"
+            >
+              <QrCode className="h-4 w-4" /> Escanear QR
+            </button>
+          </div>
+        </div>
       </div>
 
-      <div className="px-4 -mt-6 space-y-4">
-        {/* Ponto card — só aparece com capability punch.register */}
+      {/* CONTENT (overlaps hero) */}
+      <div className="px-4 -mt-10 space-y-4 pb-6">
+        {/* Horário card */}
+        <div className="bg-white rounded-2xl p-4 shadow-[0_10px_30px_-15px_rgba(15,23,42,0.15)] flex items-center gap-3">
+          <div className="h-12 w-12 rounded-2xl bg-orange-50 text-[#f97316] flex items-center justify-center">
+            <Clock className="h-6 w-6" />
+          </div>
+          <div className="flex-1">
+            <p className="text-[15px] font-bold text-slate-800">Horário: {scheduleText}</p>
+            <p className={cn("text-[12px] flex items-center gap-1 mt-0.5", withinWork ? "text-emerald-600" : "text-slate-500")}>
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              {withinWork ? "Dentro do horário de trabalho" : "Fora do horário de trabalho"}
+            </p>
+          </div>
+        </div>
+
+        {/* Ponto card — dark with facial ring */}
         {canPunch ? (
-          <div className="bg-gradient-to-br from-[#f97316] to-[#ea580c] rounded-2xl p-4 text-white shadow-lg shadow-orange-500/30">
-            <div className="flex items-center justify-between text-xs uppercase font-bold mb-3">
-              <span>Ponto</span>
-              <span className="opacity-90">Situação</span>
-            </div>
-            <div className="flex justify-between items-start mb-4">
-              <div>
-                <p className="text-xs opacity-90">Horário atual</p>
-                <p className="text-3xl font-bold tracking-tight">{format(now, "HH:mm")}</p>
-                <p className="text-xs opacity-80 mt-1">{format(now, "dd/MM/yyyy")}</p>
+          <div className="rounded-2xl p-5 text-white shadow-[0_20px_40px_-20px_rgba(10,17,40,0.6)]"
+               style={{ background: "linear-gradient(160deg, #0d1a3d 0%, #0a1128 100%)" }}>
+            <div className="grid grid-cols-[1fr_1.1fr] gap-3 items-center">
+              {/* Facial ring */}
+              <div className="flex flex-col items-center text-center">
+                <div className="relative h-32 w-32 rounded-full flex items-center justify-center"
+                     style={{ background: "conic-gradient(from 90deg, #22d3ee 0%, #3b82f6 60%, transparent 60% 100%)" }}>
+                  <div className="absolute inset-1.5 rounded-full bg-[#0a1128] flex flex-col items-center justify-center">
+                    <ScanFace className="h-8 w-8 text-cyan-300" />
+                    <p className="text-[11px] font-bold mt-1">Bater ponto</p>
+                    <p className="text-[9px] text-white/60">{jornadaEncerrada ? "Encerrado" : "Início de jornada"}</p>
+                  </div>
+                </div>
+                <p className="text-[10px] text-white/60 mt-3 leading-tight">Use reconhecimento facial<br/>ou geolocalização</p>
               </div>
-              <div className="text-right">
-                <p className="text-sm font-semibold">{situacao}</p>
-                <p className="text-xs opacity-90 mt-1">Entrada: {entradaHora ? format(new Date(entradaHora), "HH:mm") : "—:—"}</p>
-                <p className="text-xs opacity-90">Almoço: {almocoHora ? format(new Date(almocoHora), "HH:mm") : "—:—"}</p>
+
+              {/* Copy + CTA */}
+              <div className="border-l border-white/10 pl-4">
+                <p className="text-[13.5px] leading-snug text-white/90">
+                  {jornadaEncerrada ? "Sua jornada de hoje foi concluída." :
+                   punches.length === 0 ? "Ainda não registramos seu ponto hoje. Inicie sua jornada para começar a contar seu dia."
+                   : `${situacao}. Próximo: ${PUNCH_LABEL[nextType]}.`}
+                </p>
+                <button
+                  onClick={handlePunchClick}
+                  disabled={punch.isPending || jornadaEncerrada}
+                  className="w-full mt-3 bg-gradient-to-r from-[#fb923c] to-[#f97316] text-white font-bold text-[15px] py-3 rounded-xl active:scale-[.98] transition disabled:opacity-60 flex items-center justify-center gap-2 shadow-lg shadow-orange-500/30"
+                >
+                  {punch.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> :
+                   facialRequired ? <Camera className="h-4 w-4" /> : <MapPin className="h-4 w-4" />}
+                  {jornadaEncerrada ? "Jornada encerrada" : "Bater Ponto"}
+                </button>
+                <p className="flex items-center justify-center gap-1.5 text-[11px] text-emerald-300 mt-2">
+                  <ShieldCheck className="h-3.5 w-3.5" /> Seguro e certificado
+                </p>
               </div>
             </div>
-            <button
-              onClick={handlePunchClick}
-              disabled={punch.isPending || punches.length >= 4}
-              className="w-full bg-white text-[#ea580c] font-bold text-sm py-3 rounded-xl active:scale-[.98] transition disabled:opacity-60 flex items-center justify-center gap-2"
-            >
-              {punch.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : facialRequired ? <Camera className="h-4 w-4" /> : <MapPin className="h-4 w-4" />}
-              {punches.length >= 4 ? "JORNADA ENCERRADA" : `REGISTRAR ${PUNCH_LABEL[nextType]?.toUpperCase() || "PONTO"}`}
-            </button>
-            {gps ? (
-              <p className="text-[10px] opacity-80 mt-2 text-center">GPS ativo · precisão {Math.round(gps.acc)}m</p>
-            ) : (
-              <p className="text-[10px] opacity-80 mt-2 text-center">Aguardando GPS…</p>
-            )}
           </div>
         ) : (
           <div className="bg-white border border-slate-100 rounded-2xl p-4 flex items-start gap-3 shadow-sm">
@@ -157,7 +248,7 @@ export default function ColaboradorHome() {
           </div>
         )}
 
-        {/* Coleta de biometria facial pelo app — só aparece quando o RH habilita e o colaborador ainda pode cadastrar */}
+        {/* Coleta biometria opcional */}
         {faceStatus?.can_enroll && (
           <button
             onClick={() => nav("/colaborador/biometria")}
@@ -170,42 +261,98 @@ export default function ColaboradorHome() {
               <div className="flex-1 min-w-0">
                 <p className="text-[11px] uppercase font-bold opacity-80">Biometria facial</p>
                 <p className="text-sm font-bold truncate">
-                  {faceStatus.collection_requested && faceStatus.enrolled
-                    ? "RH pediu nova coleta"
-                    : "Cadastre sua biometria facial"}
+                  {faceStatus.collection_requested && faceStatus.enrolled ? "RH pediu nova coleta" : "Cadastre sua biometria facial"}
                 </p>
-                <p className="text-[11px] opacity-90 mt-0.5">
-                  2 capturas + teste rápido. Leva menos de 1 minuto.
-                </p>
+                <p className="text-[11px] opacity-90 mt-0.5">2 capturas + teste rápido. Leva menos de 1 minuto.</p>
               </div>
               <ChevronRight className="h-5 w-5 opacity-80" />
             </div>
           </button>
         )}
 
-
-        {/* Acesso rápido — filtrado por capability */}
+        {/* Acesso rápido — 4 grandes cards */}
         <div>
-          <p className="text-sm font-bold mb-3">Acesso rápido</p>
+          <p className="text-[15px] font-bold text-slate-800 mb-3">Acesso rápido</p>
           <div className="grid grid-cols-4 gap-3">
-            {can("payslip.view") && <QuickAction icon={FileText} label="Holerite" color="#3b82f6" onClick={() => nav("/colaborador/holerite")} />}
-            {can("vacations.view") && <QuickAction icon={Umbrella} label="Férias" color="#06b6d4" onClick={() => nav("/colaborador/ferias")} />}
-            {can("benefits.view") && <QuickAction icon={Gift} label="Benefícios" color="#f43f5e" onClick={() => nav("/colaborador/beneficios")} />}
-            {can("documents.view") && <QuickAction icon={FolderOpen} label="Documentos" color="#8b5cf6" onClick={() => nav("/colaborador/documentos")} />}
-            {can("requests.view") && <QuickAction icon={Edit3} label="Solicitações" color="#f59e0b" onClick={() => nav("/colaborador/solicitacoes")} />}
-            {can("journey.view") && <QuickAction icon={Clock} label="Jornada" color="#10b981" onClick={() => nav("/colaborador/jornada")} />}
-            <QuickAction icon={FileSignature} label="Espelho" color="#0ea5e9" onClick={() => nav("/colaborador/espelho")} />
-            {can("announcements.view") && <QuickAction icon={Bell} label="Comunicados" color="#ef4444" onClick={() => nav("/colaborador/perfil")} />}
-
+            {can("documents.view") && (
+              <BigAction icon={FileText} label="Documentos" sub="Meus documentos" onClick={() => nav("/colaborador/documentos")} />
+            )}
+            {can("journey.view") && (
+              <BigAction icon={Calendar} label="Agenda" sub="Compromissos" onClick={() => nav("/colaborador/jornada")} />
+            )}
+            {can("announcements.view") && (
+              <BigAction icon={Megaphone} label="Comunicados" sub="Avisos e notícias" onClick={() => nav("/colaborador/perfil")} />
+            )}
+            {can("payslip.view") && (
+              <BigAction icon={DollarSign} label="Pagamentos" sub="Holerites e recibos" onClick={() => nav("/colaborador/holerite")} />
+            )}
           </div>
         </div>
 
+        {/* Próximos pagamentos */}
+        {can("payslip.view") && (
+          <button
+            onClick={() => nav("/colaborador/holerite")}
+            className="w-full text-left rounded-2xl p-4 text-white shadow-[0_20px_40px_-25px_rgba(10,17,40,0.7)] flex items-center gap-4"
+            style={{ background: "linear-gradient(160deg, #0d1a3d 0%, #0a1128 100%)" }}
+          >
+            <div className="h-12 w-12 rounded-full border-2 border-emerald-400/50 flex items-center justify-center text-emerald-300">
+              <DollarSign className="h-5 w-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[15px] font-bold">Próximos pagamentos</p>
+              <p className="text-[12px] text-white/70">{nextPaymentLabel}</p>
+              <p className="text-[11px] text-white/50 capitalize">{nextPaymentPeriod}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-[20px] font-bold text-emerald-300">{nextPaymentDate}</p>
+              <p className="text-[11px] text-white/60">Em {daysToPay} dias</p>
+            </div>
+            <ChevronRight className="h-5 w-5 text-white/60" />
+          </button>
+        )}
 
-        {can("announcements.view") && (
+        {/* Compromissos de hoje */}
+        <div>
+          <div className="flex items-center gap-2 mb-2 px-1">
+            <Calendar className="h-4 w-4 text-slate-500" />
+            <p className="text-[15px] font-bold text-slate-800">Compromissos de hoje</p>
+          </div>
+          <div className="bg-white rounded-2xl p-4 shadow-sm">
+            {compromissos.length === 0 ? (
+              <div className="flex items-start gap-3">
+                <div className="h-10 w-10 rounded-xl bg-slate-100 flex items-center justify-center flex-shrink-0">
+                  <Calendar className="h-5 w-5 text-slate-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-slate-700">Nenhum compromisso para hoje</p>
+                  <p className="text-xs text-slate-500">Aproveite seu dia! 💪</p>
+                </div>
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {compromissos.slice(0, 4).map((c: any, i: number) => (
+                  <div key={i} className="flex items-center gap-3 py-2 first:pt-0 last:pb-0">
+                    <div className="h-9 w-9 rounded-lg bg-orange-50 text-[#f97316] flex items-center justify-center">
+                      <Calendar className="h-4 w-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold truncate">{c.title || c.name}</p>
+                      {c.time && <p className="text-xs text-slate-500">{c.time}</p>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Comunicados recentes */}
+        {can("announcements.view") && !!announcements?.length && (
           <div className="bg-white rounded-2xl p-4 shadow-sm">
             <div className="flex items-center justify-between mb-3">
-              <p className="text-sm font-bold">Comunicados</p>
-              <button className="text-xs text-[#f97316] font-semibold">Ver todos</button>
+              <p className="text-[15px] font-bold text-slate-800">Comunicados</p>
+              <button className="text-xs text-[#f97316] font-semibold" onClick={() => nav("/colaborador/perfil")}>Ver todos</button>
             </div>
             {(announcements || []).slice(0, 2).map((a: any) => (
               <div key={a.id} className="flex items-start gap-3 py-2 border-t border-slate-100 first:border-0">
@@ -219,9 +366,6 @@ export default function ColaboradorHome() {
                 </div>
               </div>
             ))}
-            {!announcements?.length && (
-              <p className="text-xs text-slate-400 text-center py-6">Nenhum comunicado no momento</p>
-            )}
           </div>
         )}
 
@@ -240,13 +384,17 @@ export default function ColaboradorHome() {
   );
 }
 
-function QuickAction({ icon: Icon, label, color, onClick }: any) {
+function BigAction({ icon: Icon, label, sub, onClick }: any) {
   return (
-    <button onClick={onClick} className="flex flex-col items-center gap-1.5 active:scale-95 transition">
-      <div className="h-14 w-14 rounded-2xl flex items-center justify-center shadow-sm" style={{ background: `${color}15`, color }}>
-        <Icon className="h-6 w-6" />
+    <button
+      onClick={onClick}
+      className="bg-white rounded-2xl p-3 flex flex-col items-center gap-1.5 shadow-sm hover:shadow-md border border-slate-100 active:scale-[.97] transition"
+    >
+      <div className="h-11 w-11 rounded-2xl bg-orange-50 text-[#f97316] flex items-center justify-center">
+        <Icon className="h-6 w-6" strokeWidth={1.8} />
       </div>
-      <span className="text-[10px] font-medium text-slate-600 text-center leading-tight">{label}</span>
+      <span className="text-[12px] font-bold text-slate-800 text-center leading-tight">{label}</span>
+      <span className="text-[10px] text-slate-500 text-center leading-tight line-clamp-1">{sub}</span>
     </button>
   );
 }
