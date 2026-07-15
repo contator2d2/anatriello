@@ -239,7 +239,8 @@ router.post('/ocr/batch-expiry', async (req, res) => {
     const { image_url, image_base64, mime_type, stop_id, photo_id } = req.body || {};
     if (!image_url && !image_base64) return res.status(400).json({ error: 'image_url ou image_base64 obrigatório' });
 
-    const prompt = `Analise o rótulo do produto na imagem. Extraia e responda APENAS o JSON:
+    const extra = await getCustomInstructions(req.organizationId, 'ocr_batch_expiry');
+    const prompt = `${extra ? `INSTRUÇÕES DO GESTOR:\n${extra}\n\n` : ''}Analise o rótulo do produto na imagem. Extraia e responda APENAS o JSON:
 {
   "batch": "código do LOTE (procure LOTE/L./BATCH/L:)",
   "expiry_date": "YYYY-MM-DD (procure VAL/VALIDADE/VENC)",
