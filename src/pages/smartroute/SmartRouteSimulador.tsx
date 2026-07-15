@@ -305,7 +305,7 @@ export default function SmartRouteSimulador() {
     // Usa o trecho CD → PDV1; nunca sai antes do início da jornada informado.
     let adjustedDeparture = startMin;
     if (autoDeparture && first.stops.length && first.stops[0].wait > 0) {
-      adjustedDeparture = Math.max(startMin, startMin + first.stops[0].wait);
+      adjustedDeparture = Math.max(startMin, first.stops[0].arrival - first.stops[0].travel);
     }
     // Se ajustou, roda passada 2
     return adjustedDeparture !== startMin ? simulate(adjustedDeparture) : first;
