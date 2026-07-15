@@ -179,6 +179,23 @@ export default function SmartRouteSimulador() {
         <div className="text-center py-12 text-muted-foreground">Carregando…</div>
       ) : !order.length ? (
         <div className="text-center py-12 text-sm text-muted-foreground">Nenhum pedido lançado para esta data.</div>
+      ) : !showResult ? (
+        <Card>
+          <CardContent className="p-10 text-center space-y-4">
+            <div className="mx-auto w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-sky-500 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+              <Sparkles className="w-7 h-7 text-white" />
+            </div>
+            <div>
+              <div className="font-semibold text-lg">Pronto para simular</div>
+              <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                {order.length} pedido(s) prontos. Rode a simulação para ver a sequência otimizada, ETAs por PDV e tempo total da rota.
+              </p>
+            </div>
+            <Button onClick={runSimulation} className="bg-gradient-to-r from-indigo-500 to-sky-500 hover:from-indigo-600 hover:to-sky-600 text-white">
+              <Sparkles className="w-4 h-4 mr-2" /> Rodar Simulação
+            </Button>
+          </CardContent>
+        </Card>
       ) : (
         <>
           {/* Totais */}
