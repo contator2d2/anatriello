@@ -2010,6 +2010,43 @@ function haversineKm(a, b) {
   return 2 * R * Math.asin(Math.sqrt(s));
 }
 
+const AVG_ROUTE_SPEED_KMH = 30;
+const toCoord = (value) => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+};
+const hasCoord = (point) => toCoord(point?.lat) !== null && toCoord(point?.lng) !== null;
+async function fetchOsrmLeg(from, to) {
+  const fromLat = toCoord(from.lat), fromLng = toCoord(from.lng);
+  const toLat = toCoord(to.lat), toLng = toCoord(to.lng);
+  const fallbackKm = haversineKm({ lat: fromLat, lng: fromLng }, { lat: toLat, lng: toLng });
+  const fallback = {
+    leg: { km: fallbackKm, min: (fallbackKm / AVG_ROUTE_SPEED_KMH) * 60, fallback: true },
+    geometry: [[fromLat, fromLng], [toLat, toLng]],
+    ok: false,
+  };
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 12000);
+    const coords = `${fromLng},${fromLat};${toLng},${toLat}`;
+    const response = await fetch(`https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson&steps=false`, { signal: ctrl.signal });
+    clearTimeout(timer);
+    if (!response.ok) return fallback;
+    const data = await response.json();
+    const route = data?.routes?.[0];
+    const rawLeg = route?.legs?.[0];
+    const geometry = route?.geometry?.coordinates;
+    if (!route || !rawLeg || !Array.isArray(geometry) || geometry.length < 2) return fallback;
+    return {
+      leg: { km: Number(rawLeg.distance || 0) / 1000, min: Number(rawLeg.duration || 0) / 60 },
+      geometry: geometry.map((c) => [c[1], c[0]]),
+      ok: true,
+    };
+  } catch {
+    return fallback;
+  }
+}
+
 async function optimizeRouteDay(organization_id, route_id, date, actor = 'manual') {
   // Garante instância do dia
   await query(
