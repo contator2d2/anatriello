@@ -319,9 +319,14 @@ export default function SmartRouteSimulador() {
             <label className="text-xs text-muted-foreground">Início da jornada</label>
             <Input type="time" value={startHour} onChange={(e) => setStartHour(e.target.value)} className="w-32" />
           </div>
+          <label className="flex items-center gap-2 text-xs text-muted-foreground pb-2 cursor-pointer select-none">
+            <input type="checkbox" checked={autoDeparture} onChange={(e) => setAutoDeparture(e.target.checked)} />
+            Ajustar saída do CD automaticamente para chegar na janela do 1º PDV
+          </label>
           <div className="text-xs text-muted-foreground pb-2">
-            Upsell/PDV: <b>{upsellMin} min</b> · Velocidade média: <b>{AVG_SPEED_KMH} km/h</b>
+            Upsell/PDV: <b>{upsellMin} min</b> · Rota real: <b>{osrmLoading ? "calculando…" : osrm ? "por ruas (OSRM)" : "linha reta (fallback)"}</b>
           </div>
+
         </CardContent>
       </Card>
 
