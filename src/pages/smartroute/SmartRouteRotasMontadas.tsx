@@ -35,8 +35,8 @@ export default function RotasMontadas() {
     <div className="p-6 max-w-7xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2"><RouteIcon className="w-6 h-6" /> Rotas Montadas</h1>
-          <p className="text-sm text-muted-foreground">Rotas fixas com PDVs pré-cadastrados, janelas de horário e escala de entregadores.</p>
+          <h1 className="text-2xl font-bold flex items-center gap-2"><RouteIcon className="w-6 h-6" /> Rotas Dinâmicas</h1>
+          <p className="text-sm text-muted-foreground">Modelos operacionais para organizar os PDVs lançados no dia, janelas de horário e escala de entregadores.</p>
         </div>
         <Button onClick={() => setCreating(true)}><Plus className="w-4 h-4 mr-2" /> Nova rota</Button>
       </div>
@@ -45,7 +45,7 @@ export default function RotasMontadas() {
         <div className="text-center py-12 text-muted-foreground">Carregando…</div>
       ) : templates.length === 0 ? (
         <Card><CardContent className="py-12 text-center text-muted-foreground">
-          Nenhuma rota fixa cadastrada. Crie sua primeira rota-modelo.
+          Nenhuma rota dinâmica cadastrada. Crie sua primeira rota-modelo.
         </CardContent></Card>
       ) : (
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -100,7 +100,7 @@ function TemplateDialog({ open, onOpenChange, template }: any) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
-        <DialogHeader><DialogTitle>{template ? "Editar rota" : "Nova rota fixa"}</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>{template ? "Editar rota" : "Nova rota dinâmica"}</DialogTitle></DialogHeader>
         <div className="space-y-3">
           <div><label className="text-sm">Código/Nome da rota*</label><Input value={form.code || ""} onChange={(e) => setForm({ ...form, code: e.target.value })} placeholder="Ex: Rota Centro-SP" /></div>
           <div><label className="text-sm">Centro de Distribuição de saída*</label>
