@@ -1,6 +1,6 @@
 import { ReactNode } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import { Home, Clock, FileText, User, ChevronLeft, WifiOff, CloudUpload } from "lucide-react";
+import { Home, Clock, FileText, User, ChevronLeft, WifiOff, CloudUpload, Megaphone, Calendar } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useBranding } from "@/hooks/use-branding";
 import { useOfflineSync } from "@/hooks/use-offline-sync";
@@ -13,17 +13,19 @@ interface Props {
   showBack?: boolean;
   rightSlot?: ReactNode;
   bg?: "navy" | "light";
+  hideTopBar?: boolean;
 }
 
 // tab.cap = capability necessária para mostrar a aba (undefined = sempre visível)
 const tabs: { to: string; label: string; icon: any; cap?: string }[] = [
   { to: "/colaborador/home", label: "Início", icon: Home },
-  { to: "/colaborador/jornada", label: "Jornada", icon: Clock, cap: "journey.view" },
-  { to: "/colaborador/solicitacoes", label: "Solicitações", icon: FileText, cap: "requests.view" },
+  { to: "/colaborador/jornada", label: "Agenda", icon: Calendar, cap: "journey.view" },
+  { to: "/colaborador/perfil?tab=comunicados", label: "Comunicados", icon: Megaphone },
+  { to: "/colaborador/documentos", label: "Documentos", icon: FileText, cap: "documents.view" },
   { to: "/colaborador/perfil", label: "Perfil", icon: User, cap: "profile.view" },
 ];
 
-export function ColaboradorLayout({ children, title, showBack, rightSlot, bg = "light" }: Props) {
+export function ColaboradorLayout({ children, title, showBack, rightSlot, bg = "light", hideTopBar }: Props) {
   const nav = useNavigate();
   const { branding } = useBranding() as any;
   const { isOnline, isSyncing } = useOfflineSync();
@@ -35,7 +37,7 @@ export function ColaboradorLayout({ children, title, showBack, rightSlot, bg = "
 
   return (
     <div className={cn("min-h-screen flex flex-col", bg === "navy" ? "bg-[#0a1128] text-white" : "bg-[#f4f6fb] text-[#0f172a]")}>
-      {/* Branded top bar — always visible */}
+      {!hideTopBar && (
       <div className={cn(
         "sticky top-0 z-30 px-3 pt-[env(safe-area-inset-top)] pb-2 flex items-center gap-2 border-b",
         bg === "navy" ? "bg-[#0a1128] border-white/10" : "bg-white border-slate-100"
@@ -55,6 +57,7 @@ export function ColaboradorLayout({ children, title, showBack, rightSlot, bg = "
           </span>
         )}
       </div>
+      )}
 
       {title && (
         <header className={cn(
