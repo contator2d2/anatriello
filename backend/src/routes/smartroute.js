@@ -195,6 +195,7 @@ export async function ensureSmartRouteTables() {
     ALTER TABLE smartroute_pdvs ADD COLUMN IF NOT EXISTS channel TEXT;
     ALTER TABLE smartroute_pdvs ADD COLUMN IF NOT EXISTS category TEXT;
     ALTER TABLE smartroute_pdvs ADD COLUMN IF NOT EXISTS region TEXT;
+    ALTER TABLE smartroute_pdvs ADD COLUMN IF NOT EXISTS contacts JSONB DEFAULT '[]'::jsonb;
 
 
     -- === Fluxo Inteligente da Operação (Onda 1) ===
