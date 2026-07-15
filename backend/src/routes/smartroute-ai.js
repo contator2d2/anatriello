@@ -66,11 +66,58 @@ async function ensureTables() {
     );
     CREATE INDEX IF NOT EXISTS idx_sr_reco_org ON smartroute_ai_recommendations(organization_id, created_at DESC);
 
+    CREATE TABLE IF NOT EXISTS smartroute_ai_prompts (
+      organization_id UUID NOT NULL,
+      key TEXT NOT NULL,
+      instructions TEXT,
+      updated_by UUID,
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY (organization_id, key)
+    );
+
     ALTER TABLE smartroute_orders ADD COLUMN IF NOT EXISTS time_window_start TIME;
     ALTER TABLE smartroute_orders ADD COLUMN IF NOT EXISTS time_window_end TIME;
     ALTER TABLE smartroute_orders ADD COLUMN IF NOT EXISTS service_time_min INTEGER DEFAULT 15;
   `);
   ensured = true;
+}
+
+// ---------- Custom prompts (per-org overrides) ----------
+export const AI_PROMPT_DEFS = {
+  advisor: {
+    label: 'Gestor IA (recomendações)',
+    description: 'Como a IA deve analisar a operação e sugerir ações. Ex: priorize custo, foque em janela de horário, evite motoristas específicos.',
+    system_default: 'Você é um gestor sênior de logística e distribuição no Brasil, atuando como consultor operacional para a plataforma Anatriello SmartRoute AI. Analise dados operacionais reais e forneça recomendações práticas, específicas e priorizadas em português do Brasil. Sempre responda APENAS com JSON válido.',
+  },
+  post_route: {
+    label: 'Análise Pós-Rota',
+    description: 'Como avaliar a execução de rotas concluídas. Ex: peso maior em pontualidade, tolerância a atrasos, foco em checklist.',
+    system_default: 'Você é um analista sênior de operações logísticas no Brasil. Analise a execução de uma rota concluída e gere um relatório objetivo e acionável em português do Brasil. Responda APENAS com JSON válido.',
+  },
+  ocr_batch_expiry: {
+    label: 'OCR de Lote e Validade',
+    description: 'Regras extras para leitura de rótulos. Ex: aceitar formatos DD/MM/AA, ignorar códigos EAN, priorizar data mais próxima.',
+    system_default: 'Extrair informações de rótulos de produtos brasileiros com precisão. Responda apenas em JSON válido.',
+  },
+  shelf_analysis: {
+    label: 'Análise de Gôndola',
+    description: 'Como avaliar fotos de prateleiras. Ex: marcas prioritárias, critérios de share, tolerância a ruptura.',
+    system_default: 'Analista visual de merchandising no varejo brasileiro. Responda apenas em JSON válido.',
+  },
+};
+
+async function getCustomInstructions(org, key) {
+  if (!org) return '';
+  try {
+    await ensureTables();
+    const r = await query(`SELECT instructions FROM smartroute_ai_prompts WHERE organization_id=$1 AND key=$2`, [org, key]);
+    return (r.rows[0]?.instructions || '').trim();
+  } catch { return ''; }
+}
+
+function composeSystem(baseSystem, custom) {
+  if (!custom) return baseSystem;
+  return `${baseSystem}\n\n===== INSTRUÇÕES ADICIONAIS DO GESTOR (obedeça sempre) =====\n${custom}\n=====`;
 }
 
 // ---------- AI provider (OpenAI / Gemini / OpenRouter) ----------
@@ -192,7 +239,8 @@ router.post('/ocr/batch-expiry', async (req, res) => {
     const { image_url, image_base64, mime_type, stop_id, photo_id } = req.body || {};
     if (!image_url && !image_base64) return res.status(400).json({ error: 'image_url ou image_base64 obrigatório' });
 
-    const prompt = `Analise o rótulo do produto na imagem. Extraia e responda APENAS o JSON:
+    const extra = await getCustomInstructions(req.organizationId, 'ocr_batch_expiry');
+    const prompt = `${extra ? `INSTRUÇÕES DO GESTOR:\n${extra}\n\n` : ''}Analise o rótulo do produto na imagem. Extraia e responda APENAS o JSON:
 {
   "batch": "código do LOTE (procure LOTE/L./BATCH/L:)",
   "expiry_date": "YYYY-MM-DD (procure VAL/VALIDADE/VENC)",
@@ -239,7 +287,8 @@ router.post('/analysis/shelf', async (req, res) => {
     const { image_url, image_base64, mime_type, stop_id, photo_id, expected_brands } = req.body || {};
     if (!image_url && !image_base64) return res.status(400).json({ error: 'image_url ou image_base64 obrigatório' });
 
-    const prompt = `Analise a foto da gôndola/prateleira do PDV. Responda APENAS o JSON:
+    const extra = await getCustomInstructions(req.organizationId, 'shelf_analysis');
+    const prompt = `${extra ? `INSTRUÇÕES DO GESTOR:\n${extra}\n\n` : ''}Analise a foto da gôndola/prateleira do PDV. Responda APENAS o JSON:
 {
   "fill_percent": 0-100,
   "out_of_stock": true/false,
@@ -518,7 +567,7 @@ router.post('/advisor/analyze', async (req, res) => {
       rota_focada: routeContext,
     };
 
-    const system = 'Você é um gestor sênior de logística e distribuição no Brasil, atuando como consultor operacional para a plataforma Anatriello SmartRoute AI. Analise dados operacionais reais e forneça recomendações práticas, específicas e priorizadas em português do Brasil. Sempre responda APENAS com JSON válido.';
+    const system = composeSystem(AI_PROMPT_DEFS.advisor.system_default, await getCustomInstructions(org, 'advisor'));
     const prompt = `Analise o contexto operacional abaixo e retorne recomendações do "gestor IA".
 
 CONTEXTO:
@@ -673,7 +722,7 @@ router.post('/routes/:id/post-analysis', async (req, res) => {
       })),
     };
 
-    const system = 'Você é um analista sênior de operações logísticas no Brasil. Analise a execução de uma rota concluída e gere um relatório objetivo e acionável em português do Brasil. Responda APENAS com JSON válido.';
+    const system = composeSystem(AI_PROMPT_DEFS.post_route.system_default, await getCustomInstructions(org, 'post_route'));
     const prompt = `Analise a execução da rota abaixo e produza um relatório pós-rota.
 
 MÉTRICAS:
@@ -728,6 +777,42 @@ router.get('/post-analyses', async (req, res) => {
        ORDER BY rec.created_at DESC LIMIT 100`, [req.organizationId]);
     res.json(r.rows);
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ============ PROMPTS CUSTOMIZÁVEIS ============
+router.get('/prompts', async (req, res) => {
+  try {
+    await ensureTables();
+    const org = req.organizationId;
+    const r = await query(`SELECT key, instructions, updated_at, updated_by FROM smartroute_ai_prompts WHERE organization_id=$1`, [org]);
+    const byKey = Object.fromEntries(r.rows.map((x) => [x.key, x]));
+    const out = Object.entries(AI_PROMPT_DEFS).map(([key, def]) => ({
+      key,
+      label: def.label,
+      description: def.description,
+      system_default: def.system_default,
+      instructions: byKey[key]?.instructions || '',
+      updated_at: byKey[key]?.updated_at || null,
+    }));
+    res.json(out);
+  } catch (e) { logError('prompts.list', e); res.status(500).json({ error: e.message }); }
+});
+
+router.put('/prompts/:key', async (req, res) => {
+  try {
+    await ensureTables();
+    const { key } = req.params;
+    if (!AI_PROMPT_DEFS[key]) return res.status(400).json({ error: 'Chave inválida' });
+    const instructions = (req.body?.instructions || '').toString();
+    await query(
+      `INSERT INTO smartroute_ai_prompts (organization_id, key, instructions, updated_by, updated_at)
+       VALUES ($1,$2,$3,$4,NOW())
+       ON CONFLICT (organization_id, key)
+       DO UPDATE SET instructions=EXCLUDED.instructions, updated_by=EXCLUDED.updated_by, updated_at=NOW()`,
+      [req.organizationId, key, instructions, req.userId]
+    );
+    res.json({ ok: true });
+  } catch (e) { logError('prompts.save', e); res.status(500).json({ error: e.message }); }
 });
 
 export default router;

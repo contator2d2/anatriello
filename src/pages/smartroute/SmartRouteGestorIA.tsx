@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Brain, Sparkles, RefreshCw, Trash2, TrendingUp, AlertTriangle, Lightbulb, ClipboardCheck, Loader2 } from "lucide-react";
+import { Brain, Sparkles, RefreshCw, Trash2, TrendingUp, AlertTriangle, Lightbulb, ClipboardCheck, Loader2, Settings2 } from "lucide-react";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { useSRAdvisorHistory, useSRAdvisorAnalyze, useSRDeleteAdvisor } from "@/hooks/use-smartroute-ai";
 import { useSRRoutes } from "@/hooks/use-smartroute";
@@ -46,6 +47,9 @@ export default function SmartRouteGestorIA() {
             </h1>
             <p className="text-sm text-muted-foreground">Recomendações estratégicas e operacionais baseadas nos dados reais da sua operação.</p>
           </div>
+          <Button asChild variant="outline" size="sm">
+            <Link to="/smartroute/prompts"><Settings2 className="w-4 h-4 mr-2" /> Ajustar inteligência</Link>
+          </Button>
         </div>
 
         <Card>
