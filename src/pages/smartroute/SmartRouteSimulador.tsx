@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useSRTemplates, useSRRouteDay, useSRSaveDaySequence } from "@/hooks/use-smartroute-daily";
+import { SimulationRunnerDialog } from "@/components/smartroute/SimulationRunnerDialog";
 
 const WIN_META: Record<string, { label: string; icon: any; color: string }> = {
   manha: { label: "Manhã", icon: Sun, color: "bg-amber-100 text-amber-700" },
