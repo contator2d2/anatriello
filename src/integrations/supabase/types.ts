@@ -258,6 +258,36 @@ export type Database = {
         }
         Relationships: []
       }
+      smartroute_route_pdvs: {
+        Row: {
+          created_at: string | null
+          delivery_window: string | null
+          id: string
+          notes: string | null
+          pdv_id: string
+          route_id: string
+          sequence: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          delivery_window?: string | null
+          id?: string
+          notes?: string | null
+          pdv_id: string
+          route_id: string
+          sequence?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          delivery_window?: string | null
+          id?: string
+          notes?: string | null
+          pdv_id?: string
+          route_id?: string
+          sequence?: number | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

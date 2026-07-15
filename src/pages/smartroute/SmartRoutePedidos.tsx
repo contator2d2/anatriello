@@ -110,7 +110,7 @@ export default function SmartRoutePedidos() {
                 <Select value={form.pdv_id || ""} onValueChange={(v) => {
                   const rp = routePdvs.find((x: any) => x.pdv_id === v);
                   const pdv = pdvs.find((x: any) => x.id === v);
-                  setForm({ ...form, pdv_id: v, pdv_window: rp?.window || pdv?.delivery_window || null });
+                  setForm({ ...form, pdv_id: v, pdv_window: rp?.delivery_window || rp?.window || pdv?.delivery_window || null });
                 }}>
                   <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                   <SelectContent>
