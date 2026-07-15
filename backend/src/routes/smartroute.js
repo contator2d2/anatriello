@@ -687,9 +687,9 @@ router.post('/pdvs', async (req, res) => {
   try {
     const b = req.body || {};
     const r = await query(
-      `INSERT INTO smartroute_pdvs (organization_id, name, cnpj, address, city, state, zip, lat, lng, contact_name, contact_phone, delivery_window_start, delivery_window_end, notes, active)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,COALESCE($15,true)) RETURNING *`,
-      [orgId(req), b.name, b.cnpj, b.address, b.city, b.state, b.zip, b.lat, b.lng, b.contact_name, b.contact_phone, b.delivery_window_start, b.delivery_window_end, b.notes, b.active]
+      `INSERT INTO smartroute_pdvs (organization_id, name, cnpj, address, city, state, zip, lat, lng, contact_name, contact_phone, delivery_window_start, delivery_window_end, notes, active, delivery_window, allowed_weekdays, service_time_min, checklist_template_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,COALESCE($15,true),COALESCE($16,'qualquer'),COALESCE($17,'{0,1,2,3,4,5,6}'::int[]),COALESCE($18,15),$19) RETURNING *`,
+      [orgId(req), b.name, b.cnpj, b.address, b.city, b.state, b.zip, b.lat, b.lng, b.contact_name, b.contact_phone, b.delivery_window_start, b.delivery_window_end, b.notes, b.active, b.delivery_window, b.allowed_weekdays, b.service_time_min, b.checklist_template_id]
     );
     res.json(r.rows[0]);
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -701,9 +701,11 @@ router.put('/pdvs/:id', async (req, res) => {
       `UPDATE smartroute_pdvs SET name=COALESCE($3,name), cnpj=COALESCE($4,cnpj), address=COALESCE($5,address),
         city=COALESCE($6,city), state=COALESCE($7,state), zip=COALESCE($8,zip), lat=$9, lng=$10,
         contact_name=COALESCE($11,contact_name), contact_phone=COALESCE($12,contact_phone),
-        delivery_window_start=$13, delivery_window_end=$14, notes=COALESCE($15,notes), active=COALESCE($16,active), updated_at=NOW()
+        delivery_window_start=$13, delivery_window_end=$14, notes=COALESCE($15,notes), active=COALESCE($16,active),
+        delivery_window=COALESCE($17,delivery_window), allowed_weekdays=COALESCE($18,allowed_weekdays),
+        service_time_min=COALESCE($19,service_time_min), checklist_template_id=$20, updated_at=NOW()
        WHERE id=$1 AND organization_id=$2 RETURNING *`,
-      [req.params.id, orgId(req), b.name, b.cnpj, b.address, b.city, b.state, b.zip, b.lat, b.lng, b.contact_name, b.contact_phone, b.delivery_window_start, b.delivery_window_end, b.notes, b.active]
+      [req.params.id, orgId(req), b.name, b.cnpj, b.address, b.city, b.state, b.zip, b.lat, b.lng, b.contact_name, b.contact_phone, b.delivery_window_start, b.delivery_window_end, b.notes, b.active, b.delivery_window, b.allowed_weekdays, b.service_time_min, b.checklist_template_id]
     );
     res.json(r.rows[0]);
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -712,6 +714,7 @@ router.delete('/pdvs/:id', async (req, res) => {
   try { await query(`DELETE FROM smartroute_pdvs WHERE id=$1 AND organization_id=$2`, [req.params.id, orgId(req)]); res.json({ ok: true }); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
+
 
 // ============ ORDERS CRUD ============
 router.get('/orders', async (req, res) => {
