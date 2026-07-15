@@ -124,3 +124,47 @@ export function useSRReopenDay() {
     },
   });
 }
+
+// -------- IA: otimizar e publicar --------
+export function useSROptimizeDay() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ routeId, date }: any) =>
+      api(`${BASE}/routes/${routeId}/day/${date}/optimize`, { method: 'POST', body: {} }),
+    onSuccess: (_, v: any) => qc.invalidateQueries({ queryKey: ['sr-route-day', v.routeId, v.date] }),
+  });
+}
+export function useSRPublishDay() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ routeId, date }: any) =>
+      api(`${BASE}/routes/${routeId}/day/${date}/publish`, { method: 'POST', body: {} }),
+    onSuccess: (_, v: any) => {
+      qc.invalidateQueries({ queryKey: ['sr-route-day', v.routeId, v.date] });
+      qc.invalidateQueries({ queryKey: ['sr-orders'] });
+    },
+  });
+}
+
+// -------- Templates de checklist (por PDV) --------
+export function useSRChecklistTemplates() {
+  return useQuery<any[]>({ queryKey: ['sr-pdv-checklists'], queryFn: () => api(`${BASE}/pdv-checklists`) });
+}
+export function useSRSaveChecklistTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: any) =>
+      body.id
+        ? api(`${BASE}/pdv-checklists/${body.id}`, { method: 'PUT', body })
+        : api(`${BASE}/pdv-checklists`, { method: 'POST', body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['sr-pdv-checklists'] }),
+  });
+}
+export function useSRDeleteChecklistTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api(`${BASE}/pdv-checklists/${id}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['sr-pdv-checklists'] }),
+  });
+}
+

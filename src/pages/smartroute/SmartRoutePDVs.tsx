@@ -7,21 +7,49 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
 import { Plus, Edit, Trash2, Store } from "lucide-react";
 import { toast } from "sonner";
 import { useSRPdvs, useSRSavePdv, useSRDeletePdv } from "@/hooks/use-smartroute";
+import { useSRChecklistTemplates } from "@/hooks/use-smartroute-daily";
+
+const WEEKDAYS = [
+  { n: 0, l: "Dom" }, { n: 1, l: "Seg" }, { n: 2, l: "Ter" },
+  { n: 3, l: "Qua" }, { n: 4, l: "Qui" }, { n: 5, l: "Sex" }, { n: 6, l: "Sáb" },
+];
 
 export default function SmartRoutePDVs() {
   const { data = [] } = useSRPdvs();
+  const { data: checklists = [] } = useSRChecklistTemplates();
   const save = useSRSavePdv();
   const del = useSRDeletePdv();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<any>({});
 
+  const openForm = (row: any = {}) => {
+    setForm({
+      delivery_window: "qualquer",
+      service_time_min: 15,
+      ...row,
+      allowed_weekdays: row?.allowed_weekdays || [1, 2, 3, 4, 5],
+    });
+    setOpen(true);
+  };
+
+
+  const toggleWd = (n: number) => {
+    const arr: number[] = form.allowed_weekdays || [];
+    setForm({ ...form, allowed_weekdays: arr.includes(n) ? arr.filter((x) => x !== n) : [...arr, n].sort() });
+  };
+
   const onSave = async () => {
     if (!form.name) return toast.error("Nome é obrigatório");
     try { await save.mutateAsync(form); toast.success("Salvo"); setOpen(false); setForm({}); } catch (e: any) { toast.error(e.message); }
   };
+
+  const winLabel = (w?: string) => ({ manha: "Manhã", tarde: "Tarde", noite: "Noite", qualquer: "Qualquer" }[w || "qualquer"]);
 
   return (
     <MainLayout>
@@ -29,39 +57,50 @@ export default function SmartRoutePDVs() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold flex items-center gap-2"><Store className="w-6 h-6" /> PDVs / Clientes</h1>
-            <p className="text-sm text-muted-foreground">Pontos de entrega e janelas de recebimento.</p>
+            <p className="text-sm text-muted-foreground">Cadastro de pontos de entrega com regras: janela preferencial, dias permitidos, tempo de descarga e checklist.</p>
           </div>
-          <Button onClick={() => { setForm({}); setOpen(true); }}><Plus className="w-4 h-4 mr-1" /> Novo PDV</Button>
+          <Button onClick={() => openForm()}><Plus className="w-4 h-4 mr-1" /> Novo PDV</Button>
         </div>
 
         <Card><CardContent className="p-0">
           <Table>
             <TableHeader><TableRow>
-              <TableHead>Nome</TableHead><TableHead>CNPJ</TableHead><TableHead>Endereço</TableHead>
-              <TableHead>Janela</TableHead><TableHead>Contato</TableHead><TableHead></TableHead>
+              <TableHead>Nome</TableHead><TableHead>Cidade</TableHead>
+              <TableHead>Janela</TableHead><TableHead>Dias</TableHead>
+              <TableHead>Descarga</TableHead><TableHead>Checklist</TableHead>
+              <TableHead></TableHead>
             </TableRow></TableHeader>
             <TableBody>
               {data.map((p: any) => (
                 <TableRow key={p.id}>
                   <TableCell className="font-medium">{p.name}</TableCell>
-                  <TableCell>{p.cnpj}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{p.address}{p.city ? `, ${p.city}` : ""}{p.state ? `/${p.state}` : ""}</TableCell>
-                  <TableCell>{p.delivery_window_start ? `${p.delivery_window_start.slice(0,5)}–${p.delivery_window_end?.slice(0,5) || ""}` : "—"}</TableCell>
-                  <TableCell>{p.contact_name} {p.contact_phone && `· ${p.contact_phone}`}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{p.city}{p.state ? `/${p.state}` : ""}</TableCell>
+                  <TableCell><Badge variant="outline">{winLabel(p.delivery_window)}</Badge></TableCell>
+                  <TableCell className="text-xs">
+                    {WEEKDAYS.map((w) => (
+                      <span key={w.n} className={(p.allowed_weekdays || []).includes(w.n) ? "text-primary font-semibold mr-1" : "text-muted-foreground/40 mr-1"}>
+                        {w.l[0]}
+                      </span>
+                    ))}
+                  </TableCell>
+                  <TableCell>{p.service_time_min || 15} min</TableCell>
+                  <TableCell className="text-xs">{checklists.find((c: any) => c.id === p.checklist_template_id)?.name || <span className="text-muted-foreground">padrão</span>}</TableCell>
                   <TableCell className="text-right space-x-1">
-                    <Button size="icon" variant="ghost" onClick={() => { setForm(p); setOpen(true); }}><Edit className="w-4 h-4" /></Button>
+                    <Button size="icon" variant="ghost" onClick={() => openForm(p)}><Edit className="w-4 h-4" /></Button>
                     <Button size="icon" variant="ghost" onClick={() => { if (confirm("Excluir?")) del.mutate(p.id); }}><Trash2 className="w-4 h-4 text-red-500" /></Button>
                   </TableCell>
                 </TableRow>
               ))}
-              {!data.length && <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">Nenhum PDV cadastrado.</TableCell></TableRow>}
+              {!data.length && <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">Nenhum PDV cadastrado.</TableCell></TableRow>}
             </TableBody>
           </Table>
         </CardContent></Card>
 
         <Dialog open={open} onOpenChange={setOpen}>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
             <DialogHeader><DialogTitle>{form.id ? "Editar PDV" : "Novo PDV"}</DialogTitle></DialogHeader>
+
+            <h3 className="text-sm font-semibold mt-2">Identificação</h3>
             <div className="grid grid-cols-2 gap-3">
               <div className="col-span-2"><Label>Nome / Razão Social*</Label><Input value={form.name || ""} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
               <div><Label>CNPJ</Label><Input value={form.cnpj || ""} onChange={(e) => setForm({ ...form, cnpj: e.target.value })} /></div>
@@ -73,10 +112,53 @@ export default function SmartRoutePDVs() {
               <div><Label>Longitude</Label><Input type="number" step="any" value={form.lng || ""} onChange={(e) => setForm({ ...form, lng: +e.target.value })} /></div>
               <div><Label>Contato</Label><Input value={form.contact_name || ""} onChange={(e) => setForm({ ...form, contact_name: e.target.value })} /></div>
               <div><Label>Telefone contato</Label><Input value={form.contact_phone || ""} onChange={(e) => setForm({ ...form, contact_phone: e.target.value })} /></div>
-              <div><Label>Janela início</Label><Input type="time" value={form.delivery_window_start || ""} onChange={(e) => setForm({ ...form, delivery_window_start: e.target.value })} /></div>
-              <div><Label>Janela fim</Label><Input type="time" value={form.delivery_window_end || ""} onChange={(e) => setForm({ ...form, delivery_window_end: e.target.value })} /></div>
+            </div>
+
+            <h3 className="text-sm font-semibold mt-4">Regras de recebimento (usadas pela IA)</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Janela preferencial</Label>
+                <Select value={form.delivery_window || "qualquer"} onValueChange={(v) => setForm({ ...form, delivery_window: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="manha">Manhã</SelectItem>
+                    <SelectItem value="tarde">Tarde</SelectItem>
+                    <SelectItem value="noite">Noite</SelectItem>
+                    <SelectItem value="qualquer">Qualquer horário</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Tempo de descarga (min)</Label>
+                <Input type="number" min={1} value={form.service_time_min || 15} onChange={(e) => setForm({ ...form, service_time_min: +e.target.value || 15 })} />
+              </div>
+              <div className="col-span-2">
+                <Label>Dias da semana permitidos</Label>
+                <div className="flex gap-2 flex-wrap mt-1">
+                  {WEEKDAYS.map((w) => (
+                    <label key={w.n} className="flex items-center gap-1 border rounded px-3 py-1.5 cursor-pointer hover:bg-muted">
+                      <Checkbox checked={(form.allowed_weekdays || []).includes(w.n)} onCheckedChange={() => toggleWd(w.n)} />
+                      <span className="text-sm">{w.l}</span>
+                    </label>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">Pedidos lançados para um dia fora desta lista ficam bloqueados na otimização.</p>
+              </div>
+              <div className="col-span-2">
+                <Label>Checklist do PDV</Label>
+                <Select value={form.checklist_template_id || "__default"} onValueChange={(v) => setForm({ ...form, checklist_template_id: v === "__default" ? null : v })}>
+                  <SelectTrigger><SelectValue placeholder="Usar template padrão" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__default">Template padrão da organização</SelectItem>
+                    {checklists.map((c: any) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div><Label>Janela horária início</Label><Input type="time" value={form.delivery_window_start || ""} onChange={(e) => setForm({ ...form, delivery_window_start: e.target.value })} /></div>
+              <div><Label>Janela horária fim</Label><Input type="time" value={form.delivery_window_end || ""} onChange={(e) => setForm({ ...form, delivery_window_end: e.target.value })} /></div>
               <div className="col-span-2"><Label>Observações</Label><Textarea value={form.notes || ""} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></div>
             </div>
+
             <DialogFooter><Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button><Button onClick={onSave} disabled={save.isPending}>Salvar</Button></DialogFooter>
           </DialogContent>
         </Dialog>
@@ -84,3 +166,4 @@ export default function SmartRoutePDVs() {
     </MainLayout>
   );
 }
+

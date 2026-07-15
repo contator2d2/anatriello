@@ -10,8 +10,10 @@ import { toast } from "sonner";
 import {
   useSRTemplates,
   useSRRouteDay, useSRSetDayDrivers, useSRCloseDay, useSRReopenDay,
+  useSROptimizeDay, useSRPublishDay,
 } from "@/hooks/use-smartroute-daily";
 import { useSRDrivers, useSRVehicles } from "@/hooks/use-smartroute";
+import { Sparkles, Send } from "lucide-react";
 
 const WIN_META: Record<string, { label: string; icon: any; color: string }> = {
   manha: { label: "Manhã", icon: Sun, color: "bg-amber-100 text-amber-700" },
@@ -21,11 +23,14 @@ const WIN_META: Record<string, { label: string; icon: any; color: string }> = {
 };
 
 const STATUS_META: Record<string, { label: string; color: string }> = {
-  aberta: { label: "Aberta", color: "bg-emerald-100 text-emerald-700" },
+  aberta: { label: "Aberta (recebendo pedidos)", color: "bg-emerald-100 text-emerald-700" },
+  otimizada: { label: "Otimizada pela IA", color: "bg-purple-100 text-purple-700" },
+  publicada: { label: "Publicada no app", color: "bg-blue-100 text-blue-700" },
   fechada: { label: "Fechada", color: "bg-amber-100 text-amber-700" },
   em_andamento: { label: "Em rota", color: "bg-blue-100 text-blue-700" },
   concluida: { label: "Concluída", color: "bg-slate-100 text-slate-700" },
 };
+
 
 export default function RotaDoDia() {
   const [params, setParams] = useSearchParams();
@@ -72,6 +77,9 @@ function DayDetails({ routeId, date }: { routeId: string; date: string }) {
   const setDrivers = useSRSetDayDrivers();
   const closeDay = useSRCloseDay();
   const reopenDay = useSRReopenDay();
+  const optimize = useSROptimizeDay();
+  const publish = useSRPublishDay();
+
 
   const [driverIds, setDriverIds] = useState<string[]>([]);
   const [vehicleId, setVehicleId] = useState<string>("");
@@ -87,7 +95,8 @@ function DayDetails({ routeId, date }: { routeId: string; date: string }) {
 
   const { day, orders = [], vehicle } = data;
   const status = STATUS_META[day.status] || STATUS_META.aberta;
-  const locked = day.status !== "aberta";
+  const isPublished = ["publicada", "fechada", "em_andamento", "concluida"].includes(day.status);
+  const isOptimized = day.status === "otimizada" || day.optimized_at;
 
   const toggleDriver = (id: string) => {
     setDriverIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
@@ -96,17 +105,27 @@ function DayDetails({ routeId, date }: { routeId: string; date: string }) {
     await setDrivers.mutateAsync({ routeId, date, driver_ids: driverIds, vehicle_id: vehicleId || null });
     toast.success("Entregadores atualizados"); refetch();
   };
-  const doClose = async () => {
+  const doOptimize = async () => {
     try {
-      await closeDay.mutateAsync({ routeId, date });
-      toast.success("Rota do dia fechada — liberada no app do entregador"); refetch();
+      const r: any = await optimize.mutateAsync({ routeId, date });
+      const blocked = r?.blocked?.length || 0;
+      toast.success(`IA gerou sequência com ${r.sequence?.length || 0} paradas${blocked ? ` · ${blocked} bloqueado(s) por dia da semana` : ""}`);
+      refetch();
+    } catch (e: any) { toast.error(e.message); }
+  };
+  const doPublish = async () => {
+    if (!driverIds.length) return toast.error("Atribua ao menos um entregador antes de publicar");
+    try {
+      await publish.mutateAsync({ routeId, date });
+      toast.success("Rota publicada — disponível no app do entregador"); refetch();
     } catch (e: any) { toast.error(e.message); }
   };
   const doReopen = async () => {
-    if (!confirm("Reabrir a rota devolve os pedidos ao pool e apaga as rotas do app. Continuar?")) return;
+    if (!confirm("Reabrir a rota devolve os pedidos ao pool. Continuar?")) return;
     await reopenDay.mutateAsync({ routeId, date });
     toast.success("Rota reaberta"); refetch();
   };
+
 
   return (
     <>
@@ -132,7 +151,7 @@ function DayDetails({ routeId, date }: { routeId: string; date: string }) {
             {drivers.map((d: any) => {
               const on = driverIds.includes(d.id);
               return (
-                <Button key={d.id} type="button" size="sm" variant={on ? "default" : "outline"} onClick={() => toggleDriver(d.id)} disabled={locked}>
+                <Button key={d.id} type="button" size="sm" variant={on ? "default" : "outline"} onClick={() => toggleDriver(d.id)} disabled={isPublished}>
                   {d.full_name}
                 </Button>
               );
@@ -141,26 +160,45 @@ function DayDetails({ routeId, date }: { routeId: string; date: string }) {
           <div className="flex gap-2 items-end">
             <div className="flex-1 max-w-xs">
               <label className="text-xs text-muted-foreground flex items-center gap-1"><Truck className="w-3 h-3" /> Veículo</label>
-              <Select value={vehicleId} onValueChange={setVehicleId} disabled={locked}>
+              <Select value={vehicleId} onValueChange={setVehicleId} disabled={isPublished}>
                 <SelectTrigger><SelectValue placeholder="Selecionar" /></SelectTrigger>
                 <SelectContent>{vehicles.map((v: any) => <SelectItem key={v.id} value={v.id}>{v.plate} — {v.model}</SelectItem>)}</SelectContent>
               </Select>
             </div>
-            <Button onClick={saveDrivers} disabled={locked}>Salvar</Button>
+            <Button onClick={saveDrivers} disabled={isPublished}>Salvar</Button>
           </div>
-          {vehicle && locked && <div className="text-xs text-muted-foreground">Veículo em uso: {vehicle.plate}</div>}
+          {vehicle && isPublished && <div className="text-xs text-muted-foreground">Veículo em uso: {vehicle.plate}</div>}
         </CardContent>
       </Card>
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="text-base">Sequência de entregas</CardTitle>
-          {day.status === "aberta" ? (
-            <Button onClick={doClose} disabled={!driverIds.length || !orders.length}><Lock className="w-4 h-4 mr-1" /> Fechar rota do dia</Button>
-          ) : (
-            <Button variant="outline" onClick={doReopen}><Unlock className="w-4 h-4 mr-1" /> Reabrir</Button>
-          )}
+        <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-2">
+          <div>
+            <CardTitle className="text-base">Sequência de entregas</CardTitle>
+            {day.optimized_at && (
+              <p className="text-xs text-muted-foreground mt-1">
+                IA otimizou em {new Date(day.optimized_at).toLocaleString("pt-BR")} · {day.stops_summary?.stops || orders.length} paradas
+                {day.stops_summary?.blocked ? ` · ${day.stops_summary.blocked} bloqueado(s)` : ""}
+              </p>
+            )}
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            {!isPublished && (
+              <Button variant="outline" onClick={doOptimize} disabled={optimize.isPending || !orders.length}>
+                <Sparkles className="w-4 h-4 mr-1" /> {isOptimized ? "Reotimizar" : "Otimizar com IA"}
+              </Button>
+            )}
+            {!isPublished && isOptimized && (
+              <Button onClick={doPublish} disabled={publish.isPending || !driverIds.length}>
+                <Send className="w-4 h-4 mr-1" /> Publicar para o entregador
+              </Button>
+            )}
+            {isPublished && (
+              <Button variant="outline" onClick={doReopen}><Unlock className="w-4 h-4 mr-1" /> Reabrir</Button>
+            )}
+          </div>
         </CardHeader>
+
         <CardContent>
           {orders.length === 0 ? (
             <div className="text-center py-8 text-sm text-muted-foreground">Nenhum pedido lançado para esta data. Vá em Pedidos e associe pedidos a esta rota + data.</div>

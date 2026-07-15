@@ -66,8 +66,9 @@ import pdvBlocksRoutes from './routes/pdv-blocks.js';
 import networkPortalRoutes from './routes/network-portal.js';
 import agencyNetworkRequestsRoutes from './routes/agency-network-requests.js';
 import promoterAccessRoutes from './routes/promoter-access.js';
-import smartrouteRoutes from './routes/smartroute.js';
+import smartrouteRoutes, { runNightlyOptimizer } from './routes/smartroute.js';
 import smartrouteDriverRoutes from './routes/smartroute-driver.js';
+
 import smartrouteAIRoutes from './routes/smartroute-ai.js';
 import smartroutePublicRoutes from './routes/smartroute-public.js';
 import smartrouteReportsRoutes from './routes/smartroute-reports.js';
@@ -724,6 +725,14 @@ app.listen(PORT, () => {
       timezone: 'America/Sao_Paulo'
     });
     console.log('⭐ Promoter score calculator started - runs every 6 hours');
+
+    // SmartRoute IA - otimização noturna 20h America/Sao_Paulo para D+1
+    cron.schedule('0 20 * * *', async () => {
+      try { await runNightlyOptimizer(); }
+      catch (error) { console.error('🌙 [CRON] Erro na otimização noturna SmartRoute:', error); }
+    }, { timezone: 'America/Sao_Paulo' });
+    console.log('🌙 SmartRoute IA nightly optimizer started - runs at 20:00 (America/Sao_Paulo)');
+
   }).catch((error) => {
     databaseInitError = error?.message || 'Database initialization failed';
     console.error('🛑 Database initialization crashed. API remains online in degraded mode:', error);

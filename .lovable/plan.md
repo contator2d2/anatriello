@@ -1,67 +1,109 @@
-# SmartRoute – Rotas fixas + escala + fechamento diário
 
-Modelo novo: **rota é permanente** (não vira template). Cada dia ela tem um "estado do dia" (aberta/fechada) e uma escala de entregador(es). Pedidos são anexados à rota apontando uma data-alvo; no dia da entrega a rota é fechada e vai pro app do entregador.
+# SmartRoute — Reformulação: Rotas Dinâmicas + IA Noturna
 
-## 1. Modelo de dados
+## Modelo mental novo
 
-Novas colunas / tabelas em `backend/schema-routes-phase4.sql` (migration incremental):
+Rotas **não são mais fixas**. São **contêineres lógicos** (ex.: "Rota Centro-SP", "Rota Zona Leste"). Todo dia os vendedores lançam **solicitações** apontando para uma dessas rotas + PDV + data. No fim do dia, um job noturno de IA pega todas as solicitações do dia seguinte, agrupa por rota, ordena respeitando as regras de cada PDV, atribui o motorista padrão e publica no app do motorista.
 
-**`smartroute_routes`** (existente – adicionar):
-- `is_template boolean default true` — marca que é rota-mestre permanente
-- `default_driver_id uuid` — entregador padrão
-- `default_vehicle_id uuid`
-- `owner_user_id uuid` — vendedor/supervisor responsável (opcional)
+```text
+Vendedores lançam pedidos ──► fila por (rota, data)
+                                       │
+                    [Cron 20h] IA organiza ordem ideal
+                                       │
+                    Motorista padrão atribuído ──► App do motorista (D+1)
+```
 
-**`smartroute_route_pdvs`** (nova) — PDVs fixos da rota:
-- `route_id`, `pdv_id`, `sequence int`, `window` enum(`manha`,`tarde`,`noite`,`qualquer`), `notes`
+## Mudanças no modelo de dados
 
-**`smartroute_route_schedule`** (nova) — escala semanal do entregador:
-- `route_id`, `weekday 0-6`, `driver_id`, `vehicle_id`
+### PDV — passa a carregar as regras
+Campos adicionados em `smartroute_pdvs`:
+- `delivery_window` — `manha` | `tarde` | `noite` | `qualquer`
+- `allowed_weekdays` — `int[]` (0=dom … 6=sáb; default = todos)
+- `checklist_template_id` — FK para checklist customizado (nullable → usa o padrão)
+- `service_time_min` — tempo médio de descarga (default 15)
 
-**`smartroute_route_days`** (nova) — instância diária (criada on-demand):
-- `route_id`, `date`, `status` (`aberta`,`fechada`,`em_andamento`,`concluida`), `driver_ids uuid[]` (permite 2+), `vehicle_id`, `closed_at`, `closed_by`, `reopened_at`
+### Rota — vira "linha/contêiner"
+Remover a lógica de `is_template`/PDVs fixos/escala semanal criada na iteração anterior. A rota agora tem apenas:
+- `name`, `code`, `region`, `default_driver_id`, `default_vehicle_id`, `color`, `active`
 
-**`smartroute_orders`** (existente – adicionar):
-- `route_id uuid` (rota-mestre)
-- `delivery_date date` (data-alvo)
-- `pdv_window` copiada do PDV no momento do lançamento (só pra ordenar)
-- `owner_user_id uuid` (vendedor que lançou)
+Descartar as tabelas `smartroute_route_pdvs` e `smartroute_route_schedule` (drop com IF EXISTS na migração).
 
-Sequência do dia = ordena por `pdv_window` (manhã→tarde→noite→qualquer) + `sequence` do PDV na rota.
+### `smartroute_route_days` — passa a ser o agendamento gerado
+- `route_id`, `date`, `status` (`aberta` p/ acumular pedidos → `otimizada` pós-IA → `publicada` p/ o motorista → `em_andamento` → `concluída`)
+- `driver_id`, `vehicle_id` (atribuídos automaticamente, editáveis pelo supervisor)
+- `optimized_at`, `optimized_by` (`ia` | user id), `stops_summary` (jsonb com totais)
 
-## 2. Backend (`backend/src/routes/smartroute-planner.js` + novo `smartroute-daily.js`)
+### `smartroute_orders` — solicitação de entrega
+- `route_id`, `delivery_date`, `pdv_id`
+- `note_number`, `volume`, `weight_kg`, `notes`, `priority`
+- `sequence` (definido pela IA), `pdv_window_snapshot` (herdado do PDV no momento do lançamento)
+- `owner_user_id` (vendedor)
 
-Endpoints novos:
-- `GET/POST/PUT/DELETE /routes/:id/pdvs` — CRUD de PDVs fixos da rota
-- `GET/PUT /routes/:id/schedule` — escala semanal
-- `GET /routes/:id/day?date=YYYY-MM-DD` — retorna instância do dia (cria se não existir, herdando escala + entregador padrão)
-- `POST /routes/:id/day/:date/close` — fecha a rota do dia (supervisor)
-- `POST /routes/:id/day/:date/reopen` — reabre
-- `POST /routes/:id/day/:date/drivers` — adiciona/troca entregador(es)
-- `POST /orders` (ajustar) — aceita `route_id + delivery_date + pdv_id`; grava `pdv_window`
+### Checklists
+Nova tabela `smartroute_pdv_checklists`:
+- `pdv_id` (nullable → quando null = template global padrão), `name`, `items` (jsonb: foto/ocr/assinatura/texto/sim_nao)
+- Um template default por organização; PDV pode ter o seu próprio.
 
-App entregador (`/api/smartroute/driver/routes`) passa a listar `smartroute_route_days` onde `driver_ids` contém o motorista logado e `status in ('fechada','em_andamento')`.
+## Backend
 
-## 3. Frontend
+### Novos endpoints
+- `GET/PUT /api/smartroute/pdvs/:id/rules` — janela, dias permitidos, checklist, tempo de descarga.
+- `GET/POST/PUT /api/smartroute/checklist-templates` — CRUD do template padrão e dos customizados.
+- `POST /api/smartroute/orders` — mantido; valida `pdv.allowed_weekdays.includes(weekday(delivery_date))`, ordena por `window` na hora da IA.
+- `POST /api/smartroute/route-days/:route_id/:date/optimize` — dispara IA sob demanda (mesma função do cron).
+- `POST /api/smartroute/route-days/:route_id/:date/publish` — publica no app do motorista.
+- `POST /api/smartroute/route-days/:route_id/:date/driver` — troca motorista.
 
-- **`src/pages/smartroute/RotasMontadas.tsx`** (novo) — lista rotas-mestre, editor de PDVs fixos (drag para sequência, seletor de janela), aba "Escala semanal".
-- **`src/pages/smartroute/RotaDoDia.tsx`** (novo) — para uma rota + data: mostra pedidos anexados, janela de cada PDV, botão **Fechar rota**, **Reabrir**, **Adicionar entregador**.
-- **Lançamento de pedido** (existente `SmartRouteOrders`): campo "Rota" + "Data da entrega" + PDV filtrado pelos PDVs da rota; janela vem preenchida.
-- **Sidebar SmartRoute**: item "Rotas Montadas" e "Rota do Dia".
+Remover os endpoints de PDVs fixos/escala semanal criados antes (route_pdvs, schedule).
 
-## 4. Regras
+### Job noturno
+`backend/src/smartroute-nightly-scheduler.js` — cron 20:00 America/Sao_Paulo:
+1. Para cada `(route_id, delivery_date=amanhã)` com pedidos abertos, criar/atualizar `smartroute_route_days`.
+2. Rodar `optimizeRouteDay()`: ordenar por `window_rank(pdv) → nearest-neighbor(lat/lng) → prioridade`.
+3. Atribuir `default_driver_id`/`default_vehicle_id` da rota (se não houver override manual).
+4. Marcar `status=otimizada`, salvar `sequence` nos pedidos e `stops_summary` no dia.
+5. Publicar automaticamente (`status=publicada`) → aparece no app do motorista.
 
-- Janela do PDV **só ordena** — não bloqueia.
-- Fechamento: qualquer supervisor pode fechar/reabrir manualmente. Pode rodar um cron opcional depois; por ora, manual.
-- Um entregador pode servir várias rotas (sem restrição de vínculo exclusivo).
-- Enquanto `status='aberta'`, vendedores continuam anexando pedidos. Ao fechar, snapshot vai pro app; alterações posteriores exigem reabrir.
+Reutilizar helpers de `smartroute-planner.js` (haversine, sweep, nearest-neighbor).
 
-## 5. Compatibilidade
+### App do motorista
+`GET /api/smartroute/driver/routes` — retorna `route_days` com `driver_id = req.user.id` e status ∈ (`publicada`, `em_andamento`) — sem depender mais de `driver_ids[]`.
 
-Rotas antigas migram com `is_template=true`. Pedidos existentes ganham `delivery_date = scheduled_date` da rota (fallback hoje). Nada é deletado.
+## Frontend
 
-## Fora do escopo agora
+### Páginas a criar/reescrever
+- **`SmartRouteRotas.tsx`** (substitui `SmartRouteRotasMontadas.tsx`) — CRUD simples: nome, região, motorista padrão, veículo padrão, cor.
+- **`SmartRoutePDVs.tsx`** (atualizar) — nova aba **Regras & Checklist** por PDV: janela, dias da semana permitidos, tempo de descarga, seletor de checklist (padrão do org ou custom).
+- **`SmartRouteChecklistTemplates.tsx`** — novo: gerenciar template padrão e templates por PDV.
+- **`SmartRoutePedidos.tsx`** (atualizar) — form pega `route_id` + `pdv_id` (filtrado pelos PDVs elegíveis à data conforme `allowed_weekdays`), mostra badge com a janela do PDV.
+- **`SmartRouteRotaDoDia.tsx`** (refatorar) — passa a mostrar a rota do dia como resultado da IA, com botão **"Reotimizar"** e **"Trocar motorista"**; sem lógica de fechar/reabrir manual (o job publica automaticamente).
 
-- Espelho da nota fiscal (só solicitação de rota, como você pediu).
-- Importação em massa de pedidos (fase futura).
-- Restrição de visibilidade por vendedor (você confirmou que vendedor vê tudo).
+Descartar telas de PDVs fixos e escala semanal.
+
+### Sidebar / rotas
+- Renomear "Rotas Montadas" → "Rotas".
+- Adicionar "Checklists de PDV".
+- Manter "Rota do Dia" e "Pedidos".
+
+## Documentação
+Reescrever `public/docs/smartroute-documentacao.md`:
+- Modelo dinâmico + IA noturna.
+- Papéis: vendedor lança, IA organiza, supervisor supervisiona, motorista executa.
+- Regras por PDV (janela + dias).
+- Checklists template vs custom.
+- Fluxo do dia: fila → cron 20h → publicação → app do motorista.
+- Endpoints atualizados.
+
+## Detalhes técnicos (para o dev)
+
+- Migração drop-safe: `DROP TABLE IF EXISTS smartroute_route_pdvs, smartroute_route_schedule` + `ALTER TABLE smartroute_routes DROP COLUMN IF EXISTS is_template`.
+- `smartroute_orders` ganha índice em `(route_id, delivery_date, sequence)`.
+- Cron via `node-cron`, registrar em `backend/src/scheduler.js`.
+- Otimização usa dados já existentes: `pdvs.lat/lng` + `depot` mais próximo (opcional para nearest-neighbor inicial).
+- Reotimização manual chama o mesmo `optimizeRouteDay(routeId, date)`.
+- Timezone `America/Sao_Paulo` em todas as datas (memória do projeto).
+
+## Não faremos agora
+- Espelho de NF-e (fase futura, mencionado).
+- Rebalanceamento entre rotas (IA sugere rota B se rota A estourou capacidade) — fica como Fase 2.
+- Multi-motorista por rota no mesmo dia — só quando o supervisor pedir (fora do escopo desta fase).
