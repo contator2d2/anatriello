@@ -272,13 +272,22 @@ export default function SmartRouteSimulador() {
       ) : (
         <>
           {/* Totais */}
-          <div className="grid md:grid-cols-5 gap-3">
+          <div className="grid md:grid-cols-6 gap-3">
             <StatCard icon={Package} label="Paradas" value={String(order.length)} />
-            <StatCard icon={MapPin} label="Distância" value={`${computed.totals.km.toFixed(1)} km`} />
+            <StatCard icon={MapPin} label="Distância (c/ retorno)" value={`${computed.totals.km.toFixed(1)} km`} />
             <StatCard icon={Timer} label="Deslocamento" value={fmtDur(computed.totals.travel)} />
             <StatCard icon={ClipboardCheck} label="Serviço + Checklist" value={fmtDur(computed.totals.service + computed.totals.checklist)} />
             <StatCard icon={TrendingUp} label="Upsell" value={fmtDur(computed.totals.upsell)} highlight />
+            <StatCard
+              icon={AlertTriangle}
+              label={violations > 0 ? `${violations} fora da janela` : "Janelas OK"}
+              value={computed.totals.wait > 0 ? `Espera ${fmtDur(computed.totals.wait)}` : "—"}
+              highlight={violations > 0}
+            />
           </div>
+
+          {/* Mapa do trajeto */}
+          <TrajectoryMap depot={depot} stops={computed.stops} />
 
           <Card>
             <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
@@ -287,11 +296,16 @@ export default function SmartRouteSimulador() {
                 <p className="text-xs text-muted-foreground mt-1">
                   Início {startHour} · Fim previsto <b>{fmtHM((parseInt(startHour.slice(0,2))||8)*60 + (parseInt(startHour.slice(3,5))||0) + computed.totals.totalMin)}</b>
                   {" "}· Duração total <b>{fmtDur(computed.totals.totalMin)}</b>
+                  {" "}· Retorno ao CD <b>{computed.returnLeg.km.toFixed(1)} km</b> ({fmtHM(computed.returnLeg.arrival)})
                   {dirty && <Badge className="ml-2 bg-amber-100 text-amber-700">Alterações não salvas</Badge>}
                   {locked && <Badge className="ml-2 bg-blue-100 text-blue-700">Rota publicada · edição bloqueada</Badge>}
+                  {violations > 0 && <Badge className="ml-2 bg-red-100 text-red-700 gap-1"><AlertTriangle className="w-3 h-3" /> {violations} PDV(s) fora da janela</Badge>}
                 </p>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
+                <Button variant="outline" size="sm" onClick={applyAutoSort} disabled={locked}>
+                  <Sparkles className="w-4 h-4 mr-1" /> Reorganizar por janela
+                </Button>
                 <Button variant="ghost" size="sm" onClick={reset} disabled={!dirty}>
                   <RotateCcw className="w-4 h-4 mr-1" /> Descartar simulação
                 </Button>
@@ -307,14 +321,20 @@ export default function SmartRouteSimulador() {
                 const WIcon = w.icon;
                 const pct = (s.stopMin / maxStop) * 100;
                 return (
-                  <div key={o.id} className="border rounded-lg p-3">
+                  <div key={o.id} className={"border rounded-lg p-3 " + (s.violation > 0 ? "border-red-300 bg-red-50/40" : "")}>
                     <div className="flex items-start gap-3">
-                      <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-sm font-bold shrink-0">{i + 1}</div>
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shrink-0 text-white" style={{ background: w.hex }}>{i + 1}</div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-medium truncate">{o.pdv_name}</span>
                           <Badge className={w.color + " gap-1"}><WIcon className="w-3 h-3" /> {w.label}</Badge>
                           <span className="text-xs text-muted-foreground">{o.order_number || "—"}</span>
+                          {s.wait > 0 && (
+                            <Badge className="bg-sky-100 text-sky-700 gap-1"><Clock className="w-3 h-3" /> Espera {fmtDur(s.wait)}</Badge>
+                          )}
+                          {s.violation > 0 && (
+                            <Badge className="bg-red-100 text-red-700 gap-1"><AlertTriangle className="w-3 h-3" /> Fora da janela (+{fmtDur(s.violation)})</Badge>
+                          )}
                         </div>
                         <div className="text-xs text-muted-foreground truncate flex items-center gap-1">
                           <MapPin className="w-3 h-3" /> {o.pdv_address}
@@ -330,6 +350,7 @@ export default function SmartRouteSimulador() {
                         </div>
                         <div className="mt-2 h-2 rounded bg-slate-100 overflow-hidden flex">
                           <div className="bg-sky-400" style={{ width: `${(s.travel / s.stopMin) * pct}%` }} title="Deslocamento" />
+                          {s.wait > 0 && <div className="bg-sky-200" style={{ width: `${(s.wait / s.stopMin) * pct}%` }} title="Espera" />}
                           <div className="bg-emerald-400" style={{ width: `${(s.service / s.stopMin) * pct}%` }} title="Serviço" />
                           <div className="bg-violet-400" style={{ width: `${(s.checklist / s.stopMin) * pct}%` }} title="Checklist" />
                           <div className="bg-amber-400" style={{ width: `${(s.upsell / s.stopMin) * pct}%` }} title="Upsell" />
@@ -347,8 +368,23 @@ export default function SmartRouteSimulador() {
                   </div>
                 );
               })}
-              <div className="flex gap-2 items-center pt-2 text-xs text-muted-foreground">
+              {/* Retorno ao CD */}
+              <div className="border rounded-lg p-3 border-dashed bg-slate-50">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-slate-700 text-white flex items-center justify-center shrink-0">
+                    <Warehouse className="w-4 h-4" />
+                  </div>
+                  <div className="flex-1 text-sm">
+                    <b>Retorno ao CD</b> — {depot.name}
+                    <div className="text-xs text-muted-foreground">
+                      🚚 {computed.returnLeg.km.toFixed(1)} km · {fmtDur(computed.returnLeg.travel)} · Chegada prevista <span className="font-mono font-semibold">{fmtHM(computed.returnLeg.arrival)}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="flex gap-2 items-center pt-2 text-xs text-muted-foreground flex-wrap">
                 <span className="inline-block w-3 h-2 bg-sky-400 rounded-sm" /> Deslocamento
+                <span className="inline-block w-3 h-2 bg-sky-200 rounded-sm ml-3" /> Espera janela
                 <span className="inline-block w-3 h-2 bg-emerald-400 rounded-sm ml-3" /> Serviço
                 <span className="inline-block w-3 h-2 bg-violet-400 rounded-sm ml-3" /> Checklist
                 <span className="inline-block w-3 h-2 bg-amber-400 rounded-sm ml-3" /> Upsell
