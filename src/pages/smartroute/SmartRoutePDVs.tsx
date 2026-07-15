@@ -14,6 +14,7 @@ import { Plus, Edit, Trash2, Store } from "lucide-react";
 import { toast } from "sonner";
 import { useSRPdvs, useSRSavePdv, useSRDeletePdv } from "@/hooks/use-smartroute";
 import { useSRChecklistTemplates } from "@/hooks/use-smartroute-daily";
+import { useSRGeocodeDepot } from "@/hooks/use-smartroute-depots";
 
 const WEEKDAYS = [
   { n: 0, l: "Dom" }, { n: 1, l: "Seg" }, { n: 2, l: "Ter" },
@@ -27,6 +28,41 @@ export default function SmartRoutePDVs() {
   const del = useSRDeletePdv();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<any>({});
+  const geocode = useSRGeocodeDepot();
+  const [cepLoading, setCepLoading] = useState(false);
+
+  const lookupCep = async (rawCep: string) => {
+    const cep = String(rawCep || "").replace(/\D/g, "");
+    if (cep.length !== 8) return;
+    setCepLoading(true);
+    try {
+      const r = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+      const j = await r.json();
+      if (j.erro) { toast.error("CEP não encontrado"); return; }
+      const address = [j.logradouro, j.bairro].filter(Boolean).join(", ");
+      const next = { ...form, zip: cep, address: address || form.address, city: j.localidade || form.city, state: j.uf || form.state };
+      setForm(next);
+      try {
+        const g = await geocode.mutateAsync({ address: next.address, city: next.city, state: next.state, zip: next.zip });
+        setForm((f: any) => ({ ...f, lat: g.lat, lng: g.lng }));
+        toast.success("Endereço e coordenadas preenchidos");
+      } catch {
+        toast.success("Endereço preenchido", { description: "Não foi possível obter coordenadas automaticamente." });
+      }
+    } catch {
+      toast.error("Falha ao consultar CEP");
+    } finally {
+      setCepLoading(false);
+    }
+  };
+
+  const onCepChange = (v: string) => {
+    const digits = v.replace(/\D/g, "").slice(0, 8);
+    const masked = digits.length > 5 ? `${digits.slice(0, 5)}-${digits.slice(5)}` : digits;
+    setForm({ ...form, zip: masked });
+    if (digits.length === 8) lookupCep(digits);
+  };
+
 
   const openForm = (row: any = {}) => {
     setForm({
@@ -104,7 +140,10 @@ export default function SmartRoutePDVs() {
             <div className="grid grid-cols-2 gap-3">
               <div className="col-span-2"><Label>Nome / Razão Social*</Label><Input value={form.name || ""} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
               <div><Label>CNPJ</Label><Input value={form.cnpj || ""} onChange={(e) => setForm({ ...form, cnpj: e.target.value })} /></div>
-              <div><Label>CEP</Label><Input value={form.zip || ""} onChange={(e) => setForm({ ...form, zip: e.target.value })} /></div>
+              <div>
+                <Label>CEP {cepLoading && <span className="text-xs text-muted-foreground">buscando…</span>}</Label>
+                <Input value={form.zip || ""} onChange={(e) => onCepChange(e.target.value)} placeholder="00000-000" maxLength={9} />
+              </div>
               <div className="col-span-2"><Label>Endereço</Label><Input value={form.address || ""} onChange={(e) => setForm({ ...form, address: e.target.value })} /></div>
               <div><Label>Cidade</Label><Input value={form.city || ""} onChange={(e) => setForm({ ...form, city: e.target.value })} /></div>
               <div><Label>UF</Label><Input value={form.state || ""} onChange={(e) => setForm({ ...form, state: e.target.value })} maxLength={2} /></div>
