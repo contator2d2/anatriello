@@ -439,11 +439,12 @@ export async function ensureSmartRouteTables() {
       route_id UUID NOT NULL REFERENCES smartroute_routes(id) ON DELETE CASCADE,
       pdv_id UUID NOT NULL REFERENCES smartroute_pdvs(id) ON DELETE CASCADE,
       sequence INTEGER DEFAULT 0,
-      window TEXT DEFAULT 'qualquer',
+      delivery_window TEXT DEFAULT 'qualquer',
       notes TEXT,
       created_at TIMESTAMPTZ DEFAULT NOW(),
       UNIQUE(route_id, pdv_id)
     );
+    ALTER TABLE smartroute_route_pdvs ADD COLUMN IF NOT EXISTS delivery_window TEXT DEFAULT 'qualquer';
     CREATE TABLE IF NOT EXISTS smartroute_route_schedule (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       route_id UUID NOT NULL REFERENCES smartroute_routes(id) ON DELETE CASCADE,
@@ -767,8 +768,8 @@ router.post('/orders', async (req, res) => {
     const b = req.body || {};
     let pdv_window = b.pdv_window || null;
     if (b.route_id && b.pdv_id && !pdv_window) {
-      const w = await query(`SELECT window FROM smartroute_route_pdvs WHERE route_id=$1 AND pdv_id=$2`, [b.route_id, b.pdv_id]);
-      pdv_window = w.rows[0]?.window || 'qualquer';
+      const w = await query(`SELECT delivery_window FROM smartroute_route_pdvs WHERE route_id=$1 AND pdv_id=$2`, [b.route_id, b.pdv_id]);
+      pdv_window = w.rows[0]?.delivery_window || 'qualquer';
     }
     const r = await query(
       `INSERT INTO smartroute_orders (organization_id, pdv_id, order_number, weight_kg, volume_m3, value_cents, items, priority, delivery_date, status, notes, route_id, pdv_window, owner_user_id)
@@ -1677,11 +1678,11 @@ router.post('/routes/:id/pdvs', async (req, res) => {
     // pega sequence próximo
     const s = await query(`SELECT COALESCE(MAX(sequence),0)+1 AS n FROM smartroute_route_pdvs WHERE route_id=$1`, [req.params.id]);
     const r = await query(
-      `INSERT INTO smartroute_route_pdvs (route_id, pdv_id, sequence, window, notes)
+      `INSERT INTO smartroute_route_pdvs (route_id, pdv_id, sequence, delivery_window, notes)
        VALUES ($1,$2,COALESCE($3,$4),COALESCE($5,'qualquer'),$6)
        ON CONFLICT (route_id, pdv_id) DO UPDATE SET
          sequence=COALESCE(EXCLUDED.sequence, smartroute_route_pdvs.sequence),
-         window=COALESCE(EXCLUDED.window, smartroute_route_pdvs.window),
+         delivery_window=COALESCE(EXCLUDED.delivery_window, smartroute_route_pdvs.delivery_window),
          notes=COALESCE(EXCLUDED.notes, smartroute_route_pdvs.notes)
        RETURNING *`,
       [req.params.id, b.pdv_id, b.sequence || null, s.rows[0].n, b.window || null, b.notes || null]
@@ -1702,7 +1703,7 @@ router.put('/routes/:id/pdvs/:pdvId', async (req, res) => {
   try {
     const b = req.body || {};
     const r = await query(
-      `UPDATE smartroute_route_pdvs SET window=COALESCE($3,window), notes=COALESCE($4,notes), sequence=COALESCE($5,sequence)
+      `UPDATE smartroute_route_pdvs SET delivery_window=COALESCE($3,delivery_window), notes=COALESCE($4,notes), sequence=COALESCE($5,sequence)
        WHERE route_id=$1 AND pdv_id=$2 RETURNING *`,
       [req.params.id, req.params.pdvId, b.window || null, b.notes || null, b.sequence || null]
     );
@@ -1780,7 +1781,7 @@ router.get('/routes/:id/day', async (req, res) => {
                 WHERE c.organization_id=$3
                   AND (c.pdv_id = o.pdv_id OR (c.pdv_id IS NULL AND c.is_default=true))
                 ORDER BY (c.pdv_id = o.pdv_id) DESC LIMIT 1) AS checklist_items_count,
-              rp.sequence AS pdv_sequence, rp.window AS route_pdv_window
+              rp.sequence AS pdv_sequence, rp.delivery_window AS route_pdv_window
        FROM smartroute_orders o
        LEFT JOIN smartroute_pdvs p ON p.id=o.pdv_id
        LEFT JOIN smartroute_route_pdvs rp ON rp.route_id=o.route_id AND rp.pdv_id=o.pdv_id
