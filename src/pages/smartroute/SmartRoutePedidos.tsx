@@ -24,12 +24,26 @@ export default function SmartRoutePedidos() {
   const [filter, setFilter] = useState<any>({});
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<any>({});
+  const [pdvPickerOpen, setPdvPickerOpen] = useState(false);
   const { data = [] } = useSROrders(filter);
   const { data: pdvs = [] } = useSRPdvs();
   const { data: templates = [] } = useSRTemplates();
   const { data: routePdvs = [] } = useSRRoutePdvs(form.route_id);
   const save = useSRSaveOrder();
   const del = useSRDeleteOrder();
+
+  // PDVs disponíveis: se rota selecionada, une routePdvs + pdvs com route_template_id === rota
+  const availablePdvs = (() => {
+    if (!form.route_id) return pdvs;
+    const map = new Map<string, any>();
+    routePdvs.forEach((rp: any) => {
+      const base = pdvs.find((p: any) => p.id === rp.pdv_id);
+      map.set(rp.pdv_id, { ...(base || {}), id: rp.pdv_id, name: rp.pdv_name || base?.name, delivery_window: rp.delivery_window || rp.window || base?.delivery_window });
+    });
+    pdvs.forEach((p: any) => { if (p.route_template_id === form.route_id && !map.has(p.id)) map.set(p.id, p); });
+    return Array.from(map.values());
+  })();
+  const selectedPdv = pdvs.find((p: any) => p.id === form.pdv_id) || availablePdvs.find((p: any) => p.id === form.pdv_id);
 
   const onSave = async () => {
     if (!form.pdv_id) return toast.error("Selecione o PDV");
