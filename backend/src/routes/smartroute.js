@@ -195,6 +195,7 @@ export async function ensureSmartRouteTables() {
     ALTER TABLE smartroute_pdvs ADD COLUMN IF NOT EXISTS channel TEXT;
     ALTER TABLE smartroute_pdvs ADD COLUMN IF NOT EXISTS category TEXT;
     ALTER TABLE smartroute_pdvs ADD COLUMN IF NOT EXISTS region TEXT;
+    ALTER TABLE smartroute_pdvs ADD COLUMN IF NOT EXISTS contacts JSONB DEFAULT '[]'::jsonb;
 
 
     -- === Fluxo Inteligente da Operação (Onda 1) ===
@@ -719,9 +720,9 @@ router.post('/pdvs', async (req, res) => {
   try {
     const b = req.body || {};
     const r = await query(
-      `INSERT INTO smartroute_pdvs (organization_id, name, cnpj, address, city, state, zip, lat, lng, contact_name, contact_phone, delivery_window_start, delivery_window_end, notes, active, delivery_window, allowed_weekdays, service_time_min, checklist_template_id, route_template_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,COALESCE($15,true),COALESCE($16,'qualquer'),COALESCE($17,'{0,1,2,3,4,5,6}'::int[]),COALESCE($18,15),$19,$20) RETURNING *`,
-      [orgId(req), b.name, b.cnpj, b.address, b.city, b.state, b.zip, b.lat, b.lng, b.contact_name, b.contact_phone, b.delivery_window_start, b.delivery_window_end, b.notes, b.active, b.delivery_window, b.allowed_weekdays, b.service_time_min, b.checklist_template_id, b.route_template_id || null]
+      `INSERT INTO smartroute_pdvs (organization_id, name, cnpj, address, city, state, zip, lat, lng, contact_name, contact_phone, delivery_window_start, delivery_window_end, notes, active, delivery_window, allowed_weekdays, service_time_min, checklist_template_id, route_template_id, contacts)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,COALESCE($15,true),COALESCE($16,'qualquer'),COALESCE($17,'{0,1,2,3,4,5,6}'::int[]),COALESCE($18,15),$19,$20,COALESCE($21::jsonb,'[]'::jsonb)) RETURNING *`,
+      [orgId(req), b.name, b.cnpj, b.address, b.city, b.state, b.zip, b.lat, b.lng, b.contact_name, b.contact_phone, b.delivery_window_start, b.delivery_window_end, b.notes, b.active, b.delivery_window, b.allowed_weekdays, b.service_time_min, b.checklist_template_id, b.route_template_id || null, b.contacts ? JSON.stringify(b.contacts) : null]
     );
     res.json(r.rows[0]);
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -735,9 +736,10 @@ router.put('/pdvs/:id', async (req, res) => {
         contact_name=COALESCE($11,contact_name), contact_phone=COALESCE($12,contact_phone),
         delivery_window_start=$13, delivery_window_end=$14, notes=COALESCE($15,notes), active=COALESCE($16,active),
         delivery_window=COALESCE($17,delivery_window), allowed_weekdays=COALESCE($18,allowed_weekdays),
-        service_time_min=COALESCE($19,service_time_min), checklist_template_id=$20, route_template_id=$21, updated_at=NOW()
+        service_time_min=COALESCE($19,service_time_min), checklist_template_id=$20, route_template_id=$21,
+        contacts=COALESCE($22::jsonb, contacts), updated_at=NOW()
        WHERE id=$1 AND organization_id=$2 RETURNING *`,
-      [req.params.id, orgId(req), b.name, b.cnpj, b.address, b.city, b.state, b.zip, b.lat, b.lng, b.contact_name, b.contact_phone, b.delivery_window_start, b.delivery_window_end, b.notes, b.active, b.delivery_window, b.allowed_weekdays, b.service_time_min, b.checklist_template_id, b.route_template_id || null]
+      [req.params.id, orgId(req), b.name, b.cnpj, b.address, b.city, b.state, b.zip, b.lat, b.lng, b.contact_name, b.contact_phone, b.delivery_window_start, b.delivery_window_end, b.notes, b.active, b.delivery_window, b.allowed_weekdays, b.service_time_min, b.checklist_template_id, b.route_template_id || null, b.contacts ? JSON.stringify(b.contacts) : null]
     );
     res.json(r.rows[0]);
   } catch (e) { res.status(500).json({ error: e.message }); }

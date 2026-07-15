@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Edit, Trash2, Store } from "lucide-react";
+import { Plus, Edit, Trash2, Store, UserPlus, X, Share2 } from "lucide-react";
 import { toast } from "sonner";
 import { useSRPdvs, useSRSavePdv, useSRDeletePdv } from "@/hooks/use-smartroute";
 import { useSRChecklistTemplates, useSRTemplates } from "@/hooks/use-smartroute-daily";
@@ -168,8 +168,62 @@ export default function SmartRoutePDVs() {
               </div>
               <div><Label>Latitude</Label><Input type="number" step="any" value={form.lat || ""} onChange={(e) => setForm({ ...form, lat: +e.target.value })} /></div>
               <div><Label>Longitude</Label><Input type="number" step="any" value={form.lng || ""} onChange={(e) => setForm({ ...form, lng: +e.target.value })} /></div>
-              <div><Label>Contato</Label><Input value={form.contact_name || ""} onChange={(e) => setForm({ ...form, contact_name: e.target.value })} /></div>
-              <div><Label>Telefone contato</Label><Input value={form.contact_phone || ""} onChange={(e) => setForm({ ...form, contact_phone: e.target.value })} /></div>
+            </div>
+
+            <div className="flex items-center justify-between mt-4">
+              <h3 className="text-sm font-semibold">Contatos do PDV</h3>
+              <Button type="button" size="sm" variant="outline" onClick={() => {
+                const list = Array.isArray(form.contacts) ? form.contacts : [];
+                setForm({ ...form, contacts: [...list, { name: "", role: "", phone: "", email: "", whatsapp: "", shared: false }] });
+              }}>
+                <UserPlus className="w-4 h-4 mr-1" /> Adicionar contato
+              </Button>
+            </div>
+            <div className="space-y-2 border rounded-md p-3 bg-muted/30">
+              {(!form.contacts || form.contacts.length === 0) && (
+                <p className="text-xs text-muted-foreground text-center py-2">
+                  Nenhum contato adicionado. Adicione múltiplos contatos (comprador, gerente, recebedor…) e marque quais devem ser sincronizados com a lista de contatos central futuramente.
+                </p>
+              )}
+              {(form.contacts || []).map((c: any, idx: number) => (
+                <div key={idx} className="grid grid-cols-12 gap-2 items-end bg-background border rounded p-2">
+                  <div className="col-span-3"><Label className="text-xs">Nome</Label><Input value={c.name || ""} onChange={(e) => {
+                    const list = [...form.contacts]; list[idx] = { ...list[idx], name: e.target.value }; setForm({ ...form, contacts: list });
+                  }} /></div>
+                  <div className="col-span-2"><Label className="text-xs">Função</Label><Input placeholder="Comprador, Gerente…" value={c.role || ""} onChange={(e) => {
+                    const list = [...form.contacts]; list[idx] = { ...list[idx], role: e.target.value }; setForm({ ...form, contacts: list });
+                  }} /></div>
+                  <div className="col-span-2"><Label className="text-xs">Telefone</Label><Input value={c.phone || ""} onChange={(e) => {
+                    const list = [...form.contacts]; list[idx] = { ...list[idx], phone: e.target.value }; setForm({ ...form, contacts: list });
+                  }} /></div>
+                  <div className="col-span-2"><Label className="text-xs">WhatsApp</Label><Input value={c.whatsapp || ""} onChange={(e) => {
+                    const list = [...form.contacts]; list[idx] = { ...list[idx], whatsapp: e.target.value }; setForm({ ...form, contacts: list });
+                  }} /></div>
+                  <div className="col-span-2"><Label className="text-xs">E-mail</Label><Input value={c.email || ""} onChange={(e) => {
+                    const list = [...form.contacts]; list[idx] = { ...list[idx], email: e.target.value }; setForm({ ...form, contacts: list });
+                  }} /></div>
+                  <div className="col-span-1 flex flex-col items-center gap-1">
+                    <label className="flex items-center gap-1 text-[10px] cursor-pointer" title="Compartilhar com lista central de contatos">
+                      <Checkbox checked={!!c.shared} onCheckedChange={() => {
+                        const list = [...form.contacts]; list[idx] = { ...list[idx], shared: !list[idx].shared }; setForm({ ...form, contacts: list });
+                      }} />
+                      <Share2 className="w-3 h-3" />
+                    </label>
+                    <Button type="button" size="icon" variant="ghost" onClick={() => {
+                      const list = [...form.contacts]; list.splice(idx, 1); setForm({ ...form, contacts: list });
+                    }}><X className="w-4 h-4 text-red-500" /></Button>
+                  </div>
+                </div>
+              ))}
+              <p className="text-[11px] text-muted-foreground">
+                <Share2 className="w-3 h-3 inline mr-1" />Marque para incluir na lista de contatos compartilhada (integração futura).
+              </p>
+            </div>
+
+            <h3 className="text-sm font-semibold mt-4">Contato principal (legado)</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>Nome contato principal</Label><Input value={form.contact_name || ""} onChange={(e) => setForm({ ...form, contact_name: e.target.value })} /></div>
+              <div><Label>Telefone contato principal</Label><Input value={form.contact_phone || ""} onChange={(e) => setForm({ ...form, contact_phone: e.target.value })} /></div>
             </div>
 
             <h3 className="text-sm font-semibold mt-4">Rota fixa (linha do caminhão)</h3>
