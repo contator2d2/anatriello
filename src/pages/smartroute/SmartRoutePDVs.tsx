@@ -114,7 +114,7 @@ export default function SmartRoutePDVs() {
                   <TableCell className="font-medium">{p.name}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">{p.city}{p.state ? `/${p.state}` : ""}</TableCell>
                   <TableCell className="text-xs">
-                    {routes.find((r: any) => r.id === p.route_template_id)?.name
+                    {routes.find((r: any) => r.id === p.route_template_id)?.code
                       || <span className="text-muted-foreground">—</span>}
                   </TableCell>
                   <TableCell><Badge variant="outline">{winLabel(p.delivery_window)}</Badge></TableCell>
