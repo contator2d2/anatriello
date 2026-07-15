@@ -200,6 +200,7 @@ import SmartRouteRotas from "./pages/smartroute/SmartRouteRotas";
 import SmartRoutePedidos from "./pages/smartroute/SmartRoutePedidos";
 import SmartRouteRotasMontadas from "./pages/smartroute/SmartRouteRotasMontadas";
 import SmartRouteRotaDoDia from "./pages/smartroute/SmartRouteRotaDoDia";
+import SmartRouteSimulador from "./pages/smartroute/SmartRouteSimulador";
 import SmartRoutePDVs from "./pages/smartroute/SmartRoutePDVs";
 import SmartRouteFrota from "./pages/smartroute/SmartRouteFrota";
 import SmartRouteMotoristas from "./pages/smartroute/SmartRouteMotoristas";
