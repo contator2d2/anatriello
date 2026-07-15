@@ -287,7 +287,8 @@ router.post('/analysis/shelf', async (req, res) => {
     const { image_url, image_base64, mime_type, stop_id, photo_id, expected_brands } = req.body || {};
     if (!image_url && !image_base64) return res.status(400).json({ error: 'image_url ou image_base64 obrigatório' });
 
-    const prompt = `Analise a foto da gôndola/prateleira do PDV. Responda APENAS o JSON:
+    const extra = await getCustomInstructions(req.organizationId, 'shelf_analysis');
+    const prompt = `${extra ? `INSTRUÇÕES DO GESTOR:\n${extra}\n\n` : ''}Analise a foto da gôndola/prateleira do PDV. Responda APENAS o JSON:
 {
   "fill_percent": 0-100,
   "out_of_stock": true/false,
