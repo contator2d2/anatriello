@@ -95,7 +95,8 @@ function DayDetails({ routeId, date }: { routeId: string; date: string }) {
 
   const { day, orders = [], vehicle } = data;
   const status = STATUS_META[day.status] || STATUS_META.aberta;
-  const locked = day.status !== "aberta";
+  const isPublished = ["publicada", "fechada", "em_andamento", "concluida"].includes(day.status);
+  const isOptimized = day.status === "otimizada" || day.optimized_at;
 
   const toggleDriver = (id: string) => {
     setDriverIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
@@ -104,17 +105,27 @@ function DayDetails({ routeId, date }: { routeId: string; date: string }) {
     await setDrivers.mutateAsync({ routeId, date, driver_ids: driverIds, vehicle_id: vehicleId || null });
     toast.success("Entregadores atualizados"); refetch();
   };
-  const doClose = async () => {
+  const doOptimize = async () => {
     try {
-      await closeDay.mutateAsync({ routeId, date });
-      toast.success("Rota do dia fechada — liberada no app do entregador"); refetch();
+      const r: any = await optimize.mutateAsync({ routeId, date });
+      const blocked = r?.blocked?.length || 0;
+      toast.success(`IA gerou sequência com ${r.sequence?.length || 0} paradas${blocked ? ` · ${blocked} bloqueado(s) por dia da semana` : ""}`);
+      refetch();
+    } catch (e: any) { toast.error(e.message); }
+  };
+  const doPublish = async () => {
+    if (!driverIds.length) return toast.error("Atribua ao menos um entregador antes de publicar");
+    try {
+      await publish.mutateAsync({ routeId, date });
+      toast.success("Rota publicada — disponível no app do entregador"); refetch();
     } catch (e: any) { toast.error(e.message); }
   };
   const doReopen = async () => {
-    if (!confirm("Reabrir a rota devolve os pedidos ao pool e apaga as rotas do app. Continuar?")) return;
+    if (!confirm("Reabrir a rota devolve os pedidos ao pool. Continuar?")) return;
     await reopenDay.mutateAsync({ routeId, date });
     toast.success("Rota reaberta"); refetch();
   };
+
 
   return (
     <>
