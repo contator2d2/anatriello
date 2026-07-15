@@ -65,7 +65,8 @@ function getWindowBounds(order: any) {
   const explicitEnd = parseClockToMin(order?.pdv_window_end || order?.delivery_window_end);
   const start = explicitStart ?? preset.start;
   const end = explicitEnd ?? preset.end;
-  return { ...preset, start, end, key, hasExactTime: explicitStart != null || explicitEnd != null };
+  const sortStart = explicitStart ?? (key === "qualquer" ? 24 * 60 : preset.start);
+  return { ...preset, start, end, key, sortStart, hasExactTime: explicitStart != null || explicitEnd != null };
 }
 
 function haversineKm(a: any, b: any) {
@@ -149,7 +150,7 @@ export default function SmartRouteSimulador() {
       const byExactWindow = new Map<string, any[]>();
       groups[k].forEach((o) => {
         const b = getWindowBounds(o);
-        const key = `${b.order}:${b.start}:${b.end}`;
+        const key = `${b.sortStart}:${b.end}:${b.order}`;
         byExactWindow.set(key, [...(byExactWindow.get(key) || []), o]);
       });
       return Array.from(byExactWindow.entries())
@@ -230,7 +231,7 @@ export default function SmartRouteSimulador() {
 
   // Cálculo de ETAs / durações — usa distância real (OSRM) quando disponível, respeitando janela do PDV.
   // Duas passadas: 1) calcula assumindo início em startHour para obter a espera do 1º stop;
-  // 2) se autoDeparture, adianta a saída do CD para chegar exatamente na abertura do 1º stop.
+  // 2) se autoDeparture, atrasa a saída do CD para chegar exatamente na abertura do 1º stop.
   const computed = useMemo(() => {
     const [hh, mm] = (startHour || "08:00").split(":").map(Number);
     const startMin = (hh || 8) * 60 + (mm || 0);
