@@ -2035,6 +2035,37 @@ router.post('/routes/:id/day/:date/publish', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Salvar sequência manual (simulador) → registra como oficial
+router.put('/routes/:id/day/:date/sequence', async (req, res) => {
+  try {
+    const org = orgId(req);
+    const ids = Array.isArray(req.body?.order_ids) ? req.body.order_ids : [];
+    if (!ids.length) return res.status(400).json({ error: 'order_ids vazio' });
+    // Garante dia
+    await query(
+      `INSERT INTO smartroute_route_days (route_id, date, status)
+       VALUES ($1,$2,'aberta') ON CONFLICT (route_id, date) DO NOTHING`,
+      [req.params.id, req.params.date]
+    );
+    for (let i = 0; i < ids.length; i++) {
+      await query(
+        `UPDATE smartroute_orders SET sequence=$1, status = CASE WHEN status='pendente' THEN 'planejado' ELSE status END
+           WHERE id=$2 AND organization_id=$3 AND route_id=$4 AND delivery_date=$5`,
+        [i + 1, ids[i], org, req.params.id, req.params.date]
+      );
+    }
+    const summary = { stops: ids.length, manual_override: true, saved_by: req.user?.email || 'manual' };
+    await query(
+      `UPDATE smartroute_route_days
+         SET status = CASE WHEN status IN ('publicada','em_andamento','concluida') THEN status ELSE 'otimizada' END,
+             optimized_at=NOW(), optimized_by=$3, stops_summary=$4, updated_at=NOW()
+       WHERE route_id=$1 AND date=$2`,
+      [req.params.id, req.params.date, req.user?.email || 'manual', JSON.stringify(summary)]
+    );
+    res.json({ ok: true, stops: ids.length });
+  } catch (e) { logError('sr.day.sequence', e); res.status(500).json({ error: e.message }); }
+});
+
 // Troca/adiciona motorista
 router.post('/routes/:id/day/:date/drivers', async (req, res) => {
   try {
