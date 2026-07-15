@@ -1685,7 +1685,7 @@ router.post('/routes/:id/pdvs', async (req, res) => {
          delivery_window=COALESCE(EXCLUDED.delivery_window, smartroute_route_pdvs.delivery_window),
          notes=COALESCE(EXCLUDED.notes, smartroute_route_pdvs.notes)
        RETURNING *`,
-      [req.params.id, b.pdv_id, b.sequence || null, s.rows[0].n, b.window || null, b.notes || null]
+      [req.params.id, b.pdv_id, b.sequence || null, s.rows[0].n, b.delivery_window || b.window || null, b.notes || null]
     );
     res.json(r.rows[0]);
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -1705,7 +1705,7 @@ router.put('/routes/:id/pdvs/:pdvId', async (req, res) => {
     const r = await query(
       `UPDATE smartroute_route_pdvs SET delivery_window=COALESCE($3,delivery_window), notes=COALESCE($4,notes), sequence=COALESCE($5,sequence)
        WHERE route_id=$1 AND pdv_id=$2 RETURNING *`,
-      [req.params.id, req.params.pdvId, b.window || null, b.notes || null, b.sequence || null]
+      [req.params.id, req.params.pdvId, b.delivery_window || b.window || null, b.notes || null, b.sequence || null]
     );
     res.json(r.rows[0]);
   } catch (e) { res.status(500).json({ error: e.message }); }

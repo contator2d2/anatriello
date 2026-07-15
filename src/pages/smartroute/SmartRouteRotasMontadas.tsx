@@ -169,7 +169,7 @@ function PdvsTab({ routeId }: { routeId: string }) {
 
   const add = async () => {
     if (!selectedPdv) return;
-    await save.mutateAsync({ routeId, pdv_id: selectedPdv, window: win });
+    await save.mutateAsync({ routeId, pdv_id: selectedPdv, delivery_window: win });
     setSelectedPdv(""); setWin("qualquer");
     toast.success("PDV adicionado"); refetch();
   };
@@ -215,7 +215,7 @@ function PdvsTab({ routeId }: { routeId: string }) {
                   <div className="font-medium">{rp.pdv_name}</div>
                   <div className="text-xs text-muted-foreground truncate">{rp.address} · {rp.city}</div>
                 </div>
-                <Select value={rp.delivery_window || rp.window || "qualquer"} onValueChange={(v) => upd.mutate({ routeId, pdvId: rp.pdv_id, window: v })}>
+                <Select value={rp.delivery_window || rp.window || "qualquer"} onValueChange={(v) => upd.mutate({ routeId, pdvId: rp.pdv_id, delivery_window: v })}>
                   <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
                   <SelectContent>{WINDOWS.map((w) => <SelectItem key={w.value} value={w.value}>{w.label}</SelectItem>)}</SelectContent>
                 </Select>
