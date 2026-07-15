@@ -95,11 +95,15 @@ export default function SmartRouteSimulador() {
   const saveSeq = useSRSaveDaySequence();
 
   const [startHour, setStartHour] = useState("08:00");
+  const [autoDeparture, setAutoDeparture] = useState(true);
   const [order, setOrder] = useState<any[]>([]);
   const [dirty, setDirty] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [simOpen, setSimOpen] = useState(false);
   const [showResult, setShowResult] = useState(false);
+  const [osrm, setOsrm] = useState<OsrmResult | null>(null);
+  const [osrmLoading, setOsrmLoading] = useState(false);
+
 
   // Reordena automaticamente respeitando a janela de entrega do PDV.
   // Agrupa por janela (manhã → tarde → noite → qualquer) e, dentro de cada grupo,
