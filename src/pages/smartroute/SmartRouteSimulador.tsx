@@ -138,25 +138,17 @@ export default function SmartRouteSimulador() {
   // Agrupa por janela (manhã → tarde → noite → qualquer) e, dentro de cada grupo,
   // aplica nearest-neighbor partindo do último ponto (ou do CD).
   const autoSortByWindow = (list: any[], depot: { lat?: number; lng?: number }) => {
-    const groups: Record<string, any[]> = { manha: [], tarde: [], noite: [], qualquer: [] };
-    list.forEach((o) => {
-      const w = getWindowKey(o);
-      (groups[w] || groups.qualquer).push(o);
-    });
-    const orderKeys = ["manha", "tarde", "noite", "qualquer"];
     let cursor = { lat: depot.lat, lng: depot.lng };
     const out: any[] = [];
-    const buckets = orderKeys.flatMap((k) => {
-      const byExactWindow = new Map<string, any[]>();
-      groups[k].forEach((o) => {
-        const b = getWindowBounds(o);
-        const key = `${b.sortStart}:${b.end}:${b.order}`;
-        byExactWindow.set(key, [...(byExactWindow.get(key) || []), o]);
-      });
-      return Array.from(byExactWindow.entries())
-        .map(([key, items]) => ({ key, items, sort: key.split(":").map(Number) }))
-        .sort((a, b) => a.sort[0] - b.sort[0] || a.sort[1] - b.sort[1] || a.sort[2] - b.sort[2]);
+    const byExactWindow = new Map<string, any[]>();
+    list.forEach((o) => {
+      const b = getWindowBounds(o);
+      const key = `${b.sortStart}:${b.end}:${b.order}`;
+      byExactWindow.set(key, [...(byExactWindow.get(key) || []), o]);
     });
+    const buckets = Array.from(byExactWindow.entries())
+      .map(([key, items]) => ({ key, items, sort: key.split(":").map(Number) }))
+      .sort((a, b) => a.sort[0] - b.sort[0] || a.sort[1] - b.sort[1] || a.sort[2] - b.sort[2]);
     for (const group of buckets) {
       const bucket = group.items.slice();
       while (bucket.length) {
