@@ -134,13 +134,20 @@ export default function SmartRouteSimulador() {
             Ajuste a ordem das paradas, veja tempo estimado por PDV e total da rota. Salve como oficial ou descarte a simulação.
           </p>
         </div>
-        {routeId && date && (
-          <Button asChild variant="outline" size="sm">
-            <Link to={`/smartroute/rota-do-dia?route=${routeId}&date=${date}`}>
-              <RouteIcon className="w-4 h-4 mr-1" /> Ver Rota do Dia
-            </Link>
-          </Button>
-        )}
+        <div className="flex gap-2">
+          {routeId && (
+            <Button size="sm" onClick={runSimulation} className="bg-gradient-to-r from-indigo-500 to-sky-500 hover:from-indigo-600 hover:to-sky-600 text-white">
+              <Sparkles className="w-4 h-4 mr-1" /> Rodar Simulação
+            </Button>
+          )}
+          {routeId && date && (
+            <Button asChild variant="outline" size="sm">
+              <Link to={`/smartroute/rota-do-dia?route=${routeId}&date=${date}`}>
+                <RouteIcon className="w-4 h-4 mr-1" /> Ver Rota do Dia
+              </Link>
+            </Button>
+          )}
+        </div>
       </div>
 
       <Card>
