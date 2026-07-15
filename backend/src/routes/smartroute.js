@@ -1862,9 +1862,9 @@ router.post('/routes/template', async (req, res) => {
     const b = req.body || {};
     const code = b.code || `TMPL-${Date.now().toString(36).toUpperCase()}`;
     const r = await query(
-      `INSERT INTO smartroute_routes (organization_id, code, is_template, default_driver_id, default_vehicle_id, owner_user_id, notes, status, planned_date)
-       VALUES ($1,$2,true,$3,$4,$5,$6,'template',CURRENT_DATE) RETURNING *`,
-      [orgId(req), code, b.default_driver_id || null, b.default_vehicle_id || null, req.user?.id || null, b.notes || null]
+      `INSERT INTO smartroute_routes (organization_id, code, is_template, default_driver_id, default_vehicle_id, owner_user_id, notes, status, planned_date, upsell_time_min)
+       VALUES ($1,$2,true,$3,$4,$5,$6,'template',CURRENT_DATE,$7) RETURNING *`,
+      [orgId(req), code, b.default_driver_id || null, b.default_vehicle_id || null, req.user?.id || null, b.notes || null, Number.isFinite(+b.upsell_time_min) ? +b.upsell_time_min : 0]
     );
     res.json(r.rows[0]);
   } catch (e) { res.status(500).json({ error: e.message }); }
