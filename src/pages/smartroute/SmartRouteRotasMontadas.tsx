@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Plus, Trash2, Edit3, Store, Calendar, ArrowUp, ArrowDown, Route as RouteIcon, Sun, Sunset, Moon, Clock } from "lucide-react";
+import { Plus, Trash2, Edit3, Store, Calendar, ArrowUp, ArrowDown, Route as RouteIcon, Sun, Sunset, Moon, Clock, Warehouse } from "lucide-react";
 import { toast } from "sonner";
 import {
   useSRTemplates, useSRCreateTemplate, useSRUpdateTemplate, useSRDeleteTemplate,
@@ -16,6 +16,7 @@ import {
   useSRRouteSchedule, useSRSaveRouteSchedule,
 } from "@/hooks/use-smartroute-daily";
 import { useSRDrivers, useSRVehicles, useSRPdvs } from "@/hooks/use-smartroute";
+import { useSRDepots } from "@/hooks/use-smartroute-depots";
 
 const WINDOWS = [
   { value: "manha", label: "Manhã", icon: Sun },
@@ -34,8 +35,8 @@ export default function RotasMontadas() {
     <div className="p-6 max-w-7xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2"><RouteIcon className="w-6 h-6" /> Rotas Montadas</h1>
-          <p className="text-sm text-muted-foreground">Rotas fixas com PDVs pré-cadastrados, janelas de horário e escala de entregadores.</p>
+          <h1 className="text-2xl font-bold flex items-center gap-2"><RouteIcon className="w-6 h-6" /> Rotas Dinâmicas</h1>
+          <p className="text-sm text-muted-foreground">Modelos operacionais para organizar os PDVs lançados no dia, janelas de horário e escala de entregadores.</p>
         </div>
         <Button onClick={() => setCreating(true)}><Plus className="w-4 h-4 mr-2" /> Nova rota</Button>
       </div>
@@ -44,7 +45,7 @@ export default function RotasMontadas() {
         <div className="text-center py-12 text-muted-foreground">Carregando…</div>
       ) : templates.length === 0 ? (
         <Card><CardContent className="py-12 text-center text-muted-foreground">
-          Nenhuma rota fixa cadastrada. Crie sua primeira rota-modelo.
+          Nenhuma rota dinâmica cadastrada. Crie sua primeira rota-modelo.
         </CardContent></Card>
       ) : (
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -59,6 +60,7 @@ export default function RotasMontadas() {
               <CardContent className="text-sm space-y-1">
                 <div className="text-muted-foreground">Entregador padrão: <span className="font-medium text-foreground">{t.default_driver_name || "—"}</span></div>
                 <div className="text-muted-foreground">Veículo: <span className="font-medium text-foreground">{t.default_vehicle_plate || "—"}</span></div>
+                <div className="text-muted-foreground flex items-center gap-1"><Warehouse className="w-3 h-3" /> CD: <span className="font-medium text-foreground">{t.depot_name || "padrão"}</span></div>
                 <div className="flex gap-2 pt-2">
                   <Link to={`/smartroute/rota-do-dia?route=${t.id}`} onClick={(e) => e.stopPropagation()}>
                     <Button size="sm" variant="outline"><Calendar className="w-3 h-3 mr-1" /> Rota do dia</Button>
@@ -81,12 +83,15 @@ function TemplateDialog({ open, onOpenChange, template }: any) {
   const update = useSRUpdateTemplate();
   const { data: drivers = [] } = useSRDrivers();
   const { data: vehicles = [] } = useSRVehicles();
-  const [form, setForm] = useState<any>(template || { code: "", default_driver_id: "", default_vehicle_id: "", notes: "" });
+  const { data: depots = [] } = useSRDepots();
+  const defaultDepot = depots.find((d: any) => d.is_default) || depots[0];
+  const [form, setForm] = useState<any>(template || { code: "", depot_id: "", default_driver_id: "", default_vehicle_id: "", notes: "" });
 
   const save = async () => {
     try {
-      if (template) await update.mutateAsync({ id: template.id, ...form });
-      else await create.mutateAsync(form);
+      const payload = { ...form, depot_id: form.depot_id || defaultDepot?.id || null };
+      if (template) await update.mutateAsync({ id: template.id, ...payload });
+      else await create.mutateAsync(payload);
       toast.success("Rota salva");
       onOpenChange(false);
     } catch (e: any) { toast.error(e.message); }
@@ -95,9 +100,15 @@ function TemplateDialog({ open, onOpenChange, template }: any) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
-        <DialogHeader><DialogTitle>{template ? "Editar rota" : "Nova rota fixa"}</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>{template ? "Editar rota" : "Nova rota dinâmica"}</DialogTitle></DialogHeader>
         <div className="space-y-3">
           <div><label className="text-sm">Código/Nome da rota*</label><Input value={form.code || ""} onChange={(e) => setForm({ ...form, code: e.target.value })} placeholder="Ex: Rota Centro-SP" /></div>
+          <div><label className="text-sm">Centro de Distribuição de saída*</label>
+            <Select value={form.depot_id || defaultDepot?.id || ""} onValueChange={(v) => setForm({ ...form, depot_id: v })}>
+              <SelectTrigger><SelectValue placeholder="Selecione o CD" /></SelectTrigger>
+              <SelectContent>{depots.map((d: any) => <SelectItem key={d.id} value={d.id}>{d.name}{d.is_default ? " — padrão" : ""}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
           <div><label className="text-sm">Entregador padrão</label>
             <Select value={form.default_driver_id || ""} onValueChange={(v) => setForm({ ...form, default_driver_id: v || null })}>
               <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
