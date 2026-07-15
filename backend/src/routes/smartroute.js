@@ -1745,16 +1745,25 @@ router.get('/routes/:id/day', async (req, res) => {
     const day = await ensureRouteDay(req.params.id, date);
     const orders = await query(
       `SELECT o.*, p.name AS pdv_name, p.address AS pdv_address, p.lat AS pdv_lat, p.lng AS pdv_lng,
+              COALESCE(p.service_time_min,15) AS pdv_service_time_min,
+              p.checklist_template_id AS pdv_checklist_template_id,
+              (SELECT COALESCE(jsonb_array_length(items),0)
+                 FROM smartroute_pdv_checklists c
+                WHERE c.organization_id=$3
+                  AND (c.pdv_id = o.pdv_id OR (c.pdv_id IS NULL AND c.is_default=true))
+                ORDER BY (c.pdv_id = o.pdv_id) DESC LIMIT 1) AS checklist_items_count,
               rp.sequence AS pdv_sequence, rp.window AS route_pdv_window
        FROM smartroute_orders o
        LEFT JOIN smartroute_pdvs p ON p.id=o.pdv_id
        LEFT JOIN smartroute_route_pdvs rp ON rp.route_id=o.route_id AND rp.pdv_id=o.pdv_id
        WHERE o.route_id=$1 AND o.delivery_date=$2
        ORDER BY
+         CASE WHEN o.sequence IS NOT NULL THEN 0 ELSE 1 END,
+         o.sequence NULLS LAST,
          CASE COALESCE(o.pdv_window,'qualquer')
            WHEN 'manha' THEN 1 WHEN 'tarde' THEN 2 WHEN 'noite' THEN 3 ELSE 4 END,
          rp.sequence NULLS LAST, o.created_at`,
-      [req.params.id, date]);
+      [req.params.id, date, org]);
     // enriquece drivers/vehicle
     const drvs = day.driver_ids?.length
       ? (await query(`SELECT id, full_name, phone FROM smartroute_drivers WHERE id = ANY($1::uuid[])`, [day.driver_ids])).rows
