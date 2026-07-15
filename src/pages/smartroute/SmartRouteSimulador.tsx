@@ -60,10 +60,18 @@ export default function SmartRouteSimulador() {
   const [order, setOrder] = useState<any[]>([]);
   const [dirty, setDirty] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [simOpen, setSimOpen] = useState(false);
+  const [showResult, setShowResult] = useState(false);
 
   useEffect(() => {
     if (data?.orders) { setOrder(data.orders); setDirty(false); }
   }, [data?.orders]);
+
+  const runSimulation = async () => {
+    setShowResult(false);
+    setSimOpen(true);
+    try { await refetch(); } catch {}
+  };
 
   const route = data?.route;
   const upsellMin = Number(route?.upsell_time_min || 0);
