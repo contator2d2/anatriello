@@ -1778,6 +1778,10 @@ router.get('/routes/:id/day', async (req, res) => {
     const day = await ensureRouteDay(req.params.id, date);
     const orders = await query(
       `SELECT o.*, p.name AS pdv_name, p.address AS pdv_address, p.lat AS pdv_lat, p.lng AS pdv_lng,
+              p.delivery_window AS pdv_default_window,
+              p.delivery_window_start AS pdv_window_start,
+              p.delivery_window_end AS pdv_window_end,
+              COALESCE(NULLIF(o.pdv_window,'qualquer'), NULLIF(rp.delivery_window,'qualquer'), p.delivery_window, 'qualquer') AS effective_pdv_window,
               COALESCE(p.service_time_min,15) AS pdv_service_time_min,
               p.checklist_template_id AS pdv_checklist_template_id,
               (SELECT COALESCE(jsonb_array_length(items),0)
@@ -1793,8 +1797,9 @@ router.get('/routes/:id/day', async (req, res) => {
        ORDER BY
          CASE WHEN o.sequence IS NOT NULL THEN 0 ELSE 1 END,
          o.sequence NULLS LAST,
-         CASE COALESCE(o.pdv_window,'qualquer')
+          CASE COALESCE(NULLIF(o.pdv_window,'qualquer'), NULLIF(rp.delivery_window,'qualquer'), p.delivery_window, 'qualquer')
            WHEN 'manha' THEN 1 WHEN 'tarde' THEN 2 WHEN 'noite' THEN 3 ELSE 4 END,
+          p.delivery_window_start NULLS LAST,
          rp.sequence NULLS LAST, o.created_at`,
       [req.params.id, date, org]);
     // enriquece drivers/vehicle
@@ -1941,6 +1946,12 @@ router.get('/routes-templates', async (req, res) => {
 // marcados como bloqueados e não entram na sequência).
 
 const WINDOW_RANK = { manha: 1, tarde: 2, noite: 3, qualquer: 4 };
+function timeToMinutes(value) {
+  if (!value) return null;
+  const match = String(value).match(/^(\d{1,2}):(\d{2})/);
+  if (!match) return null;
+  return Math.max(0, Math.min(1440, Number(match[1]) * 60 + Number(match[2])));
+}
 function haversineKm(a, b) {
   if (!a?.lat || !b?.lat) return 999;
   const R = 6371, toRad = (v) => (v * Math.PI) / 180;
@@ -1962,7 +1973,9 @@ async function optimizeRouteDay(organization_id, route_id, date, actor = 'manual
   const ordersR = await query(
     `SELECT o.id, o.pdv_id, o.pdv_window, o.priority, o.notes, o.order_number,
             p.name AS pdv_name, p.lat, p.lng, p.delivery_window, p.allowed_weekdays,
-            p.service_time_min, p.checklist_template_id
+            p.delivery_window_start, p.delivery_window_end,
+            p.service_time_min, p.checklist_template_id,
+            COALESCE(NULLIF(o.pdv_window,'qualquer'), p.delivery_window, 'qualquer') AS effective_window
        FROM smartroute_orders o
        LEFT JOIN smartroute_pdvs p ON p.id = o.pdv_id
       WHERE o.organization_id=$1 AND o.route_id=$2 AND o.delivery_date=$3
@@ -1975,17 +1988,31 @@ async function optimizeRouteDay(organization_id, route_id, date, actor = 'manual
   for (const o of ordersR.rows) {
     const allowed = Array.isArray(o.allowed_weekdays) ? o.allowed_weekdays : [0,1,2,3,4,5,6];
     if (!allowed.includes(weekday)) blocked.push({ ...o, reason: 'dia_nao_permitido' });
-    else eligible.push({ ...o, window: (o.pdv_window || o.delivery_window || 'qualquer') });
+    else {
+      const window = o.effective_window || o.pdv_window || o.delivery_window || 'qualquer';
+      eligible.push({
+        ...o,
+        window,
+        window_start_min: timeToMinutes(o.delivery_window_start),
+        window_end_min: timeToMinutes(o.delivery_window_end),
+      });
+    }
   }
 
-  // Ordenação: janela → nearest-neighbor por PDV
+  // Ordenação: janela → horário exato da janela → nearest-neighbor por PDV
   const byWindow = new Map();
   for (const o of eligible) {
-    const w = WINDOW_RANK[o.window] ?? 4;
-    if (!byWindow.has(w)) byWindow.set(w, []);
-    byWindow.get(w).push(o);
+    const rank = WINDOW_RANK[o.window] ?? 4;
+    const start = o.window_start_min ?? (o.window === 'tarde' ? 13 * 60 : o.window === 'noite' ? 18 * 60 : o.window === 'manha' ? 8 * 60 : 0);
+    const end = o.window_end_min ?? (o.window === 'tarde' ? 18 * 60 : o.window === 'noite' ? 22 * 60 : o.window === 'manha' ? 12 * 60 : 24 * 60);
+    const key = `${rank}:${start}:${end}`;
+    if (!byWindow.has(key)) byWindow.set(key, []);
+    byWindow.get(key).push(o);
   }
-  const sortedWindows = [...byWindow.keys()].sort((a,b) => a-b);
+  const sortedWindows = [...byWindow.keys()].sort((a,b) => {
+    const aa = a.split(':').map(Number), bb = b.split(':').map(Number);
+    return aa[0] - bb[0] || aa[1] - bb[1] || aa[2] - bb[2];
+  });
 
   const sequence = [];
   let cursor = null;
