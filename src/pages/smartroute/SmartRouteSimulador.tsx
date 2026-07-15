@@ -164,6 +164,14 @@ export default function SmartRouteSimulador() {
   const [osrm, setOsrm] = useState<OsrmResult | null>(null);
   const [osrmLoading, setOsrmLoading] = useState(false);
 
+  const route = data?.route;
+  const upsellMin = Number(route?.upsell_time_min || 0);
+  const fallbackDepot = depots.find((d: any) => d.id === route?.depot_id) || depots.find((d: any) => d.is_default) || depots[0];
+  const depot = {
+    lat: route?.depot_lat ?? fallbackDepot?.lat,
+    lng: route?.depot_lng ?? fallbackDepot?.lng,
+    name: route?.depot_name || fallbackDepot?.name || "Centro de Distribuição",
+  };
 
   // Reordena automaticamente respeitando a janela de entrega do PDV.
   // Agrupa por janela (manhã → tarde → noite → qualquer) e, dentro de cada grupo,
@@ -198,25 +206,16 @@ export default function SmartRouteSimulador() {
 
   useEffect(() => {
     if (data?.orders) {
-      const sorted = autoSortByWindow(data.orders, { lat: data?.route?.depot_lat, lng: data?.route?.depot_lng });
+      const sorted = autoSortByWindow(data.orders, depot);
       setOrder(sorted);
       setDirty(false);
     }
-  }, [data?.orders, data?.route?.depot_lat, data?.route?.depot_lng]);
+  }, [data?.orders, depot.lat, depot.lng]);
 
   const runSimulation = async () => {
     setShowResult(false);
     setSimOpen(true);
     try { await refetch(); } catch {}
-  };
-
-  const route = data?.route;
-  const upsellMin = Number(route?.upsell_time_min || 0);
-  const fallbackDepot = depots.find((d: any) => d.id === route?.depot_id) || depots.find((d: any) => d.is_default) || depots[0];
-  const depot = {
-    lat: route?.depot_lat ?? fallbackDepot?.lat,
-    lng: route?.depot_lng ?? fallbackDepot?.lng,
-    name: route?.depot_name || fallbackDepot?.name || "Centro de Distribuição",
   };
 
   const move = (i: number, dir: -1 | 1) => {
