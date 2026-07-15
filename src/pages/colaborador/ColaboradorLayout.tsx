@@ -1,6 +1,6 @@
 import { ReactNode } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import { Home, Clock, FileText, User, ChevronLeft, WifiOff, CloudUpload } from "lucide-react";
+import { Home, Clock, FileText, User, ChevronLeft, WifiOff, CloudUpload, Megaphone, Calendar } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useBranding } from "@/hooks/use-branding";
 import { useOfflineSync } from "@/hooks/use-offline-sync";
@@ -13,17 +13,19 @@ interface Props {
   showBack?: boolean;
   rightSlot?: ReactNode;
   bg?: "navy" | "light";
+  hideTopBar?: boolean;
 }
 
 // tab.cap = capability necessária para mostrar a aba (undefined = sempre visível)
 const tabs: { to: string; label: string; icon: any; cap?: string }[] = [
   { to: "/colaborador/home", label: "Início", icon: Home },
-  { to: "/colaborador/jornada", label: "Jornada", icon: Clock, cap: "journey.view" },
-  { to: "/colaborador/solicitacoes", label: "Solicitações", icon: FileText, cap: "requests.view" },
+  { to: "/colaborador/jornada", label: "Agenda", icon: Calendar, cap: "journey.view" },
+  { to: "/colaborador/perfil?tab=comunicados", label: "Comunicados", icon: Megaphone },
+  { to: "/colaborador/documentos", label: "Documentos", icon: FileText, cap: "documents.view" },
   { to: "/colaborador/perfil", label: "Perfil", icon: User, cap: "profile.view" },
 ];
 
-export function ColaboradorLayout({ children, title, showBack, rightSlot, bg = "light" }: Props) {
+export function ColaboradorLayout({ children, title, showBack, rightSlot, bg = "light", hideTopBar }: Props) {
   const nav = useNavigate();
   const { branding } = useBranding() as any;
   const { isOnline, isSyncing } = useOfflineSync();
