@@ -11,9 +11,13 @@ import { loadDocValidationConfig } from './ayratech-ai.js';
 const router = express.Router();
 
 let ensured = false;
+async function runSafe(sql, label) {
+  try { await query(sql); }
+  catch (e) { logError(`ensureTables.${label}`, e); }
+}
 async function ensureTables() {
   if (ensured) return;
-  await query(`
+  await runSafe(`
     CREATE TABLE IF NOT EXISTS smartroute_ai_analyses (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       organization_id UUID NOT NULL,
@@ -26,10 +30,11 @@ async function ensureTables() {
       confidence NUMERIC(4,3),
       created_by UUID,
       created_at TIMESTAMPTZ DEFAULT NOW()
-    );
-    CREATE INDEX IF NOT EXISTS idx_sr_ai_org ON smartroute_ai_analyses(organization_id, kind, created_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_sr_ai_stop ON smartroute_ai_analyses(stop_id);
+    )`, 'analyses');
+  await runSafe(`CREATE INDEX IF NOT EXISTS idx_sr_ai_org ON smartroute_ai_analyses(organization_id, kind, created_at DESC)`, 'idx_analyses_org');
+  await runSafe(`CREATE INDEX IF NOT EXISTS idx_sr_ai_stop ON smartroute_ai_analyses(stop_id)`, 'idx_analyses_stop');
 
+  await runSafe(`
     CREATE TABLE IF NOT EXISTS smartroute_alerts (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       organization_id UUID NOT NULL,
@@ -47,12 +52,13 @@ async function ensureTables() {
       resolved_at TIMESTAMPTZ,
       resolved_by UUID,
       created_at TIMESTAMPTZ DEFAULT NOW()
-    );
-    CREATE INDEX IF NOT EXISTS idx_sr_alerts_org ON smartroute_alerts(organization_id, resolved, created_at DESC);
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_sr_alerts_dedupe
-      ON smartroute_alerts(organization_id, type, COALESCE(entity_id, '00000000-0000-0000-0000-000000000000'::uuid))
-      WHERE resolved = false;
+    )`, 'alerts');
+  await runSafe(`CREATE INDEX IF NOT EXISTS idx_sr_alerts_org ON smartroute_alerts(organization_id, resolved, created_at DESC)`, 'idx_alerts_org');
+  await runSafe(`CREATE UNIQUE INDEX IF NOT EXISTS idx_sr_alerts_dedupe
+    ON smartroute_alerts(organization_id, type, COALESCE(entity_id, '00000000-0000-0000-0000-000000000000'::uuid))
+    WHERE resolved = false`, 'idx_alerts_dedupe');
 
+  await runSafe(`
     CREATE TABLE IF NOT EXISTS smartroute_ai_recommendations (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       organization_id UUID NOT NULL,
@@ -63,9 +69,10 @@ async function ensureTables() {
       data JSONB DEFAULT '{}'::jsonb,
       created_by UUID,
       created_at TIMESTAMPTZ DEFAULT NOW()
-    );
-    CREATE INDEX IF NOT EXISTS idx_sr_reco_org ON smartroute_ai_recommendations(organization_id, created_at DESC);
+    )`, 'recommendations');
+  await runSafe(`CREATE INDEX IF NOT EXISTS idx_sr_reco_org ON smartroute_ai_recommendations(organization_id, created_at DESC)`, 'idx_reco_org');
 
+  await runSafe(`
     CREATE TABLE IF NOT EXISTS smartroute_ai_prompts (
       organization_id UUID NOT NULL,
       key TEXT NOT NULL,
@@ -73,14 +80,14 @@ async function ensureTables() {
       updated_by UUID,
       updated_at TIMESTAMPTZ DEFAULT NOW(),
       PRIMARY KEY (organization_id, key)
-    );
+    )`, 'prompts');
 
-    ALTER TABLE IF EXISTS smartroute_orders ADD COLUMN IF NOT EXISTS time_window_start TIME;
-    ALTER TABLE IF EXISTS smartroute_orders ADD COLUMN IF NOT EXISTS time_window_end TIME;
-    ALTER TABLE IF EXISTS smartroute_orders ADD COLUMN IF NOT EXISTS service_time_min INTEGER DEFAULT 15;
-  `);
+  await runSafe(`ALTER TABLE IF EXISTS smartroute_orders ADD COLUMN IF NOT EXISTS time_window_start TIME`, 'orders_tws');
+  await runSafe(`ALTER TABLE IF EXISTS smartroute_orders ADD COLUMN IF NOT EXISTS time_window_end TIME`, 'orders_twe');
+  await runSafe(`ALTER TABLE IF EXISTS smartroute_orders ADD COLUMN IF NOT EXISTS service_time_min INTEGER DEFAULT 15`, 'orders_stm');
   ensured = true;
 }
+
 
 async function resolveOrganizationId(req) {
   if (req.organizationId) return req.organizationId;
