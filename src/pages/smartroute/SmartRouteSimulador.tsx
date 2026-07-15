@@ -74,9 +74,41 @@ export default function SmartRouteSimulador() {
   const [simOpen, setSimOpen] = useState(false);
   const [showResult, setShowResult] = useState(false);
 
+  // Reordena automaticamente respeitando a janela de entrega do PDV.
+  // Agrupa por janela (manhã → tarde → noite → qualquer) e, dentro de cada grupo,
+  // aplica nearest-neighbor partindo do último ponto (ou do CD).
+  const autoSortByWindow = (list: any[], depot: { lat?: number; lng?: number }) => {
+    const groups: Record<string, any[]> = { manha: [], tarde: [], noite: [], qualquer: [] };
+    list.forEach((o) => {
+      const w = (o.pdv_window || "qualquer") as string;
+      (groups[w] || groups.qualquer).push(o);
+    });
+    const orderKeys = ["manha", "tarde", "noite", "qualquer"];
+    let cursor = { lat: depot.lat, lng: depot.lng };
+    const out: any[] = [];
+    for (const k of orderKeys) {
+      const bucket = groups[k].slice();
+      while (bucket.length) {
+        let bestI = 0, bestD = Infinity;
+        bucket.forEach((o, i) => {
+          const d = cursor.lat && o.pdv_lat ? haversineKm(cursor, { lat: o.pdv_lat, lng: o.pdv_lng }) : 0;
+          if (d < bestD) { bestD = d; bestI = i; }
+        });
+        const chosen = bucket.splice(bestI, 1)[0];
+        out.push(chosen);
+        if (chosen.pdv_lat) cursor = { lat: chosen.pdv_lat, lng: chosen.pdv_lng };
+      }
+    }
+    return out;
+  };
+
   useEffect(() => {
-    if (data?.orders) { setOrder(data.orders); setDirty(false); }
-  }, [data?.orders]);
+    if (data?.orders) {
+      const sorted = autoSortByWindow(data.orders, { lat: data?.route?.depot_lat, lng: data?.route?.depot_lng });
+      setOrder(sorted);
+      setDirty(false);
+    }
+  }, [data?.orders, data?.route?.depot_lat, data?.route?.depot_lng]);
 
   const runSimulation = async () => {
     setShowResult(false);
@@ -86,20 +118,31 @@ export default function SmartRouteSimulador() {
 
   const route = data?.route;
   const upsellMin = Number(route?.upsell_time_min || 0);
+  const depot = { lat: route?.depot_lat, lng: route?.depot_lng, name: route?.depot_name || "Centro de Distribuição" };
 
   const move = (i: number, dir: -1 | 1) => {
     const j = i + dir; if (j < 0 || j >= order.length) return;
     const next = order.slice(); [next[i], next[j]] = [next[j], next[i]];
     setOrder(next); setDirty(true);
   };
-  const reset = () => { if (data?.orders) { setOrder(data.orders); setDirty(false); } };
+  const reset = () => {
+    if (data?.orders) {
+      const sorted = autoSortByWindow(data.orders, { lat: route?.depot_lat, lng: route?.depot_lng });
+      setOrder(sorted); setDirty(false);
+    }
+  };
+  const applyAutoSort = () => {
+    const sorted = autoSortByWindow(order, { lat: route?.depot_lat, lng: route?.depot_lng });
+    setOrder(sorted); setDirty(true);
+    toast.success("Sequência reorganizada respeitando as janelas de cada PDV");
+  };
 
-  // Cálculo de ETAs / durações
+  // Cálculo de ETAs / durações — com respeito à janela do PDV
   const computed = useMemo(() => {
     const [hh, mm] = (startHour || "08:00").split(":").map(Number);
     let cursor = { lat: route?.depot_lat, lng: route?.depot_lng };
     let t = (hh || 8) * 60 + (mm || 0);
-    let totalKm = 0, totalTravel = 0, totalService = 0, totalUpsell = 0, totalChecklist = 0;
+    let totalKm = 0, totalTravel = 0, totalService = 0, totalUpsell = 0, totalChecklist = 0, totalWait = 0;
     const stops = order.map((o) => {
       const dest = { lat: o.pdv_lat, lng: o.pdv_lng };
       const km = cursor.lat && dest.lat ? haversineKm(cursor, dest) : 0;
@@ -107,19 +150,38 @@ export default function SmartRouteSimulador() {
       const service = Number(o.pdv_service_time_min || 15);
       const checklist = Number(o.checklist_items_count || 0) * CHECKLIST_ITEM_MIN;
       const upsell = upsellMin;
-      const arrival = t + travel;
+      const rawArrival = t + travel;
+      const win = (o.pdv_window || "qualquer") as string;
+      const bounds = WIN_BOUNDS[win] || WIN_BOUNDS.qualquer;
+      // Se chegar antes da janela abrir, espera até a abertura
+      const wait = Math.max(0, bounds.start - rawArrival);
+      const arrival = rawArrival + wait;
+      // Violação: chegou depois do fim da janela
+      const violation = arrival > bounds.end ? Math.round(arrival - bounds.end) : 0;
       const departure = arrival + service + checklist + upsell;
       t = departure;
       if (dest.lat) cursor = dest;
-      totalKm += km; totalTravel += travel; totalService += service; totalChecklist += checklist; totalUpsell += upsell;
+      totalKm += km; totalTravel += travel; totalService += service;
+      totalChecklist += checklist; totalUpsell += upsell; totalWait += wait;
       return {
-        order: o, km, travel, service, checklist, upsell,
-        arrival, departure, stopMin: service + checklist + upsell + travel,
+        order: o, km, travel, service, checklist, upsell, wait, violation,
+        arrival, departure, window: win,
+        stopMin: service + checklist + upsell + travel + wait,
       };
     });
-    const totalMin = totalTravel + totalService + totalChecklist + totalUpsell;
-    return { stops, totals: { km: totalKm, travel: totalTravel, service: totalService, checklist: totalChecklist, upsell: totalUpsell, totalMin } };
+    // Retorno ao CD
+    const returnKm = cursor.lat && route?.depot_lat ? haversineKm(cursor, { lat: route.depot_lat, lng: route.depot_lng }) : 0;
+    const returnTravel = (returnKm / AVG_SPEED_KMH) * 60;
+    totalKm += returnKm; totalTravel += returnTravel;
+    const totalMin = totalTravel + totalService + totalChecklist + totalUpsell + totalWait;
+    return {
+      stops,
+      returnLeg: { km: returnKm, travel: returnTravel, arrival: t + returnTravel },
+      totals: { km: totalKm, travel: totalTravel, service: totalService, checklist: totalChecklist, upsell: totalUpsell, wait: totalWait, totalMin },
+    };
   }, [order, startHour, route?.depot_lat, route?.depot_lng, upsellMin]);
+
+  const violations = computed.stops.filter((s) => s.violation > 0).length;
 
   const maxStop = Math.max(1, ...computed.stops.map((s) => s.stopMin));
 
