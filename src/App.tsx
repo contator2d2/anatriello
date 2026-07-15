@@ -216,6 +216,7 @@ import SmartRouteDocumentacao from "./pages/smartroute/SmartRouteDocumentacao";
 import SmartRouteMonitoramento from "./pages/smartroute/SmartRouteMonitoramento";
 import SmartRouteOcorrencias from "./pages/smartroute/SmartRouteOcorrencias";
 import SmartRoutePosAnalise from "./pages/smartroute/SmartRoutePosAnalise";
+import SmartRoutePrompts from "./pages/smartroute/SmartRoutePrompts";
 import SmartRoutePlanejador from "./pages/smartroute/SmartRoutePlanejador";
 
 import TrackingPage from "./pages/TrackingPage";
