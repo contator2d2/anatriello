@@ -300,6 +300,11 @@ export default function SmartRouteSimulador() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <SimulationRunnerDialog
+        open={simOpen}
+        onDone={() => { setSimOpen(false); setShowResult(true); }}
+      />
     </div>
   );
 }
