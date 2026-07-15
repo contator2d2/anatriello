@@ -168,49 +168,97 @@ export default function SmartRouteSimulador() {
     toast.success("Sequência reorganizada respeitando as janelas de cada PDV");
   };
 
-  // Cálculo de ETAs / durações — com respeito à janela do PDV
+  // Busca a rota real por ruas (OSRM) — CD → PDVs → CD
+  useEffect(() => {
+    const points: Array<{ lat: number; lng: number }> = [];
+    if (depot.lat && depot.lng) points.push({ lat: depot.lat, lng: depot.lng });
+    order.forEach((o) => { if (o.pdv_lat && o.pdv_lng) points.push({ lat: o.pdv_lat, lng: o.pdv_lng }); });
+    if (depot.lat && depot.lng) points.push({ lat: depot.lat, lng: depot.lng });
+    if (points.length < 2) { setOsrm(null); return; }
+    let cancelled = false;
+    setOsrmLoading(true);
+    fetchOsrmRoute(points).then((res) => {
+      if (cancelled) return;
+      setOsrm(res);
+      setOsrmLoading(false);
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [depot.lat, depot.lng, order.map((o) => `${o.id}:${o.pdv_lat},${o.pdv_lng}`).join("|")]);
+
+  // Cálculo de ETAs / durações — usa distância real (OSRM) quando disponível, respeitando janela do PDV.
+  // Duas passadas: 1) calcula assumindo início em startHour para obter a espera do 1º stop;
+  // 2) se autoDeparture, adianta a saída do CD para chegar exatamente na abertura do 1º stop.
   const computed = useMemo(() => {
     const [hh, mm] = (startHour || "08:00").split(":").map(Number);
-    let cursor = { lat: route?.depot_lat, lng: route?.depot_lng };
-    let t = (hh || 8) * 60 + (mm || 0);
-    let totalKm = 0, totalTravel = 0, totalService = 0, totalUpsell = 0, totalChecklist = 0, totalWait = 0;
-    const stops = order.map((o) => {
-      const dest = { lat: o.pdv_lat, lng: o.pdv_lng };
-      const km = cursor.lat && dest.lat ? haversineKm(cursor, dest) : 0;
-      const travel = (km / AVG_SPEED_KMH) * 60;
-      const service = Number(o.pdv_service_time_min || 15);
-      const checklist = Number(o.checklist_items_count || 0) * CHECKLIST_ITEM_MIN;
-      const upsell = upsellMin;
-      const rawArrival = t + travel;
-      const win = (o.pdv_window || "qualquer") as string;
-      const bounds = WIN_BOUNDS[win] || WIN_BOUNDS.qualquer;
-      // Se chegar antes da janela abrir, espera até a abertura
-      const wait = Math.max(0, bounds.start - rawArrival);
-      const arrival = rawArrival + wait;
-      // Violação: chegou depois do fim da janela
-      const violation = arrival > bounds.end ? Math.round(arrival - bounds.end) : 0;
-      const departure = arrival + service + checklist + upsell;
-      t = departure;
-      if (dest.lat) cursor = dest;
-      totalKm += km; totalTravel += travel; totalService += service;
-      totalChecklist += checklist; totalUpsell += upsell; totalWait += wait;
-      return {
-        order: o, km, travel, service, checklist, upsell, wait, violation,
-        arrival, departure, window: win,
-        stopMin: service + checklist + upsell + travel + wait,
-      };
-    });
-    // Retorno ao CD
-    const returnKm = cursor.lat && route?.depot_lat ? haversineKm(cursor, { lat: route.depot_lat, lng: route.depot_lng }) : 0;
-    const returnTravel = (returnKm / AVG_SPEED_KMH) * 60;
-    totalKm += returnKm; totalTravel += returnTravel;
-    const totalMin = totalTravel + totalService + totalChecklist + totalUpsell + totalWait;
-    return {
-      stops,
-      returnLeg: { km: returnKm, travel: returnTravel, arrival: t + returnTravel },
-      totals: { km: totalKm, travel: totalTravel, service: totalService, checklist: totalChecklist, upsell: totalUpsell, wait: totalWait, totalMin },
+    const startMin = (hh || 8) * 60 + (mm || 0);
+
+    const legKm = (i: number, from: any, to: any) => {
+      const real = osrm?.legs?.[i]?.km;
+      if (real != null) return real;
+      return from?.lat && to?.lat ? haversineKm(from, to) : 0;
     };
-  }, [order, startHour, route?.depot_lat, route?.depot_lng, upsellMin]);
+    const legMin = (i: number, from: any, to: any) => {
+      const real = osrm?.legs?.[i]?.min;
+      if (real != null) return real;
+      return ((from?.lat && to?.lat ? haversineKm(from, to) : 0) / AVG_SPEED_KMH) * 60;
+    };
+
+    const simulate = (departure: number) => {
+      let cursor = { lat: route?.depot_lat, lng: route?.depot_lng };
+      let t = departure;
+      let totalKm = 0, totalTravel = 0, totalService = 0, totalUpsell = 0, totalChecklist = 0, totalWait = 0;
+      const stops = order.map((o, idx) => {
+        const dest = { lat: o.pdv_lat, lng: o.pdv_lng };
+        const km = legKm(idx, cursor, dest);
+        const travel = legMin(idx, cursor, dest);
+        const service = Number(o.pdv_service_time_min || 15);
+        const checklist = Number(o.checklist_items_count || 0) * CHECKLIST_ITEM_MIN;
+        const upsell = upsellMin;
+        const rawArrival = t + travel;
+        const win = (o.pdv_window || "qualquer") as string;
+        const bounds = WIN_BOUNDS[win] || WIN_BOUNDS.qualquer;
+        const wait = Math.max(0, bounds.start - rawArrival);
+        const arrival = rawArrival + wait;
+        const violation = arrival > bounds.end ? Math.round(arrival - bounds.end) : 0;
+        const departureStop = arrival + service + checklist + upsell;
+        t = departureStop;
+        if (dest.lat) cursor = dest;
+        totalKm += km; totalTravel += travel; totalService += service;
+        totalChecklist += checklist; totalUpsell += upsell; totalWait += wait;
+        return {
+          order: o, km, travel, service, checklist, upsell, wait, violation,
+          arrival, departure: departureStop, window: win,
+          stopMin: service + checklist + upsell + travel + wait,
+        };
+      });
+      // Retorno ao CD (última leg do OSRM)
+      const returnKm = legKm(order.length, cursor, { lat: route?.depot_lat, lng: route?.depot_lng });
+      const returnTravel = legMin(order.length, cursor, { lat: route?.depot_lat, lng: route?.depot_lng });
+      totalKm += returnKm; totalTravel += returnTravel;
+      const totalMin = totalTravel + totalService + totalChecklist + totalUpsell + totalWait;
+      return {
+        stops,
+        returnLeg: { km: returnKm, travel: returnTravel, arrival: t + returnTravel },
+        totals: { km: totalKm, travel: totalTravel, service: totalService, checklist: totalChecklist, upsell: totalUpsell, wait: totalWait, totalMin },
+        departureFromCD: departure,
+      };
+    };
+
+    // Passada 1
+    const first = simulate(startMin);
+    // Ajuste automático de saída: se o 1º PDV tem espera, adianta a partida para chegar na abertura.
+    // Nunca antes do startHour informado.
+    let adjustedDeparture = startMin;
+    if (autoDeparture && first.stops.length && first.stops[0].wait > 0) {
+      adjustedDeparture = Math.max(startMin, startMin + first.stops[0].wait);
+    }
+    // Se ajustou, roda passada 2
+    return adjustedDeparture !== startMin ? simulate(adjustedDeparture) : first;
+  }, [order, startHour, autoDeparture, osrm, route?.depot_lat, route?.depot_lng, upsellMin]);
+
+  const departureShifted = computed.departureFromCD - ((parseInt(startHour.slice(0,2))||8)*60 + (parseInt(startHour.slice(3,5))||0));
+
 
   const violations = computed.stops.filter((s) => s.violation > 0).length;
 
