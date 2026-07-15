@@ -720,7 +720,7 @@ router.post('/routes/:id/post-analysis', async (req, res) => {
       })),
     };
 
-    const system = 'Você é um analista sênior de operações logísticas no Brasil. Analise a execução de uma rota concluída e gere um relatório objetivo e acionável em português do Brasil. Responda APENAS com JSON válido.';
+    const system = composeSystem(AI_PROMPT_DEFS.post_route.system_default, await getCustomInstructions(org, 'post_route'));
     const prompt = `Analise a execução da rota abaixo e produza um relatório pós-rota.
 
 MÉTRICAS:
