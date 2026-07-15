@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   PlayCircle, ArrowUp, ArrowDown, RotateCcw, Save, Clock, MapPin,
-  Package, Sun, Sunset, Moon, ClipboardCheck, TrendingUp, Timer, Route as RouteIcon,
+  Package, Sun, Sunset, Moon, ClipboardCheck, TrendingUp, Timer, Route as RouteIcon, Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useSRTemplates, useSRRouteDay, useSRSaveDaySequence } from "@/hooks/use-smartroute-daily";
