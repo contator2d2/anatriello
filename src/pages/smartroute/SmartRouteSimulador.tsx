@@ -40,6 +40,35 @@ const AVG_SPEED_KMH = 30;
 // tempo por item de checklist (min)
 const CHECKLIST_ITEM_MIN = 0.5;
 
+function todaySaoPaulo() {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
+}
+
+function parseClockToMin(value?: string | null) {
+  if (!value) return null;
+  const m = String(value).match(/^(\d{1,2}):(\d{2})/);
+  if (!m) return null;
+  const hh = Number(m[1]);
+  const mm = Number(m[2]);
+  if (!Number.isFinite(hh) || !Number.isFinite(mm)) return null;
+  return Math.max(0, Math.min(24 * 60, hh * 60 + mm));
+}
+
+function getWindowKey(order: any) {
+  return (order?.effective_pdv_window || order?.pdv_window || order?.route_pdv_window || order?.pdv_default_window || order?.delivery_window || "qualquer") as string;
+}
+
+function getWindowBounds(order: any) {
+  const key = getWindowKey(order);
+  const preset = WIN_BOUNDS[key] || WIN_BOUNDS.qualquer;
+  const explicitStart = parseClockToMin(order?.pdv_window_start || order?.delivery_window_start);
+  const explicitEnd = parseClockToMin(order?.pdv_window_end || order?.delivery_window_end);
+  const start = explicitStart ?? preset.start;
+  const end = explicitEnd ?? preset.end;
+  const sortStart = explicitStart ?? (key === "qualquer" ? 24 * 60 : preset.start);
+  return { ...preset, start, end, key, sortStart, hasExactTime: explicitStart != null || explicitEnd != null };
+}
+
 function haversineKm(a: any, b: any) {
   if (!a?.lat || !b?.lat) return 0;
   const R = 6371, toRad = (v: number) => (v * Math.PI) / 180;
@@ -88,7 +117,7 @@ export default function SmartRouteSimulador() {
   const [params, setParams] = useSearchParams();
   const { data: templates = [] } = useSRTemplates();
   const routeId = params.get("route") || "";
-  const date = params.get("date") || new Date().toISOString().slice(0, 10);
+  const date = params.get("date") || todaySaoPaulo();
   const setP = (k: string, v: string) => { const p = new URLSearchParams(params); p.set(k, v); setParams(p, { replace: true }); };
 
   const { data, isLoading, refetch } = useSRRouteDay(routeId, date);
@@ -109,16 +138,19 @@ export default function SmartRouteSimulador() {
   // Agrupa por janela (manhã → tarde → noite → qualquer) e, dentro de cada grupo,
   // aplica nearest-neighbor partindo do último ponto (ou do CD).
   const autoSortByWindow = (list: any[], depot: { lat?: number; lng?: number }) => {
-    const groups: Record<string, any[]> = { manha: [], tarde: [], noite: [], qualquer: [] };
-    list.forEach((o) => {
-      const w = (o.pdv_window || "qualquer") as string;
-      (groups[w] || groups.qualquer).push(o);
-    });
-    const orderKeys = ["manha", "tarde", "noite", "qualquer"];
     let cursor = { lat: depot.lat, lng: depot.lng };
     const out: any[] = [];
-    for (const k of orderKeys) {
-      const bucket = groups[k].slice();
+    const byExactWindow = new Map<string, any[]>();
+    list.forEach((o) => {
+      const b = getWindowBounds(o);
+      const key = `${b.sortStart}:${b.end}:${b.order}`;
+      byExactWindow.set(key, [...(byExactWindow.get(key) || []), o]);
+    });
+    const buckets = Array.from(byExactWindow.entries())
+      .map(([key, items]) => ({ key, items, sort: key.split(":").map(Number) }))
+      .sort((a, b) => a.sort[0] - b.sort[0] || a.sort[1] - b.sort[1] || a.sort[2] - b.sort[2]);
+    for (const group of buckets) {
+      const bucket = group.items.slice();
       while (bucket.length) {
         let bestI = 0, bestD = Infinity;
         bucket.forEach((o, i) => {
@@ -170,12 +202,15 @@ export default function SmartRouteSimulador() {
 
   // Busca a rota real por ruas (OSRM) — CD → PDVs → CD
   useEffect(() => {
-    const points: Array<{ lat: number; lng: number }> = [];
-    if (depot.lat && depot.lng) points.push({ lat: depot.lat, lng: depot.lng });
-    order.forEach((o) => { if (o.pdv_lat && o.pdv_lng) points.push({ lat: o.pdv_lat, lng: o.pdv_lng }); });
-    if (depot.lat && depot.lng) points.push({ lat: depot.lat, lng: depot.lng });
-    if (points.length < 2) { setOsrm(null); return; }
+    const hasFullCoordinates = !!depot.lat && !!depot.lng && order.every((o) => !!o.pdv_lat && !!o.pdv_lng);
+    if (!hasFullCoordinates) { setOsrm(null); return; }
+    const points: Array<{ lat: number; lng: number }> = [
+      { lat: depot.lat, lng: depot.lng },
+      ...order.map((o) => ({ lat: o.pdv_lat, lng: o.pdv_lng })),
+      { lat: depot.lat, lng: depot.lng },
+    ];
     let cancelled = false;
+    setOsrm(null);
     setOsrmLoading(true);
     fetchOsrmRoute(points).then((res) => {
       if (cancelled) return;
@@ -188,18 +223,18 @@ export default function SmartRouteSimulador() {
 
   // Cálculo de ETAs / durações — usa distância real (OSRM) quando disponível, respeitando janela do PDV.
   // Duas passadas: 1) calcula assumindo início em startHour para obter a espera do 1º stop;
-  // 2) se autoDeparture, adianta a saída do CD para chegar exatamente na abertura do 1º stop.
+  // 2) se autoDeparture, atrasa a saída do CD para chegar exatamente na abertura do 1º stop.
   const computed = useMemo(() => {
     const [hh, mm] = (startHour || "08:00").split(":").map(Number);
     const startMin = (hh || 8) * 60 + (mm || 0);
 
     const legKm = (i: number, from: any, to: any) => {
-      const real = osrm?.legs?.[i]?.km;
+      const real = osrm?.legs?.length === order.length + 1 ? osrm?.legs?.[i]?.km : undefined;
       if (real != null) return real;
       return from?.lat && to?.lat ? haversineKm(from, to) : 0;
     };
     const legMin = (i: number, from: any, to: any) => {
-      const real = osrm?.legs?.[i]?.min;
+      const real = osrm?.legs?.length === order.length + 1 ? osrm?.legs?.[i]?.min : undefined;
       if (real != null) return real;
       return ((from?.lat && to?.lat ? haversineKm(from, to) : 0) / AVG_SPEED_KMH) * 60;
     };
@@ -216,8 +251,8 @@ export default function SmartRouteSimulador() {
         const checklist = Number(o.checklist_items_count || 0) * CHECKLIST_ITEM_MIN;
         const upsell = upsellMin;
         const rawArrival = t + travel;
-        const win = (o.pdv_window || "qualquer") as string;
-        const bounds = WIN_BOUNDS[win] || WIN_BOUNDS.qualquer;
+        const bounds = getWindowBounds(o);
+        const win = bounds.key;
         const wait = Math.max(0, bounds.start - rawArrival);
         const arrival = rawArrival + wait;
         const violation = arrival > bounds.end ? Math.round(arrival - bounds.end) : 0;
@@ -247,8 +282,8 @@ export default function SmartRouteSimulador() {
 
     // Passada 1
     const first = simulate(startMin);
-    // Ajuste automático de saída: se o 1º PDV tem espera, adianta a partida para chegar na abertura.
-    // Nunca antes do startHour informado.
+    // Ajuste automático de saída: se o 1º PDV tem espera, atrasa a saída do CD para chegar na abertura real da janela.
+    // Usa o trecho CD → PDV1; nunca sai antes do início da jornada informado.
     let adjustedDeparture = startMin;
     if (autoDeparture && first.stops.length && first.stops[0].wait > 0) {
       adjustedDeparture = Math.max(startMin, startMin + first.stops[0].wait);
@@ -408,7 +443,8 @@ export default function SmartRouteSimulador() {
             <CardContent className="space-y-2">
               {computed.stops.map((s, i) => {
                 const o = s.order;
-                const w = WIN_META[o.pdv_window || "qualquer"] || WIN_META.qualquer;
+                const bounds = getWindowBounds(o);
+                const w = WIN_META[bounds.key] || WIN_META.qualquer;
                 const WIcon = w.icon;
                 const pct = (s.stopMin / maxStop) * 100;
                 return (
@@ -418,7 +454,7 @@ export default function SmartRouteSimulador() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-medium truncate">{o.pdv_name}</span>
-                          <Badge className={w.color + " gap-1"}><WIcon className="w-3 h-3" /> {w.label}</Badge>
+                          <Badge className={w.color + " gap-1"}><WIcon className="w-3 h-3" /> {w.label} {bounds.hasExactTime ? `${fmtHM(bounds.start)}-${fmtHM(bounds.end)}` : ""}</Badge>
                           <span className="text-xs text-muted-foreground">{o.order_number || "—"}</span>
                           {s.wait > 0 && (
                             <Badge className="bg-sky-100 text-sky-700 gap-1"><Clock className="w-3 h-3" /> Espera {fmtDur(s.wait)}</Badge>
@@ -560,7 +596,8 @@ function TrajectoryMap({ depot, stops, geometry }: { depot: { lat?: number; lng?
     stops.forEach((s, i) => {
       const o = s.order;
       if (!o.pdv_lat || !o.pdv_lng) return;
-      const meta = WIN_META[o.pdv_window || "qualquer"] || WIN_META.qualquer;
+      const boundsMeta = getWindowBounds(o);
+      const meta = WIN_META[boundsMeta.key] || WIN_META.qualquer;
       const isViolation = s.violation > 0;
       const bg = isViolation ? "#dc2626" : meta.hex;
       const icon = L.divIcon({
@@ -571,7 +608,7 @@ function TrajectoryMap({ depot, stops, geometry }: { depot: { lat?: number; lng?
       L.marker([o.pdv_lat, o.pdv_lng], { icon })
         .bindPopup(
           `<b>${i + 1}. ${o.pdv_name}</b><br/>` +
-          `Janela: <b>${meta.label}</b><br/>` +
+          `Janela: <b>${meta.label}${boundsMeta.hasExactTime ? ` ${fmtHM(boundsMeta.start)}-${fmtHM(boundsMeta.end)}` : ""}</b><br/>` +
           `ETA: <b>${String(Math.floor(s.arrival / 60) % 24).padStart(2, "0")}:${String(Math.round(s.arrival) % 60).padStart(2, "0")}</b><br/>` +
           `Trecho: ${s.km.toFixed(1)} km` +
           (isViolation ? `<br/><span style="color:#dc2626"><b>⚠ Fora da janela</b></span>` : "") +
