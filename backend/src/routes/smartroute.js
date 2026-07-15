@@ -1772,7 +1772,7 @@ async function ensureRouteDay(routeId, date) {
 router.get('/routes/:id/day', async (req, res) => {
   try {
     const org = orgId(req);
-    const date = req.query.date || new Date().toISOString().slice(0, 10);
+    const date = req.query.date || new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
     const rt = await query(`SELECT * FROM smartroute_routes WHERE id=$1 AND organization_id=$2`, [req.params.id, org]);
     if (!rt.rows[0]) return res.status(404).json({ error: 'Rota não encontrada' });
     const day = await ensureRouteDay(req.params.id, date);
