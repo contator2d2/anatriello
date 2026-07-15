@@ -3,6 +3,27 @@ import { api } from '@/lib/api';
 
 const BASE = '/api/smartroute/ai';
 
+export type SRAIPrompt = {
+  key: string;
+  label: string;
+  description: string;
+  system_default: string;
+  instructions: string;
+  updated_at: string | null;
+};
+
+export function useSRPrompts() {
+  return useQuery<SRAIPrompt[]>({ queryKey: ['sr-ai-prompts'], queryFn: () => api(`${BASE}/prompts`) });
+}
+export function useSRSavePrompt() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ key, instructions }: { key: string; instructions: string }) =>
+      api(`${BASE}/prompts/${key}`, { method: 'PUT', body: { instructions } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['sr-ai-prompts'] }),
+  });
+}
+
 export function useSRAISummary() {
   return useQuery<any>({ queryKey: ['sr-ai-summary'], queryFn: () => api(`${BASE}/summary`), refetchInterval: 60000 });
 }
