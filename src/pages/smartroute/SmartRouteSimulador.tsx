@@ -35,7 +35,7 @@ const WIN_BOUNDS: Record<string, { start: number; end: number; order: number }> 
   qualquer: { start: 0,       end: 24 * 60, order: 4 },
 };
 
-// km/min médios em cidade
+// km/min médios em cidade (fallback quando OSRM indisponível)
 const AVG_SPEED_KMH = 30;
 // tempo por item de checklist (min)
 const CHECKLIST_ITEM_MIN = 0.5;
@@ -57,6 +57,33 @@ function fmtDur(min: number) {
   return m >= 60 ? `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}` : `${m}min`;
 }
 
+// OSRM público — calcula rota real por ruas (como Uber/iFood).
+// Retorna distância (km) e duração (min) por trecho + geometria para o mapa.
+type OsrmLeg = { km: number; min: number };
+type OsrmResult = { legs: OsrmLeg[]; geometry: [number, number][] };
+async function fetchOsrmRoute(points: Array<{ lat: number; lng: number }>): Promise<OsrmResult | null> {
+  if (points.length < 2) return null;
+  const coords = points.map((p) => `${p.lng},${p.lat}`).join(";");
+  const url = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson&steps=false`;
+  try {
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), 12000);
+    const r = await fetch(url, { signal: ctrl.signal });
+    clearTimeout(to);
+    if (!r.ok) return null;
+    const j = await r.json();
+    const route = j?.routes?.[0];
+    if (!route) return null;
+    const legs: OsrmLeg[] = (route.legs || []).map((l: any) => ({
+      km: (l.distance || 0) / 1000,
+      min: (l.duration || 0) / 60,
+    }));
+    const geometry: [number, number][] = (route.geometry?.coordinates || []).map((c: [number, number]) => [c[1], c[0]]);
+    return { legs, geometry };
+  } catch { return null; }
+}
+
+
 export default function SmartRouteSimulador() {
   const [params, setParams] = useSearchParams();
   const { data: templates = [] } = useSRTemplates();
@@ -68,11 +95,15 @@ export default function SmartRouteSimulador() {
   const saveSeq = useSRSaveDaySequence();
 
   const [startHour, setStartHour] = useState("08:00");
+  const [autoDeparture, setAutoDeparture] = useState(true);
   const [order, setOrder] = useState<any[]>([]);
   const [dirty, setDirty] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [simOpen, setSimOpen] = useState(false);
   const [showResult, setShowResult] = useState(false);
+  const [osrm, setOsrm] = useState<OsrmResult | null>(null);
+  const [osrmLoading, setOsrmLoading] = useState(false);
+
 
   // Reordena automaticamente respeitando a janela de entrega do PDV.
   // Agrupa por janela (manhã → tarde → noite → qualquer) e, dentro de cada grupo,
@@ -137,49 +168,97 @@ export default function SmartRouteSimulador() {
     toast.success("Sequência reorganizada respeitando as janelas de cada PDV");
   };
 
-  // Cálculo de ETAs / durações — com respeito à janela do PDV
+  // Busca a rota real por ruas (OSRM) — CD → PDVs → CD
+  useEffect(() => {
+    const points: Array<{ lat: number; lng: number }> = [];
+    if (depot.lat && depot.lng) points.push({ lat: depot.lat, lng: depot.lng });
+    order.forEach((o) => { if (o.pdv_lat && o.pdv_lng) points.push({ lat: o.pdv_lat, lng: o.pdv_lng }); });
+    if (depot.lat && depot.lng) points.push({ lat: depot.lat, lng: depot.lng });
+    if (points.length < 2) { setOsrm(null); return; }
+    let cancelled = false;
+    setOsrmLoading(true);
+    fetchOsrmRoute(points).then((res) => {
+      if (cancelled) return;
+      setOsrm(res);
+      setOsrmLoading(false);
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [depot.lat, depot.lng, order.map((o) => `${o.id}:${o.pdv_lat},${o.pdv_lng}`).join("|")]);
+
+  // Cálculo de ETAs / durações — usa distância real (OSRM) quando disponível, respeitando janela do PDV.
+  // Duas passadas: 1) calcula assumindo início em startHour para obter a espera do 1º stop;
+  // 2) se autoDeparture, adianta a saída do CD para chegar exatamente na abertura do 1º stop.
   const computed = useMemo(() => {
     const [hh, mm] = (startHour || "08:00").split(":").map(Number);
-    let cursor = { lat: route?.depot_lat, lng: route?.depot_lng };
-    let t = (hh || 8) * 60 + (mm || 0);
-    let totalKm = 0, totalTravel = 0, totalService = 0, totalUpsell = 0, totalChecklist = 0, totalWait = 0;
-    const stops = order.map((o) => {
-      const dest = { lat: o.pdv_lat, lng: o.pdv_lng };
-      const km = cursor.lat && dest.lat ? haversineKm(cursor, dest) : 0;
-      const travel = (km / AVG_SPEED_KMH) * 60;
-      const service = Number(o.pdv_service_time_min || 15);
-      const checklist = Number(o.checklist_items_count || 0) * CHECKLIST_ITEM_MIN;
-      const upsell = upsellMin;
-      const rawArrival = t + travel;
-      const win = (o.pdv_window || "qualquer") as string;
-      const bounds = WIN_BOUNDS[win] || WIN_BOUNDS.qualquer;
-      // Se chegar antes da janela abrir, espera até a abertura
-      const wait = Math.max(0, bounds.start - rawArrival);
-      const arrival = rawArrival + wait;
-      // Violação: chegou depois do fim da janela
-      const violation = arrival > bounds.end ? Math.round(arrival - bounds.end) : 0;
-      const departure = arrival + service + checklist + upsell;
-      t = departure;
-      if (dest.lat) cursor = dest;
-      totalKm += km; totalTravel += travel; totalService += service;
-      totalChecklist += checklist; totalUpsell += upsell; totalWait += wait;
-      return {
-        order: o, km, travel, service, checklist, upsell, wait, violation,
-        arrival, departure, window: win,
-        stopMin: service + checklist + upsell + travel + wait,
-      };
-    });
-    // Retorno ao CD
-    const returnKm = cursor.lat && route?.depot_lat ? haversineKm(cursor, { lat: route.depot_lat, lng: route.depot_lng }) : 0;
-    const returnTravel = (returnKm / AVG_SPEED_KMH) * 60;
-    totalKm += returnKm; totalTravel += returnTravel;
-    const totalMin = totalTravel + totalService + totalChecklist + totalUpsell + totalWait;
-    return {
-      stops,
-      returnLeg: { km: returnKm, travel: returnTravel, arrival: t + returnTravel },
-      totals: { km: totalKm, travel: totalTravel, service: totalService, checklist: totalChecklist, upsell: totalUpsell, wait: totalWait, totalMin },
+    const startMin = (hh || 8) * 60 + (mm || 0);
+
+    const legKm = (i: number, from: any, to: any) => {
+      const real = osrm?.legs?.[i]?.km;
+      if (real != null) return real;
+      return from?.lat && to?.lat ? haversineKm(from, to) : 0;
     };
-  }, [order, startHour, route?.depot_lat, route?.depot_lng, upsellMin]);
+    const legMin = (i: number, from: any, to: any) => {
+      const real = osrm?.legs?.[i]?.min;
+      if (real != null) return real;
+      return ((from?.lat && to?.lat ? haversineKm(from, to) : 0) / AVG_SPEED_KMH) * 60;
+    };
+
+    const simulate = (departure: number) => {
+      let cursor = { lat: route?.depot_lat, lng: route?.depot_lng };
+      let t = departure;
+      let totalKm = 0, totalTravel = 0, totalService = 0, totalUpsell = 0, totalChecklist = 0, totalWait = 0;
+      const stops = order.map((o, idx) => {
+        const dest = { lat: o.pdv_lat, lng: o.pdv_lng };
+        const km = legKm(idx, cursor, dest);
+        const travel = legMin(idx, cursor, dest);
+        const service = Number(o.pdv_service_time_min || 15);
+        const checklist = Number(o.checklist_items_count || 0) * CHECKLIST_ITEM_MIN;
+        const upsell = upsellMin;
+        const rawArrival = t + travel;
+        const win = (o.pdv_window || "qualquer") as string;
+        const bounds = WIN_BOUNDS[win] || WIN_BOUNDS.qualquer;
+        const wait = Math.max(0, bounds.start - rawArrival);
+        const arrival = rawArrival + wait;
+        const violation = arrival > bounds.end ? Math.round(arrival - bounds.end) : 0;
+        const departureStop = arrival + service + checklist + upsell;
+        t = departureStop;
+        if (dest.lat) cursor = dest;
+        totalKm += km; totalTravel += travel; totalService += service;
+        totalChecklist += checklist; totalUpsell += upsell; totalWait += wait;
+        return {
+          order: o, km, travel, service, checklist, upsell, wait, violation,
+          arrival, departure: departureStop, window: win,
+          stopMin: service + checklist + upsell + travel + wait,
+        };
+      });
+      // Retorno ao CD (última leg do OSRM)
+      const returnKm = legKm(order.length, cursor, { lat: route?.depot_lat, lng: route?.depot_lng });
+      const returnTravel = legMin(order.length, cursor, { lat: route?.depot_lat, lng: route?.depot_lng });
+      totalKm += returnKm; totalTravel += returnTravel;
+      const totalMin = totalTravel + totalService + totalChecklist + totalUpsell + totalWait;
+      return {
+        stops,
+        returnLeg: { km: returnKm, travel: returnTravel, arrival: t + returnTravel },
+        totals: { km: totalKm, travel: totalTravel, service: totalService, checklist: totalChecklist, upsell: totalUpsell, wait: totalWait, totalMin },
+        departureFromCD: departure,
+      };
+    };
+
+    // Passada 1
+    const first = simulate(startMin);
+    // Ajuste automático de saída: se o 1º PDV tem espera, adianta a partida para chegar na abertura.
+    // Nunca antes do startHour informado.
+    let adjustedDeparture = startMin;
+    if (autoDeparture && first.stops.length && first.stops[0].wait > 0) {
+      adjustedDeparture = Math.max(startMin, startMin + first.stops[0].wait);
+    }
+    // Se ajustou, roda passada 2
+    return adjustedDeparture !== startMin ? simulate(adjustedDeparture) : first;
+  }, [order, startHour, autoDeparture, osrm, route?.depot_lat, route?.depot_lng, upsellMin]);
+
+  const departureShifted = computed.departureFromCD - ((parseInt(startHour.slice(0,2))||8)*60 + (parseInt(startHour.slice(3,5))||0));
+
 
   const violations = computed.stops.filter((s) => s.violation > 0).length;
 
@@ -240,9 +319,14 @@ export default function SmartRouteSimulador() {
             <label className="text-xs text-muted-foreground">Início da jornada</label>
             <Input type="time" value={startHour} onChange={(e) => setStartHour(e.target.value)} className="w-32" />
           </div>
+          <label className="flex items-center gap-2 text-xs text-muted-foreground pb-2 cursor-pointer select-none">
+            <input type="checkbox" checked={autoDeparture} onChange={(e) => setAutoDeparture(e.target.checked)} />
+            Ajustar saída do CD automaticamente para chegar na janela do 1º PDV
+          </label>
           <div className="text-xs text-muted-foreground pb-2">
-            Upsell/PDV: <b>{upsellMin} min</b> · Velocidade média: <b>{AVG_SPEED_KMH} km/h</b>
+            Upsell/PDV: <b>{upsellMin} min</b> · Rota real: <b>{osrmLoading ? "calculando…" : osrm ? "por ruas (OSRM)" : "linha reta (fallback)"}</b>
           </div>
+
         </CardContent>
       </Card>
 
@@ -287,21 +371,28 @@ export default function SmartRouteSimulador() {
           </div>
 
           {/* Mapa do trajeto */}
-          <TrajectoryMap depot={depot} stops={computed.stops} />
+          <TrajectoryMap depot={depot} stops={computed.stops} geometry={osrm?.geometry || null} />
 
           <Card>
             <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
               <div>
                 <CardTitle className="text-base">Sequência simulada</CardTitle>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Início {startHour} · Fim previsto <b>{fmtHM((parseInt(startHour.slice(0,2))||8)*60 + (parseInt(startHour.slice(3,5))||0) + computed.totals.totalMin)}</b>
+                  Saída do CD <b>{fmtHM(computed.departureFromCD)}</b>
+                  {" "}· Fim previsto <b>{fmtHM(computed.departureFromCD + computed.totals.totalMin)}</b>
                   {" "}· Duração total <b>{fmtDur(computed.totals.totalMin)}</b>
                   {" "}· Retorno ao CD <b>{computed.returnLeg.km.toFixed(1)} km</b> ({fmtHM(computed.returnLeg.arrival)})
+                  {departureShifted > 0 && (
+                    <Badge className="ml-2 bg-sky-100 text-sky-700 gap-1">
+                      <Clock className="w-3 h-3" /> Saída adiada +{fmtDur(departureShifted)} p/ chegar na janela
+                    </Badge>
+                  )}
                   {dirty && <Badge className="ml-2 bg-amber-100 text-amber-700">Alterações não salvas</Badge>}
                   {locked && <Badge className="ml-2 bg-blue-100 text-blue-700">Rota publicada · edição bloqueada</Badge>}
                   {violations > 0 && <Badge className="ml-2 bg-red-100 text-red-700 gap-1"><AlertTriangle className="w-3 h-3" /> {violations} PDV(s) fora da janela</Badge>}
                 </p>
               </div>
+
               <div className="flex gap-2 flex-wrap">
                 <Button variant="outline" size="sm" onClick={applyAutoSort} disabled={locked}>
                   <Sparkles className="w-4 h-4 mr-1" /> Reorganizar por janela
@@ -429,7 +520,7 @@ function StatCard({ icon: Icon, label, value, highlight }: any) {
   );
 }
 
-function TrajectoryMap({ depot, stops }: { depot: { lat?: number; lng?: number; name?: string }; stops: any[] }) {
+function TrajectoryMap({ depot, stops, geometry }: { depot: { lat?: number; lng?: number; name?: string }; stops: any[]; geometry: [number, number][] | null }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const layerRef = useRef<L.LayerGroup | null>(null);
@@ -491,20 +582,25 @@ function TrajectoryMap({ depot, stops }: { depot: { lat?: number; lng?: number; 
       bounds.push([o.pdv_lat, o.pdv_lng]);
     });
 
-    // Retorno ao CD
+    // Retorno ao CD (fallback straight-line)
     if (depot.lat && depot.lng && path.length > 1) {
       path.push([depot.lat, depot.lng]);
     }
 
-    if (path.length >= 2) {
-      L.polyline(path, { color: "#6366f1", weight: 4, opacity: 0.75, dashArray: "6,6" }).addTo(layer);
+    // Se temos geometria real do OSRM, desenha o trajeto por ruas; senão, linha reta pontilhada.
+    if (geometry && geometry.length >= 2) {
+      L.polyline(geometry, { color: "#6366f1", weight: 5, opacity: 0.85 }).addTo(layer);
+      geometry.forEach((p) => bounds.push(p));
+    } else if (path.length >= 2) {
+      L.polyline(path, { color: "#6366f1", weight: 4, opacity: 0.6, dashArray: "6,6" }).addTo(layer);
     }
 
     if (bounds.length) {
       map.invalidateSize();
       map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
     }
-  }, [depot.lat, depot.lng, stops]);
+  }, [depot.lat, depot.lng, stops, geometry]);
+
 
   return (
     <Card>
