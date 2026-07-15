@@ -181,7 +181,7 @@ export default function ColaboradorHome() {
       </div>
 
       {/* CONTENT (overlaps hero) */}
-      <div className="px-4 -mt-10 space-y-4 pb-6">
+      <div className="px-4 mt-4 space-y-4 pb-6">
         {/* Horário card */}
         <div className="bg-white rounded-2xl p-4 shadow-[0_10px_30px_-15px_rgba(15,23,42,0.15)] flex items-center gap-3">
           <div className="h-12 w-12 rounded-2xl bg-orange-50 text-[#f97316] flex items-center justify-center">
