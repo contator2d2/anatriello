@@ -103,6 +103,7 @@ export default function SmartRoutePDVs() {
           <Table>
             <TableHeader><TableRow>
               <TableHead>Nome</TableHead><TableHead>Cidade</TableHead>
+              <TableHead>Rota fixa</TableHead>
               <TableHead>Janela</TableHead><TableHead>Dias</TableHead>
               <TableHead>Descarga</TableHead><TableHead>Checklist</TableHead>
               <TableHead></TableHead>
@@ -112,6 +113,10 @@ export default function SmartRoutePDVs() {
                 <TableRow key={p.id}>
                   <TableCell className="font-medium">{p.name}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">{p.city}{p.state ? `/${p.state}` : ""}</TableCell>
+                  <TableCell className="text-xs">
+                    {routes.find((r: any) => r.id === p.route_template_id)?.name
+                      || <span className="text-muted-foreground">—</span>}
+                  </TableCell>
                   <TableCell><Badge variant="outline">{winLabel(p.delivery_window)}</Badge></TableCell>
                   <TableCell className="text-xs">
                     {WEEKDAYS.map((w) => (
@@ -128,7 +133,7 @@ export default function SmartRoutePDVs() {
                   </TableCell>
                 </TableRow>
               ))}
-              {!data.length && <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">Nenhum PDV cadastrado.</TableCell></TableRow>}
+              {!data.length && <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">Nenhum PDV cadastrado.</TableCell></TableRow>}
             </TableBody>
           </Table>
         </CardContent></Card>
