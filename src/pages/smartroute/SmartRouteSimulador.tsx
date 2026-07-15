@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,16 +12,27 @@ import {
 import {
   PlayCircle, ArrowUp, ArrowDown, RotateCcw, Save, Clock, MapPin,
   Package, Sun, Sunset, Moon, ClipboardCheck, TrendingUp, Timer, Route as RouteIcon, Sparkles,
+  AlertTriangle, Warehouse,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useSRTemplates, useSRRouteDay, useSRSaveDaySequence } from "@/hooks/use-smartroute-daily";
 import { SimulationRunnerDialog } from "@/components/smartroute/SimulationRunnerDialog";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 
-const WIN_META: Record<string, { label: string; icon: any; color: string }> = {
-  manha: { label: "Manhã", icon: Sun, color: "bg-amber-100 text-amber-700" },
-  tarde: { label: "Tarde", icon: Sunset, color: "bg-orange-100 text-orange-700" },
-  noite: { label: "Noite", icon: Moon, color: "bg-indigo-100 text-indigo-700" },
-  qualquer: { label: "—", icon: Clock, color: "bg-slate-100 text-slate-700" },
+const WIN_META: Record<string, { label: string; icon: any; color: string; hex: string }> = {
+  manha: { label: "Manhã", icon: Sun, color: "bg-amber-100 text-amber-700", hex: "#f59e0b" },
+  tarde: { label: "Tarde", icon: Sunset, color: "bg-orange-100 text-orange-700", hex: "#fb923c" },
+  noite: { label: "Noite", icon: Moon, color: "bg-indigo-100 text-indigo-700", hex: "#6366f1" },
+  qualquer: { label: "—", icon: Clock, color: "bg-slate-100 text-slate-700", hex: "#64748b" },
+};
+
+// Faixas horárias por janela (minutos desde 00:00)
+const WIN_BOUNDS: Record<string, { start: number; end: number; order: number }> = {
+  manha:    { start: 8 * 60,  end: 12 * 60, order: 1 },
+  tarde:    { start: 13 * 60, end: 18 * 60, order: 2 },
+  noite:    { start: 18 * 60, end: 22 * 60, order: 3 },
+  qualquer: { start: 0,       end: 24 * 60, order: 4 },
 };
 
 // km/min médios em cidade
@@ -63,9 +74,41 @@ export default function SmartRouteSimulador() {
   const [simOpen, setSimOpen] = useState(false);
   const [showResult, setShowResult] = useState(false);
 
+  // Reordena automaticamente respeitando a janela de entrega do PDV.
+  // Agrupa por janela (manhã → tarde → noite → qualquer) e, dentro de cada grupo,
+  // aplica nearest-neighbor partindo do último ponto (ou do CD).
+  const autoSortByWindow = (list: any[], depot: { lat?: number; lng?: number }) => {
+    const groups: Record<string, any[]> = { manha: [], tarde: [], noite: [], qualquer: [] };
+    list.forEach((o) => {
+      const w = (o.pdv_window || "qualquer") as string;
+      (groups[w] || groups.qualquer).push(o);
+    });
+    const orderKeys = ["manha", "tarde", "noite", "qualquer"];
+    let cursor = { lat: depot.lat, lng: depot.lng };
+    const out: any[] = [];
+    for (const k of orderKeys) {
+      const bucket = groups[k].slice();
+      while (bucket.length) {
+        let bestI = 0, bestD = Infinity;
+        bucket.forEach((o, i) => {
+          const d = cursor.lat && o.pdv_lat ? haversineKm(cursor, { lat: o.pdv_lat, lng: o.pdv_lng }) : 0;
+          if (d < bestD) { bestD = d; bestI = i; }
+        });
+        const chosen = bucket.splice(bestI, 1)[0];
+        out.push(chosen);
+        if (chosen.pdv_lat) cursor = { lat: chosen.pdv_lat, lng: chosen.pdv_lng };
+      }
+    }
+    return out;
+  };
+
   useEffect(() => {
-    if (data?.orders) { setOrder(data.orders); setDirty(false); }
-  }, [data?.orders]);
+    if (data?.orders) {
+      const sorted = autoSortByWindow(data.orders, { lat: data?.route?.depot_lat, lng: data?.route?.depot_lng });
+      setOrder(sorted);
+      setDirty(false);
+    }
+  }, [data?.orders, data?.route?.depot_lat, data?.route?.depot_lng]);
 
   const runSimulation = async () => {
     setShowResult(false);
@@ -75,20 +118,31 @@ export default function SmartRouteSimulador() {
 
   const route = data?.route;
   const upsellMin = Number(route?.upsell_time_min || 0);
+  const depot = { lat: route?.depot_lat, lng: route?.depot_lng, name: route?.depot_name || "Centro de Distribuição" };
 
   const move = (i: number, dir: -1 | 1) => {
     const j = i + dir; if (j < 0 || j >= order.length) return;
     const next = order.slice(); [next[i], next[j]] = [next[j], next[i]];
     setOrder(next); setDirty(true);
   };
-  const reset = () => { if (data?.orders) { setOrder(data.orders); setDirty(false); } };
+  const reset = () => {
+    if (data?.orders) {
+      const sorted = autoSortByWindow(data.orders, { lat: route?.depot_lat, lng: route?.depot_lng });
+      setOrder(sorted); setDirty(false);
+    }
+  };
+  const applyAutoSort = () => {
+    const sorted = autoSortByWindow(order, { lat: route?.depot_lat, lng: route?.depot_lng });
+    setOrder(sorted); setDirty(true);
+    toast.success("Sequência reorganizada respeitando as janelas de cada PDV");
+  };
 
-  // Cálculo de ETAs / durações
+  // Cálculo de ETAs / durações — com respeito à janela do PDV
   const computed = useMemo(() => {
     const [hh, mm] = (startHour || "08:00").split(":").map(Number);
     let cursor = { lat: route?.depot_lat, lng: route?.depot_lng };
     let t = (hh || 8) * 60 + (mm || 0);
-    let totalKm = 0, totalTravel = 0, totalService = 0, totalUpsell = 0, totalChecklist = 0;
+    let totalKm = 0, totalTravel = 0, totalService = 0, totalUpsell = 0, totalChecklist = 0, totalWait = 0;
     const stops = order.map((o) => {
       const dest = { lat: o.pdv_lat, lng: o.pdv_lng };
       const km = cursor.lat && dest.lat ? haversineKm(cursor, dest) : 0;
@@ -96,19 +150,38 @@ export default function SmartRouteSimulador() {
       const service = Number(o.pdv_service_time_min || 15);
       const checklist = Number(o.checklist_items_count || 0) * CHECKLIST_ITEM_MIN;
       const upsell = upsellMin;
-      const arrival = t + travel;
+      const rawArrival = t + travel;
+      const win = (o.pdv_window || "qualquer") as string;
+      const bounds = WIN_BOUNDS[win] || WIN_BOUNDS.qualquer;
+      // Se chegar antes da janela abrir, espera até a abertura
+      const wait = Math.max(0, bounds.start - rawArrival);
+      const arrival = rawArrival + wait;
+      // Violação: chegou depois do fim da janela
+      const violation = arrival > bounds.end ? Math.round(arrival - bounds.end) : 0;
       const departure = arrival + service + checklist + upsell;
       t = departure;
       if (dest.lat) cursor = dest;
-      totalKm += km; totalTravel += travel; totalService += service; totalChecklist += checklist; totalUpsell += upsell;
+      totalKm += km; totalTravel += travel; totalService += service;
+      totalChecklist += checklist; totalUpsell += upsell; totalWait += wait;
       return {
-        order: o, km, travel, service, checklist, upsell,
-        arrival, departure, stopMin: service + checklist + upsell + travel,
+        order: o, km, travel, service, checklist, upsell, wait, violation,
+        arrival, departure, window: win,
+        stopMin: service + checklist + upsell + travel + wait,
       };
     });
-    const totalMin = totalTravel + totalService + totalChecklist + totalUpsell;
-    return { stops, totals: { km: totalKm, travel: totalTravel, service: totalService, checklist: totalChecklist, upsell: totalUpsell, totalMin } };
+    // Retorno ao CD
+    const returnKm = cursor.lat && route?.depot_lat ? haversineKm(cursor, { lat: route.depot_lat, lng: route.depot_lng }) : 0;
+    const returnTravel = (returnKm / AVG_SPEED_KMH) * 60;
+    totalKm += returnKm; totalTravel += returnTravel;
+    const totalMin = totalTravel + totalService + totalChecklist + totalUpsell + totalWait;
+    return {
+      stops,
+      returnLeg: { km: returnKm, travel: returnTravel, arrival: t + returnTravel },
+      totals: { km: totalKm, travel: totalTravel, service: totalService, checklist: totalChecklist, upsell: totalUpsell, wait: totalWait, totalMin },
+    };
   }, [order, startHour, route?.depot_lat, route?.depot_lng, upsellMin]);
+
+  const violations = computed.stops.filter((s) => s.violation > 0).length;
 
   const maxStop = Math.max(1, ...computed.stops.map((s) => s.stopMin));
 
@@ -199,13 +272,22 @@ export default function SmartRouteSimulador() {
       ) : (
         <>
           {/* Totais */}
-          <div className="grid md:grid-cols-5 gap-3">
+          <div className="grid md:grid-cols-6 gap-3">
             <StatCard icon={Package} label="Paradas" value={String(order.length)} />
-            <StatCard icon={MapPin} label="Distância" value={`${computed.totals.km.toFixed(1)} km`} />
+            <StatCard icon={MapPin} label="Distância (c/ retorno)" value={`${computed.totals.km.toFixed(1)} km`} />
             <StatCard icon={Timer} label="Deslocamento" value={fmtDur(computed.totals.travel)} />
             <StatCard icon={ClipboardCheck} label="Serviço + Checklist" value={fmtDur(computed.totals.service + computed.totals.checklist)} />
             <StatCard icon={TrendingUp} label="Upsell" value={fmtDur(computed.totals.upsell)} highlight />
+            <StatCard
+              icon={AlertTriangle}
+              label={violations > 0 ? `${violations} fora da janela` : "Janelas OK"}
+              value={computed.totals.wait > 0 ? `Espera ${fmtDur(computed.totals.wait)}` : "—"}
+              highlight={violations > 0}
+            />
           </div>
+
+          {/* Mapa do trajeto */}
+          <TrajectoryMap depot={depot} stops={computed.stops} />
 
           <Card>
             <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
@@ -214,11 +296,16 @@ export default function SmartRouteSimulador() {
                 <p className="text-xs text-muted-foreground mt-1">
                   Início {startHour} · Fim previsto <b>{fmtHM((parseInt(startHour.slice(0,2))||8)*60 + (parseInt(startHour.slice(3,5))||0) + computed.totals.totalMin)}</b>
                   {" "}· Duração total <b>{fmtDur(computed.totals.totalMin)}</b>
+                  {" "}· Retorno ao CD <b>{computed.returnLeg.km.toFixed(1)} km</b> ({fmtHM(computed.returnLeg.arrival)})
                   {dirty && <Badge className="ml-2 bg-amber-100 text-amber-700">Alterações não salvas</Badge>}
                   {locked && <Badge className="ml-2 bg-blue-100 text-blue-700">Rota publicada · edição bloqueada</Badge>}
+                  {violations > 0 && <Badge className="ml-2 bg-red-100 text-red-700 gap-1"><AlertTriangle className="w-3 h-3" /> {violations} PDV(s) fora da janela</Badge>}
                 </p>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
+                <Button variant="outline" size="sm" onClick={applyAutoSort} disabled={locked}>
+                  <Sparkles className="w-4 h-4 mr-1" /> Reorganizar por janela
+                </Button>
                 <Button variant="ghost" size="sm" onClick={reset} disabled={!dirty}>
                   <RotateCcw className="w-4 h-4 mr-1" /> Descartar simulação
                 </Button>
@@ -234,14 +321,20 @@ export default function SmartRouteSimulador() {
                 const WIcon = w.icon;
                 const pct = (s.stopMin / maxStop) * 100;
                 return (
-                  <div key={o.id} className="border rounded-lg p-3">
+                  <div key={o.id} className={"border rounded-lg p-3 " + (s.violation > 0 ? "border-red-300 bg-red-50/40" : "")}>
                     <div className="flex items-start gap-3">
-                      <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-sm font-bold shrink-0">{i + 1}</div>
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shrink-0 text-white" style={{ background: w.hex }}>{i + 1}</div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-medium truncate">{o.pdv_name}</span>
                           <Badge className={w.color + " gap-1"}><WIcon className="w-3 h-3" /> {w.label}</Badge>
                           <span className="text-xs text-muted-foreground">{o.order_number || "—"}</span>
+                          {s.wait > 0 && (
+                            <Badge className="bg-sky-100 text-sky-700 gap-1"><Clock className="w-3 h-3" /> Espera {fmtDur(s.wait)}</Badge>
+                          )}
+                          {s.violation > 0 && (
+                            <Badge className="bg-red-100 text-red-700 gap-1"><AlertTriangle className="w-3 h-3" /> Fora da janela (+{fmtDur(s.violation)})</Badge>
+                          )}
                         </div>
                         <div className="text-xs text-muted-foreground truncate flex items-center gap-1">
                           <MapPin className="w-3 h-3" /> {o.pdv_address}
@@ -257,6 +350,7 @@ export default function SmartRouteSimulador() {
                         </div>
                         <div className="mt-2 h-2 rounded bg-slate-100 overflow-hidden flex">
                           <div className="bg-sky-400" style={{ width: `${(s.travel / s.stopMin) * pct}%` }} title="Deslocamento" />
+                          {s.wait > 0 && <div className="bg-sky-200" style={{ width: `${(s.wait / s.stopMin) * pct}%` }} title="Espera" />}
                           <div className="bg-emerald-400" style={{ width: `${(s.service / s.stopMin) * pct}%` }} title="Serviço" />
                           <div className="bg-violet-400" style={{ width: `${(s.checklist / s.stopMin) * pct}%` }} title="Checklist" />
                           <div className="bg-amber-400" style={{ width: `${(s.upsell / s.stopMin) * pct}%` }} title="Upsell" />
@@ -274,8 +368,23 @@ export default function SmartRouteSimulador() {
                   </div>
                 );
               })}
-              <div className="flex gap-2 items-center pt-2 text-xs text-muted-foreground">
+              {/* Retorno ao CD */}
+              <div className="border rounded-lg p-3 border-dashed bg-slate-50">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-slate-700 text-white flex items-center justify-center shrink-0">
+                    <Warehouse className="w-4 h-4" />
+                  </div>
+                  <div className="flex-1 text-sm">
+                    <b>Retorno ao CD</b> — {depot.name}
+                    <div className="text-xs text-muted-foreground">
+                      🚚 {computed.returnLeg.km.toFixed(1)} km · {fmtDur(computed.returnLeg.travel)} · Chegada prevista <span className="font-mono font-semibold">{fmtHM(computed.returnLeg.arrival)}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="flex gap-2 items-center pt-2 text-xs text-muted-foreground flex-wrap">
                 <span className="inline-block w-3 h-2 bg-sky-400 rounded-sm" /> Deslocamento
+                <span className="inline-block w-3 h-2 bg-sky-200 rounded-sm ml-3" /> Espera janela
                 <span className="inline-block w-3 h-2 bg-emerald-400 rounded-sm ml-3" /> Serviço
                 <span className="inline-block w-3 h-2 bg-violet-400 rounded-sm ml-3" /> Checklist
                 <span className="inline-block w-3 h-2 bg-amber-400 rounded-sm ml-3" /> Upsell
@@ -315,6 +424,100 @@ function StatCard({ icon: Icon, label, value, highlight }: any) {
       <CardContent className="p-3">
         <div className="text-xs text-muted-foreground flex items-center gap-1"><Icon className="w-3 h-3" /> {label}</div>
         <div className="text-lg font-bold">{value}</div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function TrajectoryMap({ depot, stops }: { depot: { lat?: number; lng?: number; name?: string }; stops: any[] }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<L.Map | null>(null);
+  const layerRef = useRef<L.LayerGroup | null>(null);
+
+  useEffect(() => {
+    if (!containerRef.current || mapRef.current) return;
+    const map = L.map(containerRef.current, { zoomControl: true }).setView([-23.5505, -46.6333], 11);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19, attribution: "© OpenStreetMap",
+    }).addTo(map);
+    layerRef.current = L.layerGroup().addTo(map);
+    mapRef.current = map;
+    return () => { map.remove(); mapRef.current = null; };
+  }, []);
+
+  useEffect(() => {
+    const layer = layerRef.current, map = mapRef.current;
+    if (!layer || !map) return;
+    layer.clearLayers();
+
+    const path: [number, number][] = [];
+    const bounds: [number, number][] = [];
+
+    if (depot.lat && depot.lng) {
+      const depotIcon = L.divIcon({
+        className: "",
+        html: `<div style="background:#111827;color:#fff;width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3);font-size:11px;font-weight:700">CD</div>`,
+        iconSize: [34, 34], iconAnchor: [17, 17],
+      });
+      L.marker([depot.lat, depot.lng], { icon: depotIcon })
+        .bindPopup(`<b>${depot.name || "Centro de Distribuição"}</b>`)
+        .addTo(layer);
+      path.push([depot.lat, depot.lng]);
+      bounds.push([depot.lat, depot.lng]);
+    }
+
+    stops.forEach((s, i) => {
+      const o = s.order;
+      if (!o.pdv_lat || !o.pdv_lng) return;
+      const meta = WIN_META[o.pdv_window || "qualquer"] || WIN_META.qualquer;
+      const isViolation = s.violation > 0;
+      const bg = isViolation ? "#dc2626" : meta.hex;
+      const icon = L.divIcon({
+        className: "",
+        html: `<div style="background:${bg};color:#fff;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3);font-size:12px;font-weight:700">${i + 1}</div>`,
+        iconSize: [30, 30], iconAnchor: [15, 15],
+      });
+      L.marker([o.pdv_lat, o.pdv_lng], { icon })
+        .bindPopup(
+          `<b>${i + 1}. ${o.pdv_name}</b><br/>` +
+          `Janela: <b>${meta.label}</b><br/>` +
+          `ETA: <b>${String(Math.floor(s.arrival / 60) % 24).padStart(2, "0")}:${String(Math.round(s.arrival) % 60).padStart(2, "0")}</b><br/>` +
+          `Trecho: ${s.km.toFixed(1)} km` +
+          (isViolation ? `<br/><span style="color:#dc2626"><b>⚠ Fora da janela</b></span>` : "") +
+          (s.wait > 0 ? `<br/><span style="color:#0284c7">⏳ Espera até abertura</span>` : "")
+        )
+        .addTo(layer);
+      path.push([o.pdv_lat, o.pdv_lng]);
+      bounds.push([o.pdv_lat, o.pdv_lng]);
+    });
+
+    // Retorno ao CD
+    if (depot.lat && depot.lng && path.length > 1) {
+      path.push([depot.lat, depot.lng]);
+    }
+
+    if (path.length >= 2) {
+      L.polyline(path, { color: "#6366f1", weight: 4, opacity: 0.75, dashArray: "6,6" }).addTo(layer);
+    }
+
+    if (bounds.length) {
+      map.invalidateSize();
+      map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
+    }
+  }, [depot.lat, depot.lng, stops]);
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base flex items-center gap-2">
+          <MapPin className="w-4 h-4" /> Trajeto no mapa
+        </CardTitle>
+        <p className="text-xs text-muted-foreground">
+          Saída do CD → paradas na ordem simulada → retorno ao CD. Pinos coloridos por janela; vermelho = fora da janela.
+        </p>
+      </CardHeader>
+      <CardContent className="p-2">
+        <div ref={containerRef} style={{ height: 420, width: "100%" }} className="rounded" />
       </CardContent>
     </Card>
   );
