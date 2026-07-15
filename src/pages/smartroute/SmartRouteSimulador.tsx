@@ -11,10 +11,11 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   PlayCircle, ArrowUp, ArrowDown, RotateCcw, Save, Clock, MapPin,
-  Package, Sun, Sunset, Moon, ClipboardCheck, TrendingUp, Timer, Route as RouteIcon,
+  Package, Sun, Sunset, Moon, ClipboardCheck, TrendingUp, Timer, Route as RouteIcon, Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useSRTemplates, useSRRouteDay, useSRSaveDaySequence } from "@/hooks/use-smartroute-daily";
+import { SimulationRunnerDialog } from "@/components/smartroute/SimulationRunnerDialog";
 
 const WIN_META: Record<string, { label: string; icon: any; color: string }> = {
   manha: { label: "Manhã", icon: Sun, color: "bg-amber-100 text-amber-700" },
@@ -59,10 +60,18 @@ export default function SmartRouteSimulador() {
   const [order, setOrder] = useState<any[]>([]);
   const [dirty, setDirty] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [simOpen, setSimOpen] = useState(false);
+  const [showResult, setShowResult] = useState(false);
 
   useEffect(() => {
     if (data?.orders) { setOrder(data.orders); setDirty(false); }
   }, [data?.orders]);
+
+  const runSimulation = async () => {
+    setShowResult(false);
+    setSimOpen(true);
+    try { await refetch(); } catch {}
+  };
 
   const route = data?.route;
   const upsellMin = Number(route?.upsell_time_min || 0);
@@ -125,13 +134,20 @@ export default function SmartRouteSimulador() {
             Ajuste a ordem das paradas, veja tempo estimado por PDV e total da rota. Salve como oficial ou descarte a simulação.
           </p>
         </div>
-        {routeId && date && (
-          <Button asChild variant="outline" size="sm">
-            <Link to={`/smartroute/rota-do-dia?route=${routeId}&date=${date}`}>
-              <RouteIcon className="w-4 h-4 mr-1" /> Ver Rota do Dia
-            </Link>
-          </Button>
-        )}
+        <div className="flex gap-2">
+          {routeId && (
+            <Button size="sm" onClick={runSimulation} className="bg-gradient-to-r from-indigo-500 to-sky-500 hover:from-indigo-600 hover:to-sky-600 text-white">
+              <Sparkles className="w-4 h-4 mr-1" /> Rodar Simulação
+            </Button>
+          )}
+          {routeId && date && (
+            <Button asChild variant="outline" size="sm">
+              <Link to={`/smartroute/rota-do-dia?route=${routeId}&date=${date}`}>
+                <RouteIcon className="w-4 h-4 mr-1" /> Ver Rota do Dia
+              </Link>
+            </Button>
+          )}
+        </div>
       </div>
 
       <Card>
@@ -163,6 +179,23 @@ export default function SmartRouteSimulador() {
         <div className="text-center py-12 text-muted-foreground">Carregando…</div>
       ) : !order.length ? (
         <div className="text-center py-12 text-sm text-muted-foreground">Nenhum pedido lançado para esta data.</div>
+      ) : !showResult ? (
+        <Card>
+          <CardContent className="p-10 text-center space-y-4">
+            <div className="mx-auto w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-sky-500 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+              <Sparkles className="w-7 h-7 text-white" />
+            </div>
+            <div>
+              <div className="font-semibold text-lg">Pronto para simular</div>
+              <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                {order.length} pedido(s) prontos. Rode a simulação para ver a sequência otimizada, ETAs por PDV e tempo total da rota.
+              </p>
+            </div>
+            <Button onClick={runSimulation} className="bg-gradient-to-r from-indigo-500 to-sky-500 hover:from-indigo-600 hover:to-sky-600 text-white">
+              <Sparkles className="w-4 h-4 mr-2" /> Rodar Simulação
+            </Button>
+          </CardContent>
+        </Card>
       ) : (
         <>
           {/* Totais */}
@@ -267,6 +300,11 @@ export default function SmartRouteSimulador() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <SimulationRunnerDialog
+        open={simOpen}
+        onDone={() => { setSimOpen(false); setShowResult(true); }}
+      />
     </div>
   );
 }
