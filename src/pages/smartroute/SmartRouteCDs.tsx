@@ -20,6 +20,49 @@ export default function SmartRouteCDs() {
   const geocode = useSRGeocodeDepot();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<any>({});
+  const [cepLoading, setCepLoading] = useState(false);
+  const cepTimer = useRef<any>(null);
+
+  const lookupCep = async (rawCep: string) => {
+    const cep = String(rawCep || "").replace(/\D/g, "");
+    if (cep.length !== 8) return;
+    setCepLoading(true);
+    try {
+      const r = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+      const j = await r.json();
+      if (j.erro) { toast.error("CEP não encontrado"); return; }
+      const address = [j.logradouro, j.bairro].filter(Boolean).join(", ");
+      const next = {
+        ...form,
+        zip: cep,
+        address: address || form.address,
+        city: j.localidade || form.city,
+        state: j.uf || form.state,
+      };
+      setForm(next);
+      // auto-geocode
+      try {
+        const g = await geocode.mutateAsync({ address: next.address, city: next.city, state: next.state, zip: next.zip });
+        setForm((f: any) => ({ ...f, lat: g.lat, lng: g.lng }));
+        toast.success("Endereço e coordenadas preenchidos");
+      } catch {
+        toast.success("Endereço preenchido", { description: "Não foi possível obter coordenadas automaticamente." });
+      }
+    } catch {
+      toast.error("Falha ao consultar CEP");
+    } finally {
+      setCepLoading(false);
+    }
+  };
+
+  const onCepChange = (v: string) => {
+    const masked = v.replace(/\D/g, "").slice(0, 8).replace(/(\d{5})(\d)/, "$1-$2");
+    setForm({ ...form, zip: masked });
+    if (cepTimer.current) clearTimeout(cepTimer.current);
+    if (masked.replace(/\D/g, "").length === 8) {
+      cepTimer.current = setTimeout(() => lookupCep(masked), 300);
+    }
+  };
 
   const doGeocode = async () => {
     if (!form.address && !form.city) return toast.error("Preencha endereço/cidade");
