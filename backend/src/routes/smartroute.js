@@ -1792,7 +1792,7 @@ router.get('/routes/:id/day', async (req, res) => {
          LEFT JOIN LATERAL (
            SELECT id, name, lat, lng
              FROM smartroute_depots
-            WHERE organization_id=r.organization_id AND active=true
+             WHERE organization_id=r.organization_id AND COALESCE(active,true)=true
             ORDER BY is_default DESC, name
             LIMIT 1
          ) def ON true
@@ -1832,6 +1832,38 @@ router.get('/routes/:id/day', async (req, res) => {
     const veh = day.vehicle_id ? (await query(`SELECT id, plate, model FROM smartroute_vehicles WHERE id=$1`, [day.vehicle_id])).rows[0] : null;
     res.json({ route: rt.rows[0], day, orders: orders.rows, drivers: drvs, vehicle: veh });
   } catch (e) { logError('sr.route.day', e); res.status(500).json({ error: e.message }); }
+});
+
+router.post('/routes/street-route', async (req, res) => {
+  try {
+    const points = Array.isArray(req.body?.points) ? req.body.points : [];
+    if (points.length < 2) return res.status(400).json({ error: 'Informe ao menos origem e destino' });
+    const normalized = points.map((p) => ({
+      lat: toCoord(p.lat),
+      lng: toCoord(p.lng),
+      label: p.label || null,
+    }));
+    if (normalized.some((p) => !hasCoord(p))) {
+      return res.status(400).json({ error: 'Todos os pontos precisam de latitude e longitude' });
+    }
+
+    const legs = [];
+    const geometry = [];
+    let fallbackLegs = 0;
+    for (let i = 0; i < normalized.length - 1; i++) {
+      const from = normalized[i];
+      const to = normalized[i + 1];
+      const result = await fetchOsrmLeg(from, to);
+      if (!result.ok) fallbackLegs++;
+      legs.push({ ...result.leg, fromLabel: from.label, toLabel: to.label });
+      result.geometry.forEach((point, idx) => {
+        if (i > 0 && idx === 0) return;
+        geometry.push(point);
+      });
+    }
+
+    res.json({ legs, geometry, fallbackLegs });
+  } catch (e) { logError('sr.streetRoute', e); res.status(500).json({ error: e.message }); }
 });
 
 router.post('/routes/:id/day/:date/drivers', async (req, res) => {
