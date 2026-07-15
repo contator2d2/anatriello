@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,10 +12,13 @@ import {
 import {
   PlayCircle, ArrowUp, ArrowDown, RotateCcw, Save, Clock, MapPin,
   Package, Sun, Sunset, Moon, ClipboardCheck, TrendingUp, Timer, Route as RouteIcon, Sparkles,
+  AlertTriangle, Warehouse,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useSRTemplates, useSRRouteDay, useSRSaveDaySequence } from "@/hooks/use-smartroute-daily";
 import { SimulationRunnerDialog } from "@/components/smartroute/SimulationRunnerDialog";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 
 const WIN_META: Record<string, { label: string; icon: any; color: string }> = {
   manha: { label: "Manhã", icon: Sun, color: "bg-amber-100 text-amber-700" },
