@@ -1782,9 +1782,20 @@ router.get('/routes/:id/day', async (req, res) => {
     const org = orgId(req);
     const date = req.query.date || new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
     const rt = await query(
-      `SELECT r.*, d.name AS depot_name
+      `SELECT r.*,
+              COALESCE(r.depot_id, d.id, def.id) AS depot_id,
+              COALESCE(r.depot_lat, d.lat, def.lat) AS depot_lat,
+              COALESCE(r.depot_lng, d.lng, def.lng) AS depot_lng,
+              COALESCE(d.name, def.name) AS depot_name
          FROM smartroute_routes r
          LEFT JOIN smartroute_depots d ON d.id=r.depot_id
+         LEFT JOIN LATERAL (
+           SELECT id, name, lat, lng
+             FROM smartroute_depots
+            WHERE organization_id=r.organization_id AND active=true
+            ORDER BY is_default DESC, name
+            LIMIT 1
+         ) def ON true
         WHERE r.id=$1 AND r.organization_id=$2`, [req.params.id, org]);
     if (!rt.rows[0]) return res.status(404).json({ error: 'Rota não encontrada' });
     const day = await ensureRouteDay(req.params.id, date);
@@ -1845,7 +1856,21 @@ router.post('/routes/:id/day/:date/close', async (req, res) => {
     if (!day.driver_ids?.length) return res.status(400).json({ error: 'Defina ao menos 1 entregador antes de fechar' });
 
     // pega pedidos e template
-    const tmpl = (await query(`SELECT * FROM smartroute_routes WHERE id=$1`, [req.params.id])).rows[0];
+    const tmpl = (await query(
+      `SELECT r.*,
+              COALESCE(r.depot_id, d.id, def.id) AS depot_id,
+              COALESCE(r.depot_lat, d.lat, def.lat) AS depot_lat,
+              COALESCE(r.depot_lng, d.lng, def.lng) AS depot_lng
+         FROM smartroute_routes r
+         LEFT JOIN smartroute_depots d ON d.id=r.depot_id
+         LEFT JOIN LATERAL (
+           SELECT id, lat, lng
+             FROM smartroute_depots
+            WHERE organization_id=r.organization_id AND active=true
+            ORDER BY is_default DESC, name
+            LIMIT 1
+         ) def ON true
+        WHERE r.id=$1`, [req.params.id])).rows[0];
     const orders = (await query(
       `SELECT o.*, rp.sequence AS pdv_sequence
        FROM smartroute_orders o
@@ -2024,8 +2049,19 @@ async function optimizeRouteDay(organization_id, route_id, date, actor = 'manual
     }
   }
 
-  const routeSeedR = await query(
-    `SELECT depot_lat, depot_lng FROM smartroute_routes WHERE id=$1 AND organization_id=$2`,
+    const routeSeedR = await query(
+    `SELECT COALESCE(r.depot_lat, d.lat, def.lat) AS depot_lat,
+            COALESCE(r.depot_lng, d.lng, def.lng) AS depot_lng
+       FROM smartroute_routes r
+       LEFT JOIN smartroute_depots d ON d.id=r.depot_id
+       LEFT JOIN LATERAL (
+         SELECT lat, lng
+           FROM smartroute_depots
+          WHERE organization_id=r.organization_id AND active=true
+          ORDER BY is_default DESC, name
+          LIMIT 1
+       ) def ON true
+      WHERE r.id=$1 AND r.organization_id=$2`,
     [route_id, organization_id]
   );
 
