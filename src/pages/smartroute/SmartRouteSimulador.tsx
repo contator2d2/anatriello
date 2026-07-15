@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useSRTemplates, useSRRouteDay, useSRSaveDaySequence } from "@/hooks/use-smartroute-daily";
+import { useSRDepots } from "@/hooks/use-smartroute-depots";
 import { SimulationRunnerDialog } from "@/components/smartroute/SimulationRunnerDialog";
 import { api } from "@/lib/api";
 import L from "leaflet";
@@ -145,6 +146,7 @@ async function fetchOsrmRoute(points: Array<{ lat: number; lng: number; label?: 
 export default function SmartRouteSimulador() {
   const [params, setParams] = useSearchParams();
   const { data: templates = [] } = useSRTemplates();
+  const { data: depots = [] } = useSRDepots();
   const routeId = params.get("route") || "";
   const date = params.get("date") || todaySaoPaulo();
   const setP = (k: string, v: string) => { const p = new URLSearchParams(params); p.set(k, v); setParams(p, { replace: true }); };
@@ -210,7 +212,12 @@ export default function SmartRouteSimulador() {
 
   const route = data?.route;
   const upsellMin = Number(route?.upsell_time_min || 0);
-  const depot = { lat: route?.depot_lat, lng: route?.depot_lng, name: route?.depot_name || "Centro de Distribuição" };
+  const fallbackDepot = depots.find((d: any) => d.id === route?.depot_id) || depots.find((d: any) => d.is_default) || depots[0];
+  const depot = {
+    lat: route?.depot_lat ?? fallbackDepot?.lat,
+    lng: route?.depot_lng ?? fallbackDepot?.lng,
+    name: route?.depot_name || fallbackDepot?.name || "Centro de Distribuição",
+  };
 
   const move = (i: number, dir: -1 | 1) => {
     const j = i + dir; if (j < 0 || j >= order.length) return;
