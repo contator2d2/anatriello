@@ -214,6 +214,22 @@ export async function ensureSmartRouteTables() {
     ALTER TABLE smartroute_route_stops ADD COLUMN IF NOT EXISTS receiver_document_type TEXT;
     ALTER TABLE smartroute_route_stops ADD COLUMN IF NOT EXISTS receipt_url TEXT;
     ALTER TABLE smartroute_routes ADD COLUMN IF NOT EXISTS pod_require_document BOOLEAN;
+
+    -- Configurações operacionais por organização
+    -- Precisa existir antes dos ALTERs abaixo; caso contrário o ensureTables falha
+    -- e endpoints como /depots e /depots/geocode retornam 500.
+    CREATE TABLE IF NOT EXISTS smartroute_org_operation_settings (
+      organization_id UUID PRIMARY KEY,
+      max_checkin_distance_m INTEGER DEFAULT 30,
+      require_facade_photo BOOLEAN DEFAULT true,
+      require_vehicle_checklist BOOLEAN DEFAULT false,
+      preferred_nav_app TEXT DEFAULT 'ask',
+      allow_checkout_with_occurrence BOOLEAN DEFAULT true,
+      require_signature BOOLEAN DEFAULT true,
+      require_invoice_photo BOOLEAN DEFAULT true,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
     ALTER TABLE smartroute_org_operation_settings ADD COLUMN IF NOT EXISTS require_receiver_document BOOLEAN DEFAULT false;
     ALTER TABLE smartroute_org_operation_settings ADD COLUMN IF NOT EXISTS receiver_document_type TEXT DEFAULT 'cpf';
 
@@ -298,20 +314,6 @@ export async function ensureSmartRouteTables() {
     );
     CREATE INDEX IF NOT EXISTS idx_sr_occ_cmt ON smartroute_occurrence_comments(occurrence_id, created_at ASC);
 
-
-    -- Configurações operacionais por organização
-    CREATE TABLE IF NOT EXISTS smartroute_org_operation_settings (
-      organization_id UUID PRIMARY KEY,
-      max_checkin_distance_m INTEGER DEFAULT 30,
-      require_facade_photo BOOLEAN DEFAULT true,
-      require_vehicle_checklist BOOLEAN DEFAULT false,
-      preferred_nav_app TEXT DEFAULT 'ask',     -- google | waze | ask
-      allow_checkout_with_occurrence BOOLEAN DEFAULT true,
-      require_signature BOOLEAN DEFAULT true,
-      require_invoice_photo BOOLEAN DEFAULT true,
-      created_at TIMESTAMPTZ DEFAULT NOW(),
-      updated_at TIMESTAMPTZ DEFAULT NOW()
-    );
 
     -- === Checklists configuráveis (Onda 2 — schema pronto) ===
     CREATE TABLE IF NOT EXISTS smartroute_checklist_templates (
@@ -488,14 +490,40 @@ router.use(async (req, res, next) => { try { await ensureSmartRouteTables(); nex
 const orgId = (req) => req.user?.organization_id;
 
 // ============ DEPOTS (Centros de Distribuição) ============
-async function geocodeNominatim(parts) {
-  const q = encodeURIComponent([parts.address, parts.city, parts.state, parts.zip, 'Brasil'].filter(Boolean).join(', '));
-  if (!q) return null;
+async function geocodeNominatim(parts = {}) {
+  const zipDigits = String(parts.zip || '').replace(/\D/g, '');
+  let viaCep = null;
+
+  if (zipDigits.length === 8) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+      const res = await fetch(`https://viacep.com.br/ws/${zipDigits}/json/`, { signal: controller.signal });
+      clearTimeout(timeout);
+      if (res.ok) {
+        const data = await res.json().catch(() => null);
+        if (data && !data.erro) viaCep = data;
+      }
+    } catch (_) {}
+  }
+
+  const address = parts.address || [viaCep?.logradouro, viaCep?.bairro].filter(Boolean).join(', ');
+  const city = parts.city || viaCep?.localidade;
+  const state = parts.state || viaCep?.uf;
+  const queryText = [address, city, state, zipDigits || parts.zip, 'Brasil'].filter(Boolean).join(', ');
+  if (!queryText.trim()) return null;
+
   try {
-    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=br&q=${q}`,
-      { headers: { 'User-Agent': 'AnatrielloSmartRoute/1.0' } });
-    const data = await res.json();
-    if (Array.isArray(data) && data[0]) return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon), display_name: data[0].display_name };
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=br&q=${encodeURIComponent(queryText)}`,
+      { headers: { 'User-Agent': 'AnatrielloSmartRoute/1.0 (smartroute@anatriello.local)' }, signal: controller.signal });
+    clearTimeout(timeout);
+    if (!res.ok) return null;
+    const data = await res.json().catch(() => null);
+    if (Array.isArray(data) && data[0]) {
+      return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon), display_name: data[0].display_name };
+    }
   } catch (_) {}
   return null;
 }

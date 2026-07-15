@@ -213,6 +213,51 @@ export type Database = {
         }
         Relationships: []
       }
+      smartroute_org_operation_settings: {
+        Row: {
+          allow_checkout_with_occurrence: boolean | null
+          created_at: string | null
+          max_checkin_distance_m: number | null
+          organization_id: string
+          preferred_nav_app: string | null
+          receiver_document_type: string | null
+          require_facade_photo: boolean | null
+          require_invoice_photo: boolean | null
+          require_receiver_document: boolean | null
+          require_signature: boolean | null
+          require_vehicle_checklist: boolean | null
+          updated_at: string | null
+        }
+        Insert: {
+          allow_checkout_with_occurrence?: boolean | null
+          created_at?: string | null
+          max_checkin_distance_m?: number | null
+          organization_id: string
+          preferred_nav_app?: string | null
+          receiver_document_type?: string | null
+          require_facade_photo?: boolean | null
+          require_invoice_photo?: boolean | null
+          require_receiver_document?: boolean | null
+          require_signature?: boolean | null
+          require_vehicle_checklist?: boolean | null
+          updated_at?: string | null
+        }
+        Update: {
+          allow_checkout_with_occurrence?: boolean | null
+          created_at?: string | null
+          max_checkin_distance_m?: number | null
+          organization_id?: string
+          preferred_nav_app?: string | null
+          receiver_document_type?: string | null
+          require_facade_photo?: boolean | null
+          require_invoice_photo?: boolean | null
+          require_receiver_document?: boolean | null
+          require_signature?: boolean | null
+          require_vehicle_checklist?: boolean | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
