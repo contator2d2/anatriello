@@ -28,6 +28,41 @@ export default function SmartRoutePDVs() {
   const del = useSRDeletePdv();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<any>({});
+  const geocode = useSRGeocodeDepot();
+  const [cepLoading, setCepLoading] = useState(false);
+
+  const lookupCep = async (rawCep: string) => {
+    const cep = String(rawCep || "").replace(/\D/g, "");
+    if (cep.length !== 8) return;
+    setCepLoading(true);
+    try {
+      const r = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+      const j = await r.json();
+      if (j.erro) { toast.error("CEP não encontrado"); return; }
+      const address = [j.logradouro, j.bairro].filter(Boolean).join(", ");
+      const next = { ...form, zip: cep, address: address || form.address, city: j.localidade || form.city, state: j.uf || form.state };
+      setForm(next);
+      try {
+        const g = await geocode.mutateAsync({ address: next.address, city: next.city, state: next.state, zip: next.zip });
+        setForm((f: any) => ({ ...f, lat: g.lat, lng: g.lng }));
+        toast.success("Endereço e coordenadas preenchidos");
+      } catch {
+        toast.success("Endereço preenchido", { description: "Não foi possível obter coordenadas automaticamente." });
+      }
+    } catch {
+      toast.error("Falha ao consultar CEP");
+    } finally {
+      setCepLoading(false);
+    }
+  };
+
+  const onCepChange = (v: string) => {
+    const digits = v.replace(/\D/g, "").slice(0, 8);
+    const masked = digits.length > 5 ? `${digits.slice(0, 5)}-${digits.slice(5)}` : digits;
+    setForm({ ...form, zip: masked });
+    if (digits.length === 8) lookupCep(digits);
+  };
+
 
   const openForm = (row: any = {}) => {
     setForm({
