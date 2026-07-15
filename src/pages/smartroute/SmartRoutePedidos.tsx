@@ -9,7 +9,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Edit, Trash2, Package } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Plus, Edit, Trash2, Package, Check, ChevronsUpDown } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useSROrders, useSRSaveOrder, useSRDeleteOrder, useSRPdvs } from "@/hooks/use-smartroute";
 import { useSRTemplates, useSRRoutePdvs } from "@/hooks/use-smartroute-daily";
@@ -21,12 +24,26 @@ export default function SmartRoutePedidos() {
   const [filter, setFilter] = useState<any>({});
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<any>({});
+  const [pdvPickerOpen, setPdvPickerOpen] = useState(false);
   const { data = [] } = useSROrders(filter);
   const { data: pdvs = [] } = useSRPdvs();
   const { data: templates = [] } = useSRTemplates();
   const { data: routePdvs = [] } = useSRRoutePdvs(form.route_id);
   const save = useSRSaveOrder();
   const del = useSRDeleteOrder();
+
+  // PDVs disponíveis: se rota selecionada, une routePdvs + pdvs com route_template_id === rota
+  const availablePdvs = (() => {
+    if (!form.route_id) return pdvs;
+    const map = new Map<string, any>();
+    routePdvs.forEach((rp: any) => {
+      const base = pdvs.find((p: any) => p.id === rp.pdv_id);
+      map.set(rp.pdv_id, { ...(base || {}), id: rp.pdv_id, name: rp.pdv_name || base?.name, delivery_window: rp.delivery_window || rp.window || base?.delivery_window });
+    });
+    pdvs.forEach((p: any) => { if (p.route_template_id === form.route_id && !map.has(p.id)) map.set(p.id, p); });
+    return Array.from(map.values());
+  })();
+  const selectedPdv = pdvs.find((p: any) => p.id === form.pdv_id) || availablePdvs.find((p: any) => p.id === form.pdv_id);
 
   const onSave = async () => {
     if (!form.pdv_id) return toast.error("Selecione o PDV");
@@ -107,18 +124,44 @@ export default function SmartRoutePedidos() {
               </div>
               <div className="col-span-2">
                 <Label>PDV*</Label>
-                <Select value={form.pdv_id || ""} onValueChange={(v) => {
-                  const rp = routePdvs.find((x: any) => x.pdv_id === v);
-                  const pdv = pdvs.find((x: any) => x.id === v);
-                  setForm({ ...form, pdv_id: v, pdv_window: rp?.delivery_window || rp?.window || pdv?.delivery_window || null });
-                }}>
-                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                  <SelectContent>
-                    {(form.route_id ? routePdvs.map((rp: any) => ({ id: rp.pdv_id, name: rp.pdv_name })) : pdvs).map((p: any) => (
-                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Popover open={pdvPickerOpen} onOpenChange={setPdvPickerOpen}>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" role="combobox" className="w-full justify-between font-normal">
+                      {selectedPdv ? selectedPdv.name : (form.route_id ? `Selecione (${availablePdvs.length} PDVs na rota)` : "Selecione ou busque um PDV")}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Digite o nome do PDV..." />
+                      <CommandList>
+                        <CommandEmpty>Nenhum PDV encontrado.</CommandEmpty>
+                        <CommandGroup>
+                          {availablePdvs.map((p: any) => (
+                            <CommandItem
+                              key={p.id}
+                              value={p.name}
+                              onSelect={() => {
+                                const rp = routePdvs.find((x: any) => x.pdv_id === p.id);
+                                setForm({ ...form, pdv_id: p.id, pdv_window: rp?.delivery_window || rp?.window || p.delivery_window || null });
+                                setPdvPickerOpen(false);
+                              }}
+                            >
+                              <Check className={cn("mr-2 h-4 w-4", form.pdv_id === p.id ? "opacity-100" : "opacity-0")} />
+                              <div className="flex flex-col">
+                                <span>{p.name}</span>
+                                {p.delivery_window && <span className="text-xs text-muted-foreground">Janela: {p.delivery_window}</span>}
+                              </div>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+                {form.route_id && !availablePdvs.length && (
+                  <p className="text-xs text-amber-600 mt-1">Nenhum PDV vinculado a essa rota fixa. Vincule PDVs em "Rotas Montadas" ou no cadastro do PDV.</p>
+                )}
                 {(() => {
                   const pdv = pdvs.find((x: any) => x.id === form.pdv_id);
                   if (!pdv || !form.delivery_date) return form.pdv_window ? <p className="text-xs text-muted-foreground mt-1">Janela: {form.pdv_window}</p> : null;
