@@ -151,7 +151,7 @@ function DayDetails({ routeId, date }: { routeId: string; date: string }) {
             {drivers.map((d: any) => {
               const on = driverIds.includes(d.id);
               return (
-                <Button key={d.id} type="button" size="sm" variant={on ? "default" : "outline"} onClick={() => toggleDriver(d.id)} disabled={locked}>
+                <Button key={d.id} type="button" size="sm" variant={on ? "default" : "outline"} onClick={() => toggleDriver(d.id)} disabled={isPublished}>
                   {d.full_name}
                 </Button>
               );
@@ -160,26 +160,45 @@ function DayDetails({ routeId, date }: { routeId: string; date: string }) {
           <div className="flex gap-2 items-end">
             <div className="flex-1 max-w-xs">
               <label className="text-xs text-muted-foreground flex items-center gap-1"><Truck className="w-3 h-3" /> Veículo</label>
-              <Select value={vehicleId} onValueChange={setVehicleId} disabled={locked}>
+              <Select value={vehicleId} onValueChange={setVehicleId} disabled={isPublished}>
                 <SelectTrigger><SelectValue placeholder="Selecionar" /></SelectTrigger>
                 <SelectContent>{vehicles.map((v: any) => <SelectItem key={v.id} value={v.id}>{v.plate} — {v.model}</SelectItem>)}</SelectContent>
               </Select>
             </div>
-            <Button onClick={saveDrivers} disabled={locked}>Salvar</Button>
+            <Button onClick={saveDrivers} disabled={isPublished}>Salvar</Button>
           </div>
-          {vehicle && locked && <div className="text-xs text-muted-foreground">Veículo em uso: {vehicle.plate}</div>}
+          {vehicle && isPublished && <div className="text-xs text-muted-foreground">Veículo em uso: {vehicle.plate}</div>}
         </CardContent>
       </Card>
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="text-base">Sequência de entregas</CardTitle>
-          {day.status === "aberta" ? (
-            <Button onClick={doClose} disabled={!driverIds.length || !orders.length}><Lock className="w-4 h-4 mr-1" /> Fechar rota do dia</Button>
-          ) : (
-            <Button variant="outline" onClick={doReopen}><Unlock className="w-4 h-4 mr-1" /> Reabrir</Button>
-          )}
+        <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-2">
+          <div>
+            <CardTitle className="text-base">Sequência de entregas</CardTitle>
+            {day.optimized_at && (
+              <p className="text-xs text-muted-foreground mt-1">
+                IA otimizou em {new Date(day.optimized_at).toLocaleString("pt-BR")} · {day.stops_summary?.stops || orders.length} paradas
+                {day.stops_summary?.blocked ? ` · ${day.stops_summary.blocked} bloqueado(s)` : ""}
+              </p>
+            )}
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            {!isPublished && (
+              <Button variant="outline" onClick={doOptimize} disabled={optimize.isPending || !orders.length}>
+                <Sparkles className="w-4 h-4 mr-1" /> {isOptimized ? "Reotimizar" : "Otimizar com IA"}
+              </Button>
+            )}
+            {!isPublished && isOptimized && (
+              <Button onClick={doPublish} disabled={publish.isPending || !driverIds.length}>
+                <Send className="w-4 h-4 mr-1" /> Publicar para o entregador
+              </Button>
+            )}
+            {isPublished && (
+              <Button variant="outline" onClick={doReopen}><Unlock className="w-4 h-4 mr-1" /> Reabrir</Button>
+            )}
+          </div>
         </CardHeader>
+
         <CardContent>
           {orders.length === 0 ? (
             <div className="text-center py-8 text-sm text-muted-foreground">Nenhum pedido lançado para esta data. Vá em Pedidos e associe pedidos a esta rota + data.</div>
