@@ -140,7 +140,10 @@ export default function SmartRoutePDVs() {
             <div className="grid grid-cols-2 gap-3">
               <div className="col-span-2"><Label>Nome / Razão Social*</Label><Input value={form.name || ""} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
               <div><Label>CNPJ</Label><Input value={form.cnpj || ""} onChange={(e) => setForm({ ...form, cnpj: e.target.value })} /></div>
-              <div><Label>CEP</Label><Input value={form.zip || ""} onChange={(e) => setForm({ ...form, zip: e.target.value })} /></div>
+              <div>
+                <Label>CEP {cepLoading && <span className="text-xs text-muted-foreground">buscando…</span>}</Label>
+                <Input value={form.zip || ""} onChange={(e) => onCepChange(e.target.value)} placeholder="00000-000" maxLength={9} />
+              </div>
               <div className="col-span-2"><Label>Endereço</Label><Input value={form.address || ""} onChange={(e) => setForm({ ...form, address: e.target.value })} /></div>
               <div><Label>Cidade</Label><Input value={form.city || ""} onChange={(e) => setForm({ ...form, city: e.target.value })} /></div>
               <div><Label>UF</Label><Input value={form.state || ""} onChange={(e) => setForm({ ...form, state: e.target.value })} maxLength={2} /></div>
