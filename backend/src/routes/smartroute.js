@@ -405,6 +405,7 @@ export async function ensureSmartRouteTables() {
     ALTER TABLE smartroute_routes ADD COLUMN IF NOT EXISTS owner_user_id UUID;
     ALTER TABLE smartroute_routes ADD COLUMN IF NOT EXISTS parent_route_id UUID;
     ALTER TABLE smartroute_routes ADD COLUMN IF NOT EXISTS route_day_id UUID;
+    ALTER TABLE smartroute_routes ADD COLUMN IF NOT EXISTS upsell_time_min INTEGER DEFAULT 0;
 
     ALTER TABLE smartroute_orders ADD COLUMN IF NOT EXISTS route_id UUID;
     ALTER TABLE smartroute_orders ADD COLUMN IF NOT EXISTS pdv_window TEXT;
