@@ -234,7 +234,7 @@ export default function SmartRoutePDVs() {
                   <SelectTrigger><SelectValue placeholder="Sem rota fixa (legado)" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__none">Sem rota fixa (legado)</SelectItem>
-                    {routes.map((r: any) => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}
+                    {routes.map((r: any) => <SelectItem key={r.id} value={r.id}>{r.code || r.name || r.id}</SelectItem>)}
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground mt-1">
