@@ -1,240 +1,256 @@
 # SmartRoute AI — Documentação Completa
 
-Guia oficial do módulo de logística e roteirização. Cobre o painel administrativo, o app do entregador e o novo modelo de **Rotas Fixas + Escala + Fechamento Diário**.
+Módulo de logística e roteirização com **otimização por IA**. Este documento descreve o fluxo oficial: vendedores lançam solicitações → IA organiza a sequência ideal por rota → supervisor publica → entregador recebe no app.
 
 ---
 
-## 1. Visão geral
-
-O SmartRoute organiza a operação em três camadas:
-
-1. **Rotas Fixas (permanentes)** — cadastro-mãe de uma rota comercial. Contém os PDVs atendidos, sequência sugerida, janelas de horário e escala de entregadores por dia da semana.
-2. **Pedidos / Solicitações de Entrega** — cada nota/pedido lançado pelo vendedor é vinculado a uma rota fixa + data de entrega. Não guardamos itens da nota — apenas a solicitação (o espelho da NF-e virá em fase futura).
-3. **Rota do Dia** — instância diária de uma rota fixa. É onde o supervisor confere carga, fecha a rota, adiciona/troca entregadores e envia para o app.
+## 1. Visão geral do fluxo
 
 ```text
-[Rota Fixa: "Rota Centro-SP"]
-  ├─ PDVs fixos (com janela: manhã/tarde/noite/qualquer)
-  ├─ Escala semanal (seg→dom: entregador + veículo)
-  └─ Rota do Dia (por data)
-        ├─ Pedidos anexados pelos vendedores
-        ├─ Entregador(es) do dia
-        ├─ Status: aberta → fechada → em_andamento → concluída
-        └─ Vai para o app quando fechada
+Vendedor lança pedido → escolhe uma ROTA (contêiner) + DATA + PDV
+        │
+        ▼
+Pedidos acumulam ao longo do dia na rota escolhida (status: aberta)
+        │
+        ▼
+20h · Cron da IA otimiza a "Rota do Dia" para AMANHÃ (D+1):
+      • respeita janela do PDV (manhã/tarde/noite/qualquer)
+      • bloqueia pedidos em PDVs cujos dias permitidos não incluem essa data
+      • gera sequência ótima (nearest-neighbor a partir da 1ª parada)
+      • atribui motorista/veículo padrão da rota
+        │
+        ▼
+Supervisor revisa (pode Reotimizar manual, trocar motorista, adicionar 2º entregador)
+        │
+        ▼
+Supervisor "Publica" → rota fica disponível no app do entregador
+        │
+        ▼
+Entregador executa: navegação · check-in · checklist do PDV · POD
 ```
 
----
-
-## 2. Papéis e permissões
+**Papéis**
 
 | Papel | O que faz |
 |---|---|
-| **Vendedor** | Lança pedidos e escolhe a rota fixa + data. Vê todas as rotas (sem restrição de dono). |
-| **Supervisor** | Cria/edita rotas fixas, define escala, fecha e reabre a rota do dia, troca ou adiciona entregadores. |
-| **Entregador** | Recebe no app apenas as rotas do dia em que aparece na escala (ou foi adicionado manualmente) e que já estão **fechadas** ou **em andamento**. |
-| **Administrador** | Configura checklists, depósitos, veículos, motoristas e integrações. |
-
-Um entregador pode atender **várias rotas** e uma rota pode ter **mais de um entregador** no mesmo dia (definido pelo supervisor).
+| **Vendedor** | Lança pedidos em qualquer rota. Vê todas as rotas (sem restrição de dono). Cada pedido é uma **solicitação de entrega** — o espelho da NF-e virá em fase futura. |
+| **Supervisor** | Cadastra rotas e PDVs (com regras), roda a IA manualmente quando quiser, troca/adiciona entregadores, publica ou reabre a rota do dia. |
+| **Entregador** | Recebe no app apenas rotas **publicadas** em que ele é o motorista atribuído. |
 
 ---
 
-## 3. Rotas Fixas (menu **SmartRoute → Rotas Montadas**)
+## 2. Cadastros essenciais
 
-### 3.1 Criar uma rota fixa
-1. Clique em **Nova rota**.
-2. Preencha:
-   - **Código/Nome** (ex.: "Rota Centro-SP", "Zona Leste — Segundas").
-   - **Entregador padrão** — usado quando não houver escala definida para o dia.
-   - **Veículo padrão**.
-   - **Observações** (opcional).
-3. Salvar.
+### 2.1 Rotas (menu **SmartRoute → Rotas Montadas**)
 
-A rota é criada como **permanente** (`is_template = true`). Ela existe todos os dias — não precisa "clonar" nem "gerar" nada.
+Uma "rota" é o **contêiner comercial** (ex.: "Rota Centro-SP", "Zona Leste"). Contém:
+- **Código/Nome**
+- **Motorista padrão** — usado pela IA quando ninguém foi atribuído manualmente
+- **Veículo padrão**
+- **Observações**
 
-### 3.2 PDVs fixos da rota
-Aba **PDVs Fixos** dentro da rota:
-- Selecione um PDV do cadastro e a **janela preferencial**:
-  - `Manhã`, `Tarde`, `Noite`, `Qualquer horário`.
-- Reordene com as setas ↑ ↓ — a **sequência** define a ordem sugerida no dia.
-- A janela **só ordena** entregas (manhã → tarde → noite → qualquer). Não bloqueia lançamentos fora da janela.
+Não é necessário pré-cadastrar PDVs "fixos" na rota — o vendedor associa o PDV no momento do pedido. Se você quiser trabalhar com carteira fixa por rota, o cadastro `PDVs da rota` continua disponível.
 
-### 3.3 Escala semanal
-Aba **Escala Semanal**:
-- Para cada dia (dom → sáb), escolha o entregador e o veículo.
-- Deixar em branco = usa o **entregador/veículo padrão** da rota.
-- Um entregador pode aparecer na escala de várias rotas.
+### 2.2 PDVs / Clientes (menu **SmartRoute → PDVs**)
 
----
+Cadastro-mãe do ponto de entrega. **Este é o lugar onde as regras vivem** — a IA lê tudo daqui na hora de organizar a rota.
 
-## 4. Lançamento de pedidos (vendedor)
+Campos da seção **Regras de recebimento**:
 
-Menu **SmartRoute → Pedidos**.
-
-1. **Nova solicitação**.
-2. Selecione a **Rota fixa** — o dropdown de PDV é filtrado automaticamente para os PDVs daquela rota.
-3. Escolha o **PDV** — a **janela** é herdada do cadastro (mas pode ser sobrescrita).
-4. Defina a **Data de entrega**.
-5. (Opcional) Observações, prioridade, referência interna.
-6. Salvar.
-
-O pedido fica anexado à rota daquela data. Enquanto a **rota do dia** estiver **aberta**, novos pedidos podem entrar. Depois de fechada, exige reabertura pelo supervisor.
-
-> Sem espelho de NF-e nesta fase: cada pedido é apenas uma **solicitação de entrega**.
-
----
-
-## 5. Rota do Dia (menu **SmartRoute → Rota do Dia**)
-
-Instância diária de uma rota fixa. Criada automaticamente na primeira vez que alguém abre a rota para uma data.
-
-### 5.1 O que o supervisor vê
-- **Data + rota fixa** no topo.
-- **Entregador(es) do dia** — herdados da escala; podem ser trocados ou complementados.
-- **Veículo** — herdado da escala.
-- **Sequência de entregas** — ordenada por `janela do PDV → sequência do PDV → ordem de lançamento`.
-- **Status**: `aberta` · `fechada` · `em_andamento` · `concluída`.
-
-### 5.2 Ações
-| Ação | Quando usar |
+| Campo | Efeito na IA |
 |---|---|
-| **Adicionar entregador** | Volume alto no dia — dois motoristas dividem a rota. |
-| **Trocar entregador** | Substituição por falta/folga. |
-| **Fechar rota** | Encerra o lançamento e libera no app do entregador. |
-| **Reabrir rota** | Precisa incluir um pedido de última hora ou trocar entregador. |
+| **Janela preferencial** (`manhã` / `tarde` / `noite` / `qualquer`) | Ordena as paradas: primeiro todos os PDVs de manhã, depois tarde, depois noite, depois `qualquer`. |
+| **Dias permitidos** (checkboxes seg–dom) | Se um pedido for lançado para um dia fora desta lista, a IA **bloqueia** o pedido — ele não entra na sequência. |
+| **Tempo de descarga (min)** | Usado no cálculo de ETA das paradas seguintes. |
+| **Checklist do PDV** | Template de checklist executado quando o entregador chegar. `padrão` usa o template global da organização. |
+| Janela horária início/fim | Referência operacional (não trava lançamento). |
 
-### 5.3 Ciclo de vida
+### 2.3 Templates de checklist
+
+Um PDV pode usar o template global (**padrão**) ou um checklist específico. O template contém itens do tipo `foto`, `ocr`, `assinatura`, `texto`, `número`, `sim/não`, `múltipla escolha` — o mesmo motor da versão anterior.
+
+---
+
+## 3. Lançamento de pedidos (vendedor)
+
+Menu **SmartRoute → Pedidos → Novo pedido**.
+
+1. Escolha a **Rota** (contêiner) — opcional. Sem rota, é pedido avulso e não entra na otimização automática.
+2. Escolha o **PDV**.
+3. Preencha a **Data de entrega**.
+   - A tela mostra em tempo real se aquele PDV **aceita** entregas naquele dia da semana.
+   - Se não aceitar, o pedido pode ser salvo, mas ficará marcado como **bloqueado** na otimização até você trocar a data.
+4. Nº pedido, peso, volume, valor, prioridade, observações.
+5. Salvar.
+
+O pedido entra na fila da rota + data escolhidas. Enquanto a rota do dia estiver **aberta** ou **otimizada** (não publicada), o pedido pode ser editado ou removido normalmente.
+
+---
+
+## 4. Otimização com IA
+
+A IA roda em dois momentos:
+
+### 4.1 Automática (cron 20h America/Sao_Paulo)
+Todo dia às 20h o job noturno pega **todas as rotas com pedidos para o dia seguinte (D+1)** e roda o otimizador. Não é preciso ação manual — quando o supervisor abrir a rota do dia de manhã, a sequência já vem pronta.
+
+### 4.2 Manual (botão **Otimizar com IA**)
+Em **SmartRoute → Rota do Dia**, escolha a rota + data e clique **Otimizar com IA**. Útil quando:
+- Você lançou pedidos depois das 20h.
+- Precisa refazer a sequência depois de mudar restrições do PDV.
+- Quer testar cenários antes de publicar.
+
+### 4.3 O que a IA faz
+1. Lê todos os pedidos dessa rota + data.
+2. Para cada pedido, checa se o dia da semana está nos **dias permitidos** do PDV. Se não estiver → marca como `bloqueado` (não entra na sequência).
+3. Agrupa os pedidos elegíveis por **janela** (manhã → tarde → noite → qualquer).
+4. Dentro de cada janela, aplica **nearest-neighbor** por coordenadas (lat/lng do PDV), começando pela primeira parada natural do grupo.
+5. Grava `sequence = 1..N` em cada pedido.
+6. Atribui o **motorista/veículo padrão da rota** se ainda não houver um definido para o dia.
+7. Marca a rota do dia como `otimizada` e guarda `optimized_at`, `optimized_by`, `stops_summary`.
+
+---
+
+## 5. Rota do Dia (supervisor)
+
+Menu **SmartRoute → Rota do Dia**.
+
+### 5.1 Ciclo de vida do status
+
 ```text
-aberta ──[supervisor fecha]──▶ fechada
-   ▲                              │
-   │                              ▼
-reabrir ◀──[supervisor reabre]  em_andamento (entregador iniciou)
-                                  │
-                                  ▼
-                              concluída (todas entregas finalizadas)
+aberta ─▶ otimizada ─▶ publicada ─▶ em_andamento ─▶ concluída
+   ▲          │              │
+   └──[reabrir]─────────[reabrir]
 ```
+
+| Status | O que acontece |
+|---|---|
+| `aberta` | Aceita novos pedidos. Nenhuma sequência ainda. |
+| `otimizada` | IA gerou a sequência. Ainda não foi enviada para o app. |
+| `publicada` | Rota liberada no app do entregador (`status` dos pedidos → `em_rota`). |
+| `em_andamento` | Entregador iniciou. |
+| `concluída` | Todas as paradas finalizadas. |
+
+### 5.2 Ações do supervisor
+- **Otimizar / Reotimizar** — dispara a IA (ou refaz).
+- **Atribuir/trocar entregadores** — pode escolher um ou vários (rota grande).
+- **Publicar** — libera no app. Exige ao menos um entregador.
+- **Reabrir** — volta para `aberta`, devolvendo pedidos para edição.
 
 ---
 
 ## 6. App do Entregador
 
-O entregador vê apenas rotas do dia onde ele está na lista de entregadores e que estejam **fechada** ou **em_andamento**.
+Vê apenas rotas **publicadas** em que aparece como motorista.
 
-Fluxo por parada:
-1. **Navegar** — abre rota no Google/Waze/Apple Maps.
-2. **Check-in** — GPS + Haversine valida chegada ao PDV.
-3. **Checklist** — perguntas configuráveis (foto, OCR, assinatura, texto).
-4. **Finalizar** — POD (prova de entrega): assinatura + foto + CPF/RG opcional.
-5. **Ocorrência** — se algo der errado, registra motivo, foto e segue.
+Fluxo por parada (já existente, sem mudanças):
+1. **Navegar** — abre Google/Waze/Apple Maps.
+2. **Check-in** — GPS + Haversine valida chegada.
+3. **Checklist** — executa o template configurado no PDV (ou o padrão).
+4. **Finalizar** — POD: assinatura + foto + CPF/RG opcional.
+5. **Ocorrência** — motivo, foto, segue.
 
-Modo offline: check-ins, fotos e checklists ficam em fila local (`offline-db`) e sobem quando volta a conexão.
-
-Menu inferior: **Rotas · Ponto · Avarias · Devoluções · Perfil**.
+Offline: check-ins, fotos e checklists ficam em fila local (`offline-db`) e sobem quando a conexão volta.
 
 ---
 
-## 7. Checklists inteligentes
+## 7. Torre de Controle, Replay e Relatórios
 
-Menu **SmartRoute → Checklists**.
-
-Tipos de item suportados:
-- `foto` — obrigatória, com watermark de GPS + data.
-- `ocr` — foto + análise por IA (Gemini/OpenAI, configurado em **Superadmin → IA Anatriello**) para extrair campos estruturados (JSON).
-- `assinatura` — pad de assinatura no touch.
-- `texto`, `numero`, `sim_nao`, `multipla_escolha`.
-
-Checklists são vinculados por **tipo de rota**, **PDV** ou **etapa** (chegada / entrega / saída).
+Sem mudanças em relação à versão anterior:
+- **Monitoramento** — mapa em tempo real, filtros por rota, SLA em risco.
+- **Replay** — reconstrói o percurso do dia.
+- **Relatórios** — eficiência por entregador, aderência à sequência, ocorrências por PDV, sugestões de reordenação da rota fixa.
 
 ---
 
-## 8. Torre de Controle e Replay
-
-Menu **SmartRoute → Monitoramento**.
-
-- Mapa em tempo real com todos os entregadores ativos.
-- Filtros por rota, status, SLA em risco.
-- **Replay**: reconstrói o percurso do dia (linha do tempo + paradas + fotos).
-
----
-
-## 9. Relatórios e IA pós-rota
-
-Ao final do dia, o motor gera automaticamente:
-- Eficiência por entregador (paradas/h, km/entrega).
-- Aderência à sequência sugerida.
-- Ocorrências por PDV/motivo.
-- Sugestões de reordenação da rota fixa quando um PDV consistentemente atrasa.
-
----
-
-## 10. Modelo de dados (referência técnica)
+## 8. Modelo de dados (referência técnica)
 
 ```text
-smartroute_routes            — rota fixa (is_template=true)
+smartroute_routes            — contêiner comercial
   ├─ default_driver_id
   ├─ default_vehicle_id
   └─ owner_user_id           — vendedor responsável (opcional)
 
-smartroute_route_pdvs        — PDVs fixos da rota
-  (route_id, pdv_id, sequence, window, notes)
+smartroute_pdvs              — cadastro + REGRAS
+  ├─ delivery_window         — manha | tarde | noite | qualquer
+  ├─ allowed_weekdays        — int[] 0=Dom..6=Sab
+  ├─ service_time_min        — tempo de descarga
+  └─ checklist_template_id   — FK para smartroute_pdv_checklists (opcional)
 
-smartroute_route_schedule    — escala semanal
-  (route_id, weekday, driver_id, vehicle_id)
+smartroute_pdv_checklists    — templates (globais ou por PDV)
+  ├─ pdv_id (nullable)
+  ├─ is_default              — usa quando o PDV não tem checklist próprio
+  └─ items (jsonb)
+
+smartroute_orders            — solicitação de entrega
+  ├─ route_id, delivery_date, pdv_id
+  ├─ pdv_window              — herdado do PDV, sobrescrivível
+  └─ sequence                — preenchido pela IA
 
 smartroute_route_days        — instância diária
-  (route_id, date, status, driver_ids[], vehicle_id,
-   closed_at, closed_by, reopened_at)
-
-smartroute_orders            — pedido/solicitação
-  (route_id, delivery_date, pdv_id, pdv_window,
-   owner_user_id, priority, notes)
+  ├─ status                  — aberta | otimizada | publicada | em_andamento | concluida
+  ├─ driver_ids[]            — 1..N entregadores
+  ├─ vehicle_id
+  ├─ optimized_at, optimized_by
+  ├─ stops_summary (jsonb)   — { stops, blocked, weekday }
+  └─ published_at
 ```
 
-Regras de ordenação no dia:
-`ORDER BY window_rank(pdv_window), route_pdvs.sequence, orders.created_at`
-onde `window_rank`: manhã=1, tarde=2, noite=3, qualquer=4.
+**Regra de ordenação da sequência (implementada em `optimizeRouteDay`):**
+```
+window_rank(pdv_window) ASC → nearest-neighbor Haversine
+onde window_rank: manha=1, tarde=2, noite=3, qualquer=4
+```
 
 ---
 
-## 11. Endpoints principais
+## 9. Endpoints principais
 
-### Rotas fixas
-- `GET/POST/PUT/DELETE /api/smartroute/routes` — CRUD de rotas fixas.
-- `GET/POST/PUT/DELETE /api/smartroute/routes/:id/pdvs` — PDVs fixos.
-- `POST /api/smartroute/routes/:id/pdvs/reorder` — reordenar.
-- `GET/PUT /api/smartroute/routes/:id/schedule` — escala semanal.
+### PDVs (com regras)
+- `GET/POST/PUT/DELETE /api/smartroute/pdvs`
 
-### Rota do dia
+### Templates de checklist
+- `GET/POST/PUT/DELETE /api/smartroute/pdv-checklists`
+
+### Rota do dia + IA
 - `GET /api/smartroute/routes/:id/day?date=YYYY-MM-DD` — retorna (ou cria) a instância.
-- `POST /api/smartroute/routes/:id/day/:date/close` — fecha.
+- `POST /api/smartroute/routes/:id/day/:date/optimize` — roda a IA para essa rota+data.
+- `POST /api/smartroute/routes/:id/day/:date/publish` — publica no app.
+- `POST /api/smartroute/routes/:id/day/:date/drivers` — troca/adiciona entregadores.
 - `POST /api/smartroute/routes/:id/day/:date/reopen` — reabre.
-- `POST /api/smartroute/routes/:id/day/:date/drivers` — define entregadores.
+
+### Cron
+- `runNightlyOptimizer()` — registrado em `backend/src/index.js` em `0 20 * * *` (America/Sao_Paulo). Percorre todas as orgs e todas as rotas com pedidos para D+1.
 
 ### Pedidos
-- `POST /api/smartroute/orders` — cria pedido (`route_id + delivery_date + pdv_id`).
-- `PUT /api/smartroute/orders/:id` — atualiza (bloqueado se dia fechado).
+- `POST /api/smartroute/orders` — `route_id + delivery_date + pdv_id + …`
+- `PUT /api/smartroute/orders/:id`
 
 ### App do entregador
-- `GET /api/smartroute/driver/routes` — retorna dias com `driver_ids` contendo o motorista e status ∈ (`fechada`, `em_andamento`).
+- `GET /api/smartroute/driver/routes` — dias com o motorista atribuído e status em (`publicada`, `em_andamento`).
 
 ---
 
-## 12. Perguntas frequentes
+## 10. Perguntas frequentes
 
-**E se um vendedor precisa lançar um pedido depois de a rota ter sido fechada?**
-Peça ao supervisor para **reabrir** o dia, lance o pedido e feche novamente.
+**Preciso pré-cadastrar PDVs em cada rota?**
+Não. Basta ter o cadastro do PDV. O vendedor associa PDV + rota + data no momento do pedido.
 
-**Um entregador pode atender duas rotas no mesmo dia?**
-Sim — basta aparecer na escala (ou ser adicionado manualmente) das duas rotas. O app dele mostra as duas.
+**E se lançar um pedido depois das 20h?**
+A IA já rodou. Peça ao supervisor para clicar **Reotimizar** — leva alguns segundos.
 
-**As janelas bloqueiam entregas fora do horário?**
-Não. Elas apenas ordenam a sequência do dia. A regra é operacional, não travamento de sistema.
+**PDV recebe só nas segundas e quartas. E se lançarem para uma terça?**
+O pedido é salvo, mas a IA o marca como **bloqueado** (não entra na sequência do dia). O aviso já aparece na tela do vendedor no momento do lançamento.
+
+**Um entregador pode fazer duas rotas no mesmo dia?**
+Sim — basta estar na lista `driver_ids` das duas rotas do dia. Ambas aparecem no app.
+
+**Uma rota pode ter dois entregadores?**
+Sim. O supervisor adiciona o segundo motorista antes de publicar (útil em dias de volume alto).
 
 **Como funciona a auditoria?**
-Toda ação (fechar, reabrir, trocar entregador, editar pedido) fica registrada com usuário, timestamp e IP. Disponível em **Monitoramento → Replay**.
-
-**Compatibilidade com rotas antigas?**
-Rotas anteriores foram migradas com `is_template=true` e seus pedidos ganharam `delivery_date = scheduled_date` (ou hoje, como fallback). Nada foi apagado.
+Toda ação (otimizar, publicar, reabrir, trocar entregador, editar pedido) registra usuário, timestamp e (quando disponível) IP. Disponível em **Monitoramento → Replay**.
 
 ---
 
-_Última atualização: fase Rotas Fixas + Escala + Fechamento Diário._
+_Última atualização: fase Rotas Dinâmicas + Otimização IA Noturna (regras no PDV, cron 20h, ciclo otimizada→publicada)._
