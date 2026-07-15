@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,49 @@ export default function SmartRouteCDs() {
   const geocode = useSRGeocodeDepot();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<any>({});
+  const [cepLoading, setCepLoading] = useState(false);
+  const cepTimer = useRef<any>(null);
+
+  const lookupCep = async (rawCep: string) => {
+    const cep = String(rawCep || "").replace(/\D/g, "");
+    if (cep.length !== 8) return;
+    setCepLoading(true);
+    try {
+      const r = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+      const j = await r.json();
+      if (j.erro) { toast.error("CEP não encontrado"); return; }
+      const address = [j.logradouro, j.bairro].filter(Boolean).join(", ");
+      const next = {
+        ...form,
+        zip: cep,
+        address: address || form.address,
+        city: j.localidade || form.city,
+        state: j.uf || form.state,
+      };
+      setForm(next);
+      // auto-geocode
+      try {
+        const g = await geocode.mutateAsync({ address: next.address, city: next.city, state: next.state, zip: next.zip });
+        setForm((f: any) => ({ ...f, lat: g.lat, lng: g.lng }));
+        toast.success("Endereço e coordenadas preenchidos");
+      } catch {
+        toast.success("Endereço preenchido", { description: "Não foi possível obter coordenadas automaticamente." });
+      }
+    } catch {
+      toast.error("Falha ao consultar CEP");
+    } finally {
+      setCepLoading(false);
+    }
+  };
+
+  const onCepChange = (v: string) => {
+    const masked = v.replace(/\D/g, "").slice(0, 8).replace(/(\d{5})(\d)/, "$1-$2");
+    setForm({ ...form, zip: masked });
+    if (cepTimer.current) clearTimeout(cepTimer.current);
+    if (masked.replace(/\D/g, "").length === 8) {
+      cepTimer.current = setTimeout(() => lookupCep(masked), 300);
+    }
+  };
 
   const doGeocode = async () => {
     if (!form.address && !form.city) return toast.error("Preencha endereço/cidade");
@@ -77,15 +120,26 @@ export default function SmartRouteCDs() {
             <DialogHeader><DialogTitle>{form.id ? "Editar CD" : "Novo CD"}</DialogTitle></DialogHeader>
             <div className="grid grid-cols-2 gap-3">
               <div className="col-span-2"><Label>Nome*</Label><Input value={form.name || ""} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Ex: CD Anatriello Matriz" /></div>
+              <div className="col-span-2">
+                <Label>CEP {cepLoading && <span className="text-xs text-muted-foreground ml-1">buscando...</span>}</Label>
+                <Input
+                  value={form.zip || ""}
+                  onChange={(e) => onCepChange(e.target.value)}
+                  onBlur={(e) => lookupCep(e.target.value)}
+                  placeholder="00000-000"
+                  maxLength={9}
+                />
+                <p className="text-xs text-muted-foreground mt-1">Digite o CEP para preencher endereço e coordenadas automaticamente.</p>
+              </div>
               <div className="col-span-2"><Label>Endereço</Label><Input value={form.address || ""} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="Rua, número, bairro" /></div>
               <div><Label>Cidade</Label><Input value={form.city || ""} onChange={(e) => setForm({ ...form, city: e.target.value })} /></div>
               <div><Label>Estado (UF)</Label><Input maxLength={2} value={form.state || ""} onChange={(e) => setForm({ ...form, state: e.target.value.toUpperCase() })} /></div>
-              <div><Label>CEP</Label><Input value={form.zip || ""} onChange={(e) => setForm({ ...form, zip: e.target.value })} /></div>
-              <div className="flex items-end">
+              <div className="col-span-2">
                 <Button type="button" variant="outline" className="w-full" onClick={doGeocode} disabled={geocode.isPending}>
-                  <MapPin className="w-4 h-4 mr-1" /> {geocode.isPending ? "Buscando..." : "Buscar coordenadas"}
+                  <MapPin className="w-4 h-4 mr-1" /> {geocode.isPending ? "Buscando..." : "Rebuscar coordenadas"}
                 </Button>
               </div>
+
               <div><Label>Latitude</Label><Input type="number" step="any" value={form.lat ?? ""} onChange={(e) => setForm({ ...form, lat: e.target.value ? +e.target.value : null })} /></div>
               <div><Label>Longitude</Label><Input type="number" step="any" value={form.lng ?? ""} onChange={(e) => setForm({ ...form, lng: e.target.value ? +e.target.value : null })} /></div>
               <div className="col-span-2 flex items-center gap-2 pt-2">
