@@ -490,14 +490,40 @@ router.use(async (req, res, next) => { try { await ensureSmartRouteTables(); nex
 const orgId = (req) => req.user?.organization_id;
 
 // ============ DEPOTS (Centros de Distribuição) ============
-async function geocodeNominatim(parts) {
-  const q = encodeURIComponent([parts.address, parts.city, parts.state, parts.zip, 'Brasil'].filter(Boolean).join(', '));
-  if (!q) return null;
+async function geocodeNominatim(parts = {}) {
+  const zipDigits = String(parts.zip || '').replace(/\D/g, '');
+  let viaCep = null;
+
+  if (zipDigits.length === 8) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+      const res = await fetch(`https://viacep.com.br/ws/${zipDigits}/json/`, { signal: controller.signal });
+      clearTimeout(timeout);
+      if (res.ok) {
+        const data = await res.json().catch(() => null);
+        if (data && !data.erro) viaCep = data;
+      }
+    } catch (_) {}
+  }
+
+  const address = parts.address || [viaCep?.logradouro, viaCep?.bairro].filter(Boolean).join(', ');
+  const city = parts.city || viaCep?.localidade;
+  const state = parts.state || viaCep?.uf;
+  const queryText = [address, city, state, zipDigits || parts.zip, 'Brasil'].filter(Boolean).join(', ');
+  if (!queryText.trim()) return null;
+
   try {
-    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=br&q=${q}`,
-      { headers: { 'User-Agent': 'AnatrielloSmartRoute/1.0' } });
-    const data = await res.json();
-    if (Array.isArray(data) && data[0]) return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon), display_name: data[0].display_name };
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=br&q=${encodeURIComponent(queryText)}`,
+      { headers: { 'User-Agent': 'AnatrielloSmartRoute/1.0 (smartroute@anatriello.local)' }, signal: controller.signal });
+    clearTimeout(timeout);
+    if (!res.ok) return null;
+    const data = await res.json().catch(() => null);
+    if (Array.isArray(data) && data[0]) {
+      return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon), display_name: data[0].display_name };
+    }
   } catch (_) {}
   return null;
 }
