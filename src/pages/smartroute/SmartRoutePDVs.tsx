@@ -147,6 +147,19 @@ export default function SmartRoutePDVs() {
               <div className="col-span-2"><Label>Endereço</Label><Input value={form.address || ""} onChange={(e) => setForm({ ...form, address: e.target.value })} /></div>
               <div><Label>Cidade</Label><Input value={form.city || ""} onChange={(e) => setForm({ ...form, city: e.target.value })} /></div>
               <div><Label>UF</Label><Input value={form.state || ""} onChange={(e) => setForm({ ...form, state: e.target.value })} maxLength={2} /></div>
+              <div className="col-span-2">
+                <Button type="button" variant="outline" className="w-full" disabled={geocode.isPending} onClick={async () => {
+                  if (!form.address && !form.city) return toast.error("Preencha endereço/cidade");
+                  try {
+                    const g = await geocode.mutateAsync({ address: form.address, city: form.city, state: form.state, zip: form.zip });
+                    setForm((f: any) => ({ ...f, lat: g.lat, lng: g.lng }));
+                    toast.success("Coordenadas encontradas", { description: g.display_name });
+                  } catch { toast.error("Endereço não localizado", { description: "Preencha lat/lng manualmente." }); }
+                }}>
+                  {geocode.isPending ? "Buscando..." : "Obter coordenadas do endereço"}
+                </Button>
+                <p className="text-xs text-muted-foreground mt-1">Preencha o número do endereço antes para maior precisão.</p>
+              </div>
               <div><Label>Latitude</Label><Input type="number" step="any" value={form.lat || ""} onChange={(e) => setForm({ ...form, lat: +e.target.value })} /></div>
               <div><Label>Longitude</Label><Input type="number" step="any" value={form.lng || ""} onChange={(e) => setForm({ ...form, lng: +e.target.value })} /></div>
               <div><Label>Contato</Label><Input value={form.contact_name || ""} onChange={(e) => setForm({ ...form, contact_name: e.target.value })} /></div>
