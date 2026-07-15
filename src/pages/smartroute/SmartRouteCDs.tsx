@@ -120,15 +120,26 @@ export default function SmartRouteCDs() {
             <DialogHeader><DialogTitle>{form.id ? "Editar CD" : "Novo CD"}</DialogTitle></DialogHeader>
             <div className="grid grid-cols-2 gap-3">
               <div className="col-span-2"><Label>Nome*</Label><Input value={form.name || ""} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Ex: CD Anatriello Matriz" /></div>
+              <div className="col-span-2">
+                <Label>CEP {cepLoading && <span className="text-xs text-muted-foreground ml-1">buscando...</span>}</Label>
+                <Input
+                  value={form.zip || ""}
+                  onChange={(e) => onCepChange(e.target.value)}
+                  onBlur={(e) => lookupCep(e.target.value)}
+                  placeholder="00000-000"
+                  maxLength={9}
+                />
+                <p className="text-xs text-muted-foreground mt-1">Digite o CEP para preencher endereço e coordenadas automaticamente.</p>
+              </div>
               <div className="col-span-2"><Label>Endereço</Label><Input value={form.address || ""} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="Rua, número, bairro" /></div>
               <div><Label>Cidade</Label><Input value={form.city || ""} onChange={(e) => setForm({ ...form, city: e.target.value })} /></div>
               <div><Label>Estado (UF)</Label><Input maxLength={2} value={form.state || ""} onChange={(e) => setForm({ ...form, state: e.target.value.toUpperCase() })} /></div>
-              <div><Label>CEP</Label><Input value={form.zip || ""} onChange={(e) => setForm({ ...form, zip: e.target.value })} /></div>
-              <div className="flex items-end">
+              <div className="col-span-2">
                 <Button type="button" variant="outline" className="w-full" onClick={doGeocode} disabled={geocode.isPending}>
-                  <MapPin className="w-4 h-4 mr-1" /> {geocode.isPending ? "Buscando..." : "Buscar coordenadas"}
+                  <MapPin className="w-4 h-4 mr-1" /> {geocode.isPending ? "Buscando..." : "Rebuscar coordenadas"}
                 </Button>
               </div>
+
               <div><Label>Latitude</Label><Input type="number" step="any" value={form.lat ?? ""} onChange={(e) => setForm({ ...form, lat: e.target.value ? +e.target.value : null })} /></div>
               <div><Label>Longitude</Label><Input type="number" step="any" value={form.lng ?? ""} onChange={(e) => setForm({ ...form, lng: e.target.value ? +e.target.value : null })} /></div>
               <div className="col-span-2 flex items-center gap-2 pt-2">
