@@ -779,4 +779,40 @@ router.get('/post-analyses', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ============ PROMPTS CUSTOMIZÁVEIS ============
+router.get('/prompts', async (req, res) => {
+  try {
+    await ensureTables();
+    const org = req.organizationId;
+    const r = await query(`SELECT key, instructions, updated_at, updated_by FROM smartroute_ai_prompts WHERE organization_id=$1`, [org]);
+    const byKey = Object.fromEntries(r.rows.map((x) => [x.key, x]));
+    const out = Object.entries(AI_PROMPT_DEFS).map(([key, def]) => ({
+      key,
+      label: def.label,
+      description: def.description,
+      system_default: def.system_default,
+      instructions: byKey[key]?.instructions || '',
+      updated_at: byKey[key]?.updated_at || null,
+    }));
+    res.json(out);
+  } catch (e) { logError('prompts.list', e); res.status(500).json({ error: e.message }); }
+});
+
+router.put('/prompts/:key', async (req, res) => {
+  try {
+    await ensureTables();
+    const { key } = req.params;
+    if (!AI_PROMPT_DEFS[key]) return res.status(400).json({ error: 'Chave inválida' });
+    const instructions = (req.body?.instructions || '').toString();
+    await query(
+      `INSERT INTO smartroute_ai_prompts (organization_id, key, instructions, updated_by, updated_at)
+       VALUES ($1,$2,$3,$4,NOW())
+       ON CONFLICT (organization_id, key)
+       DO UPDATE SET instructions=EXCLUDED.instructions, updated_by=EXCLUDED.updated_by, updated_at=NOW()`,
+      [req.organizationId, key, instructions, req.userId]
+    );
+    res.json({ ok: true });
+  } catch (e) { logError('prompts.save', e); res.status(500).json({ error: e.message }); }
+});
+
 export default router;
