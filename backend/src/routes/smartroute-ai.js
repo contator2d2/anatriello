@@ -565,7 +565,7 @@ router.post('/advisor/analyze', async (req, res) => {
       rota_focada: routeContext,
     };
 
-    const system = 'Você é um gestor sênior de logística e distribuição no Brasil, atuando como consultor operacional para a plataforma Anatriello SmartRoute AI. Analise dados operacionais reais e forneça recomendações práticas, específicas e priorizadas em português do Brasil. Sempre responda APENAS com JSON válido.';
+    const system = composeSystem(AI_PROMPT_DEFS.advisor.system_default, await getCustomInstructions(org, 'advisor'));
     const prompt = `Analise o contexto operacional abaixo e retorne recomendações do "gestor IA".
 
 CONTEXTO:
