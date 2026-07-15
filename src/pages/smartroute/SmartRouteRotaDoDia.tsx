@@ -10,8 +10,10 @@ import { toast } from "sonner";
 import {
   useSRTemplates,
   useSRRouteDay, useSRSetDayDrivers, useSRCloseDay, useSRReopenDay,
+  useSROptimizeDay, useSRPublishDay,
 } from "@/hooks/use-smartroute-daily";
 import { useSRDrivers, useSRVehicles } from "@/hooks/use-smartroute";
+import { Sparkles, Send } from "lucide-react";
 
 const WIN_META: Record<string, { label: string; icon: any; color: string }> = {
   manha: { label: "Manhã", icon: Sun, color: "bg-amber-100 text-amber-700" },
@@ -21,11 +23,14 @@ const WIN_META: Record<string, { label: string; icon: any; color: string }> = {
 };
 
 const STATUS_META: Record<string, { label: string; color: string }> = {
-  aberta: { label: "Aberta", color: "bg-emerald-100 text-emerald-700" },
+  aberta: { label: "Aberta (recebendo pedidos)", color: "bg-emerald-100 text-emerald-700" },
+  otimizada: { label: "Otimizada pela IA", color: "bg-purple-100 text-purple-700" },
+  publicada: { label: "Publicada no app", color: "bg-blue-100 text-blue-700" },
   fechada: { label: "Fechada", color: "bg-amber-100 text-amber-700" },
   em_andamento: { label: "Em rota", color: "bg-blue-100 text-blue-700" },
   concluida: { label: "Concluída", color: "bg-slate-100 text-slate-700" },
 };
+
 
 export default function RotaDoDia() {
   const [params, setParams] = useSearchParams();
