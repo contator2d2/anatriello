@@ -20,7 +20,7 @@ interface Props {
 // tab.cap = capability necessária para mostrar a aba (undefined = sempre visível)
 const tabs: { to: string; label: string; icon: any; cap?: string }[] = [
   { to: "/colaborador/home", label: "Início", icon: Home },
-  { to: "/colaborador/jornada", label: "Agenda", icon: Calendar, cap: "journey.view" },
+  { to: "/colaborador/jornada", label: "Ponto", icon: Clock, cap: "journey.view" },
   { to: "/colaborador/perfil?tab=comunicados", label: "Comunicados", icon: Megaphone },
   { to: "/colaborador/documentos", label: "Documentos", icon: FileText, cap: "documents.view" },
   { to: "/colaborador/perfil", label: "Perfil", icon: User, cap: "profile.view" },
