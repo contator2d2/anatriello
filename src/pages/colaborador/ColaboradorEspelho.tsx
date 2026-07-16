@@ -201,8 +201,7 @@ export default function ColaboradorEspelho() {
                     <StatusPill status={m.status} compact />
                   </div>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    {fmtHM(m.totals_json?.worked_min || 0)} trabalhadas
-                    • Saldo {fmtHM(m.totals_json?.balance_min || 0)}
+                    Competência {m.reference_month}
                   </p>
                   {m.status === "pending" && (
                     <p className="text-xs text-amber-600 font-medium mt-1">Aguardando seu aceite</p>
