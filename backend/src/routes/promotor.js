@@ -934,28 +934,51 @@ async function getOrgFacialConfig(orgId) {
   }
 }
 
+function normalizeFaceDescriptorPayload(rawDescriptor) {
+  if (!rawDescriptor) return [];
+  let parsed = rawDescriptor;
+  try {
+    if (typeof parsed === 'string') parsed = JSON.parse(parsed);
+  } catch {
+    return [];
+  }
+
+  const source = Array.isArray(parsed)
+    ? parsed
+    : Array.isArray(parsed?.descriptor)
+      ? parsed.descriptor
+      : Array.isArray(parsed?.face_descriptor)
+        ? parsed.face_descriptor
+        : [];
+
+  return source.map((n) => Number(n)).filter((n) => Number.isFinite(n));
+}
+
 router.get('/face-enrollment', authenticatePromotor, async (req, res) => {
   try {
     await ensurePromotorFaceColumns();
     const r = await query(
-      `SELECT face_enrolled_at, face_photo_url, organization_id,
-              (face_descriptor IS NOT NULL) AS enrolled,
+      `SELECT face_descriptor, face_enrolled_at, face_photo_url, organization_id,
               COALESCE(face_collection_requested, false) AS collection_requested
          FROM employees WHERE id = $1`,
       [req.employeeId]
     );
     const row = r.rows[0] || {};
+    const descriptor = normalizeFaceDescriptorPayload(row.face_descriptor);
+    const enrolled = descriptor.length >= 64;
     const cfg = await getOrgFacialConfig(row.organization_id);
-    // Pode se cadastrar: RH habilitou a coleta pelo app E (ainda não cadastrou OU RH pediu nova coleta)
-    const canEnroll = !!cfg.allow_self_enrollment && (!row.enrolled || !!row.collection_requested);
+    // Solicitação do RH sempre desbloqueia a recoleta no app; sem solicitação, segue a configuração global.
+    const canEnroll = !!row.collection_requested || (!!cfg.allow_self_enrollment && !enrolled);
     res.json({
-      enrolled: !!row.enrolled,
+      enrolled,
+      face_descriptor: enrolled ? descriptor : null,
       face_photo_url: row.face_photo_url || null,
       face_enrolled_at: row.face_enrolled_at || null,
       collection_requested: !!row.collection_requested,
       allow_self_enrollment: !!cfg.allow_self_enrollment,
       min_confidence: parseFloat(cfg.min_confidence) || 70,
       can_enroll: canEnroll,
+      can_test: enrolled,
     });
   } catch (err) {
     res.status(500).json({ error: 'Erro ao carregar status da biometria' });
@@ -998,7 +1021,7 @@ router.post('/face-enrollment', authenticatePromotor, async (req, res) => {
     if (!cfg.allow_self_enrollment) {
       return res.status(403).json({ error: 'A coleta pelo app não está habilitada. Procure o RH.' });
     }
-    const alreadyEnrolled = !!existing.rows[0].face_descriptor && !!existing.rows[0].face_enrolled_at;
+    const alreadyEnrolled = normalizeFaceDescriptorPayload(existing.rows[0].face_descriptor).length >= 64;
     if (alreadyEnrolled && !existing.rows[0].collection_requested) {
       return res.status(403).json({ error: 'Biometria já cadastrada. O RH precisa solicitar uma nova coleta.' });
     }
