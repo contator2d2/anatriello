@@ -38,6 +38,16 @@ function normalizeFaceDescriptor(input: any): number[] {
   return source.map((n: any) => Number(n)).filter((n: number) => Number.isFinite(n));
 }
 
+async function requestUserCameraOnce(): Promise<boolean> {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+    stream.getTracks().forEach((track) => track.stop());
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export default function ColaboradorHome() {
   const nav = useNavigate();
   const { toast } = useToast();
@@ -134,7 +144,7 @@ export default function ColaboradorHome() {
     } catch (e: any) { toast({ title: e.message || "Erro ao registrar", variant: "destructive" }); }
   }
 
-  function handlePunchClick() {
+  async function handlePunchClick() {
     if (jornadaEncerrada) { toast({ title: "Jornada concluída" }); return; }
     if (facialRequired) {
       if (faceDescriptor.length < 64) {
@@ -143,6 +153,11 @@ export default function ColaboradorHome() {
           description: "Cadastre sua biometria facial em Perfil › Configurações › Reconhecimento facial.",
           variant: "destructive",
         });
+        return;
+      }
+      const cameraReady = await requestUserCameraOnce();
+      if (!cameraReady) {
+        toast({ title: "Câmera não autorizada", description: "Permita o acesso à câmera para confirmar a facial.", variant: "destructive" });
         return;
       }
       setShowFace(true);
