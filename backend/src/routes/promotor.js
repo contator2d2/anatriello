@@ -228,6 +228,14 @@ router.post('/change-password', authenticatePromotor, async (req, res) => {
 // =============================================
 // PROMOTOR: HOME / STATUS DO DIA
 // =============================================
+function parseTimeToMinutes(value, fallback) {
+  const [h = '', m = ''] = String(value || '').split(':');
+  const hh = Number.parseInt(h, 10);
+  const mm = Number.parseInt(m, 10);
+  if (!Number.isFinite(hh) || !Number.isFinite(mm)) return fallback;
+  return (hh * 60) + mm;
+}
+
 router.get('/home', authenticatePromotor, async (req, res) => {
   try {
     // Use America/Sao_Paulo timezone
@@ -244,7 +252,7 @@ router.get('/home', authenticatePromotor, async (req, res) => {
 
     const [employee, punches, pendingDocs, notifications, assignment, settings] = await Promise.all([
       safeQuery(`SELECT id, full_name, email, cpf, photo_url, worker_profile, work_schedule, position, face_descriptor, face_photo_url, facial_required FROM employees WHERE id = $1`, [empId]),
-      safeQuery(`SELECT * FROM time_punches WHERE employee_id = $1 AND punched_at::date = $2 ORDER BY punched_at`, [empId, today]),
+      safeQuery(`SELECT * FROM time_punches WHERE employee_id = $1 AND (punched_at AT TIME ZONE 'America/Sao_Paulo')::date = $2::date ORDER BY punched_at`, [empId, today]),
       safeQuery(`SELECT COUNT(*) as count FROM rh_document_deliveries WHERE employee_id = $1 AND status IN ('enviado', 'entregue', 'visualizado') AND (requires_signature = true OR requires_confirmation = true)`, [empId]),
       safeQuery(`SELECT * FROM collaborator_notifications WHERE employee_id = $1 AND read = false ORDER BY created_at DESC LIMIT 10`, [empId]),
       safeQuery(`SELECT da.*, p.name as pdv_name, p.latitude, p.longitude, p.radius_meters FROM collaborator_daily_assignments da LEFT JOIN pdvs p ON p.id = da.pdv_id WHERE da.employee_id = $1 AND da.assignment_date = $2 LIMIT 1`, [empId, today]),
@@ -310,8 +318,8 @@ router.get('/home', authenticatePromotor, async (req, res) => {
     }
     const now = new Date();
     const currentMin = nowBR.getHours() * 60 + nowBR.getMinutes();
-    const startMin = scheduleStart.split(':').reduce((h, m) => parseInt(h) * 60 + parseInt(m), 0) || 480;
-    const endMin = scheduleEnd.split(':').reduce((h, m) => parseInt(h) * 60 + parseInt(m), 0) || 1020;
+    const startMin = parseTimeToMinutes(scheduleStart, 480);
+    const endMin = parseTimeToMinutes(scheduleEnd, 1020);
     const isWithinSchedule = currentMin >= (startMin - 30) && currentMin <= (endMin + 15);
 
     // Check overtime approval for today
@@ -414,8 +422,8 @@ router.post('/punch', authenticatePromotor, async (req, res) => {
       if (parsed && parsed.entry) { schedStartStr = parsed.entry; schedEndStr = parsed.exit || '17:00'; }
       else { const parts = String(wsRaw).split('-'); if (parts.length >= 2) { schedStartStr = parts[0].trim(); schedEndStr = parts[1].trim(); } }
     } catch { const parts = String(wsRaw).split('-'); if (parts.length >= 2) { schedStartStr = parts[0].trim(); schedEndStr = parts[1].trim(); } }
-    const scheduleStart = schedStartStr.split(':').reduce((h, m) => parseInt(h) * 60 + parseInt(m), 0) || 480;
-    const scheduleEnd = schedEndStr.split(':').reduce((h, m) => parseInt(h) * 60 + parseInt(m), 0) || 1020;
+    const scheduleStart = parseTimeToMinutes(schedStartStr, 480);
+    const scheduleEnd = parseTimeToMinutes(schedEndStr, 1020);
 
     // Allow 30 min before start and 15 min after end as tolerance
     const toleranceBefore = 30;
@@ -574,10 +582,24 @@ router.post('/punch', authenticatePromotor, async (req, res) => {
     // Garante coluna selfie_url (idempotente)
     try { await query(`ALTER TABLE time_punches ADD COLUMN IF NOT EXISTS selfie_url TEXT`); } catch {}
 
+    const punchedAt = is_offline && offline_local_time ? new Date(offline_local_time) : new Date();
+
+    if (is_offline && offline_local_time) {
+      const existing = await query(
+        `SELECT * FROM time_punches
+         WHERE employee_id = $1
+           AND punch_type = $2
+           AND offline_local_time = $3::timestamptz
+         LIMIT 1`,
+        [req.employeeId, punch_type, offline_local_time]
+      );
+      if (existing.rows[0]) return res.json(existing.rows[0]);
+    }
+
     const result = await query(
       `INSERT INTO time_punches (organization_id, employee_id, punch_type, punched_at, latitude, longitude, accuracy_meters, pdv_id, distance_from_pdv, geo_status, device_info, ip_address, is_offline, offline_local_time, sync_status, justification, selfie_url)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING *`,
-      [req.organizationId, req.employeeId, punch_type, is_offline ? offline_local_time : new Date(),
+      [req.organizationId, req.employeeId, punch_type, punchedAt,
         latitude, longitude, accuracy_meters, pdv_id || null, distance, geo_status,
         req.headers['user-agent'], req.ip, is_offline || false, offline_local_time || null,
         is_offline ? 'synced' : 'synced', justification || null, selfie_url || null]
@@ -756,8 +778,8 @@ router.get('/punches', authenticatePromotor, async (req, res) => {
     let sql = `SELECT tp.*, p.name as pdv_name FROM time_punches tp LEFT JOIN pdvs p ON p.id = tp.pdv_id WHERE tp.employee_id = $1`;
     const params = [req.employeeId];
     let idx = 2;
-    if (start_date) { sql += ` AND tp.punched_at::date >= $${idx++}`; params.push(start_date); }
-    if (end_date) { sql += ` AND tp.punched_at::date <= $${idx++}`; params.push(end_date); }
+    if (start_date) { sql += ` AND (tp.punched_at AT TIME ZONE 'America/Sao_Paulo')::date >= $${idx++}::date`; params.push(start_date); }
+    if (end_date) { sql += ` AND (tp.punched_at AT TIME ZONE 'America/Sao_Paulo')::date <= $${idx++}::date`; params.push(end_date); }
     sql += ` ORDER BY tp.punched_at DESC LIMIT 200`;
     res.json((await query(sql, params)).rows);
   } catch (err) {
@@ -1082,7 +1104,9 @@ router.post('/sync', authenticatePromotor, async (req, res) => {
         if (ev.action_type === 'time_punch') {
           const punch = await query(
             `INSERT INTO time_punches (organization_id, employee_id, punch_type, punched_at, latitude, longitude, accuracy_meters, pdv_id, is_offline, offline_local_time, sync_status, device_info, ip_address)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true,$9,'synced',$10,$11) RETURNING id`,
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true,$9,'synced',$10,$11)
+             ON CONFLICT DO NOTHING
+             RETURNING id`,
             [req.organizationId, req.employeeId, ev.payload.punch_type, ev.payload.offline_local_time || ev.local_timestamp,
               ev.payload.latitude, ev.payload.longitude, ev.payload.accuracy_meters, ev.payload.pdv_id,
               ev.local_timestamp, req.headers['user-agent'], req.ip]

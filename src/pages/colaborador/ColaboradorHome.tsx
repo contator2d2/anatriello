@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Bell, FileText, Calendar, Megaphone, DollarSign, Loader2, Camera, MapPin,
@@ -13,6 +13,9 @@ import { FaceVerifyDialog } from "@/components/facial-recognition/FaceVerifyDial
 import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
 import { useBranding } from "@/hooks/use-branding";
+import { SyncStatusIndicator } from "@/components/promotor/SyncStatusIndicator";
+import { db } from "@/lib/offline-db";
+import { useLiveQuery } from "dexie-react-hooks";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -22,6 +25,28 @@ const PUNCH_ORDER = ["entrada", "saida_intervalo", "retorno_intervalo", "saida"]
 const PUNCH_LABEL: Record<string, string> = {
   entrada: "Entrada", saida_intervalo: "Início Almoço", retorno_intervalo: "Fim Almoço", saida: "Saída",
 };
+
+function saoPauloDateKey(value: Date) {
+  const parts = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(value);
+  const get = (type: string) => parts.find((part) => part.type === type)?.value || "";
+  return `${get("year")}-${get("month")}-${get("day")}`;
+}
+
+function parsePunchDate(value: any) {
+  if (!value) return null;
+  const d = new Date(String(value).includes(" ") ? String(value).replace(" ", "T") : String(value));
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function formatPunchTime(value: any) {
+  const d = parsePunchDate(value);
+  return d ? d.toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" }) : "—";
+}
 
 function normalizeFaceDescriptor(input: any): number[] {
   let parsed = input;
@@ -62,6 +87,24 @@ export default function ColaboradorHome() {
   const [now, setNow] = useState(new Date());
   const [showFace, setShowFace] = useState(false);
   const [gps, setGps] = useState<{ lat: number; lng: number; acc: number } | null>(null);
+  const pendingPunches = useLiveQuery(async () => {
+    const calls = await db.pending_api_calls.where("status").anyOf("pending", "processing", "failed").toArray();
+    return calls
+      .filter((call) => call.url === "/api/promotor/punch")
+      .map((call) => ({
+        id: call.body?.local_id || `pending-${call.id}`,
+        local_id: call.body?.local_id,
+        punch_type: call.body?.punch_type,
+        punched_at: call.body?.offline_local_time || call.timestamp,
+        offline_local_time: call.body?.offline_local_time || call.timestamp,
+        latitude: call.body?.latitude ?? null,
+        longitude: call.body?.longitude ?? null,
+        accuracy_meters: call.body?.accuracy_meters ?? null,
+        is_offline: true,
+        sync_status: call.status === "failed" ? "failed" : "pending",
+        pending_local: true,
+      }));
+  }, [], [] as any[]);
 
   const { data: faceStatus } = useQuery({
     queryKey: ["colab-face-status"],
@@ -95,7 +138,22 @@ export default function ColaboradorHome() {
     faceDescriptor = normalizeFaceDescriptor(employeeFull.face_descriptor);
   }
   if (!faceDescriptor.length && faceStatus?.face_descriptor) faceDescriptor = normalizeFaceDescriptor(faceStatus.face_descriptor);
-  const punches = data?.today_punches || [];
+  const todayKey = saoPauloDateKey(now);
+  const punches = useMemo(() => {
+    const merged = [...(data?.today_punches || []), ...(pendingPunches || [])];
+    const unique = new Map<string, any>();
+    merged.forEach((p: any) => {
+      const ts = p.punched_at || p.offline_local_time || p.created_at;
+      const date = parsePunchDate(ts);
+      if (date && saoPauloDateKey(date) !== todayKey) return;
+      unique.set(String(p.id || p.local_id || ts), p);
+    });
+    return Array.from(unique.values()).sort((a: any, b: any) => {
+      const da = parsePunchDate(a.punched_at || a.offline_local_time || a.created_at)?.getTime() || 0;
+      const dbt = parsePunchDate(b.punched_at || b.offline_local_time || b.created_at)?.getTime() || 0;
+      return da - dbt;
+    });
+  }, [data?.today_punches, pendingPunches, todayKey]);
   const nextType = PUNCH_ORDER[punches.length] || "extraordinaria";
   const jornadaEncerrada = punches.length >= 4;
   const situacao = punches.length === 0 ? "Início de jornada"
@@ -135,15 +193,17 @@ export default function ColaboradorHome() {
   const compromissos: any[] = (data as any)?.today_events || [];
 
   async function doPunch(facialVerified = false, selfieDataUrl?: string) {
-    if (!gps) { toast({ title: "Aguardando GPS", variant: "destructive" }); return; }
     try {
-      await punch.mutateAsync({
+      const created: any = await punch.mutateAsync({
         punch_type: nextType,
-        latitude: gps.lat, longitude: gps.lng, accuracy_meters: gps.acc,
+        latitude: gps?.lat ?? null, longitude: gps?.lng ?? null, accuracy_meters: gps?.acc ?? null,
         facial_verified: facialVerified,
         selfie_url: selfieDataUrl,
       });
-      toast({ title: `${PUNCH_LABEL[nextType] || "Ponto"} registrada` });
+      toast({
+        title: `${PUNCH_LABEL[nextType] || "Ponto"} registrada`,
+        description: created?.pending_local ? "Sem conexão: ficou salvo no aparelho e será sincronizado." : undefined,
+      });
     } catch (e: any) { toast({ title: e.message || "Erro ao registrar", variant: "destructive" }); }
   }
 
@@ -203,6 +263,9 @@ export default function ColaboradorHome() {
               <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-[#3b82f6] ring-2 ring-[#0a1128]" />
             )}
           </button>
+        </div>
+        <div className="relative mt-3 flex justify-end">
+          <SyncStatusIndicator className="border-white/20 bg-white/10 text-white" />
         </div>
 
         <div className="relative mt-6 flex items-start justify-between">
@@ -304,6 +367,47 @@ export default function ColaboradorHome() {
             </div>
           </div>
         )}
+
+        {/* Registros de ponto do dia */}
+        <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Clock className="h-4 w-4 text-slate-500" />
+              <p className="text-[15px] font-bold text-slate-800">Registros de hoje</p>
+            </div>
+            <span className="text-[11px] font-semibold text-slate-400">{punches.length}/4</span>
+          </div>
+          {punches.length === 0 ? (
+            <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-500">Nenhum ponto registrado hoje.</div>
+          ) : (
+            <div className="space-y-2">
+              {punches.map((p: any, idx: number) => {
+                const pending = p.pending_local || p.sync_status === "pending";
+                const failed = p.sync_status === "failed";
+                return (
+                  <div key={p.id || p.local_id || idx} className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
+                    <div className={cn(
+                      "h-8 w-8 rounded-full flex items-center justify-center",
+                      failed ? "bg-red-100 text-red-600" : pending ? "bg-amber-100 text-amber-600" : "bg-emerald-100 text-emerald-600"
+                    )}>
+                      {failed ? <ShieldOff className="h-4 w-4" /> : pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-slate-800 truncate">{PUNCH_LABEL[p.punch_type] || p.punch_type || "Ponto"}</p>
+                      <p className="text-[11px] text-slate-500">
+                        {pending ? "Aguardando sincronização" : failed ? "Falha — toque em sincronizar quando estiver online" : "Sincronizado no sistema"}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-bold tabular-nums text-slate-800">{formatPunchTime(p.punched_at || p.offline_local_time || p.created_at)}</p>
+                      {p.is_offline && <p className="text-[10px] font-semibold text-amber-600">Offline</p>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
 
         {/* Coleta biometria opcional */}
         {faceStatus?.can_enroll && (

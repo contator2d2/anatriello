@@ -58,8 +58,8 @@ export function useOfflineSync() {
   const sync = useCallback(async () => {
     if (!isOnline || isSyncing) return;
 
-    const pendingUploads = await db.pending_uploads.where('status').equals('pending').toArray();
-    const pendingCalls = await db.pending_api_calls.where('status').equals('pending').toArray();
+    const pendingUploads = await db.pending_uploads.where('status').anyOf('pending', 'failed').toArray();
+    const pendingCalls = await db.pending_api_calls.where('status').anyOf('pending', 'failed').toArray();
 
     if (pendingUploads.length === 0 && pendingCalls.length === 0) return;
 
@@ -148,7 +148,7 @@ export function useOfflineSync() {
 
 
     // Refresh pending calls list since we might have updated them
-    const updatedPendingCalls = await db.pending_api_calls.where('status').equals('pending').toArray();
+    const updatedPendingCalls = await db.pending_api_calls.where('status').anyOf('pending', 'failed').toArray();
     
     // Load all current mappings for resolution
     const allMappings = await db.upload_mappings.toArray();
@@ -206,8 +206,11 @@ export function useOfflineSync() {
         await db.pending_api_calls.delete(call.id!);
         logger.info('[OfflineSync] Chamada API concluída', { url: call.url });
       } catch (err: any) {
-        logger.error('[OfflineSync] Erro na chamada API', { id: call.id, error: err.message, url: call.url });
-        await db.pending_api_calls.update(call.id!, { status: 'failed', error: err.message });
+        const status = Number(err?.status || err?.response?.status || 0);
+        const message = err?.message || 'Erro de sincronização';
+        const retryable = !status || status === 408 || status === 429 || status >= 500 || /failed to fetch|networkerror|load failed|internet|offline/i.test(message);
+        logger.error('[OfflineSync] Erro na chamada API', { id: call.id, error: message, url: call.url, retryable });
+        await db.pending_api_calls.update(call.id!, { status: retryable ? 'pending' : 'failed', error: message });
       }
     }
 

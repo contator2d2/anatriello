@@ -73,7 +73,7 @@ router.get('/next-punch/:employeeId', async (req, res) => {
       [orgId, req.params.employeeId]
     );
 
-    const seq = ['entrada', 'saida_almoco', 'volta_almoco', 'saida'];
+    const seq = ['entrada', 'saida_intervalo', 'retorno_intervalo', 'saida'];
     const done = r.rows.map((x) => x.punch_type);
     const next = seq.find((t) => !done.includes(t)) || 'entrada';
     res.json({ next, done });
@@ -102,7 +102,7 @@ router.post('/punch', async (req, res) => {
     // Auto-suggest punch type if not provided
     let ptype = punch_type;
     if (!ptype) {
-      const seq = ['entrada', 'saida_almoco', 'volta_almoco', 'saida'];
+      const seq = ['entrada', 'saida_intervalo', 'retorno_intervalo', 'saida'];
       const done = await query(
         `SELECT punch_type FROM time_punches
          WHERE organization_id = $1 AND employee_id = $2
