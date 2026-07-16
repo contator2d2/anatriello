@@ -28,7 +28,32 @@ export function useCartaoPontoAudit(employee_id?: string, date?: string) {
   });
 }
 
-// ---------- BANCO DE HORAS ----------
+// ---------- REGISTROS DE PONTO (grade diária) ----------
+export function usePunchesDailyGrid(params: { start?: string; end?: string; company_id?: string; employee_id?: string }) {
+  const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v) as [string, string][]).toString();
+  return useQuery({
+    queryKey: ['timeclock', 'daily-grid', qs],
+    queryFn: () => api<{
+      days: string[];
+      employees: Array<{
+        employee_id: string; full_name: string; photo_url?: string;
+        company_id?: string; company_name?: string;
+        days: Record<string, { times: string[]; minutes: number; punch_count: number }>;
+        total_minutes: number;
+      }>;
+    }>(`/api/timeclock/punches/daily-grid?${qs}`),
+    enabled: !!(params.start && params.end),
+  });
+}
+
+export function useTimeBankSummaryByCompany(company_id?: string) {
+  const qs = company_id ? `?company_id=${company_id}` : '';
+  return useQuery({
+    queryKey: ['timeclock', 'tb-summary-comp', company_id || 'all'],
+    queryFn: () => api<any[]>(`/api/timeclock/time-bank/summary${qs}`),
+  });
+}
+
 export function useTimeBankSummary(employee_id?: string) {
   const qs = employee_id ? `?employee_id=${employee_id}` : '';
   return useQuery({

@@ -235,12 +235,12 @@ async function ensureSchema() {
     CREATE INDEX IF NOT EXISTS idx_mirror_org_month ON time_mirror_acceptances(organization_id, reference_month);
     CREATE INDEX IF NOT EXISTS idx_mirror_emp ON time_mirror_acceptances(employee_id, reference_month);
     CREATE UNIQUE INDEX IF NOT EXISTS uq_mirror_emp_month ON time_mirror_acceptances(employee_id, reference_month);
-  `).catch(err => logError('timeclock.ensureSchema', err));
-
-  schemaReady = true;
+  `).then(() => { schemaReady = true; })
+   .catch(err => { logError('timeclock.ensureSchema', err); schemaReady = false; });
 }
 
-router.use(async (_req, _res, next) => { await ensureSchema(); next(); });
+router.use(async (_req, _res, next) => { try { await ensureSchema(); } catch {} next(); });
+
 
 // ---- helpers: closing lock & notifications ----
 export async function isPeriodClosed(orgId, employeeId, dateStr) {
@@ -666,45 +666,158 @@ router.get('/cartao-ponto/audit', async (req, res) => {
   } catch (err) { res.status(500).json({ error: 'Erro' }); }
 });
 
+// GET /api/timeclock/punches/daily-grid?start=&end=&company_id=&employee_id=
+// Retorna lista de colaboradores com resumo diário de batidas + total do dia
+router.get('/punches/daily-grid', async (req, res) => {
+  try {
+    const orgId = await resolveOrgId(req);
+    if (!orgId) return res.json({ employees: [], days: [] });
+    const { start, end, company_id, employee_id } = req.query;
+    if (!start || !end) return res.status(400).json({ error: 'start e end são obrigatórios' });
+
+    const filters = ['e.organization_id = $1', "e.status = 'ativo'"];
+    const params = [orgId, start, end];
+    if (company_id) { params.push(company_id); filters.push(`e.company_id = $${params.length}`); }
+    if (employee_id) { params.push(employee_id); filters.push(`e.id = $${params.length}`); }
+
+    const sql = `
+      WITH days AS (
+        SELECT generate_series($2::date, $3::date, interval '1 day')::date AS d
+      ),
+      emp_days AS (
+        SELECT e.id AS employee_id, e.full_name, e.photo_url, e.company_id,
+               c.trade_name AS company_name,
+               d.d AS record_date
+        FROM employees e
+        LEFT JOIN companies c ON c.id = e.company_id
+        CROSS JOIN days d
+        WHERE ${filters.join(' AND ')}
+      ),
+      punches AS (
+        SELECT tp.employee_id,
+               (tp.punched_at AT TIME ZONE 'America/Sao_Paulo')::date AS record_date,
+               tp.punched_at
+        FROM time_punches tp
+        WHERE tp.organization_id = $1
+          AND (tp.punched_at AT TIME ZONE 'America/Sao_Paulo')::date BETWEEN $2::date AND $3::date
+      ),
+      day_punches AS (
+        SELECT employee_id, record_date,
+               array_agg(to_char(punched_at AT TIME ZONE 'America/Sao_Paulo','HH24:MI') ORDER BY punched_at) AS times_arr,
+               array_agg(punched_at ORDER BY punched_at) AS ts_arr
+        FROM punches
+        GROUP BY employee_id, record_date
+      )
+      SELECT ed.employee_id, ed.full_name, ed.photo_url, ed.company_id, ed.company_name,
+             ed.record_date,
+             COALESCE(dp.times_arr, ARRAY[]::text[]) AS times,
+             dp.ts_arr AS timestamps
+      FROM emp_days ed
+      LEFT JOIN day_punches dp ON dp.employee_id = ed.employee_id AND dp.record_date = ed.record_date
+      ORDER BY ed.full_name, ed.record_date
+    `;
+    const r = await query(sql, params);
+
+    // Agrupar por colaborador; calcular minutos por par (entrada/saída)
+    const byEmp = new Map();
+    for (const row of r.rows) {
+      if (!byEmp.has(row.employee_id)) {
+        byEmp.set(row.employee_id, {
+          employee_id: row.employee_id,
+          full_name: row.full_name,
+          photo_url: row.photo_url,
+          company_id: row.company_id,
+          company_name: row.company_name,
+          days: {},
+          total_minutes: 0,
+        });
+      }
+      const emp = byEmp.get(row.employee_id);
+      const times = row.times || [];
+      const ts = (row.timestamps || []).map(t => new Date(t));
+      let minutes = 0;
+      for (let i = 0; i + 1 < ts.length; i += 2) {
+        minutes += Math.max(0, Math.round((ts[i + 1] - ts[i]) / 60000));
+      }
+      const dateKey = new Date(row.record_date).toISOString().slice(0, 10);
+      emp.days[dateKey] = { times, minutes, punch_count: times.length };
+      emp.total_minutes += minutes;
+    }
+
+    // Lista de datas do intervalo
+    const days = [];
+    const s = new Date(start); const e = new Date(end);
+    for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
+      days.push(d.toISOString().slice(0, 10));
+    }
+
+    res.json({ days, employees: Array.from(byEmp.values()) });
+  } catch (err) {
+    logError('timeclock.punches.daily-grid', err);
+    res.status(500).json({ error: 'Erro ao carregar registros', detail: String(err?.message || err) });
+  }
+});
+
+
 // ============================================
 // BANCO DE HORAS
 // ============================================
 router.get('/time-bank/summary', async (req, res) => {
   try {
     const orgId = await resolveOrgId(req);
-    const { employee_id } = req.query;
+    if (!orgId) return res.json([]);
+    const { employee_id, company_id } = req.query;
     const notifyDays = 30;
-    const baseSelect = `
-      COALESCE(SUM(tb.minutes),0)::int AS balance_min,
-      COALESCE(SUM(CASE WHEN tb.expired = FALSE THEN tb.minutes ELSE 0 END),0)::int AS available_min,
-      COALESCE(SUM(CASE WHEN tb.minutes > 0 AND tb.expired = FALSE
-                        AND tb.expires_at IS NOT NULL
-                        AND tb.expires_at <= (CURRENT_DATE + ($X || ' days')::interval)
-                   THEN tb.minutes ELSE 0 END),0)::int AS expiring_soon_min,
-      COALESCE(SUM(CASE WHEN tb.expired = TRUE THEN tb.minutes ELSE 0 END),0)::int AS expired_min`;
+    // Verifica se as tabelas existem (evita 500 quando o schema ainda não foi criado)
+    const tbCheck = await query(
+      `SELECT to_regclass('public.time_bank_entries') AS tb, to_regclass('public.time_bank_compensations') AS tbc`
+    );
+    const hasTb = !!tbCheck.rows[0]?.tb;
+    const hasTbc = !!tbCheck.rows[0]?.tbc;
+    const tbJoin = hasTb ? `LEFT JOIN time_bank_entries tb ON tb.employee_id = e.id` : '';
+    const balExpr = hasTb ? `COALESCE(SUM(tb.minutes),0)::int` : `0::int`;
+    const availExpr = hasTb ? `COALESCE(SUM(CASE WHEN tb.expired = FALSE THEN tb.minutes ELSE 0 END),0)::int` : `0::int`;
+    const expiringExpr = hasTb ? `COALESCE(SUM(CASE WHEN tb.minutes > 0 AND tb.expired = FALSE AND tb.expires_at IS NOT NULL AND tb.expires_at <= (CURRENT_DATE + ($X || ' days')::interval) THEN tb.minutes ELSE 0 END),0)::int` : `0::int`;
+    const expiredExpr = hasTb ? `COALESCE(SUM(CASE WHEN tb.expired = TRUE THEN tb.minutes ELSE 0 END),0)::int` : `0::int`;
+    const pendCompExpr = hasTbc
+      ? `COALESCE((SELECT SUM(minutes) FROM time_bank_compensations WHERE employee_id = e.id AND status = 'pending'),0)::int`
+      : `0::int`;
+
     let sql, params;
     if (employee_id) {
-      sql = `SELECT e.id, e.full_name, ${baseSelect.replace('$X', '$2')},
-                    COALESCE((SELECT SUM(minutes) FROM time_bank_compensations
-                              WHERE employee_id = e.id AND status = 'pending'),0)::int AS pending_comp_min
+      sql = `SELECT e.id, e.full_name,
+                    ${balExpr} AS balance_min,
+                    ${availExpr} AS available_min,
+                    ${expiringExpr.replace('$X', '$2')} AS expiring_soon_min,
+                    ${expiredExpr} AS expired_min,
+                    ${pendCompExpr} AS pending_comp_min
              FROM employees e
-             LEFT JOIN time_bank_entries tb ON tb.employee_id = e.id
-             WHERE e.id = $1 GROUP BY e.id, e.full_name`;
+             ${tbJoin}
+             WHERE e.id = $1
+             GROUP BY e.id, e.full_name`;
       params = [employee_id, notifyDays];
     } else {
-      sql = `SELECT e.id, e.full_name, e.photo_url, ${baseSelect.replace('$X', '$2')},
-                    COALESCE((SELECT SUM(minutes) FROM time_bank_compensations
-                              WHERE employee_id = e.id AND status = 'pending'),0)::int AS pending_comp_min
+      const compFilter = company_id ? ` AND e.company_id = $3` : '';
+      sql = `SELECT e.id, e.full_name, e.photo_url,
+                    ${balExpr} AS balance_min,
+                    ${availExpr} AS available_min,
+                    ${expiringExpr.replace('$X', '$2')} AS expiring_soon_min,
+                    ${expiredExpr} AS expired_min,
+                    ${pendCompExpr} AS pending_comp_min
              FROM employees e
-             LEFT JOIN time_bank_entries tb ON tb.employee_id = e.id
-             WHERE e.organization_id = $1 AND e.status = 'ativo'
+             ${tbJoin}
+             WHERE e.organization_id = $1 AND e.status = 'ativo'${compFilter}
              GROUP BY e.id, e.full_name, e.photo_url
              ORDER BY e.full_name`;
-      params = [orgId, notifyDays];
+      params = company_id ? [orgId, notifyDays, company_id] : [orgId, notifyDays];
     }
     res.json((await query(sql, params)).rows);
-  } catch (err) { logError('timeclock.tb.summary', err); res.status(500).json({ error: 'Erro' }); }
+  } catch (err) {
+    logError('timeclock.tb.summary', err);
+    res.status(500).json({ error: 'Erro ao carregar banco de horas', detail: String(err?.message || err) });
+  }
 });
+
 
 router.get('/time-bank/entries', async (req, res) => {
   try {
