@@ -227,12 +227,25 @@ async function promotorDownloadPDF(endpoint: string, filename: string) {
   const token = localStorage.getItem('promotor_token');
   const url = `${(import.meta.env.VITE_API_URL || '').replace(/\/$/, '')}${endpoint}`;
   const r = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
-  if (!r.ok) throw new Error('Falha ao gerar PDF');
+  if (!r.ok) {
+    let msg = 'Falha ao gerar PDF';
+    try { const j = await r.json(); msg = j?.error || msg; } catch {}
+    throw new Error(msg);
+  }
   const blob = await r.blob();
   const objUrl = URL.createObjectURL(blob);
+  // iOS Safari does not honor <a download>; open in new tab as fallback
+  const isIOS = /iPad|iPhone|iPod/i.test(navigator.userAgent) && !(window as any).MSStream;
+  if (isIOS) {
+    const win = window.open(objUrl, '_blank');
+    if (!win) window.location.href = objUrl;
+    setTimeout(() => URL.revokeObjectURL(objUrl), 30000);
+    return;
+  }
   const a = document.createElement('a');
-  a.href = objUrl; a.download = filename; document.body.appendChild(a); a.click();
-  setTimeout(() => { URL.revokeObjectURL(objUrl); a.remove(); }, 500);
+  a.href = objUrl; a.download = filename; a.rel = 'noopener';
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(objUrl); a.remove(); }, 1000);
 }
 
 export function useDownloadPunchReceipt() {
