@@ -25,7 +25,7 @@ function initials(name?: string) {
 }
 
 export function RegistrosPontoTab() {
-  const { data: companies = [] } = useCompanies();
+  const { companies = [] } = useCompanies();
   const [companyId, setCompanyId] = useState<string>('all');
   const [start, setStart] = useState(() => format(startOfMonth(new Date()), 'yyyy-MM-dd'));
   const [end, setEnd] = useState(() => format(endOfMonth(new Date()), 'yyyy-MM-dd'));
