@@ -80,7 +80,10 @@ export default function ColaboradorHome() {
     : jornadaEncerrada ? "Jornada encerrada"
     : (punches[punches.length - 1]?.punch_type === "saida_intervalo" ? "Em almoço" : "Em jornada");
   const unreadCount = (notifications || []).filter((n: any) => !n.read).length;
-  const facialRequired = employee?.facial_required === true || can("punch.facial_required");
+  const facialRequired = (data as any)?.facial_config?.required === true
+    || employee?.facial_required_resolved === true
+    || employee?.facial_required === true
+    || can("punch.facial_required");
   const canPunch = can("punch.register");
 
   // Compute schedule / status pill
