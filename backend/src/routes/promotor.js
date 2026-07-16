@@ -410,9 +410,8 @@ router.post('/punch', authenticatePromotor, async (req, res) => {
     // ===== WORK SCHEDULE VALIDATION =====
     const empRes = await query(`SELECT work_schedule, face_descriptor, facial_required FROM employees WHERE id = $1`, [req.employeeId]);
     const wsRaw = empRes.rows[0]?.work_schedule || '08:00-17:00';
-    const now = is_offline && offline_local_time
-      ? new Date(offline_local_time)
-      : new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+    const punchInstant = is_offline && offline_local_time ? new Date(offline_local_time) : new Date();
+    const now = new Date(punchInstant.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
     // Parse schedule — supports JSON {"entry":"HH:MM","exit":"HH:MM"} or plain "HH:MM-HH:MM"
@@ -582,7 +581,7 @@ router.post('/punch', authenticatePromotor, async (req, res) => {
     // Garante coluna selfie_url (idempotente)
     try { await query(`ALTER TABLE time_punches ADD COLUMN IF NOT EXISTS selfie_url TEXT`); } catch {}
 
-    const punchedAt = is_offline && offline_local_time ? new Date(offline_local_time) : new Date();
+    const punchedAt = punchInstant;
 
     if (is_offline && offline_local_time) {
       const existing = await query(
@@ -608,7 +607,7 @@ router.post('/punch', authenticatePromotor, async (req, res) => {
     if (geo_status === 'fora_area' || geo_status === 'excecao') {
       await query(
         `INSERT INTO time_alerts (organization_id, employee_id, alert_type, alert_date, description) VALUES ($1,$2,'fora_pdv',$3,$4)`,
-        [req.organizationId, req.employeeId, new Date().toISOString().slice(0,10), `Ponto registrado ${Math.round(distance)}m do PDV (${geo_status})`]
+        [req.organizationId, req.employeeId, `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`, `Ponto registrado ${Math.round(distance)}m do PDV (${geo_status})`]
       );
     }
 
@@ -1102,10 +1101,23 @@ router.post('/sync', authenticatePromotor, async (req, res) => {
     for (const ev of (events || [])) {
       try {
         if (ev.action_type === 'time_punch') {
+          if (ev.payload.offline_local_time || ev.local_timestamp) {
+            const existing = await query(
+              `SELECT id FROM time_punches
+               WHERE employee_id = $1
+                 AND punch_type = $2
+                 AND offline_local_time = $3::timestamptz
+               LIMIT 1`,
+              [req.employeeId, ev.payload.punch_type, ev.payload.offline_local_time || ev.local_timestamp]
+            );
+            if (existing.rows[0]) {
+              results.push({ local_id: ev.local_id, server_id: existing.rows[0].id, status: 'synced' });
+              continue;
+            }
+          }
           const punch = await query(
             `INSERT INTO time_punches (organization_id, employee_id, punch_type, punched_at, latitude, longitude, accuracy_meters, pdv_id, is_offline, offline_local_time, sync_status, device_info, ip_address)
              VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true,$9,'synced',$10,$11)
-             ON CONFLICT DO NOTHING
              RETURNING id`,
             [req.organizationId, req.employeeId, ev.payload.punch_type, ev.payload.offline_local_time || ev.local_timestamp,
               ev.payload.latitude, ev.payload.longitude, ev.payload.accuracy_meters, ev.payload.pdv_id,

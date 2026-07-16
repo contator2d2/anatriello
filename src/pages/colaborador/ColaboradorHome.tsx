@@ -39,6 +39,10 @@ function saoPauloDateKey(value: Date) {
 
 function parsePunchDate(value: any) {
   if (!value) return null;
+  if (typeof value === "number") {
+    const numericDate = new Date(value);
+    return Number.isNaN(numericDate.getTime()) ? null : numericDate;
+  }
   const d = new Date(String(value).includes(" ") ? String(value).replace(" ", "T") : String(value));
   return Number.isNaN(d.getTime()) ? null : d;
 }
