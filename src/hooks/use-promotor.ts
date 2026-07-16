@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import { db } from '@/lib/offline-db';
 
 // ===== PROMOTOR APP HOOKS (used by collaborator app) =====
 
@@ -34,9 +35,69 @@ export function usePromotorHome() {
 
 export function usePromotorPunch() {
   const qc = useQueryClient();
+  const queuePunchOffline = async (data: any) => {
+    const localId = data.local_id || `punch_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+    const offlineTime = data.offline_local_time || new Date().toISOString();
+    const body = {
+      ...data,
+      local_id: localId,
+      is_offline: true,
+      offline_local_time: offlineTime,
+    };
+
+    await db.pending_api_calls.add({
+      url: '/api/promotor/punch',
+      method: 'POST',
+      body,
+      headers: {},
+      status: 'pending',
+      timestamp: Date.now(),
+    });
+
+    return {
+      id: localId,
+      local_id: localId,
+      punch_type: body.punch_type,
+      punched_at: offlineTime,
+      offline_local_time: offlineTime,
+      latitude: body.latitude ?? null,
+      longitude: body.longitude ?? null,
+      accuracy_meters: body.accuracy_meters ?? null,
+      pdv_id: body.pdv_id ?? null,
+      geo_status: body.latitude && body.longitude ? 'pendente' : 'sem_gps',
+      is_offline: true,
+      sync_status: 'pending',
+      pending_local: true,
+    };
+  };
+
   return useMutation({
-    mutationFn: (data: any) => promotorApi<any>('/api/promotor/punch', { method: 'POST', body: data }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['promotor-home'] }); qc.invalidateQueries({ queryKey: ['promotor-punches'] }); },
+    mutationFn: async (data: any) => {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        return queuePunchOffline(data);
+      }
+
+      try {
+        return await promotorApi<any>('/api/promotor/punch', { method: 'POST', body: data });
+      } catch (err: any) {
+        const networkLike = err?.name === 'TypeError'
+          || /failed to fetch|networkerror|load failed|internet|offline/i.test(String(err?.message || ''));
+        if (networkLike) return queuePunchOffline(data);
+        throw err;
+      }
+    },
+    onSuccess: (created: any) => {
+      if (created?.id || created?.local_id) {
+        qc.setQueryData(['promotor-home'], (old: any) => {
+          if (!old) return old;
+          const current = Array.isArray(old.today_punches) ? old.today_punches : [];
+          const exists = current.some((p: any) => p.id === created.id || p.local_id === created.local_id);
+          return exists ? old : { ...old, today_punches: [...current, created] };
+        });
+      }
+      qc.invalidateQueries({ queryKey: ['promotor-home'] });
+      qc.invalidateQueries({ queryKey: ['promotor-punches'] });
+    },
   });
 }
 
