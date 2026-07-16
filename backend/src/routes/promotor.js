@@ -332,6 +332,25 @@ router.get('/home', authenticatePromotor, async (req, res) => {
     const pendingRoutes = todayRoutes.filter(r => r.status === 'scheduled' || r.status === 'confirmed');
     const hasRoutesToday = todayRoutes.length > 0;
 
+    // ===== FACIAL REQUIREMENT (resolvido: override do colaborador + config da organização) =====
+    let facialRequired = false;
+    let facialAllowFallback = true;
+    try {
+      const facialCfg = await safeQuery(
+        `SELECT enabled, use_for_attendance, allow_manual_fallback
+           FROM facial_recognition_config WHERE organization_id = $1 LIMIT 1`,
+        [req.organizationId]
+      );
+      const cfg = facialCfg.rows[0];
+      const empOverride = employee.rows[0]?.facial_required;
+      const orgRequires = !!(cfg?.enabled && cfg?.use_for_attendance);
+      facialRequired = empOverride === false ? false : (empOverride === true ? true : orgRequires);
+      facialAllowFallback = cfg?.allow_manual_fallback !== false;
+    } catch { /* tabela pode não existir */ }
+
+    // Enrich employee payload with resolved facial flag
+    const employeePayload = employee.rows[0] ? { ...employee.rows[0], facial_required_resolved: facialRequired } : null;
+
     res.json({
       employee: employee.rows[0],
       today_punches: punches.rows,
