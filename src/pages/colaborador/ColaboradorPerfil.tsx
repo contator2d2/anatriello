@@ -3,15 +3,16 @@ import { ColaboradorLayout } from "./ColaboradorLayout";
 import { useColabMeFull } from "@/hooks/use-promotor";
 import { User, Phone, Users, CreditCard, MapPin, Settings, Shield, ChevronRight, Camera, LogOut, KeyRound } from "lucide-react";
 
-const ITEMS: { icon: any; label: string; to?: string }[] = [
-  { icon: User, label: "Dados pessoais" },
-  { icon: Phone, label: "Contato" },
-  { icon: Users, label: "Dependentes" },
-  { icon: CreditCard, label: "Dados bancários" },
-  { icon: MapPin, label: "Endereço" },
+const ITEMS: { icon: any; label: string; to: string }[] = [
+  { icon: User, label: "Dados pessoais", to: "/colaborador/dados?section=pessoais" },
+  { icon: Phone, label: "Contato", to: "/colaborador/dados?section=contato" },
+  { icon: Users, label: "Dependentes", to: "/colaborador/dados?section=dependentes" },
+  { icon: CreditCard, label: "Dados bancários", to: "/colaborador/dados?section=bancario" },
+  { icon: MapPin, label: "Endereço", to: "/colaborador/dados?section=endereco" },
+  { icon: Camera, label: "Reconhecimento facial", to: "/colaborador/biometria" },
   { icon: KeyRound, label: "Trocar senha", to: "/promotor/trocar-senha" },
-  { icon: Settings, label: "Configurações" },
-  { icon: Shield, label: "Privacidade e segurança" },
+  { icon: Settings, label: "Configurações", to: "/colaborador/configuracoes" },
+  { icon: Shield, label: "Privacidade e segurança", to: "/colaborador/dados?section=privacidade" },
 ];
 
 export default function ColaboradorPerfil() {
@@ -48,8 +49,8 @@ export default function ColaboradorPerfil() {
           {ITEMS.map((it, i) => (
             <button
               key={it.label}
-              onClick={() => it.to && nav(it.to)}
-              className={`w-full flex items-center gap-3 px-4 py-3.5 text-left ${i > 0 ? "border-t border-slate-100" : ""}`}
+              onClick={() => nav(it.to)}
+              className={`w-full flex items-center gap-3 px-4 py-3.5 text-left active:bg-slate-50 ${i > 0 ? "border-t border-slate-100" : ""}`}
             >
               <it.icon className="h-5 w-5 text-slate-500" />
               <span className="flex-1 text-sm">{it.label}</span>
