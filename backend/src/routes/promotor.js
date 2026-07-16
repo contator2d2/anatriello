@@ -1680,6 +1680,7 @@ router.put('/rh/inbound-documents/:id', async (req, res) => {
 // =============================================
 router.get('/rh/punch-monitor', async (req, res) => {
   try {
+    await ensureAttendanceSchema();
     const orgId = await resolveOrganizationId(req);
     // Data "hoje" no fuso America/Sao_Paulo (evita bug de virada de dia em servidor UTC)
     const todayRes = await query(`SELECT (NOW() AT TIME ZONE 'America/Sao_Paulo')::date AS d`);
