@@ -21,9 +21,16 @@ import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import anatrielloLogo from "@/assets/anatriello-logo.png.asset.json";
 
-const PUNCH_ORDER = ["entrada", "saida_intervalo", "retorno_intervalo", "saida"];
+// Até 6 batidas por dia: entrada, café (15 min), almoço, saída
+const PUNCH_ORDER = ["entrada", "saida_cafe", "retorno_cafe", "saida_intervalo", "retorno_intervalo", "saida"];
+const MAX_PUNCHES_PER_DAY = 6;
 const PUNCH_LABEL: Record<string, string> = {
-  entrada: "Entrada", saida_intervalo: "Início Almoço", retorno_intervalo: "Fim Almoço", saida: "Saída",
+  entrada: "Entrada",
+  saida_cafe: "Início Café",
+  retorno_cafe: "Fim Café",
+  saida_intervalo: "Início Almoço",
+  retorno_intervalo: "Fim Almoço",
+  saida: "Saída",
 };
 
 function saoPauloDateKey(value: Date) {
