@@ -2437,7 +2437,7 @@ router.get('/punch/:id/receipt.pdf', authenticatePromotor, async (req, res) => {
     const { generateReceiptPDF } = await import('../services/receipt-pdf.js');
     const bytes = await generateReceiptPDF(req.params.id);
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="comprovante-${req.params.id}.pdf"`);
+    res.setHeader('Content-Disposition', `attachment; filename="comprovante-${req.params.id}.pdf"`);
     res.send(Buffer.from(bytes));
   } catch (e) { logError('promotor.receipt.pdf', e); res.status(500).json({ error: 'Erro ao gerar comprovante' }); }
 });
