@@ -148,12 +148,31 @@ router.delete('/:id', async (req, res) => {
 // Consolida por colaborador: salário base, proventos avulsos, deduções avulsas, líquido a pagar
 async function buildPaymentSheet(orgId, month, companyId) {
   await ensureSchema();
-  const params = [orgId, month];
-  let empSql = `SELECT id, full_name, cpf, registration_number, position, base_salary, company_id, pix_key, bank_account, bank_agency, bank_name
-                FROM employees WHERE organization_id=$1 AND (status='ativo' OR status IS NULL)`;
-  if (companyId) { empSql += ` AND company_id=$3`; params.push(companyId); }
+  const params = [orgId];
+  // Colunas reais do schema: `salary` (não base_salary), sem pix_key.
+  // Filtro tolerante: se não houver termination_date, é ativo.
+  let empSql = `SELECT id, full_name, cpf, registration_number, position,
+                       COALESCE(salary, 0) AS salary, company_id,
+                       bank_account, bank_agency, bank_name, bank_account_type
+                FROM employees
+                WHERE organization_id=$1
+                  AND (status IS NULL OR status::text NOT IN ('inativo','desligado','demitido'))
+                  AND termination_date IS NULL`;
+  if (companyId) { empSql += ` AND company_id=$${params.length + 1}`; params.push(companyId); }
   empSql += ` ORDER BY full_name`;
-  const employees = (await query(empSql, params)).rows;
+  let employees = [];
+  try { employees = (await query(empSql, params)).rows; }
+  catch (e) {
+    // Fallback quando alguma coluna opcional não existe
+    const fb = await query(
+      `SELECT id, full_name, cpf, registration_number, position, company_id,
+              COALESCE(salary, 0) AS salary
+       FROM employees WHERE organization_id=$1 ${companyId ? 'AND company_id=$2' : ''}
+       ORDER BY full_name`,
+      companyId ? [orgId, companyId] : [orgId]
+    );
+    employees = fb.rows.map(r => ({ ...r, bank_account: '', bank_agency: '', bank_name: '', bank_account_type: '' }));
+  }
 
   const entriesRes = await query(
     `SELECT * FROM rh_payroll_entries WHERE organization_id=$1 AND reference_month=$2 AND status IN ('pendente','aplicada')`,
@@ -165,7 +184,6 @@ async function buildPaymentSheet(orgId, month, companyId) {
     byEmp.get(e.employee_id).push(e);
   }
 
-  // Puxa payslip já gerado, se existir, para usar líquido oficial
   const payRes = await query(
     `SELECT employee_id, gross_salary, total_earnings, total_deductions, net_salary
      FROM payslips WHERE organization_id=$1 AND reference_month=$2`,
@@ -178,13 +196,14 @@ async function buildPaymentSheet(orgId, month, companyId) {
     const proventos = ents.filter(x => x.kind === 'provento').reduce((s, x) => s + Number(x.amount || 0), 0);
     const deducoes = ents.filter(x => x.kind === 'deducao').reduce((s, x) => s + Number(x.amount || 0), 0);
     const pay = payMap.get(emp.id);
-    const base = Number(pay?.gross_salary ?? emp.base_salary ?? 0);
+    const base = Number(pay?.gross_salary ?? emp.salary ?? 0);
     const totalProv = Number(pay?.total_earnings ?? 0) + proventos;
     const totalDed = Number(pay?.total_deductions ?? 0) + deducoes;
     const bruto = base + totalProv;
     const liquido = pay?.net_salary != null
       ? Number(pay.net_salary) + proventos - deducoes
       : bruto - totalDed;
+    const isPix = String(emp.bank_account_type || '').toLowerCase() === 'pix';
     return {
       employee_id: emp.id,
       matricula: emp.registration_number || '',
@@ -198,7 +217,7 @@ async function buildPaymentSheet(orgId, month, companyId) {
       total_bruto: bruto,
       total_descontos: totalDed,
       liquido_a_pagar: Number(liquido.toFixed(2)),
-      pix: emp.pix_key || '',
+      pix: isPix ? (emp.bank_account || '') : '',
       banco: emp.bank_name || '',
       agencia: emp.bank_agency || '',
       conta: emp.bank_account || '',
