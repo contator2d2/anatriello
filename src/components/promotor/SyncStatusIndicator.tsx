@@ -11,6 +11,13 @@ export function SyncStatusIndicator({ className }: { className?: string }) {
   const pendingCalls = useLiveQuery(() => db.pending_api_calls.count()) || 0;
   const totalPending = pendingUploads + pendingCalls;
 
+  const retryFailedAndSync = async () => {
+    if (!isOnline) return;
+    await db.pending_uploads.where('status').equals('failed').modify({ status: 'pending' });
+    await db.pending_api_calls.where('status').equals('failed').modify({ status: 'pending' });
+    sync();
+  };
+
   if (totalPending > 0) {
     return (
       <Badge 
@@ -19,7 +26,7 @@ export function SyncStatusIndicator({ className }: { className?: string }) {
           "gap-1.5 py-1 px-3 border-yellow-500/50 bg-yellow-500/10 text-yellow-700 font-medium cursor-pointer animate-pulse h-7", 
           className
         )}
-        onClick={() => isOnline && sync()}
+        onClick={retryFailedAndSync}
       >
         <RefreshCw className={cn("h-3.5 w-3.5", (isSyncing || isOnline) && "animate-spin")} />
         {isOnline ? `Sincronizando ${totalPending}...` : `Aguardando conexão (${totalPending})`}

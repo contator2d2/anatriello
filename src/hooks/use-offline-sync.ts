@@ -58,8 +58,8 @@ export function useOfflineSync() {
   const sync = useCallback(async () => {
     if (!isOnline || isSyncing) return;
 
-    const pendingUploads = await db.pending_uploads.where('status').anyOf('pending', 'failed').toArray();
-    const pendingCalls = await db.pending_api_calls.where('status').anyOf('pending', 'failed').toArray();
+    const pendingUploads = await db.pending_uploads.where('status').equals('pending').toArray();
+    const pendingCalls = await db.pending_api_calls.where('status').equals('pending').toArray();
 
     if (pendingUploads.length === 0 && pendingCalls.length === 0) return;
 
@@ -135,8 +135,12 @@ export function useOfflineSync() {
 
         await db.pending_uploads.delete(upload.id!);
       } catch (err: any) {
-        logger.error('[OfflineSync] Erro no upload', { id: upload.id, error: err.message });
-        await db.pending_uploads.update(upload.id!, { status: 'failed', error: err.message });
+        const message = err?.message || 'Erro no upload';
+        const statusMatch = String(message).match(/status\s+(\d+)/i);
+        const status = statusMatch ? Number(statusMatch[1]) : 0;
+        const retryable = !status || status === 408 || status === 429 || status >= 500 || /failed to fetch|networkerror|load failed|internet|offline/i.test(message);
+        logger.error('[OfflineSync] Erro no upload', { id: upload.id, error: message, retryable });
+        await db.pending_uploads.update(upload.id!, { status: retryable ? 'pending' : 'failed', error: message });
       }
     };
 
@@ -148,7 +152,7 @@ export function useOfflineSync() {
 
 
     // Refresh pending calls list since we might have updated them
-    const updatedPendingCalls = await db.pending_api_calls.where('status').anyOf('pending', 'failed').toArray();
+    const updatedPendingCalls = await db.pending_api_calls.where('status').equals('pending').toArray();
     
     // Load all current mappings for resolution
     const allMappings = await db.upload_mappings.toArray();
