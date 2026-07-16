@@ -375,6 +375,7 @@ const App = () => (
             <Route path="/rh/holerite" element={<ProtectedRoute><RHHolerite /></ProtectedRoute>} />
             <Route path="/rh/folha-export" element={<ProtectedRoute><RHFolhaExport /></ProtectedRoute>} />
             <Route path="/rh/deducoes" element={<ProtectedRoute><RHDeducoes /></ProtectedRoute>} />
+            <Route path="/rh/folha-pagamento" element={<ProtectedRoute><RHFolhaPagamento /></ProtectedRoute>} />
             <Route path="/rh/banco-horas" element={<ProtectedRoute><RHBancoHoras /></ProtectedRoute>} />
             <Route path="/rh/escalas" element={<ProtectedRoute><RHEscalas /></ProtectedRoute>} />
             <Route path="/rh/ferias-coletivas" element={<ProtectedRoute><RHFeriasColetivas /></ProtectedRoute>} />
