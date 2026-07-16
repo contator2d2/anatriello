@@ -23,6 +23,21 @@ const PUNCH_LABEL: Record<string, string> = {
   entrada: "Entrada", saida_intervalo: "Início Almoço", retorno_intervalo: "Fim Almoço", saida: "Saída",
 };
 
+function normalizeFaceDescriptor(input: any): number[] {
+  let parsed = input;
+  if (typeof parsed === "string") {
+    try { parsed = JSON.parse(parsed); } catch { return []; }
+  }
+  const source = Array.isArray(parsed)
+    ? parsed
+    : Array.isArray(parsed?.descriptor)
+      ? parsed.descriptor
+      : Array.isArray(parsed?.face_descriptor)
+        ? parsed.face_descriptor
+        : [];
+  return source.map((n: any) => Number(n)).filter((n: number) => Number.isFinite(n));
+}
+
 export default function ColaboradorHome() {
   const nav = useNavigate();
   const { toast } = useToast();
@@ -45,7 +60,7 @@ export default function ColaboradorHome() {
       const url = `${(import.meta.env.VITE_API_URL || "").replace(/\/$/, "")}/api/promotor/face-enrollment`;
       const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
       if (!r.ok) return null;
-      return r.json() as Promise<{ can_enroll: boolean; enrolled: boolean; collection_requested: boolean }>;
+      return r.json() as Promise<{ can_enroll: boolean; enrolled: boolean; collection_requested: boolean; face_descriptor?: number[] | null }>;
     },
     refetchInterval: 60000,
   });
@@ -64,15 +79,12 @@ export default function ColaboradorHome() {
   const employeeFull = meFull?.employee || {};
   // Merge: home é fonte principal, mas complementa com meFull p/ campos ausentes (face_descriptor, facial_required, etc.)
   const employee: any = { ...employeeFull, ...employeeBase };
-  // Normaliza descriptor (pode vir como string JSON do Postgres JSONB)
-  if (employee && typeof employee.face_descriptor === "string") {
-    try { employee.face_descriptor = JSON.parse(employee.face_descriptor); } catch { /* noop */ }
-  }
+  // Normaliza descriptor (pode vir como array, objeto { descriptor } ou string JSON do Postgres JSONB)
+  let faceDescriptor = normalizeFaceDescriptor(employee.face_descriptor);
   if (!employee.face_descriptor && employeeFull.face_descriptor) {
-    employee.face_descriptor = typeof employeeFull.face_descriptor === "string"
-      ? (() => { try { return JSON.parse(employeeFull.face_descriptor); } catch { return null; } })()
-      : employeeFull.face_descriptor;
+    faceDescriptor = normalizeFaceDescriptor(employeeFull.face_descriptor);
   }
+  if (!faceDescriptor.length && faceStatus?.face_descriptor) faceDescriptor = normalizeFaceDescriptor(faceStatus.face_descriptor);
   const punches = data?.today_punches || [];
   const nextType = PUNCH_ORDER[punches.length] || "extraordinaria";
   const jornadaEncerrada = punches.length >= 4;
@@ -125,7 +137,7 @@ export default function ColaboradorHome() {
   function handlePunchClick() {
     if (jornadaEncerrada) { toast({ title: "Jornada concluída" }); return; }
     if (facialRequired) {
-      if (!employee?.face_descriptor || !Array.isArray(employee.face_descriptor) || employee.face_descriptor.length === 0) {
+      if (faceDescriptor.length < 64) {
         toast({
           title: "Biometria facial não cadastrada",
           description: "Cadastre sua biometria facial em Perfil › Configurações › Reconhecimento facial.",
@@ -399,11 +411,11 @@ export default function ColaboradorHome() {
         {isLoading && <Loader2 className="h-5 w-5 animate-spin mx-auto text-slate-400" />}
       </div>
 
-      {showFace && employee?.face_descriptor && (
+      {showFace && faceDescriptor.length >= 64 && (
         <FaceVerifyDialog
           open={showFace}
           onOpenChange={setShowFace}
-          storedDescriptor={employee.face_descriptor}
+          storedDescriptor={faceDescriptor}
           onResult={(r) => { setShowFace(false); if (r.match) doPunch(true, r.imageDataUrl); else toast({ title: "Falha na validação facial", variant: "destructive" }); }}
         />
       )}
