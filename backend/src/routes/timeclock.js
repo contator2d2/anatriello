@@ -666,6 +666,99 @@ router.get('/cartao-ponto/audit', async (req, res) => {
   } catch (err) { res.status(500).json({ error: 'Erro' }); }
 });
 
+// GET /api/timeclock/punches/daily-grid?start=&end=&company_id=&employee_id=
+// Retorna lista de colaboradores com resumo diário de batidas + total do dia
+router.get('/punches/daily-grid', async (req, res) => {
+  try {
+    const orgId = await resolveOrgId(req);
+    if (!orgId) return res.json({ employees: [], days: [] });
+    const { start, end, company_id, employee_id } = req.query;
+    if (!start || !end) return res.status(400).json({ error: 'start e end são obrigatórios' });
+
+    const filters = ['e.organization_id = $1', "e.status = 'ativo'"];
+    const params = [orgId, start, end];
+    if (company_id) { params.push(company_id); filters.push(`e.company_id = $${params.length}`); }
+    if (employee_id) { params.push(employee_id); filters.push(`e.id = $${params.length}`); }
+
+    const sql = `
+      WITH days AS (
+        SELECT generate_series($2::date, $3::date, interval '1 day')::date AS d
+      ),
+      emp_days AS (
+        SELECT e.id AS employee_id, e.full_name, e.photo_url, e.company_id,
+               c.trade_name AS company_name,
+               d.d AS record_date
+        FROM employees e
+        LEFT JOIN companies c ON c.id = e.company_id
+        CROSS JOIN days d
+        WHERE ${filters.join(' AND ')}
+      ),
+      punches AS (
+        SELECT tp.employee_id,
+               (tp.punched_at AT TIME ZONE 'America/Sao_Paulo')::date AS record_date,
+               tp.punched_at
+        FROM time_punches tp
+        WHERE tp.organization_id = $1
+          AND (tp.punched_at AT TIME ZONE 'America/Sao_Paulo')::date BETWEEN $2::date AND $3::date
+      ),
+      day_punches AS (
+        SELECT employee_id, record_date,
+               array_agg(to_char(punched_at AT TIME ZONE 'America/Sao_Paulo','HH24:MI') ORDER BY punched_at) AS times_arr,
+               array_agg(punched_at ORDER BY punched_at) AS ts_arr
+        FROM punches
+        GROUP BY employee_id, record_date
+      )
+      SELECT ed.employee_id, ed.full_name, ed.photo_url, ed.company_id, ed.company_name,
+             ed.record_date,
+             COALESCE(dp.times_arr, ARRAY[]::text[]) AS times,
+             dp.ts_arr AS timestamps
+      FROM emp_days ed
+      LEFT JOIN day_punches dp ON dp.employee_id = ed.employee_id AND dp.record_date = ed.record_date
+      ORDER BY ed.full_name, ed.record_date
+    `;
+    const r = await query(sql, params);
+
+    // Agrupar por colaborador; calcular minutos por par (entrada/saída)
+    const byEmp = new Map();
+    for (const row of r.rows) {
+      if (!byEmp.has(row.employee_id)) {
+        byEmp.set(row.employee_id, {
+          employee_id: row.employee_id,
+          full_name: row.full_name,
+          photo_url: row.photo_url,
+          company_id: row.company_id,
+          company_name: row.company_name,
+          days: {},
+          total_minutes: 0,
+        });
+      }
+      const emp = byEmp.get(row.employee_id);
+      const times = row.times || [];
+      const ts = (row.timestamps || []).map(t => new Date(t));
+      let minutes = 0;
+      for (let i = 0; i + 1 < ts.length; i += 2) {
+        minutes += Math.max(0, Math.round((ts[i + 1] - ts[i]) / 60000));
+      }
+      const dateKey = new Date(row.record_date).toISOString().slice(0, 10);
+      emp.days[dateKey] = { times, minutes, punch_count: times.length };
+      emp.total_minutes += minutes;
+    }
+
+    // Lista de datas do intervalo
+    const days = [];
+    const s = new Date(start); const e = new Date(end);
+    for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
+      days.push(d.toISOString().slice(0, 10));
+    }
+
+    res.json({ days, employees: Array.from(byEmp.values()) });
+  } catch (err) {
+    logError('timeclock.punches.daily-grid', err);
+    res.status(500).json({ error: 'Erro ao carregar registros', detail: String(err?.message || err) });
+  }
+});
+
+
 // ============================================
 // BANCO DE HORAS
 // ============================================
