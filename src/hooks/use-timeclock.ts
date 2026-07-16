@@ -1,12 +1,113 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 
+type CartaoPontoResponse = { employee: any; days: any[]; totals: any };
+
+const parseLocalDate = (value: string) => new Date(`${value}T12:00:00`);
+
+const formatLocalDate = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const listDates = (start: string, end: string) => {
+  const dates: string[] = [];
+  const current = parseLocalDate(start);
+  const last = parseLocalDate(end);
+  while (current <= last) {
+    dates.push(formatLocalDate(current));
+    current.setDate(current.getDate() + 1);
+  }
+  return dates;
+};
+
+const buildCartaoFromDailyGrid = (
+  params: { employee_id?: string; start?: string; end?: string },
+  grid: {
+    days?: string[];
+    employees?: Array<{
+      employee_id: string;
+      full_name: string;
+      company_id?: string;
+      company_name?: string;
+      days?: Record<string, { times?: string[]; minutes?: number; punch_count?: number }>;
+      total_minutes?: number;
+    }>;
+  }
+): CartaoPontoResponse => {
+  const employee = grid.employees?.find((item) => item.employee_id === params.employee_id) || grid.employees?.[0];
+  const dates = grid.days?.length ? grid.days : listDates(params.start || '', params.end || '');
+  const days = dates.map((date) => {
+    const dayData = employee?.days?.[date] || { times: [], minutes: 0, punch_count: 0 };
+    const times = (dayData.times || []).map((time) => String(time).slice(0, 5));
+    const dow = parseLocalDate(date).getDay();
+    return {
+      date,
+      dow,
+      entry1: times[0] || null,
+      exit1: times[1] || null,
+      entry2: times[2] || null,
+      exit2: times[3] || null,
+      entry3: times[4] || null,
+      exit3: times[5] || null,
+      total_worked_min: dayData.minutes || 0,
+      expected_min: 0,
+      credit_min: 0,
+      debit_min: 0,
+      balance_min: dayData.minutes || 0,
+      punch_count: dayData.punch_count || times.length,
+      status: times.length ? 'normal' : (dow === 0 || dow === 6 ? 'folga' : 'sem registro'),
+      is_holiday: false,
+      fallback: true,
+    };
+  });
+  const worked = days.reduce((sum, day) => sum + (day.total_worked_min || 0), 0);
+  return {
+    employee: {
+      id: employee?.employee_id || params.employee_id,
+      full_name: employee?.full_name || 'Colaborador',
+      company_id: employee?.company_id,
+      company_name: employee?.company_name,
+    },
+    days,
+    totals: {
+      worked_min: worked,
+      expected_min: 0,
+      credit_min: 0,
+      debit_min: 0,
+      balance_min: worked,
+      fallback: true,
+    },
+  };
+};
+
 // ---------- CARTÃO PONTO ----------
 export function useCartaoPonto(params: { employee_id?: string; start?: string; end?: string; org_id?: string }) {
   const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v) as [string, string][]).toString();
   return useQuery({
     queryKey: ['timeclock', 'cartao-ponto', qs],
-    queryFn: () => api<{ employee: any; days: any[]; totals: any }>(`/api/timeclock/cartao-ponto?${qs}`),
+    queryFn: async () => {
+      try {
+        return await api<CartaoPontoResponse>(`/api/timeclock/cartao-ponto?${qs}`, { silent: true });
+      } catch (error: any) {
+        if (error?.status !== 404) throw error;
+        const fallbackQs = new URLSearchParams(
+          Object.entries({ start: params.start, end: params.end, employee_id: params.employee_id }).filter(([, v]) => v) as [string, string][]
+        ).toString();
+        const grid = await api<{
+          days: string[];
+          employees: Array<{
+            employee_id: string; full_name: string; photo_url?: string;
+            company_id?: string; company_name?: string;
+            days: Record<string, { times: string[]; minutes: number; punch_count: number }>;
+            total_minutes: number;
+          }>;
+        }>(`/api/timeclock/punches/daily-grid?${fallbackQs}`);
+        return buildCartaoFromDailyGrid(params, grid);
+      }
+    },
     enabled: !!(params.employee_id && params.start && params.end),
   });
 }
