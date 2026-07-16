@@ -1,14 +1,9 @@
 import { useNavigate } from "react-router-dom";
 import { ColaboradorLayout } from "./ColaboradorLayout";
 import { useColabMeFull } from "@/hooks/use-promotor";
-import { User, Phone, Users, CreditCard, MapPin, Settings, Shield, ChevronRight, Camera, LogOut, KeyRound } from "lucide-react";
+import { User, Settings, Shield, ChevronRight, Camera, LogOut, KeyRound, Info } from "lucide-react";
 
 const ITEMS: { icon: any; label: string; to: string }[] = [
-  { icon: User, label: "Dados pessoais", to: "/colaborador/dados?section=pessoais" },
-  { icon: Phone, label: "Contato", to: "/colaborador/dados?section=contato" },
-  { icon: Users, label: "Dependentes", to: "/colaborador/dados?section=dependentes" },
-  { icon: CreditCard, label: "Dados bancários", to: "/colaborador/dados?section=bancario" },
-  { icon: MapPin, label: "Endereço", to: "/colaborador/dados?section=endereco" },
   { icon: Camera, label: "Reconhecimento facial", to: "/colaborador/biometria" },
   { icon: KeyRound, label: "Trocar senha", to: "/promotor/trocar-senha" },
   { icon: Settings, label: "Configurações", to: "/colaborador/configuracoes" },
