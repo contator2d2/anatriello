@@ -1,7 +1,10 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ColaboradorLayout } from "./ColaboradorLayout";
 import { useColabMeFull } from "@/hooks/use-promotor";
-import { User, Settings, Shield, ChevronRight, Camera, LogOut, KeyRound, Info } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
+import { User, Settings, Shield, ChevronRight, Camera, LogOut, KeyRound, Info, RefreshCw, Loader2 } from "lucide-react";
 
 const ITEMS: { icon: any; label: string; to: string }[] = [
   { icon: Camera, label: "Reconhecimento facial", to: "/colaborador/biometria" },
@@ -12,13 +15,46 @@ const ITEMS: { icon: any; label: string; to: string }[] = [
 
 export default function ColaboradorPerfil() {
   const nav = useNavigate();
+  const qc = useQueryClient();
+  const { toast } = useToast();
   const { data } = useColabMeFull();
   const emp = data?.employee;
+  const [syncing, setSyncing] = useState(false);
 
   function logout() {
     localStorage.removeItem("promotor_token");
     localStorage.removeItem("promotor_employee");
     nav("/colaborador/login");
+  }
+
+  async function forceSync() {
+    if (syncing) return;
+    setSyncing(true);
+    toast({ title: "Sincronizando...", description: "Baixando a versão mais recente." });
+    try {
+      // 1) invalida todas as queries em memória
+      await qc.invalidateQueries();
+      qc.clear();
+      // 2) limpa Cache Storage (SW/PWA)
+      if ("caches" in window) {
+        const names = await caches.keys();
+        await Promise.all(names.map((n) => caches.delete(n)));
+      }
+      // 3) desregistra service workers
+      if ("serviceWorker" in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map((r) => r.unregister()));
+      }
+      // 4) limpa sessionStorage (mantém login em localStorage)
+      try { sessionStorage.clear(); } catch {}
+    } catch (e) {
+      console.error("[sync] erro:", e);
+    } finally {
+      // 5) recarrega com bypass de cache HTTP (funciona no iOS/iPad Safari)
+      setTimeout(() => {
+        window.location.replace(window.location.pathname + "?v=" + Date.now());
+      }, 400);
+    }
   }
 
   return (
@@ -68,8 +104,19 @@ export default function ColaboradorPerfil() {
           <ChevronRight className="h-4 w-4 text-amber-600 mt-1" />
         </button>
 
+        <button
+          onClick={forceSync}
+          disabled={syncing}
+          className="w-full mt-4 py-3 rounded-2xl bg-white text-slate-700 font-semibold text-sm flex items-center justify-center gap-2 shadow-sm active:bg-slate-50 disabled:opacity-60"
+        >
+          {syncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+          {syncing ? "Atualizando..." : "Atualizar app (limpar cache)"}
+        </button>
+        <p className="mt-1.5 text-[11px] text-slate-400 text-center px-4">
+          Use se algum dado (jornada, horário, foto) parecer desatualizado.
+        </p>
 
-        <button onClick={logout} className="w-full mt-6 py-3 rounded-2xl bg-white text-red-500 font-semibold text-sm flex items-center justify-center gap-2 shadow-sm">
+        <button onClick={logout} className="w-full mt-4 py-3 rounded-2xl bg-white text-red-500 font-semibold text-sm flex items-center justify-center gap-2 shadow-sm">
           <LogOut className="h-4 w-4" /> Sair
         </button>
       </div>

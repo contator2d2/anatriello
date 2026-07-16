@@ -108,12 +108,15 @@ export default function ColaboradorHome() {
     || can("punch.facial_required");
   const canPunch = can("punch.register");
 
-  // Compute schedule / status pill
-  const schedule = employee?.schedule || employee?.work_schedule;
-  const scheduleText = schedule?.start && schedule?.end ? `${schedule.start} - ${schedule.end}` : "08:00 - 17:00";
+  // Compute schedule / status pill — prioriza schedule_status do backend (já parseado)
+  const ss: any = (data as any)?.schedule_status;
+  const schedule = (ss?.schedule_start && ss?.schedule_end)
+    ? { start: ss.schedule_start, end: ss.schedule_end }
+    : (employee?.schedule || null);
+  const scheduleText = schedule?.start && schedule?.end ? `${schedule.start} - ${schedule.end}` : "—";
   const hourNow = now.getHours() + now.getMinutes() / 60;
-  const [sh, sm] = String(scheduleText).split(" - ")[0].split(":").map(Number);
-  const [eh, em] = String(scheduleText).split(" - ")[1].split(":").map(Number);
+  const [sh, sm] = String(schedule?.start || "08:00").split(":").map(Number);
+  const [eh, em] = String(schedule?.end || "17:00").split(":").map(Number);
   const withinWork = hourNow >= (sh + (sm||0)/60) && hourNow <= (eh + (em||0)/60);
 
   const nextPaymentDate = data?.next_payment?.date || "25/07";

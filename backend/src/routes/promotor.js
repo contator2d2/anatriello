@@ -349,12 +349,13 @@ router.get('/home', authenticatePromotor, async (req, res) => {
       facialAllowFallback = cfg?.allow_manual_fallback !== false;
     } catch { /* tabela pode não existir */ }
 
-    // Enrich employee payload with resolved facial flag
+    // Enrich employee payload with resolved facial flag + jornada já parseada
     const employeePayload = employee.rows[0]
       ? {
           ...employee.rows[0],
           face_descriptor: normalizeFaceDescriptorPayload(employee.rows[0].face_descriptor),
           facial_required_resolved: facialRequired,
+          schedule: { start: scheduleStart, end: scheduleEnd },
         }
       : null;
 
