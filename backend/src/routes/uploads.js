@@ -3,9 +3,28 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
+import jwt from 'jsonwebtoken';
 import { authenticate } from '../middleware/auth.js';
 
 const router = express.Router();
+
+// Permissive auth: aceita tokens dos apps satélite (promotor/agency/supermarket/driver)
+// além do token principal. Qualquer JWT válido assinado com JWT_SECRET é aceito.
+const authenticateAny = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Token não fornecido' });
+  }
+  const token = authHeader.replace('Bearer ', '');
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.tokenPayload = decoded;
+    req.userId = decoded.userId || decoded.employeeId || decoded.agencyPromoterId || decoded.driverId || decoded.supermarketUserId || null;
+    next();
+  } catch (e) {
+    return res.status(401).json({ error: 'Token inválido ou expirado' });
+  }
+};
 
 // Ensure uploads directory exists
 const uploadsDir = path.join(process.cwd(), 'uploads');
@@ -152,7 +171,7 @@ const upload = multer({
 });
 
 // Upload single file
-router.post('/', authenticate, (req, res) => {
+router.post('/', authenticateAny, (req, res) => {
   upload.single('file')(req, res, (err) => {
     try {
       if (err) {
