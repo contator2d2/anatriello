@@ -224,21 +224,33 @@ export function calculateDay({ punches = [], schedule, isHoliday = false, isSund
 
 // --- recalcular todos os dias do colaborador no período ---
 export async function recalcEmployeePeriod({ organizationId, employeeId, startDate, endDate }) {
-  const emp = await query(
-    `SELECT e.id, e.work_schedule, e.work_schedule_id, e.company_id,
-            ws.schedule_json, ws.kind AS ws_kind, ws.cycle_pattern, ws.cycle_start_date,
-            ws.tolerance_minutes AS ws_tol, ws.night_bonus_pct, ws.sunday_bonus_pct,
-            ws.holiday_bonus_pct, ws.overtime_weekday_pct, ws.dsr_enabled, ws.night_reduced_hour
-     FROM employees e
-     LEFT JOIN work_schedules ws ON ws.id = e.work_schedule_id
-     WHERE e.id = $1`,
-    [employeeId]
-  );
+  let emp;
+  try {
+    emp = await query(
+      `SELECT e.id, e.work_schedule, e.work_schedule_id, e.company_id,
+              ws.schedule_json, ws.kind AS ws_kind, ws.cycle_pattern, ws.cycle_start_date,
+              ws.tolerance_minutes AS ws_tol, ws.night_bonus_pct, ws.sunday_bonus_pct,
+              ws.holiday_bonus_pct, ws.overtime_weekday_pct, ws.dsr_enabled, ws.night_reduced_hour
+       FROM employees e
+       LEFT JOIN work_schedules ws ON ws.id = e.work_schedule_id
+       WHERE e.id = $1`,
+      [employeeId]
+    );
+  } catch (_) {
+    // work_schedules pode não existir
+    emp = await query(
+      `SELECT e.id, e.work_schedule, NULL::uuid AS work_schedule_id, e.company_id,
+              NULL::jsonb AS schedule_json, NULL::text AS ws_kind, NULL::text AS cycle_pattern, NULL::date AS cycle_start_date,
+              NULL::int AS ws_tol, NULL::int AS night_bonus_pct, NULL::int AS sunday_bonus_pct,
+              NULL::int AS holiday_bonus_pct, NULL::int AS overtime_weekday_pct, NULL::bool AS dsr_enabled, NULL::int AS night_reduced_hour
+       FROM employees e WHERE e.id = $1`,
+      [employeeId]
+    ).catch(() => ({ rows: [] }));
+  }
   if (!emp.rows[0]) return { days: [] };
   const row = emp.rows[0];
   const companyId = row.company_id;
 
-  // Monta jornada estruturada se houver work_schedule_id, senão usa string legada
   const workScheduleData = row.work_schedule_id ? {
     schedule_json: row.schedule_json,
     kind: row.ws_kind,
@@ -246,7 +258,6 @@ export async function recalcEmployeePeriod({ organizationId, employeeId, startDa
     cycle_start_date: row.cycle_start_date ? new Date(row.cycle_start_date).toISOString().slice(0, 10) : null,
   } : row.work_schedule;
 
-  // Regras (do work_schedule ou fallback global)
   let rules = {
     tolerance_minutes: row.ws_tol ?? 10,
     night_bonus_pct: row.night_bonus_pct ?? 20,
@@ -264,21 +275,20 @@ export async function recalcEmployeePeriod({ organizationId, employeeId, startDa
     rules.tolerance_minutes = tolRes.rows[0]?.late_tolerance_minutes ?? 10;
   }
 
-  // feriados no período
   const holRes = await query(
     `SELECT holiday_date FROM holidays WHERE organization_id = $1 AND (company_id = $2 OR company_id IS NULL) AND holiday_date BETWEEN $3 AND $4`,
     [organizationId, companyId, startDate, endDate]
   ).catch(() => ({ rows: [] }));
   const holidaySet = new Set(holRes.rows.map(r => new Date(r.holiday_date).toISOString().slice(0, 10)));
 
-  // batidas
   const punchRes = await query(
     `SELECT id, punch_type, punched_at, geo_status, is_offline
      FROM time_punches
      WHERE employee_id = $1 AND punched_at::date BETWEEN $2 AND $3
      ORDER BY punched_at`,
     [employeeId, startDate, endDate]
-  );
+  ).catch(() => ({ rows: [] }));
+
 
   const byDate = new Map();
   for (const p of punchRes.rows) {
