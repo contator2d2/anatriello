@@ -91,7 +91,7 @@ export default function ColaboradorHome() {
   const employee: any = { ...employeeFull, ...employeeBase };
   // Normaliza descriptor (pode vir como array, objeto { descriptor } ou string JSON do Postgres JSONB)
   let faceDescriptor = normalizeFaceDescriptor(employee.face_descriptor);
-  if (!employee.face_descriptor && employeeFull.face_descriptor) {
+  if (!faceDescriptor.length && employeeFull.face_descriptor) {
     faceDescriptor = normalizeFaceDescriptor(employeeFull.face_descriptor);
   }
   if (!faceDescriptor.length && faceStatus?.face_descriptor) faceDescriptor = normalizeFaceDescriptor(faceStatus.face_descriptor);
