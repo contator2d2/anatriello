@@ -223,16 +223,59 @@ export function usePromotorPunches(filters?: { start_date?: string; end_date?: s
   });
 }
 
+export function useColabAgenda() {
+  return useQuery({
+    queryKey: ['colab-agenda'],
+    queryFn: async () => {
+      const items: Array<{ type: string; date: string; end_date?: string; label: string }> = [];
+      try {
+        const vacs = await promotorApi<any[]>('/api/promotor/vacations');
+        (vacs || []).forEach((v: any) => {
+          const st = v.status || v.state;
+          if (['aprovado', 'aprovada', 'approved', 'em_gozo', 'agendado'].includes(String(st).toLowerCase())) {
+            items.push({ type: 'ferias', date: v.start_date, end_date: v.end_date, label: 'Férias' });
+          }
+        });
+      } catch {}
+      try {
+        const leaves = await promotorApi<any[]>('/api/promoter-leaves/mine');
+        (leaves || []).forEach((l: any) => {
+          items.push({ type: 'folga', date: l.leave_date || l.date, label: l.reason || 'Folga' });
+        });
+      } catch {}
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      return items
+        .filter(i => i.date && new Date(i.date) >= today)
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+        .slice(0, 5);
+    },
+    staleTime: 60000,
+  });
+}
+
 async function promotorDownloadPDF(endpoint: string, filename: string) {
   const token = localStorage.getItem('promotor_token');
   const url = `${(import.meta.env.VITE_API_URL || '').replace(/\/$/, '')}${endpoint}`;
   const r = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
-  if (!r.ok) throw new Error('Falha ao gerar PDF');
+  if (!r.ok) {
+    let msg = 'Falha ao gerar PDF';
+    try { const j = await r.json(); msg = j?.error || msg; } catch {}
+    throw new Error(msg);
+  }
   const blob = await r.blob();
   const objUrl = URL.createObjectURL(blob);
+  // iOS Safari does not honor <a download>; open in new tab as fallback
+  const isIOS = /iPad|iPhone|iPod/i.test(navigator.userAgent) && !(window as any).MSStream;
+  if (isIOS) {
+    const win = window.open(objUrl, '_blank');
+    if (!win) window.location.href = objUrl;
+    setTimeout(() => URL.revokeObjectURL(objUrl), 30000);
+    return;
+  }
   const a = document.createElement('a');
-  a.href = objUrl; a.download = filename; document.body.appendChild(a); a.click();
-  setTimeout(() => { URL.revokeObjectURL(objUrl); a.remove(); }, 500);
+  a.href = objUrl; a.download = filename; a.rel = 'noopener';
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(objUrl); a.remove(); }, 1000);
 }
 
 export function useDownloadPunchReceipt() {

@@ -3,23 +3,45 @@ import { ColaboradorLayout } from "./ColaboradorLayout";
 import { usePromotorPunches, useDownloadPunchReceipt, useDownloadMirror } from "@/hooks/use-promotor";
 import { format, subDays, addDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { ChevronLeft, ChevronRight, Loader2, Download, FileText } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2, Download, FileText, MapPin, WifiOff } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast";
 
 type Tab = "dia" | "semana" | "mes";
 
-const STAGES: { key: string; label: string; color: string }[] = [
-  { key: "entrada", label: "Entrada", color: "#10b981" },
-  { key: "saida_intervalo", label: "Início Almoço", color: "#f97316" },
-  { key: "retorno_intervalo", label: "Fim Almoço", color: "#f97316" },
-  { key: "saida", label: "Saída", color: "#ef4444" },
-];
+const PUNCH_LABEL: Record<string, string> = {
+  entrada: "Entrada",
+  saida_intervalo: "Início Almoço",
+  retorno_intervalo: "Fim Almoço",
+  saida: "Saída",
+  extraordinaria: "Extra",
+};
+
+const PUNCH_COLOR: Record<string, string> = {
+  entrada: "bg-emerald-100 text-emerald-700",
+  saida_intervalo: "bg-orange-100 text-orange-700",
+  retorno_intervalo: "bg-orange-100 text-orange-700",
+  saida: "bg-red-100 text-red-700",
+  extraordinaria: "bg-slate-100 text-slate-700",
+};
+
+function fmtTime(v: any) {
+  if (!v) return "—";
+  const d = new Date(String(v).replace(" ", "T"));
+  return isNaN(d.getTime()) ? "—" : format(d, "HH:mm:ss");
+}
+function fmtDate(v: any) {
+  if (!v) return "—";
+  const d = new Date(String(v).replace(" ", "T"));
+  return isNaN(d.getTime()) ? "—" : format(d, "dd/MM/yyyy");
+}
 
 export default function ColaboradorJornada() {
   const [tab, setTab] = useState<Tab>("dia");
   const [date, setDate] = useState(new Date());
   const dlReceipt = useDownloadPunchReceipt();
   const dlMirror = useDownloadMirror();
+  const { toast } = useToast();
 
   const range = useMemo(() => {
     if (tab === "dia") return { start: date, end: date };
@@ -32,32 +54,55 @@ export default function ColaboradorJornada() {
     end_date: format(range.end, "yyyy-MM-dd"),
   });
 
-  const dayPunches = (punches || []).filter((p: any) => {
-    const ts = new Date(p.punched_at || p.offline_local_time);
-    return format(ts, "yyyy-MM-dd") === format(date, "yyyy-MM-dd");
-  }).sort((a: any, b: any) => new Date(a.punched_at).getTime() - new Date(b.punched_at).getTime());
+  const rows = useMemo(() => {
+    return (punches || []).slice().sort((a: any, b: any) => {
+      const da = new Date(a.punched_at || a.offline_local_time || 0).getTime();
+      const db = new Date(b.punched_at || b.offline_local_time || 0).getTime();
+      return db - da;
+    });
+  }, [punches]);
 
-  const punchMap: Record<string, any> = {};
-  dayPunches.forEach((p: any) => { punchMap[p.punch_type] = p; });
+  const stepDate = (dir: 1 | -1) => {
+    if (tab === "dia") setDate(dir > 0 ? addDays(date, 1) : subDays(date, 1));
+    else if (tab === "semana") setDate(dir > 0 ? addDays(date, 7) : subDays(date, 7));
+    else setDate(dir > 0 ? addDays(endOfMonth(date), 1) : subDays(startOfMonth(date), 1));
+  };
 
-  const entrada = punchMap.entrada?.punched_at ? new Date(punchMap.entrada.punched_at) : null;
-  const almocoIni = punchMap.saida_intervalo?.punched_at ? new Date(punchMap.saida_intervalo.punched_at) : null;
-  const almocoFim = punchMap.retorno_intervalo?.punched_at ? new Date(punchMap.retorno_intervalo.punched_at) : null;
-  const saida = punchMap.saida?.punched_at ? new Date(punchMap.saida.punched_at) : null;
+  const handleReceipt = async (id: string, isLocal: boolean) => {
+    if (isLocal) {
+      toast({ title: "Sincronize primeiro", description: "Este ponto ainda não foi enviado ao servidor.", variant: "destructive" });
+      return;
+    }
+    try {
+      await dlReceipt.mutateAsync(id);
+      toast({ title: "Comprovante baixado" });
+    } catch (e: any) {
+      toast({ title: "Falha ao baixar", description: e.message || "Tente novamente", variant: "destructive" });
+    }
+  };
 
-  const minutos = (a: Date | null, b: Date | null) => (a && b) ? Math.max(0, Math.round((b.getTime() - a.getTime()) / 60000)) : 0;
-  const fmtDur = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+  const handleMirror = async () => {
+    try {
+      await dlMirror.mutateAsync({
+        start: format(startOfMonth(date), "yyyy-MM-dd"),
+        end: format(endOfMonth(date), "yyyy-MM-dd"),
+      });
+      toast({ title: "Espelho baixado" });
+    } catch (e: any) {
+      toast({ title: "Falha ao baixar espelho", description: e.message, variant: "destructive" });
+    }
+  };
 
-  const almocoMin = minutos(almocoIni, almocoFim);
-  const trabalhadoMin = (minutos(entrada, almocoIni) + minutos(almocoFim, saida)) || minutos(entrada, saida) - almocoMin;
-  const totalMin = trabalhadoMin + almocoMin;
-  const previstoMin = 8 * 60;
-  const saldoMin = trabalhadoMin - previstoMin;
+  const rangeLabel = tab === "dia"
+    ? format(date, "EEEE, dd 'de' MMMM", { locale: ptBR })
+    : tab === "semana"
+      ? `${format(range.start, "dd/MM")} — ${format(range.end, "dd/MM/yyyy")}`
+      : format(date, "MMMM 'de' yyyy", { locale: ptBR });
 
   return (
-    <ColaboradorLayout bg="light" title="Minha Jornada" showBack>
-      {/* Tabs */}
-      <div className="px-4 pt-4">
+    <ColaboradorLayout bg="light" title="Meus Pontos" showBack>
+      <div className="px-4 pt-4 space-y-3">
+        {/* Tabs */}
         <div className="bg-white rounded-full p-1 flex shadow-sm">
           {(["dia", "semana", "mes"] as Tab[]).map(t => (
             <button
@@ -72,89 +117,93 @@ export default function ColaboradorJornada() {
             </button>
           ))}
         </div>
-      </div>
 
-      {/* Date nav */}
-      <div className="px-4 pt-4">
-        <div className="bg-white rounded-2xl shadow-sm p-4">
-          <div className="flex items-center justify-between mb-4">
-            <button onClick={() => setDate(subDays(date, 1))} className="p-1"><ChevronLeft className="h-5 w-5 text-slate-400" /></button>
-            <p className="text-sm font-semibold capitalize">{format(date, "EEEE, dd/MM/yyyy", { locale: ptBR })}</p>
-            <button onClick={() => setDate(addDays(date, 1))} className="p-1"><ChevronRight className="h-5 w-5 text-slate-400" /></button>
+        {/* Date nav */}
+        <div className="bg-white rounded-2xl shadow-sm p-3 flex items-center justify-between">
+          <button onClick={() => stepDate(-1)} className="p-2 rounded-full hover:bg-slate-100"><ChevronLeft className="h-5 w-5 text-slate-500" /></button>
+          <p className="text-sm font-semibold capitalize text-center flex-1">{rangeLabel}</p>
+          <button onClick={() => stepDate(1)} className="p-2 rounded-full hover:bg-slate-100"><ChevronRight className="h-5 w-5 text-slate-500" /></button>
+        </div>
+
+        {/* Summary */}
+        <div className="bg-white rounded-2xl shadow-sm p-3 flex items-center justify-between">
+          <div>
+            <p className="text-xs text-slate-500">Total de registros</p>
+            <p className="text-2xl font-bold text-slate-800 tabular-nums">{rows.length}</p>
           </div>
+          <button
+            onClick={handleMirror}
+            disabled={dlMirror.isPending}
+            className="bg-[#0a1128] hover:bg-[#0d1a3d] text-white rounded-xl px-4 py-2.5 flex items-center gap-2 text-xs font-semibold disabled:opacity-60"
+          >
+            {dlMirror.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+            Espelho do mês
+          </button>
+        </div>
 
-          {/* Timeline */}
-          <div className="space-y-3">
-            {STAGES.map((s, i) => {
-              const p = punchMap[s.key];
-              const time = p?.punched_at ? format(new Date(p.punched_at), "HH:mm") : "--:--";
-              const done = !!p;
-              return (
-                <div key={s.key} className="flex items-center gap-3">
-                  <div className="flex flex-col items-center">
-                    <div className={cn("h-3 w-3 rounded-full", done ? "" : "bg-slate-200")} style={done ? { background: s.color } : {}} />
-                    {i < STAGES.length - 1 && <div className="h-6 w-px bg-slate-200" />}
-                  </div>
-                  <div className="flex-1 flex items-center justify-between">
-                    <div>
-                      <p className={cn("text-sm font-semibold", done ? "text-slate-800" : "text-slate-400")}>{time}</p>
-                      <p className="text-xs text-slate-500">{s.label}</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {done && (
+        {/* Table */}
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="text-left px-3 py-2 font-semibold">Data</th>
+                  <th className="text-left px-3 py-2 font-semibold">Hora</th>
+                  <th className="text-left px-3 py-2 font-semibold">Tipo</th>
+                  <th className="text-left px-3 py-2 font-semibold hidden sm:table-cell">Local</th>
+                  <th className="text-right px-3 py-2 font-semibold">Comprovante</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {isLoading && (
+                  <tr><td colSpan={5} className="text-center py-6"><Loader2 className="h-5 w-5 animate-spin mx-auto text-slate-400" /></td></tr>
+                )}
+                {!isLoading && rows.length === 0 && (
+                  <tr><td colSpan={5} className="text-center py-8 text-sm text-slate-400">Nenhum ponto registrado nesse período.</td></tr>
+                )}
+                {rows.map((p: any) => {
+                  const ts = p.punched_at || p.offline_local_time;
+                  const isLocal = !!(p.pending_local || String(p.id || '').startsWith('punch_') || String(p.id || '').startsWith('local'));
+                  const geo = p.geo_status === 'dentro_area' ? 'Dentro' : p.geo_status === 'fora_area' ? 'Fora' : (p.geo_status || '—');
+                  return (
+                    <tr key={p.id} className="hover:bg-slate-50/50">
+                      <td className="px-3 py-2 text-slate-700 whitespace-nowrap">{fmtDate(ts)}</td>
+                      <td className="px-3 py-2 tabular-nums font-semibold text-slate-800 whitespace-nowrap">{fmtTime(ts)}</td>
+                      <td className="px-3 py-2">
+                        <span className={cn("inline-block text-[10px] font-bold px-2 py-1 rounded-full", PUNCH_COLOR[p.punch_type] || "bg-slate-100 text-slate-700")}>
+                          {PUNCH_LABEL[p.punch_type] || p.punch_type}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-xs text-slate-600 hidden sm:table-cell">
+                        <span className="inline-flex items-center gap-1">
+                          {p.is_offline || isLocal ? <WifiOff className="h-3 w-3 text-amber-500" /> : <MapPin className="h-3 w-3 text-slate-400" />}
+                          {p.pdv_name || geo}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-right">
                         <button
-                          onClick={() => dlReceipt.mutate(p.id)}
-                          className="text-[10px] px-2 py-1 rounded-full bg-orange-50 text-orange-600 font-medium flex items-center gap-1 hover:bg-orange-100"
-                          title="Baixar comprovante"
+                          onClick={() => handleReceipt(p.id, isLocal)}
+                          disabled={dlReceipt.isPending && dlReceipt.variables === p.id}
+                          className={cn(
+                            "inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg",
+                            isLocal ? "bg-slate-100 text-slate-400" : "bg-orange-50 text-orange-600 hover:bg-orange-100"
+                          )}
+                          title={isLocal ? "Aguardando sincronização" : "Baixar comprovante"}
                         >
-                          <Download className="h-3 w-3" /> Comprovante
+                          {dlReceipt.isPending && dlReceipt.variables === p.id
+                            ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            : <Download className="h-3.5 w-3.5" />}
+                          PDF
                         </button>
-                      )}
-                      <span className={cn("text-[10px] px-2 py-0.5 rounded-full font-medium", done ? "bg-green-50 text-green-700" : "bg-slate-100 text-slate-400")}>
-                        {done ? "No horário" : "Pendente"}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
-
-        {/* Resumo */}
-        <div className="bg-white rounded-2xl shadow-sm mt-4 p-4">
-          <p className="text-sm font-bold mb-3">Resumo do dia</p>
-          <SummaryRow label="Trabalhado" value={fmtDur(trabalhadoMin)} />
-          <SummaryRow label="Almoço" value={fmtDur(almocoMin)} />
-          <SummaryRow label="Total do dia" value={fmtDur(totalMin)} />
-          <SummaryRow label="Saldo do dia" value={`${saldoMin >= 0 ? "+" : "-"}${fmtDur(Math.abs(saldoMin))}`} valueClass={saldoMin >= 0 ? "text-green-600" : "text-red-500"} />
-        </div>
-
-        <div className="bg-white rounded-2xl shadow-sm mt-4 p-4 flex items-center justify-between">
-          <p className="text-sm font-bold">Banco de horas</p>
-          <p className="text-green-600 font-bold">+10:30</p>
-        </div>
-
-        <button
-          onClick={() => dlMirror.mutate({ start: format(startOfMonth(date), "yyyy-MM-dd"), end: format(endOfMonth(date), "yyyy-MM-dd") })}
-          disabled={dlMirror.isPending}
-          className="w-full mt-4 bg-[#f97316] hover:bg-[#ea6a0a] text-white rounded-2xl py-3 flex items-center justify-center gap-2 font-semibold shadow-sm disabled:opacity-60"
-        >
-          {dlMirror.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
-          Espelho de ponto do mês
-        </button>
-
-        {isLoading && <Loader2 className="h-5 w-5 animate-spin mx-auto text-slate-400 mt-4" />}
       </div>
     </ColaboradorLayout>
-  );
-}
-
-function SummaryRow({ label, value, valueClass }: { label: string; value: string; valueClass?: string }) {
-  return (
-    <div className="flex justify-between py-2 border-t border-slate-100 first:border-0">
-      <span className="text-sm text-slate-600">{label}</span>
-      <span className={cn("text-sm font-bold", valueClass || "text-slate-800")}>{value}</span>
-    </div>
   );
 }
