@@ -2450,7 +2450,7 @@ router.get('/mirror.pdf', authenticatePromotor, async (req, res) => {
     const { generateMirrorPDF } = await import('../services/receipt-pdf.js');
     const bytes = await generateMirrorPDF({ organizationId: req.organizationId, employeeId: req.employeeId, startDate: start, endDate: end });
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="espelho-${start}_${end}.pdf"`);
+    res.setHeader('Content-Disposition', `attachment; filename="espelho-${start}_${end}.pdf"`);
     res.send(Buffer.from(bytes));
   } catch (e) { logError('promotor.mirror.pdf', e); res.status(500).json({ error: 'Erro ao gerar espelho' }); }
 });
