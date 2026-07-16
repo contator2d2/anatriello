@@ -242,7 +242,7 @@ router.get('/home', authenticatePromotor, async (req, res) => {
     };
 
     const [employee, punches, pendingDocs, notifications, assignment, settings] = await Promise.all([
-      safeQuery(`SELECT id, full_name, email, cpf, photo_url, worker_profile, work_schedule, position FROM employees WHERE id = $1`, [empId]),
+      safeQuery(`SELECT id, full_name, email, cpf, photo_url, worker_profile, work_schedule, position, face_descriptor, face_photo_url, facial_required FROM employees WHERE id = $1`, [empId]),
       safeQuery(`SELECT * FROM time_punches WHERE employee_id = $1 AND punched_at::date = $2 ORDER BY punched_at`, [empId, today]),
       safeQuery(`SELECT COUNT(*) as count FROM rh_document_deliveries WHERE employee_id = $1 AND status IN ('enviado', 'entregue', 'visualizado') AND (requires_signature = true OR requires_confirmation = true)`, [empId]),
       safeQuery(`SELECT * FROM collaborator_notifications WHERE employee_id = $1 AND read = false ORDER BY created_at DESC LIMIT 10`, [empId]),

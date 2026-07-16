@@ -60,7 +60,19 @@ export default function ColaboradorHome() {
     );
   }, []);
 
-  const employee = data?.employee || meFull?.employee;
+  const employeeBase = data?.employee || meFull?.employee || {};
+  const employeeFull = meFull?.employee || {};
+  // Merge: home é fonte principal, mas complementa com meFull p/ campos ausentes (face_descriptor, facial_required, etc.)
+  const employee: any = { ...employeeFull, ...employeeBase };
+  // Normaliza descriptor (pode vir como string JSON do Postgres JSONB)
+  if (employee && typeof employee.face_descriptor === "string") {
+    try { employee.face_descriptor = JSON.parse(employee.face_descriptor); } catch { /* noop */ }
+  }
+  if (!employee.face_descriptor && employeeFull.face_descriptor) {
+    employee.face_descriptor = typeof employeeFull.face_descriptor === "string"
+      ? (() => { try { return JSON.parse(employeeFull.face_descriptor); } catch { return null; } })()
+      : employeeFull.face_descriptor;
+  }
   const punches = data?.today_punches || [];
   const nextType = PUNCH_ORDER[punches.length] || "extraordinaria";
   const jornadaEncerrada = punches.length >= 4;
@@ -109,7 +121,19 @@ export default function ColaboradorHome() {
 
   function handlePunchClick() {
     if (jornadaEncerrada) { toast({ title: "Jornada concluída" }); return; }
-    if (facialRequired) setShowFace(true); else doPunch(false);
+    if (facialRequired) {
+      if (!employee?.face_descriptor || !Array.isArray(employee.face_descriptor) || employee.face_descriptor.length === 0) {
+        toast({
+          title: "Biometria facial não cadastrada",
+          description: "Cadastre sua biometria facial em Perfil › Configurações › Reconhecimento facial.",
+          variant: "destructive",
+        });
+        return;
+      }
+      setShowFace(true);
+    } else {
+      doPunch(false);
+    }
   }
 
   const firstName = employee?.full_name?.split(" ")[0] || "Colaborador";
