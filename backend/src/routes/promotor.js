@@ -1837,9 +1837,9 @@ router.get('/rh/live-map', async (req, res) => {
       ? `(SELECT string_agg(DISTINCT mb.name, ', ')
            FROM merch_pdv_brands mpb
            JOIN merch_brands mb ON mb.id = mpb.brand_id
-           JOIN time_punches tp2 ON tp2.pdv_id = mpb.pdv_id
+            JOIN time_punches tp2 ON tp2.pdv_id = mpb.pdv_id
            WHERE tp2.employee_id = e.id
-             AND tp2.punched_at::date = $2
+              AND (tp2.punched_at AT TIME ZONE 'America/Sao_Paulo')::date = $2::date
              AND mpb.active = true) as current_brands`
       : `NULL::text as current_brands`;
 
@@ -1848,11 +1848,11 @@ router.get('/rh/live-map', async (req, res) => {
         SELECT e.id, e.full_name, e.position, e.worker_profile, e.work_schedule, e.photo_url,
           e.home_latitude, e.home_longitude,
           ${liveLocationSelect}
-          (SELECT COUNT(*) FROM time_punches tp WHERE tp.employee_id = e.id AND tp.punched_at::date = $2) as punch_count,
-          (SELECT tp.punch_type FROM time_punches tp WHERE tp.employee_id = e.id AND tp.punched_at::date = $2 ORDER BY tp.punched_at DESC LIMIT 1) as last_punch_type,
-          (SELECT tp.punched_at FROM time_punches tp WHERE tp.employee_id = e.id AND tp.punched_at::date = $2 ORDER BY tp.punched_at DESC LIMIT 1) as last_punch_at,
-          (SELECT tp.pdv_id FROM time_punches tp WHERE tp.employee_id = e.id AND tp.punched_at::date = $2 ORDER BY tp.punched_at DESC LIMIT 1) as last_pdv_id,
-          (SELECT p.name FROM time_punches tp JOIN pdvs p ON p.id = tp.pdv_id WHERE tp.employee_id = e.id AND tp.punched_at::date = $2 ORDER BY tp.punched_at DESC LIMIT 1) as last_pdv_name,
+          (SELECT COUNT(*) FROM time_punches tp WHERE tp.employee_id = e.id AND (tp.punched_at AT TIME ZONE 'America/Sao_Paulo')::date = $2::date) as punch_count,
+          (SELECT tp.punch_type FROM time_punches tp WHERE tp.employee_id = e.id AND (tp.punched_at AT TIME ZONE 'America/Sao_Paulo')::date = $2::date ORDER BY tp.punched_at DESC LIMIT 1) as last_punch_type,
+          (SELECT tp.punched_at FROM time_punches tp WHERE tp.employee_id = e.id AND (tp.punched_at AT TIME ZONE 'America/Sao_Paulo')::date = $2::date ORDER BY tp.punched_at DESC LIMIT 1) as last_punch_at,
+          (SELECT tp.pdv_id FROM time_punches tp WHERE tp.employee_id = e.id AND (tp.punched_at AT TIME ZONE 'America/Sao_Paulo')::date = $2::date ORDER BY tp.punched_at DESC LIMIT 1) as last_pdv_id,
+          (SELECT p.name FROM time_punches tp JOIN pdvs p ON p.id = tp.pdv_id WHERE tp.employee_id = e.id AND (tp.punched_at AT TIME ZONE 'America/Sao_Paulo')::date = $2::date ORDER BY tp.punched_at DESC LIMIT 1) as last_pdv_name,
           ${currentBrandsSelect}
         FROM employees e
         ${liveLocationJoin}

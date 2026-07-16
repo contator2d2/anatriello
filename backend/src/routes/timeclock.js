@@ -607,7 +607,7 @@ router.put('/cartao-ponto', async (req, res) => {
 
     // Buscar batidas atuais do dia
     const current = await query(
-      `SELECT id, punched_at FROM time_punches WHERE employee_id = $1 AND punched_at::date = $2 ORDER BY punched_at`,
+      `SELECT id, punched_at FROM time_punches WHERE employee_id = $1 AND (punched_at AT TIME ZONE 'America/Sao_Paulo')::date = $2::date ORDER BY punched_at`,
       [employee_id, date]
     );
     const oldTimes = current.rows.map(r => new Date(r.punched_at).toISOString().slice(11, 16));
@@ -623,7 +623,7 @@ router.put('/cartao-ponto', async (req, res) => {
       const punchType = i === 0 ? 'entrada' : (i === cleanTimes.length - 1 ? 'saida' : (i % 2 === 1 ? 'saida_intervalo' : 'retorno_intervalo'));
       await query(
         `INSERT INTO time_punches (organization_id, employee_id, punch_type, punched_at, source, edited_by, edited_at)
-         VALUES ($1, $2, $3, ($4::date + $5::time), 'manual', $6, NOW())`,
+         VALUES ($1, $2, $3, (($4::date + $5::time) AT TIME ZONE 'America/Sao_Paulo'), 'manual', $6, NOW())`,
         [orgId, employee_id, punchType, date, t + ':00', req.userId]
       );
     }
@@ -1289,13 +1289,13 @@ router.patch('/adjustment-requests/:id', async (req, res) => {
     // Se aprovado, aplicar batidas
     if (status === 'approved' && reqRow.requested_times) {
       const times = String(reqRow.requested_times).split(',').map(s => s.trim()).filter(t => /^\d{1,2}:\d{2}$/.test(t)).slice(0, 8);
-      await query(`DELETE FROM time_punches WHERE employee_id = $1 AND punched_at::date = $2`, [reqRow.employee_id, dateStr]);
+      await query(`DELETE FROM time_punches WHERE employee_id = $1 AND (punched_at AT TIME ZONE 'America/Sao_Paulo')::date = $2::date`, [reqRow.employee_id, dateStr]);
       for (let idx = 0; idx < times.length; idx++) {
         const t = times[idx];
         const punchType = idx === 0 ? 'entrada' : (idx === times.length - 1 ? 'saida' : (idx % 2 === 1 ? 'saida_intervalo' : 'retorno_intervalo'));
         await query(
           `INSERT INTO time_punches (organization_id, employee_id, punch_type, punched_at, source, edited_by, edited_at, justification)
-           VALUES ($1, $2, $3, ($4::date + $5::time), 'request', $6, NOW(), $7)`,
+           VALUES ($1, $2, $3, (($4::date + $5::time) AT TIME ZONE 'America/Sao_Paulo'), 'request', $6, NOW(), $7)`,
           [orgId, reqRow.employee_id, punchType, dateStr, t + ':00', req.userId, reqRow.justification]
         );
       }
