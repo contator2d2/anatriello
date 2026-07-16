@@ -70,6 +70,7 @@ import RHHolerite from "./pages/RHHolerite";
 import RHDashboard from "./pages/RHDashboard";
 import RHAnalytics from "./pages/RHAnalytics";
 import RHFolhaExport from "./pages/RHFolhaExport";
+import RHDeducoes from "./pages/RHDeducoes";
 import RHBancoHoras from "./pages/RHBancoHoras";
 import RHEscalas from "./pages/RHEscalas";
 import RHFeriasColetivas from "./pages/RHFeriasColetivas";
@@ -372,6 +373,7 @@ const App = () => (
             <Route path="/rh/ponto-legacy" element={<ProtectedRoute><RHPonto /></ProtectedRoute>} />
             <Route path="/rh/holerite" element={<ProtectedRoute><RHHolerite /></ProtectedRoute>} />
             <Route path="/rh/folha-export" element={<ProtectedRoute><RHFolhaExport /></ProtectedRoute>} />
+            <Route path="/rh/deducoes" element={<ProtectedRoute><RHDeducoes /></ProtectedRoute>} />
             <Route path="/rh/banco-horas" element={<ProtectedRoute><RHBancoHoras /></ProtectedRoute>} />
             <Route path="/rh/escalas" element={<ProtectedRoute><RHEscalas /></ProtectedRoute>} />
             <Route path="/rh/ferias-coletivas" element={<ProtectedRoute><RHFeriasColetivas /></ProtectedRoute>} />
