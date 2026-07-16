@@ -223,6 +223,36 @@ export function usePromotorPunches(filters?: { start_date?: string; end_date?: s
   });
 }
 
+export function useColabAgenda() {
+  return useQuery({
+    queryKey: ['colab-agenda'],
+    queryFn: async () => {
+      const items: Array<{ type: string; date: string; end_date?: string; label: string }> = [];
+      try {
+        const vacs = await promotorApi<any[]>('/api/promotor/vacations');
+        (vacs || []).forEach((v: any) => {
+          const st = v.status || v.state;
+          if (['aprovado', 'aprovada', 'approved', 'em_gozo', 'agendado'].includes(String(st).toLowerCase())) {
+            items.push({ type: 'ferias', date: v.start_date, end_date: v.end_date, label: 'Férias' });
+          }
+        });
+      } catch {}
+      try {
+        const leaves = await promotorApi<any[]>('/api/promoter-leaves/mine');
+        (leaves || []).forEach((l: any) => {
+          items.push({ type: 'folga', date: l.leave_date || l.date, label: l.reason || 'Folga' });
+        });
+      } catch {}
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      return items
+        .filter(i => i.date && new Date(i.date) >= today)
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+        .slice(0, 5);
+    },
+    staleTime: 60000,
+  });
+}
+
 async function promotorDownloadPDF(endpoint: string, filename: string) {
   const token = localStorage.getItem('promotor_token');
   const url = `${(import.meta.env.VITE_API_URL || '').replace(/\/$/, '')}${endpoint}`;
