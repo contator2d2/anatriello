@@ -1017,7 +1017,7 @@ router.post('/face-enrollment', authenticatePromotor, async (req, res) => {
     if (!existing.rows[0]) return res.status(404).json({ error: 'Colaborador não encontrado' });
 
     const cfg = await getOrgFacialConfig(existing.rows[0].organization_id);
-    if (!cfg.allow_self_enrollment) {
+    if (!cfg.allow_self_enrollment && !existing.rows[0].collection_requested) {
       return res.status(403).json({ error: 'A coleta pelo app não está habilitada. Procure o RH.' });
     }
     const alreadyEnrolled = normalizeFaceDescriptorPayload(existing.rows[0].face_descriptor).length >= 64;
