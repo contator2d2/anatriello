@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import { ColaboradorLayout } from "./ColaboradorLayout";
 import { usePromotorHome, usePromotorPunch, usePromotorNotifications } from "@/hooks/use-promotor";
-import { useColabAnnouncements, useColabMeFull } from "@/hooks/use-promotor";
+import { useColabAnnouncements, useColabMeFull, useColabAgenda } from "@/hooks/use-promotor";
 import { useCaps } from "@/hooks/use-colab-capabilities";
 import { FaceVerifyDialog } from "@/components/facial-recognition/FaceVerifyDialog";
 import { useToast } from "@/hooks/use-toast";
