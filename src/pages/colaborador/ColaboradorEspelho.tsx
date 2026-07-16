@@ -80,19 +80,6 @@ export default function ColaboradorEspelho() {
               <StatusPill status={detail.status} />
             </div>
 
-            <div className="border-t pt-3">
-              <p className="text-xs text-slate-500 mb-2">Resumo do mês</p>
-              <div className="grid grid-cols-2 gap-2">
-                <MobileMetric label="Horas Trab." value={fmtHM(detail.totals_json?.worked_min)} />
-                <MobileMetric label="Previsto" value={fmtHM(detail.totals_json?.expected_min)} />
-                <MobileMetric label="Saldo"
-                  value={fmtHM(detail.totals_json?.balance_min)}
-                  color={(detail.totals_json?.balance_min || 0) >= 0 ? "emerald" : "rose"} />
-                <MobileMetric label="Extras" value={fmtHM(detail.totals_json?.overtime_min)} />
-                <MobileMetric label="Faltas" value={detail.totals_json?.absences || 0} />
-                <MobileMetric label="Atrasos" value={detail.totals_json?.lates || 0} />
-              </div>
-            </div>
 
             {detail.status === "accepted" && (
               <div className="border-t pt-3 bg-emerald-50 -mx-4 -mb-4 p-4 rounded-b-2xl">
@@ -214,8 +201,7 @@ export default function ColaboradorEspelho() {
                     <StatusPill status={m.status} compact />
                   </div>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    {fmtHM(m.totals_json?.worked_min || 0)} trabalhadas
-                    • Saldo {fmtHM(m.totals_json?.balance_min || 0)}
+                    Competência {m.reference_month}
                   </p>
                   {m.status === "pending" && (
                     <p className="text-xs text-amber-600 font-medium mt-1">Aguardando seu aceite</p>
