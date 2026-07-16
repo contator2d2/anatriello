@@ -17,6 +17,52 @@ async function resolveOrgId(req) {
   return r.rows[0]?.organization_id || null;
 }
 
+let attendanceSchemaPromise = null;
+async function ensureAttendanceSchema() {
+  if (attendanceSchemaPromise) return attendanceSchemaPromise;
+  attendanceSchemaPromise = (async () => {
+    await query(`
+      CREATE TABLE IF NOT EXISTS time_punches (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        organization_id UUID NOT NULL,
+        employee_id UUID NOT NULL,
+        punch_type VARCHAR(30) NOT NULL,
+        punched_at TIMESTAMPTZ NOT NULL,
+        latitude NUMERIC(10,7),
+        longitude NUMERIC(10,7),
+        accuracy_meters NUMERIC(8,2),
+        pdv_id UUID,
+        distance_from_pdv NUMERIC(10,2),
+        geo_status VARCHAR(30) DEFAULT 'dentro_area',
+        device_info TEXT,
+        ip_address VARCHAR(45),
+        is_offline BOOLEAN DEFAULT false,
+        offline_local_time TIMESTAMPTZ,
+        synced_at TIMESTAMPTZ,
+        sync_status VARCHAR(20) DEFAULT 'synced',
+        justification TEXT,
+        approved BOOLEAN,
+        approved_by UUID,
+        selfie_url TEXT,
+        source TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await query(`ALTER TABLE time_punches ADD COLUMN IF NOT EXISTS selfie_url TEXT`);
+    await query(`ALTER TABLE time_punches ADD COLUMN IF NOT EXISTS source TEXT`);
+    await query(`ALTER TABLE time_punches ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_time_punches_emp ON time_punches(employee_id)`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_time_punches_emp_day_sp ON time_punches(employee_id, ((punched_at AT TIME ZONE 'America/Sao_Paulo')::date))`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_time_punches_org ON time_punches(organization_id)`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_time_punches_date ON time_punches(punched_at)`);
+  })().catch((err) => {
+    attendanceSchemaPromise = null;
+    throw err;
+  });
+  return attendanceSchemaPromise;
+}
+
 // GET enrolled employees (id, name, photo, descriptor) for local matching in the tablet
 router.get('/enrollments', async (req, res) => {
   try {
@@ -61,6 +107,7 @@ router.get('/enrollments', async (req, res) => {
 // Suggest next punch type based on today's punches for the employee
 router.get('/next-punch/:employeeId', async (req, res) => {
   try {
+    await ensureAttendanceSchema();
     const orgId = await resolveOrgId(req);
     if (!orgId) return res.status(400).json({ error: 'Organização não identificada' });
 
@@ -86,6 +133,7 @@ router.get('/next-punch/:employeeId', async (req, res) => {
 // Register punch on behalf of employee (kiosk / tablet mode)
 router.post('/punch', async (req, res) => {
   try {
+    await ensureAttendanceSchema();
     const orgId = await resolveOrgId(req);
     if (!orgId) return res.status(400).json({ error: 'Organização não identificada' });
 
@@ -114,9 +162,6 @@ router.post('/punch', async (req, res) => {
       const doneTypes = done.rows.map((r) => r.punch_type);
       ptype = seq.find((t) => !doneTypes.includes(t)) || 'entrada';
     }
-
-    try { await query(`ALTER TABLE time_punches ADD COLUMN IF NOT EXISTS selfie_url TEXT`); } catch {}
-    try { await query(`ALTER TABLE time_punches ADD COLUMN IF NOT EXISTS source TEXT`); } catch {}
 
     // punched_at = timestamp real (UTC). O banco converte para SP quando exibimos.
     // NÃO usar `new Date(toLocaleString('en-US', {timeZone:'SP'}))` — isso quebra em servidores UTC

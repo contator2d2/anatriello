@@ -113,6 +113,92 @@ async function tableExists(tableName) {
   return Boolean(result.rows[0]?.table_name);
 }
 
+let attendanceSchemaPromise = null;
+async function ensureAttendanceSchema() {
+  if (attendanceSchemaPromise) return attendanceSchemaPromise;
+  attendanceSchemaPromise = (async () => {
+    await query(`
+      CREATE TABLE IF NOT EXISTS time_punches (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        organization_id UUID NOT NULL,
+        employee_id UUID NOT NULL,
+        punch_type VARCHAR(30) NOT NULL,
+        punched_at TIMESTAMPTZ NOT NULL,
+        latitude NUMERIC(10,7),
+        longitude NUMERIC(10,7),
+        accuracy_meters NUMERIC(8,2),
+        pdv_id UUID,
+        distance_from_pdv NUMERIC(10,2),
+        geo_status VARCHAR(30) DEFAULT 'dentro_area',
+        device_info TEXT,
+        ip_address VARCHAR(45),
+        is_offline BOOLEAN DEFAULT false,
+        offline_local_time TIMESTAMPTZ,
+        synced_at TIMESTAMPTZ,
+        sync_status VARCHAR(20) DEFAULT 'synced',
+        justification TEXT,
+        approved BOOLEAN,
+        approved_by UUID,
+        selfie_url TEXT,
+        source TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await query(`ALTER TABLE time_punches ADD COLUMN IF NOT EXISTS selfie_url TEXT`);
+    await query(`ALTER TABLE time_punches ADD COLUMN IF NOT EXISTS source TEXT`);
+    await query(`ALTER TABLE time_punches ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_time_punches_emp ON time_punches(employee_id)`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_time_punches_emp_day_sp ON time_punches(employee_id, ((punched_at AT TIME ZONE 'America/Sao_Paulo')::date))`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_time_punches_org ON time_punches(organization_id)`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_time_punches_date ON time_punches(punched_at)`);
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS time_alerts (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        organization_id UUID NOT NULL,
+        employee_id UUID NOT NULL,
+        alert_type VARCHAR(50) NOT NULL,
+        alert_date DATE NOT NULL,
+        description TEXT,
+        resolved BOOLEAN DEFAULT false,
+        resolved_by UUID,
+        resolved_at TIMESTAMPTZ,
+        resolution_notes TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await query(`CREATE INDEX IF NOT EXISTS idx_time_alerts_org ON time_alerts(organization_id)`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_time_alerts_date ON time_alerts(alert_date)`);
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS time_rules (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        organization_id UUID NOT NULL,
+        employee_id UUID,
+        name VARCHAR(255),
+        late_tolerance_minutes INTEGER DEFAULT 10,
+        early_leave_tolerance INTEGER DEFAULT 10,
+        break_tolerance INTEGER DEFAULT 5,
+        max_late_minutes INTEGER DEFAULT 30,
+        require_justification BOOLEAN DEFAULT true,
+        absence_on_no_punch BOOLEAN DEFAULT true,
+        punch_window_minutes INTEGER DEFAULT 60,
+        allow_manual_adjustment BOOLEAN DEFAULT true,
+        require_geo BOOLEAN DEFAULT true,
+        allow_offline_punch BOOLEAN DEFAULT true,
+        allow_exception_punch BOOLEAN DEFAULT true,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await query(`CREATE INDEX IF NOT EXISTS idx_time_rules_org ON time_rules(organization_id)`);
+  })().catch((err) => {
+    attendanceSchemaPromise = null;
+    throw err;
+  });
+  return attendanceSchemaPromise;
+}
+
 async function isOrgAdmin(userId, orgId) {
   if (!userId || !orgId) return false;
   const r = await query(
@@ -238,6 +324,7 @@ function parseTimeToMinutes(value, fallback) {
 
 router.get('/home', authenticatePromotor, async (req, res) => {
   try {
+    await ensureAttendanceSchema();
     // Use America/Sao_Paulo timezone
     const nowBR = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
     const today = `${nowBR.getFullYear()}-${String(nowBR.getMonth()+1).padStart(2,'0')}-${String(nowBR.getDate()).padStart(2,'0')}`;
@@ -405,6 +492,7 @@ router.get('/home', authenticatePromotor, async (req, res) => {
 router.post('/punch', authenticatePromotor, async (req, res) => {
   try {
     const { punch_type, latitude, longitude, accuracy_meters, pdv_id, is_offline, offline_local_time, justification, local_id, facial_verified, selfie_url } = req.body;
+    await ensureAttendanceSchema();
     await ensurePromotorFaceColumns();
 
     // ===== WORK SCHEDULE VALIDATION =====
@@ -577,9 +665,6 @@ router.post('/punch', authenticatePromotor, async (req, res) => {
       }
       if (justification) geo_status = 'excecao';
     }
-
-    // Garante coluna selfie_url (idempotente)
-    try { await query(`ALTER TABLE time_punches ADD COLUMN IF NOT EXISTS selfie_url TEXT`); } catch {}
 
     const punchedAt = punchInstant;
 
@@ -773,6 +858,7 @@ router.put('/rh/overtime-requests/:id', async (req, res) => {
 // =============================================
 router.get('/punches', authenticatePromotor, async (req, res) => {
   try {
+    await ensureAttendanceSchema();
     const { start_date, end_date } = req.query;
     let sql = `SELECT tp.*, p.name as pdv_name FROM time_punches tp LEFT JOIN pdvs p ON p.id = tp.pdv_id WHERE tp.employee_id = $1`;
     const params = [req.employeeId];
@@ -1096,6 +1182,7 @@ router.post('/face-enrollment', authenticatePromotor, async (req, res) => {
 // =============================================
 router.post('/sync', authenticatePromotor, async (req, res) => {
   try {
+    await ensureAttendanceSchema();
     const { events } = req.body; // Array of offline events
     const results = [];
     for (const ev of (events || [])) {
@@ -1593,6 +1680,7 @@ router.put('/rh/inbound-documents/:id', async (req, res) => {
 // =============================================
 router.get('/rh/punch-monitor', async (req, res) => {
   try {
+    await ensureAttendanceSchema();
     const orgId = await resolveOrganizationId(req);
     // Data "hoje" no fuso America/Sao_Paulo (evita bug de virada de dia em servidor UTC)
     const todayRes = await query(`SELECT (NOW() AT TIME ZONE 'America/Sao_Paulo')::date AS d`);
