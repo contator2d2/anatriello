@@ -135,8 +135,12 @@ export function useOfflineSync() {
 
         await db.pending_uploads.delete(upload.id!);
       } catch (err: any) {
-        logger.error('[OfflineSync] Erro no upload', { id: upload.id, error: err.message });
-        await db.pending_uploads.update(upload.id!, { status: 'failed', error: err.message });
+        const message = err?.message || 'Erro no upload';
+        const statusMatch = String(message).match(/status\s+(\d+)/i);
+        const status = statusMatch ? Number(statusMatch[1]) : 0;
+        const retryable = !status || status === 408 || status === 429 || status >= 500 || /failed to fetch|networkerror|load failed|internet|offline/i.test(message);
+        logger.error('[OfflineSync] Erro no upload', { id: upload.id, error: message, retryable });
+        await db.pending_uploads.update(upload.id!, { status: retryable ? 'pending' : 'failed', error: message });
       }
     };
 
@@ -206,8 +210,11 @@ export function useOfflineSync() {
         await db.pending_api_calls.delete(call.id!);
         logger.info('[OfflineSync] Chamada API concluída', { url: call.url });
       } catch (err: any) {
-        logger.error('[OfflineSync] Erro na chamada API', { id: call.id, error: err.message, url: call.url });
-        await db.pending_api_calls.update(call.id!, { status: 'failed', error: err.message });
+        const status = Number(err?.status || err?.response?.status || 0);
+        const message = err?.message || 'Erro de sincronização';
+        const retryable = !status || status === 408 || status === 429 || status >= 500 || /failed to fetch|networkerror|load failed|internet|offline/i.test(message);
+        logger.error('[OfflineSync] Erro na chamada API', { id: call.id, error: message, url: call.url, retryable });
+        await db.pending_api_calls.update(call.id!, { status: retryable ? 'pending' : 'failed', error: message });
       }
     }
 

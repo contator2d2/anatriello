@@ -24,8 +24,8 @@ interface Matched {
 
 const PUNCH_LABELS: Record<string, string> = {
   entrada: "Entrada",
-  saida_almoco: "Saída Almoço",
-  volta_almoco: "Volta Almoço",
+  saida_intervalo: "Saída Almoço",
+  retorno_intervalo: "Volta Almoço",
   saida: "Saída",
 };
 
