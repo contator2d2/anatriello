@@ -2273,35 +2273,117 @@ router.get('/pdvs', async (req, res) => {
 
 // ─── Facial Recognition Config ───
 let facialRecognitionInfraReady = false;
+let facialRecognitionInfraPromise = null;
 
-async function ensureFacialRecognitionInfra() {
-  if (facialRecognitionInfraReady) return;
-  await query(`CREATE EXTENSION IF NOT EXISTS pgcrypto`);
-  await query(`
-    CREATE TABLE IF NOT EXISTS facial_recognition_config (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-      enabled BOOLEAN DEFAULT false,
-      use_for_attendance BOOLEAN DEFAULT false,
-      use_for_checkin BOOLEAN DEFAULT false,
-      min_confidence NUMERIC(5,2) DEFAULT 70.00,
-      require_photo_registration BOOLEAN DEFAULT true,
-      auto_verify_on_clock_in BOOLEAN DEFAULT false,
-      allow_manual_fallback BOOLEAN DEFAULT true,
-      photo_quality_check BOOLEAN DEFAULT true,
-      allow_self_enrollment BOOLEAN DEFAULT false,
-      created_at TIMESTAMPTZ DEFAULT NOW(),
-      updated_at TIMESTAMPTZ DEFAULT NOW(),
-      UNIQUE(organization_id)
-    )
-  `);
-  try { await query(`ALTER TABLE facial_recognition_config ADD COLUMN IF NOT EXISTS allow_self_enrollment BOOLEAN DEFAULT false`); } catch {}
+const DEFAULT_FACIAL_CONFIG = {
+  enabled: false,
+  use_for_attendance: false,
+  use_for_checkin: false,
+  min_confidence: 70,
+  require_photo_registration: true,
+  auto_verify_on_clock_in: false,
+  allow_manual_fallback: true,
+  photo_quality_check: true,
+  allow_self_enrollment: false,
+};
+
+async function tableExists(tableName) {
+  try {
+    const r = await query(`SELECT to_regclass($1) AS name`, [`public.${tableName}`]);
+    return !!r.rows[0]?.name;
+  } catch (err) {
+    logError('rh.tableExists.safeSkip', err, { tableName });
+    return false;
+  }
+}
+
+async function safeGetUserOrgId(userId) {
+  try {
+    if (!userId) return null;
+    return await getUserOrgId(userId);
+  } catch (err) {
+    logError('rh.getUserOrgId.safeSkip', err, { userId });
+    return null;
+  }
+}
+
+async function ensureFacialConfigTable() {
+  try {
+    await query(`
+      CREATE TABLE IF NOT EXISTS facial_recognition_config (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        enabled BOOLEAN DEFAULT false,
+        use_for_attendance BOOLEAN DEFAULT false,
+        use_for_checkin BOOLEAN DEFAULT false,
+        min_confidence NUMERIC(5,2) DEFAULT 70.00,
+        require_photo_registration BOOLEAN DEFAULT true,
+        auto_verify_on_clock_in BOOLEAN DEFAULT false,
+        allow_manual_fallback BOOLEAN DEFAULT true,
+        photo_quality_check BOOLEAN DEFAULT true,
+        allow_self_enrollment BOOLEAN DEFAULT false,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(organization_id)
+      )
+    `);
+  } catch (err) {
+    if (err?.code !== '42P01') throw err;
+    // Banco legado sem tabela organizations pronta: mantém o endpoint funcional e
+    // ainda escopado por organization_id, sem quebrar a tela de configuração.
+    await query(`
+      CREATE TABLE IF NOT EXISTS facial_recognition_config (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        organization_id UUID NOT NULL,
+        enabled BOOLEAN DEFAULT false,
+        use_for_attendance BOOLEAN DEFAULT false,
+        use_for_checkin BOOLEAN DEFAULT false,
+        min_confidence NUMERIC(5,2) DEFAULT 70.00,
+        require_photo_registration BOOLEAN DEFAULT true,
+        auto_verify_on_clock_in BOOLEAN DEFAULT false,
+        allow_manual_fallback BOOLEAN DEFAULT true,
+        photo_quality_check BOOLEAN DEFAULT true,
+        allow_self_enrollment BOOLEAN DEFAULT false,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_facial_config_org_unique ON facial_recognition_config(organization_id)`);
+  }
+
+  const columns = [
+    `ALTER TABLE facial_recognition_config ADD COLUMN IF NOT EXISTS enabled BOOLEAN DEFAULT false`,
+    `ALTER TABLE facial_recognition_config ADD COLUMN IF NOT EXISTS use_for_attendance BOOLEAN DEFAULT false`,
+    `ALTER TABLE facial_recognition_config ADD COLUMN IF NOT EXISTS use_for_checkin BOOLEAN DEFAULT false`,
+    `ALTER TABLE facial_recognition_config ADD COLUMN IF NOT EXISTS min_confidence NUMERIC(5,2) DEFAULT 70.00`,
+    `ALTER TABLE facial_recognition_config ADD COLUMN IF NOT EXISTS require_photo_registration BOOLEAN DEFAULT true`,
+    `ALTER TABLE facial_recognition_config ADD COLUMN IF NOT EXISTS auto_verify_on_clock_in BOOLEAN DEFAULT false`,
+    `ALTER TABLE facial_recognition_config ADD COLUMN IF NOT EXISTS allow_manual_fallback BOOLEAN DEFAULT true`,
+    `ALTER TABLE facial_recognition_config ADD COLUMN IF NOT EXISTS photo_quality_check BOOLEAN DEFAULT true`,
+    `ALTER TABLE facial_recognition_config ADD COLUMN IF NOT EXISTS allow_self_enrollment BOOLEAN DEFAULT false`,
+    `ALTER TABLE facial_recognition_config ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()`,
+    `ALTER TABLE facial_recognition_config ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`,
+  ];
+  for (const sql of columns) {
+    try { await query(sql); } catch (err) { logError('rh.facial-config.alter.safeSkip', err); }
+  }
+  await query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_facial_config_org_unique ON facial_recognition_config(organization_id)`);
+}
+
+async function ensureFaceVerificationLogsTable() {
+  const hasOrganizations = await tableExists('organizations');
+  const hasEmployees = await tableExists('employees');
+  const hasAgencyPromoters = await tableExists('agency_promoters');
+  const organizationRef = hasOrganizations ? ` REFERENCES organizations(id) ON DELETE CASCADE` : '';
+  const employeeRef = hasEmployees ? ` REFERENCES employees(id) ON DELETE SET NULL` : '';
+  const agencyRef = hasAgencyPromoters ? ` REFERENCES agency_promoters(id) ON DELETE SET NULL` : '';
+
   await query(`
     CREATE TABLE IF NOT EXISTS face_verification_logs (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-      employee_id UUID REFERENCES employees(id) ON DELETE SET NULL,
-      agency_promoter_id UUID REFERENCES agency_promoters(id) ON DELETE SET NULL,
+      organization_id UUID NOT NULL${organizationRef},
+      employee_id UUID${employeeRef},
+      agency_promoter_id UUID${agencyRef},
       verification_context VARCHAR(30) NOT NULL,
       confidence_score NUMERIC(5,2),
       result VARCHAR(20) NOT NULL,
@@ -2312,44 +2394,71 @@ async function ensureFacialRecognitionInfra() {
       created_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
-  await query(`CREATE INDEX IF NOT EXISTS idx_face_verify_org ON face_verification_logs(organization_id, created_at)`);
-  await query(`CREATE INDEX IF NOT EXISTS idx_face_verify_employee ON face_verification_logs(employee_id, created_at)`);
-  facialRecognitionInfraReady = true;
+
+  const columns = [
+    `ALTER TABLE face_verification_logs ADD COLUMN IF NOT EXISTS organization_id UUID`,
+    `ALTER TABLE face_verification_logs ADD COLUMN IF NOT EXISTS employee_id UUID`,
+    `ALTER TABLE face_verification_logs ADD COLUMN IF NOT EXISTS agency_promoter_id UUID`,
+    `ALTER TABLE face_verification_logs ADD COLUMN IF NOT EXISTS verification_context VARCHAR(30)`,
+    `ALTER TABLE face_verification_logs ADD COLUMN IF NOT EXISTS confidence_score NUMERIC(5,2)`,
+    `ALTER TABLE face_verification_logs ADD COLUMN IF NOT EXISTS result VARCHAR(20)`,
+    `ALTER TABLE face_verification_logs ADD COLUMN IF NOT EXISTS captured_image_url TEXT`,
+    `ALTER TABLE face_verification_logs ADD COLUMN IF NOT EXISTS device_info TEXT`,
+    `ALTER TABLE face_verification_logs ADD COLUMN IF NOT EXISTS ip_address VARCHAR(45)`,
+    `ALTER TABLE face_verification_logs ADD COLUMN IF NOT EXISTS processing_time_ms INTEGER`,
+    `ALTER TABLE face_verification_logs ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()`,
+  ];
+  for (const sql of columns) {
+    try { await query(sql); } catch (err) { logError('rh.face-logs.alter.safeSkip', err); }
+  }
+}
+
+async function ensureFacialRecognitionInfra() {
+  if (facialRecognitionInfraReady) return;
+  if (!facialRecognitionInfraPromise) {
+    facialRecognitionInfraPromise = (async () => {
+      await query(`CREATE EXTENSION IF NOT EXISTS pgcrypto`);
+      await ensureFacialConfigTable();
+      try {
+        await ensureFaceVerificationLogsTable();
+        await query(`CREATE INDEX IF NOT EXISTS idx_face_verify_org ON face_verification_logs(organization_id, created_at)`);
+        await query(`CREATE INDEX IF NOT EXISTS idx_face_verify_employee ON face_verification_logs(employee_id, created_at)`);
+      } catch (err) {
+        // Logs não podem derrubar a tela de configuração/listagem facial.
+        logError('rh.face-logs.ensure.safeSkip', err);
+      }
+      facialRecognitionInfraReady = true;
+    })().catch((err) => {
+      facialRecognitionInfraPromise = null;
+      throw err;
+    });
+  }
+  return facialRecognitionInfraPromise;
 }
 
 router.get('/facial-recognition/config', async (req, res) => {
   try {
     await ensureFacialRecognitionInfra();
-    const orgId = req.query.org_id || await getUserOrgId(req.userId);
-    if (!orgId) return res.json({ enabled: false });
+    const orgId = req.query.org_id || await safeGetUserOrgId(req.userId);
+    if (!orgId) return res.json(DEFAULT_FACIAL_CONFIG);
     const result = await query(
       `SELECT * FROM facial_recognition_config WHERE organization_id = $1 LIMIT 1`,
       [orgId]
     );
     if (result.rows.length === 0) {
-      return res.json({
-        enabled: false,
-        use_for_attendance: false,
-        use_for_checkin: false,
-        min_confidence: 70,
-        require_photo_registration: true,
-        auto_verify_on_clock_in: false,
-        allow_manual_fallback: true,
-        photo_quality_check: true,
-        allow_self_enrollment: false,
-      });
+      return res.json({ ...DEFAULT_FACIAL_CONFIG, organization_id: orgId });
     }
-    res.json(result.rows[0]);
+    res.json({ ...DEFAULT_FACIAL_CONFIG, ...result.rows[0] });
   } catch (err) {
     logError('rh.facial-config.get', err);
-    res.status(500).json({ error: err.message || 'Erro ao carregar configuração da biometria facial' });
+    res.json(DEFAULT_FACIAL_CONFIG);
   }
 });
 
 router.put('/facial-recognition/config', async (req, res) => {
   try {
     await ensureFacialRecognitionInfra();
-    const orgId = req.body.organization_id || await getUserOrgId(req.userId);
+    const orgId = req.body.organization_id || await safeGetUserOrgId(req.userId);
     if (!orgId) return res.status(400).json({ error: 'Organização não encontrada' });
 
     const d = {
@@ -2409,13 +2518,20 @@ router.put('/facial-recognition/config', async (req, res) => {
 let faceEnrollColumnReady = false;
 async function ensureFaceEnrollColumn() {
   if (faceEnrollColumnReady) return;
+  if (!(await tableExists('employees'))) return;
   await query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS face_descriptor JSONB`);
   await query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS face_photo_url TEXT`);
   await query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS face_enrolled_at TIMESTAMPTZ`);
   await query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS face_collection_requested BOOLEAN DEFAULT false`);
   await query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS face_collection_requested_at TIMESTAMPTZ`);
   await query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS face_quality_score NUMERIC(5,2)`);
+  await query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS facial_required BOOLEAN`);
+  _employeeColsCache = null;
   faceEnrollColumnReady = true;
+}
+
+function employeeColumnSql(cols, name, fallback = 'NULL') {
+  return cols.has(name) ? `e.${name}` : `${fallback}`;
 }
 
 // Considered "listable" for facial biometrics: anyone not terminated / inactive.
@@ -2428,32 +2544,43 @@ router.get('/facial-recognition/employees', async (req, res) => {
   try {
     await ensureFacialRecognitionInfra();
     await ensureFaceEnrollColumn();
-    const orgId = req.query.org_id || await getUserOrgId(req.userId);
+    if (!(await tableExists('employees'))) return res.json([]);
+    const orgId = req.query.org_id || await safeGetUserOrgId(req.userId);
     if (!orgId) return res.json([]);
 
     const { filter, company_id } = req.query; // 'all' | 'enrolled' | 'pending'
-    let sql = `SELECT e.id, e.full_name, e.photo_url, e.cpf, e.position, e.status,
-                      e.company_id, e.branch_id,
-                      COALESCE(e.facial_required, true) as facial_verification_enabled,
-                      e.face_descriptor IS NOT NULL as face_enrolled,
-                      e.face_photo_url, e.face_enrolled_at,
-                      COALESCE(e.face_collection_requested, false) as face_collection_requested,
-                      e.face_collection_requested_at
+    const cols = await getEmployeeColumns();
+    const statusFilter = cols.has('status') ? ` AND ${LISTABLE_EMPLOYEE_STATUS_SQL}` : '';
+    const faceDescriptorSql = cols.has('face_descriptor') ? `e.face_descriptor IS NOT NULL` : `false`;
+    const facialRequiredSql = cols.has('facial_required') ? `COALESCE(e.facial_required, true)` : `true`;
+    let sql = `SELECT e.id, e.full_name,
+                      ${employeeColumnSql(cols, 'photo_url')} as photo_url,
+                      ${employeeColumnSql(cols, 'cpf')} as cpf,
+                      ${employeeColumnSql(cols, 'position')} as position,
+                      ${employeeColumnSql(cols, 'status', `'ativo'`)} as status,
+                      ${employeeColumnSql(cols, 'company_id')} as company_id,
+                      ${employeeColumnSql(cols, 'branch_id')} as branch_id,
+                      ${facialRequiredSql} as facial_verification_enabled,
+                      ${faceDescriptorSql} as face_enrolled,
+                      ${employeeColumnSql(cols, 'face_photo_url')} as face_photo_url,
+                      ${employeeColumnSql(cols, 'face_enrolled_at')} as face_enrolled_at,
+                      COALESCE(${employeeColumnSql(cols, 'face_collection_requested', 'false')}, false) as face_collection_requested,
+                      ${employeeColumnSql(cols, 'face_collection_requested_at')} as face_collection_requested_at
                FROM employees e
-               WHERE e.organization_id = $1 AND ${LISTABLE_EMPLOYEE_STATUS_SQL}`;
+               WHERE e.organization_id = $1${statusFilter}`;
     const params = [orgId];
     let idx = 2;
 
-    if (company_id) { sql += ` AND e.company_id = $${idx++}`; params.push(company_id); }
-    if (filter === 'enrolled') sql += ` AND e.face_descriptor IS NOT NULL`;
-    else if (filter === 'pending') sql += ` AND e.face_descriptor IS NULL`;
+    if (company_id && cols.has('company_id')) { sql += ` AND e.company_id = $${idx++}`; params.push(company_id); }
+    if (filter === 'enrolled') sql += cols.has('face_descriptor') ? ` AND e.face_descriptor IS NOT NULL` : ` AND false`;
+    else if (filter === 'pending' && cols.has('face_descriptor')) sql += ` AND e.face_descriptor IS NULL`;
 
-    sql += ` ORDER BY e.face_descriptor IS NULL DESC, e.full_name`;
+    sql += cols.has('face_descriptor') ? ` ORDER BY e.face_descriptor IS NULL DESC, e.full_name` : ` ORDER BY e.full_name`;
     const result = await query(sql, params);
     res.json(result.rows);
   } catch (err) {
     logError('rh.facial.employees', err);
-    res.status(500).json({ error: err.message });
+    res.json([]);
   }
 });
 
@@ -2461,6 +2588,7 @@ router.get('/facial-recognition/employees', async (req, res) => {
 router.post('/facial-recognition/request-collection/:employeeId', async (req, res) => {
   try {
     await ensureFaceEnrollColumn();
+    if (!(await tableExists('employees'))) return res.status(404).json({ error: 'Colaboradores não encontrados' });
     await query(
       `UPDATE employees SET face_collection_requested = true, face_collection_requested_at = NOW() WHERE id = $1`,
       [req.params.employeeId]
@@ -2476,6 +2604,7 @@ router.post('/facial-recognition/request-collection/:employeeId', async (req, re
 router.put('/facial-recognition/toggle-verification/:employeeId', async (req, res) => {
   try {
     await ensureFaceEnrollColumn();
+    if (!(await tableExists('employees'))) return res.status(404).json({ error: 'Colaboradores não encontrados' });
     const enabled = req.body?.enabled !== false;
     await query(
       `UPDATE employees SET facial_required = $1 WHERE id = $2`,
