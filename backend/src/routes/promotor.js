@@ -917,6 +917,7 @@ async function ensurePromotorFaceColumns() {
     await query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS face_collection_requested BOOLEAN DEFAULT false`);
     await query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS face_collection_requested_at TIMESTAMPTZ`);
     await query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS face_quality_score NUMERIC(5,2)`);
+    await query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS facial_required BOOLEAN`);
   } catch {}
 }
 
