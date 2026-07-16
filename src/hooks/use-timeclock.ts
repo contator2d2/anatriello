@@ -147,11 +147,21 @@ export function usePunchesDailyGrid(params: { start?: string; end?: string; comp
   });
 }
 
+async function safeSummary(url: string): Promise<any[]> {
+  try {
+    return await api<any[]>(url);
+  } catch (e: any) {
+    // Backend antigo pode retornar 500/404 quando o schema de banco de horas ainda não foi criado.
+    if (e?.status === 500 || e?.status === 404) return [];
+    throw e;
+  }
+}
+
 export function useTimeBankSummaryByCompany(company_id?: string) {
   const qs = company_id ? `?company_id=${company_id}` : '';
   return useQuery({
     queryKey: ['timeclock', 'tb-summary-comp', company_id || 'all'],
-    queryFn: () => api<any[]>(`/api/timeclock/time-bank/summary${qs}`),
+    queryFn: () => safeSummary(`/api/timeclock/time-bank/summary${qs}`),
   });
 }
 
@@ -159,9 +169,10 @@ export function useTimeBankSummary(employee_id?: string) {
   const qs = employee_id ? `?employee_id=${employee_id}` : '';
   return useQuery({
     queryKey: ['timeclock', 'tb-summary', employee_id || 'all'],
-    queryFn: () => api<any[]>(`/api/timeclock/time-bank/summary${qs}`),
+    queryFn: () => safeSummary(`/api/timeclock/time-bank/summary${qs}`),
   });
 }
+
 
 export function useTimeBankEntries(employee_id?: string, start?: string, end?: string) {
   return useQuery({
