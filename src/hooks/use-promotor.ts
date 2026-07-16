@@ -4,7 +4,7 @@ import { api } from '@/lib/api';
 
 // ===== PROMOTOR APP HOOKS (used by collaborator app) =====
 
-const promotorApi = async <T>(endpoint: string, options: any = {}): Promise<T> => {
+export const promotorApi = async <T>(endpoint: string, options: any = {}): Promise<T> => {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   const token = localStorage.getItem('promotor_token');
   if (token) headers['Authorization'] = `Bearer ${token}`;
