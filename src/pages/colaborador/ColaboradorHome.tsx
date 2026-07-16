@@ -563,7 +563,6 @@ export default function ColaboradorHome() {
             )}
           </div>
         </div>
-        </div>
 
         {/* Comunicados recentes */}
         {can("announcements.view") && !!announcements?.length && (
