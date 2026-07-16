@@ -558,39 +558,94 @@ router.get('/cartao-ponto', async (req, res) => {
     const { employee_id, start, end } = req.query;
     if (!orgId || !employee_id || !start || !end) return res.status(400).json({ error: 'org_id, employee_id, start, end obrigatórios' });
 
-    const emp = await query(
-      `SELECT e.id, e.full_name, e.cpf, e.registration, e.work_schedule, e.company_id,
-              c.trade_name AS company_name, c.cnpj AS company_cnpj,
-              d.name AS department_name, e.position
-       FROM employees e
-       LEFT JOIN companies c ON c.id = e.company_id
-       LEFT JOIN rh_departments d ON d.id = e.department_id
-       WHERE e.id = $1`,
-      [employee_id]
-    );
-    if (!emp.rows[0]) return res.status(404).json({ error: 'Colaborador não encontrado' });
+    let empRow = null;
+    try {
+      const emp = await query(
+        `SELECT e.id, e.full_name, e.cpf, e.registration, e.work_schedule, e.company_id,
+                c.trade_name AS company_name, c.cnpj AS company_cnpj,
+                d.name AS department_name, e.position
+         FROM employees e
+         LEFT JOIN companies c ON c.id = e.company_id
+         LEFT JOIN rh_departments d ON d.id = e.department_id
+         WHERE e.id = $1`,
+        [employee_id]
+      );
+      empRow = emp.rows[0] || null;
+    } catch (e) {
+      // fallback sem join em rh_departments (tabela pode não existir)
+      try {
+        const emp2 = await query(
+          `SELECT e.id, e.full_name, e.cpf, e.registration, e.work_schedule, e.company_id,
+                  c.trade_name AS company_name, c.cnpj AS company_cnpj,
+                  NULL::text AS department_name, e.position
+           FROM employees e
+           LEFT JOIN companies c ON c.id = e.company_id
+           WHERE e.id = $1`,
+          [employee_id]
+        );
+        empRow = emp2.rows[0] || null;
+      } catch (_) { empRow = null; }
+    }
+    if (!empRow) return res.status(404).json({ error: 'Colaborador não encontrado' });
 
-    // Recalcular tudo antes de retornar
-    const { days } = await recalcEmployeePeriod({ organizationId: orgId, employeeId: employee_id, startDate: start, endDate: end });
+    // Recalcular tudo antes de retornar — tolerante a falhas de esquema
+    let days = [];
+    let recalcError = null;
+    try {
+      const r = await recalcEmployeePeriod({ organizationId: orgId, employeeId: employee_id, startDate: start, endDate: end });
+      days = r.days || [];
+    } catch (e) {
+      recalcError = e.message || String(e);
+      logError('timeclock.cartao-ponto.recalc', e);
+      // Fallback: gera grade vazia com apenas as batidas do período
+      try {
+        const punchRes = await query(
+          `SELECT id, punch_type, punched_at
+           FROM time_punches
+           WHERE employee_id = $1 AND (punched_at AT TIME ZONE 'America/Sao_Paulo')::date BETWEEN $2::date AND $3::date
+           ORDER BY punched_at`,
+          [employee_id, start, end]
+        ).catch(() => ({ rows: [] }));
+        const byDate = new Map();
+        for (const p of punchRes.rows) {
+          const d = new Date(p.punched_at).toISOString().slice(0, 10);
+          if (!byDate.has(d)) byDate.set(d, []);
+          byDate.get(d).push(p);
+        }
+        const s = new Date(start + 'T12:00:00');
+        const e2 = new Date(end + 'T12:00:00');
+        for (let d = new Date(s); d <= e2; d.setDate(d.getDate() + 1)) {
+          const dateStr = d.toISOString().slice(0, 10);
+          const punches = byDate.get(dateStr) || [];
+          days.push({
+            date: dateStr, dow: d.getDay(),
+            entry1: null, exit1: null, entry2: null, exit2: null, entry3: null, exit3: null,
+            total_worked_min: 0, expected_min: 0, credit_min: 0, debit_min: 0, balance_min: 0,
+            overtime_min: 0, status: punches.length ? 'ok' : 'sem_registro',
+            punches,
+          });
+        }
+      } catch (_) { days = []; }
+    }
 
-    // Totais
     const totals = days.reduce((acc, d) => {
-      acc.worked_min += d.total_worked_min;
-      acc.expected_min += d.expected_min;
-      acc.credit_min += d.credit_min;
-      acc.debit_min += d.debit_min;
-      acc.balance_min += d.balance_min;
+      acc.worked_min += d.total_worked_min || 0;
+      acc.expected_min += d.expected_min || 0;
+      acc.credit_min += d.credit_min || 0;
+      acc.debit_min += d.debit_min || 0;
+      acc.balance_min += d.balance_min || 0;
       if (d.status === 'falta') acc.absences++;
       if (d.status === 'atraso') acc.lates++;
       return acc;
     }, { worked_min: 0, expected_min: 0, credit_min: 0, debit_min: 0, balance_min: 0, absences: 0, lates: 0 });
 
-    res.json({ employee: emp.rows[0], days, totals });
+    res.json({ employee: empRow, days, totals, ...(recalcError ? { warning: 'Cálculo parcial', detail: recalcError } : {}) });
   } catch (err) {
     logError('timeclock.cartao-ponto', err);
-    res.status(500).json({ error: 'Erro ao carregar cartão ponto' });
+    res.status(500).json({ error: 'Erro ao carregar cartão ponto', detail: err.message });
   }
 });
+
 
 // PUT /api/timeclock/cartao-ponto — editar batidas de um dia (RH)
 // body: { employee_id, date, times: ["08:00","12:00","13:00","17:00"], reason }
