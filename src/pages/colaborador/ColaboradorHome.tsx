@@ -510,7 +510,59 @@ export default function ColaboradorHome() {
                 ))}
               </div>
             )}
+        </div>
+
+        {/* Minha agenda — férias, folgas, escalas */}
+        <div>
+          <div className="flex items-center gap-2 mb-2 px-1">
+            <Calendar className="h-4 w-4 text-slate-500" />
+            <p className="text-[15px] font-bold text-slate-800">Minha agenda</p>
           </div>
+          <div className="bg-white rounded-2xl p-4 shadow-sm">
+            {scheduleText && scheduleText !== "—" && (
+              <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
+                <div className="h-10 w-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                  <Clock className="h-5 w-5" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-slate-800">Escala de trabalho</p>
+                  <p className="text-xs text-slate-500">{scheduleText} • Todos os dias úteis</p>
+                </div>
+              </div>
+            )}
+            {(agenda || []).length === 0 ? (
+              <div className="pt-3">
+                <p className="text-sm text-slate-500">Nenhuma férias ou folga agendada.</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {(agenda || []).map((a: any, i: number) => (
+                  <div key={i} className="flex items-center gap-3 py-2.5 first:pt-3">
+                    <div className={cn(
+                      "h-10 w-10 rounded-xl flex items-center justify-center",
+                      a.type === "ferias" ? "bg-emerald-50 text-emerald-600" : "bg-amber-50 text-amber-600"
+                    )}>
+                      <Calendar className="h-5 w-5" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-slate-800 truncate">{a.label}</p>
+                      <p className="text-xs text-slate-500">
+                        {format(new Date(a.date), "dd/MM/yyyy", { locale: ptBR })}
+                        {a.end_date ? ` — ${format(new Date(a.end_date), "dd/MM/yyyy", { locale: ptBR })}` : ""}
+                      </p>
+                    </div>
+                    <span className={cn(
+                      "text-[10px] font-bold uppercase px-2 py-1 rounded-full",
+                      a.type === "ferias" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
+                    )}>
+                      {a.type === "ferias" ? "Férias" : "Folga"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
         </div>
 
         {/* Comunicados recentes */}
