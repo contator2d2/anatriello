@@ -171,7 +171,7 @@ const upload = multer({
 });
 
 // Upload single file
-router.post('/', authenticate, (req, res) => {
+router.post('/', authenticateAny, (req, res) => {
   upload.single('file')(req, res, (err) => {
     try {
       if (err) {
