@@ -139,7 +139,10 @@ export function calculateDay({ punches = [], schedule, isHoliday = false, isSund
     pairs[k] = times[i] || null;
   });
 
-  // Minutos trabalhados e minutos noturnos
+  // Minutos trabalhados e minutos noturnos.
+  // Café (saida_cafe → retorno_cafe) é intervalo remunerado (CLT até 15min):
+  // somamos como se fosse tempo trabalhado, mesmo estando entre um par.
+  const coffeeMaxPaidMin = rules.coffee_max_paid_min ?? 15;
   let workedMin = 0;
   let nightMin = 0;
   for (let i = 0; i < times.length - 1; i += 2) {
@@ -150,6 +153,17 @@ export function calculateDay({ punches = [], schedule, isHoliday = false, isSund
     if (b > a) {
       workedMin += (b - a);
       nightMin += nightMinutesInRange(a, b);
+    }
+  }
+  // Re-somar as pausas de café (par saida_cafe → retorno_cafe) até o limite legal
+  for (let i = 0; i < sorted.length - 1; i++) {
+    if (sorted[i].punch_type === 'saida_cafe' && sorted[i + 1]?.punch_type === 'retorno_cafe') {
+      let a = toMin(toHHMMSS(sorted[i].punched_at));
+      let b = toMin(toHHMMSS(sorted[i + 1].punched_at));
+      if (a != null && b != null) {
+        if (b <= a) b += 24 * 60;
+        workedMin += Math.min(b - a, coffeeMaxPaidMin);
+      }
     }
   }
 

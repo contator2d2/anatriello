@@ -11,6 +11,8 @@ type Tab = "dia" | "semana" | "mes";
 
 const PUNCH_LABEL: Record<string, string> = {
   entrada: "Entrada",
+  saida_cafe: "Início Café",
+  retorno_cafe: "Fim Café",
   saida_intervalo: "Início Almoço",
   retorno_intervalo: "Fim Almoço",
   saida: "Saída",
@@ -19,6 +21,8 @@ const PUNCH_LABEL: Record<string, string> = {
 
 const PUNCH_COLOR: Record<string, string> = {
   entrada: "bg-emerald-100 text-emerald-700",
+  saida_cafe: "bg-amber-100 text-amber-700",
+  retorno_cafe: "bg-amber-100 text-amber-700",
   saida_intervalo: "bg-orange-100 text-orange-700",
   retorno_intervalo: "bg-orange-100 text-orange-700",
   saida: "bg-red-100 text-red-700",

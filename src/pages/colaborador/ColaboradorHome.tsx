@@ -21,9 +21,16 @@ import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import anatrielloLogo from "@/assets/anatriello-logo.png.asset.json";
 
-const PUNCH_ORDER = ["entrada", "saida_intervalo", "retorno_intervalo", "saida"];
+// Até 6 batidas por dia: entrada, café (15 min), almoço, saída
+const PUNCH_ORDER = ["entrada", "saida_cafe", "retorno_cafe", "saida_intervalo", "retorno_intervalo", "saida"];
+const MAX_PUNCHES_PER_DAY = 6;
 const PUNCH_LABEL: Record<string, string> = {
-  entrada: "Entrada", saida_intervalo: "Início Almoço", retorno_intervalo: "Fim Almoço", saida: "Saída",
+  entrada: "Entrada",
+  saida_cafe: "Início Café",
+  retorno_cafe: "Fim Café",
+  saida_intervalo: "Início Almoço",
+  retorno_intervalo: "Fim Almoço",
+  saida: "Saída",
 };
 
 function saoPauloDateKey(value: Date) {
@@ -160,10 +167,14 @@ export default function ColaboradorHome() {
     });
   }, [data?.today_punches, pendingPunches, todayKey]);
   const nextType = PUNCH_ORDER[punches.length] || "extraordinaria";
-  const jornadaEncerrada = punches.length >= 4;
+  const jornadaEncerrada = punches.length >= MAX_PUNCHES_PER_DAY
+    || punches.some((p: any) => p.punch_type === "saida");
+  const lastType = punches[punches.length - 1]?.punch_type;
   const situacao = punches.length === 0 ? "Início de jornada"
     : jornadaEncerrada ? "Jornada encerrada"
-    : (punches[punches.length - 1]?.punch_type === "saida_intervalo" ? "Em almoço" : "Em jornada");
+    : lastType === "saida_intervalo" ? "Em almoço"
+    : lastType === "saida_cafe" ? "Em café"
+    : "Em jornada";
   const unreadCount = (notifications || []).filter((n: any) => !n.read).length;
   const facialRequired = (data as any)?.facial_config?.required === true
     || employee?.facial_required_resolved === true
