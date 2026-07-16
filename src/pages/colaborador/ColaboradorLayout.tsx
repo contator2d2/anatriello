@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { useBranding } from "@/hooks/use-branding";
 import { useOfflineSync } from "@/hooks/use-offline-sync";
 import { useColabCapabilitiesSync, useCaps } from "@/hooks/use-colab-capabilities";
+import { useColabAutoSync } from "@/hooks/use-colab-auto-sync";
 import anatrielloLogo from "@/assets/anatriello-logo.png.asset.json";
 
 interface Props {
