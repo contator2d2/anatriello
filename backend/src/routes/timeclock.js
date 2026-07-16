@@ -235,12 +235,12 @@ async function ensureSchema() {
     CREATE INDEX IF NOT EXISTS idx_mirror_org_month ON time_mirror_acceptances(organization_id, reference_month);
     CREATE INDEX IF NOT EXISTS idx_mirror_emp ON time_mirror_acceptances(employee_id, reference_month);
     CREATE UNIQUE INDEX IF NOT EXISTS uq_mirror_emp_month ON time_mirror_acceptances(employee_id, reference_month);
-  `).catch(err => logError('timeclock.ensureSchema', err));
-
-  schemaReady = true;
+  `).then(() => { schemaReady = true; })
+   .catch(err => { logError('timeclock.ensureSchema', err); schemaReady = false; });
 }
 
-router.use(async (_req, _res, next) => { await ensureSchema(); next(); });
+router.use(async (_req, _res, next) => { try { await ensureSchema(); } catch {} next(); });
+
 
 // ---- helpers: closing lock & notifications ----
 export async function isPeriodClosed(orgId, employeeId, dateStr) {
