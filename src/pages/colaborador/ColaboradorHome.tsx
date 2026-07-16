@@ -510,6 +510,7 @@ export default function ColaboradorHome() {
                 ))}
               </div>
             )}
+          </div>
         </div>
 
         {/* Minha agenda — férias, folgas, escalas */}
