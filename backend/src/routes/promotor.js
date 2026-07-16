@@ -1558,19 +1558,34 @@ router.put('/rh/inbound-documents/:id', async (req, res) => {
 router.get('/rh/punch-monitor', async (req, res) => {
   try {
     const orgId = await resolveOrganizationId(req);
-    const today = new Date().toISOString().slice(0, 10);
+    // Data "hoje" no fuso America/Sao_Paulo (evita bug de virada de dia em servidor UTC)
+    const todayRes = await query(`SELECT (NOW() AT TIME ZONE 'America/Sao_Paulo')::date AS d`);
+    const today = todayRes.rows[0]?.d
+      ? new Date(todayRes.rows[0].d).toISOString().slice(0, 10)
+      : new Date().toISOString().slice(0, 10);
 
     const [punched, notPunched, alerts, outsidePdv] = await Promise.all([
       query(`SELECT DISTINCT ON (tp.employee_id) tp.*, e.full_name, e.position, p.name as pdv_name
              FROM time_punches tp JOIN employees e ON e.id = tp.employee_id LEFT JOIN pdvs p ON p.id = tp.pdv_id
-             WHERE tp.organization_id = $1 AND tp.punched_at::date = $2 ORDER BY tp.employee_id, tp.punched_at DESC`, [orgId, today]),
+             WHERE tp.organization_id = $1
+               AND (tp.punched_at AT TIME ZONE 'America/Sao_Paulo')::date = $2::date
+             ORDER BY tp.employee_id, tp.punched_at DESC`, [orgId, today]),
       query(`SELECT e.id, e.full_name, e.position, e.work_schedule, d.name as department_name
              FROM employees e LEFT JOIN rh_departments d ON d.id = e.department_id
              WHERE e.organization_id = $1 AND e.status = 'ativo'
-               AND NOT EXISTS (SELECT 1 FROM time_punches tp WHERE tp.employee_id = e.id AND tp.punched_at::date = $2)
+               AND NOT EXISTS (
+                 SELECT 1 FROM time_punches tp
+                 WHERE tp.employee_id = e.id
+                   AND (tp.punched_at AT TIME ZONE 'America/Sao_Paulo')::date = $2::date
+               )
              ORDER BY e.full_name`, [orgId, today]),
-      query(`SELECT ta.*, e.full_name FROM time_alerts ta JOIN employees e ON e.id = ta.employee_id WHERE ta.organization_id = $1 AND ta.alert_date = $2 AND ta.resolved = false ORDER BY ta.created_at DESC`, [orgId, today]),
-      query(`SELECT tp.*, e.full_name, p.name as pdv_name FROM time_punches tp JOIN employees e ON e.id = tp.employee_id LEFT JOIN pdvs p ON p.id = tp.pdv_id WHERE tp.organization_id = $1 AND tp.punched_at::date = $2 AND tp.geo_status IN ('fora_area','excecao') ORDER BY tp.punched_at DESC`, [orgId, today]),
+      query(`SELECT ta.*, e.full_name FROM time_alerts ta JOIN employees e ON e.id = ta.employee_id WHERE ta.organization_id = $1 AND ta.alert_date = $2::date AND ta.resolved = false ORDER BY ta.created_at DESC`, [orgId, today]),
+      query(`SELECT tp.*, e.full_name, p.name as pdv_name
+             FROM time_punches tp JOIN employees e ON e.id = tp.employee_id LEFT JOIN pdvs p ON p.id = tp.pdv_id
+             WHERE tp.organization_id = $1
+               AND (tp.punched_at AT TIME ZONE 'America/Sao_Paulo')::date = $2::date
+               AND tp.geo_status IN ('fora_area','excecao')
+             ORDER BY tp.punched_at DESC`, [orgId, today]),
     ]);
 
     res.json({
@@ -1578,10 +1593,11 @@ router.get('/rh/punch-monitor', async (req, res) => {
       not_punched: notPunched.rows,
       alerts: alerts.rows,
       outside_pdv: outsidePdv.rows,
+      today,
     });
   } catch (err) {
     logError('promotor.punch-monitor', err);
-    res.status(500).json({ error: 'Erro' });
+    res.status(500).json({ error: 'Erro', detail: err.message });
   }
 });
 

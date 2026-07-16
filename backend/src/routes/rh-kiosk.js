@@ -118,7 +118,10 @@ router.post('/punch', async (req, res) => {
     try { await query(`ALTER TABLE time_punches ADD COLUMN IF NOT EXISTS selfie_url TEXT`); } catch {}
     try { await query(`ALTER TABLE time_punches ADD COLUMN IF NOT EXISTS source TEXT`); } catch {}
 
-    const nowSP = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+    // punched_at = timestamp real (UTC). O banco converte para SP quando exibimos.
+    // NÃO usar `new Date(toLocaleString('en-US', {timeZone:'SP'}))` — isso quebra em servidores UTC
+    // (o horário SP é gravado como se fosse UTC, deslocando o ponto em +3h para o futuro).
+    const nowUtc = new Date();
 
     const ins = await query(
       `INSERT INTO time_punches
@@ -132,7 +135,7 @@ router.post('/punch', async (req, res) => {
         orgId,
         employee_id,
         ptype,
-        nowSP,
+        nowUtc,
         latitude || null,
         longitude || null,
         accuracy_meters || null,
