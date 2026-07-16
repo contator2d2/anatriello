@@ -2472,6 +2472,22 @@ router.post('/facial-recognition/request-collection/:employeeId', async (req, re
   }
 });
 
+// Ativa/desativa exigência de verificação facial por colaborador
+router.put('/facial-recognition/toggle-verification/:employeeId', async (req, res) => {
+  try {
+    await ensureFaceEnrollColumn();
+    const enabled = req.body?.enabled !== false;
+    await query(
+      `UPDATE employees SET facial_required = $1 WHERE id = $2`,
+      [enabled, req.params.employeeId]
+    );
+    res.json({ success: true, enabled });
+  } catch (err) {
+    logError('rh.facial.toggle-verification', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Enroll employee face
 router.post('/facial-recognition/enroll/:employeeId', async (req, res) => {
   try {
