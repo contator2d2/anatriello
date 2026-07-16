@@ -701,7 +701,7 @@ export function ChatArea({
       <div className="flex-1 flex flex-col items-center justify-center bg-muted/30 text-muted-foreground h-full min-h-0">
         <div className="flex flex-col items-center justify-center text-center -mt-12">
           <img 
-            src="/icons/ayratech-logo.jpg" 
+            src="/anatriello-logo.png" 
             alt="Anatriello" 
             className="h-32 w-auto mb-8 opacity-80"
           />
