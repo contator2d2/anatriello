@@ -1,7 +1,10 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ColaboradorLayout } from "./ColaboradorLayout";
 import { useColabMeFull } from "@/hooks/use-promotor";
-import { User, Settings, Shield, ChevronRight, Camera, LogOut, KeyRound, Info } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
+import { User, Settings, Shield, ChevronRight, Camera, LogOut, KeyRound, Info, RefreshCw, Loader2 } from "lucide-react";
 
 const ITEMS: { icon: any; label: string; to: string }[] = [
   { icon: Camera, label: "Reconhecimento facial", to: "/colaborador/biometria" },
