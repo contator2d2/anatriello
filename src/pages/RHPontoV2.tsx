@@ -1047,8 +1047,9 @@ export default function RHPontoV2() {
           <p className="text-muted-foreground text-sm">Cartão ponto, banco de horas 1:1, feriados, ajustes, relatórios, fechamento e compliance MTE.</p>
         </div>
 
-        <Tabs defaultValue="cartao">
+        <Tabs defaultValue="registros">
           <TabsList className="flex-wrap h-auto">
+            <TabsTrigger value="registros">Registros</TabsTrigger>
             <TabsTrigger value="cartao">Cartão Ponto</TabsTrigger>
             <TabsTrigger value="banco">Banco de Horas</TabsTrigger>
             <TabsTrigger value="jornadas">Jornadas</TabsTrigger>
@@ -1058,6 +1059,7 @@ export default function RHPontoV2() {
             <TabsTrigger value="fechamento">Fechamento</TabsTrigger>
             <TabsTrigger value="compliance">Compliance</TabsTrigger>
           </TabsList>
+          <TabsContent value="registros" className="mt-4"><RegistrosPontoTab /></TabsContent>
           <TabsContent value="cartao" className="mt-4"><CartaoPontoTab /></TabsContent>
           <TabsContent value="banco" className="mt-4"><BancoHorasTab /></TabsContent>
           <TabsContent value="jornadas" className="mt-4"><WorkSchedulesTab /></TabsContent>
@@ -1067,6 +1069,7 @@ export default function RHPontoV2() {
           <TabsContent value="fechamento" className="mt-4"><FechamentoTab /></TabsContent>
           <TabsContent value="compliance" className="mt-4"><ComplianceTab /></TabsContent>
         </Tabs>
+
       </div>
     </MainLayout>
   );
