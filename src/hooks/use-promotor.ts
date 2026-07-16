@@ -25,8 +25,12 @@ export function usePromotorHome() {
     queryKey: ['promotor-home'],
     queryFn: () => promotorApi<any>('/api/promotor/home'),
     refetchInterval: 30000,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    staleTime: 0,
   });
 }
+
 
 export function usePromotorPunch() {
   const qc = useQueryClient();
