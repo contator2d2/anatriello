@@ -32,6 +32,7 @@ export function ColaboradorLayout({ children, title, showBack, rightSlot, bg = "
   const { isOnline, isSyncing } = useOfflineSync();
   const logo = branding?.logo_topbar || branding?.logo || anatrielloLogo.url;
   useColabCapabilitiesSync();
+  useColabAutoSync();
   const caps = useCaps();
   const visibleTabs = tabs.filter(t => !t.cap || caps.includes(t.cap));
   const cols = visibleTabs.length || 1;
