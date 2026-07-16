@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { ColaboradorLayout } from "./ColaboradorLayout";
-import { useColabRequests, useColabAdjustmentRequests, useColabCreateRequest } from "@/hooks/use-promotor";
-import { promotorApi } from "@/hooks/use-promotor";
+import { useColabRequests, useColabAdjustmentRequests, promotorApi } from "@/hooks/use-promotor";
 import { useUpload } from "@/hooks/use-upload";
 import { useToast } from "@/hooks/use-toast";
 import {
