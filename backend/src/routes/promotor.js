@@ -352,7 +352,8 @@ router.get('/home', authenticatePromotor, async (req, res) => {
     const employeePayload = employee.rows[0] ? { ...employee.rows[0], facial_required_resolved: facialRequired } : null;
 
     res.json({
-      employee: employee.rows[0],
+      employee: employeePayload,
+      facial_config: { required: facialRequired, allow_manual_fallback: facialAllowFallback },
       today_punches: punches.rows,
       pending_docs_count: parseInt(pendingDocs.rows[0]?.count || '0'),
       notifications: notifications.rows,
