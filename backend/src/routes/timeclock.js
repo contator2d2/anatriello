@@ -672,39 +672,59 @@ router.get('/cartao-ponto/audit', async (req, res) => {
 router.get('/time-bank/summary', async (req, res) => {
   try {
     const orgId = await resolveOrgId(req);
-    const { employee_id } = req.query;
+    if (!orgId) return res.json([]);
+    const { employee_id, company_id } = req.query;
     const notifyDays = 30;
-    const baseSelect = `
-      COALESCE(SUM(tb.minutes),0)::int AS balance_min,
-      COALESCE(SUM(CASE WHEN tb.expired = FALSE THEN tb.minutes ELSE 0 END),0)::int AS available_min,
-      COALESCE(SUM(CASE WHEN tb.minutes > 0 AND tb.expired = FALSE
-                        AND tb.expires_at IS NOT NULL
-                        AND tb.expires_at <= (CURRENT_DATE + ($X || ' days')::interval)
-                   THEN tb.minutes ELSE 0 END),0)::int AS expiring_soon_min,
-      COALESCE(SUM(CASE WHEN tb.expired = TRUE THEN tb.minutes ELSE 0 END),0)::int AS expired_min`;
+    // Verifica se as tabelas existem (evita 500 quando o schema ainda não foi criado)
+    const tbCheck = await query(
+      `SELECT to_regclass('public.time_bank_entries') AS tb, to_regclass('public.time_bank_compensations') AS tbc`
+    );
+    const hasTb = !!tbCheck.rows[0]?.tb;
+    const hasTbc = !!tbCheck.rows[0]?.tbc;
+    const tbJoin = hasTb ? `LEFT JOIN time_bank_entries tb ON tb.employee_id = e.id` : '';
+    const balExpr = hasTb ? `COALESCE(SUM(tb.minutes),0)::int` : `0::int`;
+    const availExpr = hasTb ? `COALESCE(SUM(CASE WHEN tb.expired = FALSE THEN tb.minutes ELSE 0 END),0)::int` : `0::int`;
+    const expiringExpr = hasTb ? `COALESCE(SUM(CASE WHEN tb.minutes > 0 AND tb.expired = FALSE AND tb.expires_at IS NOT NULL AND tb.expires_at <= (CURRENT_DATE + ($X || ' days')::interval) THEN tb.minutes ELSE 0 END),0)::int` : `0::int`;
+    const expiredExpr = hasTb ? `COALESCE(SUM(CASE WHEN tb.expired = TRUE THEN tb.minutes ELSE 0 END),0)::int` : `0::int`;
+    const pendCompExpr = hasTbc
+      ? `COALESCE((SELECT SUM(minutes) FROM time_bank_compensations WHERE employee_id = e.id AND status = 'pending'),0)::int`
+      : `0::int`;
+
     let sql, params;
     if (employee_id) {
-      sql = `SELECT e.id, e.full_name, ${baseSelect.replace('$X', '$2')},
-                    COALESCE((SELECT SUM(minutes) FROM time_bank_compensations
-                              WHERE employee_id = e.id AND status = 'pending'),0)::int AS pending_comp_min
+      sql = `SELECT e.id, e.full_name,
+                    ${balExpr} AS balance_min,
+                    ${availExpr} AS available_min,
+                    ${expiringExpr.replace('$X', '$2')} AS expiring_soon_min,
+                    ${expiredExpr} AS expired_min,
+                    ${pendCompExpr} AS pending_comp_min
              FROM employees e
-             LEFT JOIN time_bank_entries tb ON tb.employee_id = e.id
-             WHERE e.id = $1 GROUP BY e.id, e.full_name`;
+             ${tbJoin}
+             WHERE e.id = $1
+             GROUP BY e.id, e.full_name`;
       params = [employee_id, notifyDays];
     } else {
-      sql = `SELECT e.id, e.full_name, e.photo_url, ${baseSelect.replace('$X', '$2')},
-                    COALESCE((SELECT SUM(minutes) FROM time_bank_compensations
-                              WHERE employee_id = e.id AND status = 'pending'),0)::int AS pending_comp_min
+      const compFilter = company_id ? ` AND e.company_id = $3` : '';
+      sql = `SELECT e.id, e.full_name, e.photo_url,
+                    ${balExpr} AS balance_min,
+                    ${availExpr} AS available_min,
+                    ${expiringExpr.replace('$X', '$2')} AS expiring_soon_min,
+                    ${expiredExpr} AS expired_min,
+                    ${pendCompExpr} AS pending_comp_min
              FROM employees e
-             LEFT JOIN time_bank_entries tb ON tb.employee_id = e.id
-             WHERE e.organization_id = $1 AND e.status = 'ativo'
+             ${tbJoin}
+             WHERE e.organization_id = $1 AND e.status = 'ativo'${compFilter}
              GROUP BY e.id, e.full_name, e.photo_url
              ORDER BY e.full_name`;
-      params = [orgId, notifyDays];
+      params = company_id ? [orgId, notifyDays, company_id] : [orgId, notifyDays];
     }
     res.json((await query(sql, params)).rows);
-  } catch (err) { logError('timeclock.tb.summary', err); res.status(500).json({ error: 'Erro' }); }
+  } catch (err) {
+    logError('timeclock.tb.summary', err);
+    res.status(500).json({ error: 'Erro ao carregar banco de horas', detail: String(err?.message || err) });
+  }
 });
+
 
 router.get('/time-bank/entries', async (req, res) => {
   try {
