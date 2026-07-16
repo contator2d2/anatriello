@@ -1813,7 +1813,8 @@ router.get('/rh/live-map', async (req, res) => {
       return res.status(401).json({ error: 'organization_id missing', employees: [], pdvs: [], regions: [] });
     }
 
-    const today = new Date().toISOString().slice(0, 10);
+    const nowBR = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+    const today = `${nowBR.getFullYear()}-${String(nowBR.getMonth()+1).padStart(2,'0')}-${String(nowBR.getDate()).padStart(2,'0')}`;
     const [hasLiveLocations, hasServiceRegions, hasMerchBrands, hasMerchPdvBrands] = await Promise.all([
       tableExists('public.employee_live_locations'),
       tableExists('public.service_regions'),

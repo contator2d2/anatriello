@@ -27,7 +27,7 @@ router.get('/enrollments', async (req, res) => {
       `SELECT id, full_name, photo_url, face_descriptor
        FROM employees
        WHERE organization_id = $1
-         AND status IN ('ativo','active','on_leave')
+         AND COALESCE(NULLIF(TRIM(status::text), ''), 'ativo') NOT IN ('desligado','inativo','inactive','terminated','demitido')
          AND face_descriptor IS NOT NULL`,
       [orgId]
     );
