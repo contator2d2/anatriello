@@ -32,12 +32,39 @@ const promotorApi = async <T,>(endpoint: string, options: any = {}): Promise<T> 
 
 interface Status {
   enrolled: boolean;
+  face_descriptor?: number[] | null;
   face_photo_url: string | null;
   face_enrolled_at: string | null;
   collection_requested: boolean;
   allow_self_enrollment: boolean;
   min_confidence: number;
   can_enroll: boolean;
+  can_test?: boolean;
+}
+
+function normalizeFaceDescriptor(input: any): number[] {
+  let parsed = input;
+  if (typeof parsed === "string") {
+    try { parsed = JSON.parse(parsed); } catch { return []; }
+  }
+  const source = Array.isArray(parsed)
+    ? parsed
+    : Array.isArray(parsed?.descriptor)
+      ? parsed.descriptor
+      : Array.isArray(parsed?.face_descriptor)
+        ? parsed.face_descriptor
+        : [];
+  return source.map((n: any) => Number(n)).filter((n: number) => Number.isFinite(n));
+}
+
+async function requestUserCameraOnce(): Promise<boolean> {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+    stream.getTracks().forEach((track) => track.stop());
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export default function ColaboradorBiometria() {
@@ -53,6 +80,7 @@ export default function ColaboradorBiometria() {
   const [samples, setSamples] = useState<Sample[]>([]);
   const [captureOpen, setCaptureOpen] = useState(false);
   const [testOpen, setTestOpen] = useState(false);
+  const [existingTestOpen, setExistingTestOpen] = useState(false);
   const [testPassed, setTestPassed] = useState(false);
 
   const bestSample = samples.length
@@ -68,6 +96,7 @@ export default function ColaboradorBiometria() {
       setTestPassed(false);
       qc.invalidateQueries({ queryKey: ["colab-face-status"] });
       qc.invalidateQueries({ queryKey: ["colab-me-full"] });
+      qc.invalidateQueries({ queryKey: ["promotor-home"] });
     },
     onError: (e: any) =>
       toast({ title: e?.message || "Erro ao salvar biometria", variant: "destructive" }),
@@ -102,6 +131,15 @@ export default function ColaboradorBiometria() {
     });
   };
 
+  const openCameraDialog = async (open: () => void) => {
+    const cameraReady = await requestUserCameraOnce();
+    if (!cameraReady) {
+      toast({ title: "Câmera não autorizada", description: "Permita o acesso à câmera para usar a biometria facial.", variant: "destructive" });
+      return;
+    }
+    open();
+  };
+
   if (isLoading) {
     return (
       <ColaboradorLayout title="Biometria Facial" showBack>
@@ -116,7 +154,8 @@ export default function ColaboradorBiometria() {
   // A) coleta não permitida pelo RH → aviso
   // B) já cadastrado e sem solicitação → cadastro bloqueado (só mostra info)
   // C) pode cadastrar (novo ou nova coleta pedida) → fluxo de captura
-  const blocked = !status?.allow_self_enrollment;
+  const existingDescriptor = normalizeFaceDescriptor(status?.face_descriptor);
+  const blocked = !status?.enrolled && !status?.allow_self_enrollment && !status?.collection_requested;
   const alreadyDone = status?.enrolled && !status?.collection_requested;
   const canEnroll = !!status?.can_enroll;
 
@@ -160,6 +199,14 @@ export default function ColaboradorBiometria() {
                   Cadastrada em {new Date(status.face_enrolled_at).toLocaleDateString("pt-BR")}
                 </p>
               )}
+              {existingDescriptor.length >= 64 && (
+                <button
+                  onClick={() => openCameraDialog(() => setExistingTestOpen(true))}
+                  className="mt-3 inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-2 rounded-xl active:scale-95"
+                >
+                  <Play className="h-3.5 w-3.5" /> Testar facial atual
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -167,8 +214,16 @@ export default function ColaboradorBiometria() {
         {canEnroll && (
           <>
             {status?.collection_requested && status?.enrolled && (
-              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 text-xs text-amber-800">
-                O RH solicitou uma <b>nova coleta</b> da sua biometria. Refaça o processo abaixo.
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 text-xs text-amber-800 space-y-2">
+                <p>O RH solicitou uma <b>nova coleta</b>. Sua biometria atual continua válida para testar e bater ponto até você salvar uma nova.</p>
+                {existingDescriptor.length >= 64 && (
+                  <button
+                    onClick={() => openCameraDialog(() => setExistingTestOpen(true))}
+                    className="inline-flex items-center gap-1.5 text-xs font-bold bg-white border border-amber-200 px-3 py-2 rounded-xl active:scale-95"
+                  >
+                    <Play className="h-3.5 w-3.5" /> Testar biometria atual
+                  </button>
+                )}
               </div>
             )}
 
@@ -192,7 +247,7 @@ export default function ColaboradorBiometria() {
                   </p>
                 </div>
                 <button
-                  onClick={() => setCaptureOpen(true)}
+                  onClick={() => openCameraDialog(() => setCaptureOpen(true))}
                   disabled={samples.length >= 2}
                   className="bg-[#f97316] text-white text-xs font-bold px-3 py-2 rounded-xl active:scale-95 disabled:opacity-50 flex items-center gap-1.5"
                 >
@@ -239,7 +294,7 @@ export default function ColaboradorBiometria() {
                 </p>
               </div>
               <button
-                onClick={() => setTestOpen(true)}
+                onClick={() => openCameraDialog(() => setTestOpen(true))}
                 disabled={samples.length < 2}
                 className="w-full bg-slate-900 text-white text-sm font-bold py-3 rounded-xl active:scale-[.98] disabled:opacity-50 flex items-center justify-center gap-2"
               >
@@ -292,6 +347,25 @@ export default function ColaboradorBiometria() {
                 description: `Similaridade: ${r.score.toFixed(1)}%. Refaça as capturas em local mais iluminado.`,
                 variant: "destructive",
               });
+            }
+          }}
+        />
+      )}
+
+      {existingDescriptor.length >= 64 && (
+        <FaceVerifyDialog
+          open={existingTestOpen}
+          onOpenChange={setExistingTestOpen}
+          storedDescriptor={existingDescriptor}
+          storedPhotoUrl={status?.face_photo_url || undefined}
+          personName="Você"
+          threshold={status?.min_confidence ?? 70}
+          onResult={(r) => {
+            setExistingTestOpen(false);
+            if (r.match) {
+              toast({ title: "Facial atual aprovada", description: `Similaridade: ${r.score.toFixed(1)}%` });
+            } else {
+              toast({ title: "Facial atual não conferiu", description: `Similaridade: ${r.score.toFixed(1)}%. Faça uma nova coleta.`, variant: "destructive" });
             }
           }}
         />

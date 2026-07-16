@@ -2635,7 +2635,9 @@ router.post('/facial-recognition/enroll/:employeeId', async (req, res) => {
       `UPDATE employees SET
          face_descriptor = $1,
          face_photo_url = $2,
-         face_enrolled_at = NOW()
+         face_enrolled_at = NOW(),
+         face_collection_requested = false,
+         face_collection_requested_at = NULL
        WHERE id = $3`,
       [JSON.stringify(faceData), imageDataUrl || null, employeeId]
     );
