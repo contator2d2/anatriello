@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { useBranding } from "@/hooks/use-branding";
 import { useOfflineSync } from "@/hooks/use-offline-sync";
 import { useColabCapabilitiesSync, useCaps } from "@/hooks/use-colab-capabilities";
+import { useColabAutoSync } from "@/hooks/use-colab-auto-sync";
 import anatrielloLogo from "@/assets/anatriello-logo.png.asset.json";
 
 interface Props {
@@ -31,6 +32,7 @@ export function ColaboradorLayout({ children, title, showBack, rightSlot, bg = "
   const { isOnline, isSyncing } = useOfflineSync();
   const logo = branding?.logo_topbar || branding?.logo || anatrielloLogo.url;
   useColabCapabilitiesSync();
+  useColabAutoSync();
   const caps = useCaps();
   const visibleTabs = tabs.filter(t => !t.cap || caps.includes(t.cap));
   const cols = visibleTabs.length || 1;

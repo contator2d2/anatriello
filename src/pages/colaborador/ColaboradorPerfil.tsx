@@ -1,14 +1,9 @@
 import { useNavigate } from "react-router-dom";
 import { ColaboradorLayout } from "./ColaboradorLayout";
 import { useColabMeFull } from "@/hooks/use-promotor";
-import { User, Phone, Users, CreditCard, MapPin, Settings, Shield, ChevronRight, Camera, LogOut, KeyRound } from "lucide-react";
+import { User, Settings, Shield, ChevronRight, Camera, LogOut, KeyRound, Info } from "lucide-react";
 
 const ITEMS: { icon: any; label: string; to: string }[] = [
-  { icon: User, label: "Dados pessoais", to: "/colaborador/dados?section=pessoais" },
-  { icon: Phone, label: "Contato", to: "/colaborador/dados?section=contato" },
-  { icon: Users, label: "Dependentes", to: "/colaborador/dados?section=dependentes" },
-  { icon: CreditCard, label: "Dados bancários", to: "/colaborador/dados?section=bancario" },
-  { icon: MapPin, label: "Endereço", to: "/colaborador/dados?section=endereco" },
   { icon: Camera, label: "Reconhecimento facial", to: "/colaborador/biometria" },
   { icon: KeyRound, label: "Trocar senha", to: "/promotor/trocar-senha" },
   { icon: Settings, label: "Configurações", to: "/colaborador/configuracoes" },
@@ -58,6 +53,21 @@ export default function ColaboradorPerfil() {
             </button>
           ))}
         </div>
+
+        <button
+          onClick={() => nav("/colaborador/solicitacoes?new=1&kind=atualizacao_cadastral")}
+          className="w-full mt-4 flex items-start gap-3 p-3 rounded-2xl bg-amber-50 border border-amber-200 text-left"
+        >
+          <Info className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
+          <div className="flex-1">
+            <p className="text-[13px] font-semibold text-amber-900">Precisa atualizar dados cadastrais?</p>
+            <p className="text-[11px] text-amber-700 mt-0.5">
+              Dados pessoais, endereço, dependentes e conta bancária são atualizados via Solicitação para o RH.
+            </p>
+          </div>
+          <ChevronRight className="h-4 w-4 text-amber-600 mt-1" />
+        </button>
+
 
         <button onClick={logout} className="w-full mt-6 py-3 rounded-2xl bg-white text-red-500 font-semibold text-sm flex items-center justify-center gap-2 shadow-sm">
           <LogOut className="h-4 w-4" /> Sair

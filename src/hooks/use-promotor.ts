@@ -25,8 +25,12 @@ export function usePromotorHome() {
     queryKey: ['promotor-home'],
     queryFn: () => promotorApi<any>('/api/promotor/home'),
     refetchInterval: 30000,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    staleTime: 0,
   });
 }
+
 
 export function usePromotorPunch() {
   const qc = useQueryClient();
@@ -284,8 +288,16 @@ export function usePromotorChangePassword() {
 
 // ============ COLABORADOR APP - Férias/Solicitações/Atestados/Comunicados/Benefícios ============
 export function useColabMeFull() {
-  return useQuery({ queryKey: ['colab-me-full'], queryFn: () => promotorApi<any>('/api/promotor/me/full') });
+  return useQuery({
+    queryKey: ['colab-me-full'],
+    queryFn: () => promotorApi<any>('/api/promotor/me/full'),
+    refetchInterval: 60000,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    staleTime: 0,
+  });
 }
+
 export function useColabVacations() {
   return useQuery({ queryKey: ['colab-vacations'], queryFn: () => promotorApi<any[]>('/api/promotor/vacations') });
 }
