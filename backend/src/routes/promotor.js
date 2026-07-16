@@ -349,7 +349,13 @@ router.get('/home', authenticatePromotor, async (req, res) => {
     } catch { /* tabela pode não existir */ }
 
     // Enrich employee payload with resolved facial flag
-    const employeePayload = employee.rows[0] ? { ...employee.rows[0], facial_required_resolved: facialRequired } : null;
+    const employeePayload = employee.rows[0]
+      ? {
+          ...employee.rows[0],
+          face_descriptor: normalizeFaceDescriptorPayload(employee.rows[0].face_descriptor),
+          facial_required_resolved: facialRequired,
+        }
+      : null;
 
     res.json({
       employee: employeePayload,
@@ -461,15 +467,8 @@ router.post('/punch', authenticatePromotor, async (req, res) => {
 
       const cfg = facialCfg.rows[0];
       const empOverride = empRes.rows[0]?.facial_required; // true|false|null
-      const rawDescriptor = empRes.rows[0]?.face_descriptor;
-      const parsedDescriptor = typeof rawDescriptor === 'string'
-        ? JSON.parse(rawDescriptor)
-        : rawDescriptor;
-      const hasEnrollment = Array.isArray(parsedDescriptor)
-        ? parsedDescriptor.length > 0
-        : Array.isArray(parsedDescriptor?.descriptor)
-          ? parsedDescriptor.descriptor.length > 0
-          : false;
+      const descriptor = normalizeFaceDescriptorPayload(empRes.rows[0]?.face_descriptor);
+      const hasEnrollment = descriptor.length >= 64;
 
       // Override por colaborador: false => dispensado; true => sempre exigir
       // null => segue config da organização
@@ -1938,16 +1937,9 @@ router.get('/facial-config', authenticatePromotor, async (req, res) => {
       if (empRows.length) {
         empOverride = empRows[0].facial_required;
         if (empRows[0].face_descriptor) {
-          const parsedDescriptor = typeof empRows[0].face_descriptor === 'string'
-            ? JSON.parse(empRows[0].face_descriptor)
-            : empRows[0].face_descriptor;
-          descriptor = Array.isArray(parsedDescriptor)
-            ? parsedDescriptor
-            : Array.isArray(parsedDescriptor?.descriptor)
-              ? parsedDescriptor.descriptor
-              : null;
+          descriptor = normalizeFaceDescriptorPayload(empRows[0].face_descriptor);
           photoUrl = empRows[0].face_photo_url;
-          hasEnrollment = Array.isArray(descriptor) && descriptor.length > 0;
+          hasEnrollment = descriptor.length >= 64;
         }
       }
     } catch {
