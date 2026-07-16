@@ -234,6 +234,7 @@ router.get('/home', authenticatePromotor, async (req, res) => {
     const nowBR = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
     const today = `${nowBR.getFullYear()}-${String(nowBR.getMonth()+1).padStart(2,'0')}-${String(nowBR.getDate()).padStart(2,'0')}`;
     const empId = req.employeeId;
+    await ensurePromotorFaceColumns();
 
     // Helper to run a query safely – returns empty result on missing-table errors
     const safeQuery = async (sql, params) => {
@@ -395,6 +396,7 @@ router.get('/home', authenticatePromotor, async (req, res) => {
 router.post('/punch', authenticatePromotor, async (req, res) => {
   try {
     const { punch_type, latitude, longitude, accuracy_meters, pdv_id, is_offline, offline_local_time, justification, local_id, facial_verified, selfie_url } = req.body;
+    await ensurePromotorFaceColumns();
 
     // ===== WORK SCHEDULE VALIDATION =====
     const empRes = await query(`SELECT work_schedule, face_descriptor, facial_required FROM employees WHERE id = $1`, [req.employeeId]);
