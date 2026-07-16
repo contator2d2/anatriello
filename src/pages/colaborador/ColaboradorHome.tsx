@@ -84,6 +84,7 @@ export default function ColaboradorHome() {
   const { data: meFull } = useColabMeFull();
   const { data: announcements } = useColabAnnouncements();
   const { data: notifications } = usePromotorNotifications();
+  const { data: agenda } = useColabAgenda();
   const punch = usePromotorPunch();
   const caps = useCaps();
   const { branding } = useBranding() as any;
