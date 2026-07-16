@@ -155,7 +155,7 @@ export default function ColaboradorBiometria() {
   // B) já cadastrado e sem solicitação → cadastro bloqueado (só mostra info)
   // C) pode cadastrar (novo ou nova coleta pedida) → fluxo de captura
   const existingDescriptor = normalizeFaceDescriptor(status?.face_descriptor);
-  const blocked = !status?.allow_self_enrollment && !status?.collection_requested;
+  const blocked = !status?.enrolled && !status?.allow_self_enrollment && !status?.collection_requested;
   const alreadyDone = status?.enrolled && !status?.collection_requested;
   const canEnroll = !!status?.can_enroll;
 
