@@ -118,10 +118,19 @@ async function switchFaceBackend(backend: string): Promise<boolean> {
 async function runFaceDetection(
   input: HTMLVideoElement | HTMLImageElement | HTMLCanvasElement
 ): Promise<FaceDetectionResult | null> {
-  const detection = await faceapi
-    .detectSingleFace(input, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 }))
+  // TinyFaceDetector é ~5-10x mais rápido que SSD MobileNet em CPU (mobile).
+  // Usa SSD como fallback caso o Tiny falhe.
+  let detection = await faceapi
+    .detectSingleFace(input, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 }))
     .withFaceLandmarks()
     .withFaceDescriptor();
+
+  if (!detection) {
+    detection = await faceapi
+      .detectSingleFace(input, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 }))
+      .withFaceLandmarks()
+      .withFaceDescriptor();
+  }
 
   if (!detection) return null;
 
