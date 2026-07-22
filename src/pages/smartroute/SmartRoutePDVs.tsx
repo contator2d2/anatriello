@@ -29,6 +29,7 @@ export default function SmartRoutePDVs() {
   const save = useSRSavePdv();
   const del = useSRDeletePdv();
   const [open, setOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [form, setForm] = useState<any>({});
   const geocode = useSRGeocodeDepot();
   const [cepLoading, setCepLoading] = useState(false);
