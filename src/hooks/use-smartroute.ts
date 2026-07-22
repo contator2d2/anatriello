@@ -51,6 +51,24 @@ export function useSRDeleteDriver() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['sr-drivers'] }),
   });
 }
+export function useSRRHCandidates(enabled = true) {
+  return useQuery<any[]>({
+    queryKey: ['sr-drivers-rh-candidates'],
+    queryFn: () => api(`${BASE}/drivers/rh-candidates`),
+    enabled,
+  });
+}
+export function useSRImportDriversFromRH() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (employee_ids: string[]) =>
+      api(`${BASE}/drivers/import-rh`, { method: 'POST', body: { employee_ids } }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['sr-drivers'] });
+      qc.invalidateQueries({ queryKey: ['sr-drivers-rh-candidates'] });
+    },
+  });
+}
 
 // PDVs
 export function useSRPdvs() {

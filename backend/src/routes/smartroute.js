@@ -711,6 +711,81 @@ router.delete('/drivers/:id', async (req, res) => {
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ============ IMPORT DRIVERS FROM RH (employees) ============
+// Lista colaboradores do RH com perfil de motorista que ainda não estão cadastrados no SmartRoute
+router.get('/drivers/rh-candidates', async (req, res) => {
+  try {
+    await query(`ALTER TABLE smartroute_drivers ADD COLUMN IF NOT EXISTS employee_id UUID`);
+    const org = orgId(req);
+    const r = await query(
+      `SELECT e.id, e.full_name, e.cpf, e.phone, e.email, e.position, e.worker_profile,
+              e.cnh AS license_number, e.cnh_category AS license_category, e.cnh_expiry AS license_expires_at,
+              e.status
+         FROM employees e
+        WHERE e.organization_id = $1
+          AND COALESCE(e.status::text,'ativo') = 'ativo'
+          AND (
+            e.worker_profile::text ILIKE '%motorista%'
+            OR LOWER(COALESCE(e.position,'')) LIKE '%motorista%'
+            OR LOWER(COALESCE(e.position,'')) LIKE '%entregador%'
+            OR LOWER(COALESCE(e.position,'')) LIKE '%driver%'
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM smartroute_drivers d
+             WHERE d.organization_id = $1
+               AND (
+                 d.employee_id = e.id
+                 OR (e.cpf IS NOT NULL AND REGEXP_REPLACE(COALESCE(d.cpf,''),'\\D','','g') = REGEXP_REPLACE(e.cpf,'\\D','','g'))
+               )
+          )
+        ORDER BY e.full_name`,
+      [org]
+    );
+    res.json(r.rows);
+  } catch (e) { logError('sr.drivers.rh-candidates', e); res.status(500).json({ error: e.message }); }
+});
+
+// Importa colaboradores selecionados como motoristas SmartRoute
+router.post('/drivers/import-rh', async (req, res) => {
+  try {
+    await query(`ALTER TABLE smartroute_drivers ADD COLUMN IF NOT EXISTS employee_id UUID`);
+    const org = orgId(req);
+    const ids = Array.isArray(req.body?.employee_ids) ? req.body.employee_ids : [];
+    if (!ids.length) return res.status(400).json({ error: 'Selecione pelo menos um colaborador' });
+
+    const emps = await query(
+      `SELECT id, full_name, cpf, phone, email, cnh, cnh_category, cnh_expiry
+         FROM employees WHERE organization_id=$1 AND id = ANY($2::uuid[])`,
+      [org, ids]
+    );
+
+    const created = [];
+    const credentials = [];
+    for (const e of emps.rows) {
+      const cpf = (e.cpf || '').replace(/\D/g, '') || null;
+      const password = Math.random().toString(36).slice(2, 8);
+      const hash = await bcrypt.hash(password, 10);
+      try {
+        const r = await query(
+          `INSERT INTO smartroute_drivers
+             (organization_id, employee_id, full_name, cpf, phone, email, license_number, license_category, license_expires_at, password_hash, active)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,true)
+           ON CONFLICT DO NOTHING
+           RETURNING id, full_name`,
+          [org, e.id, e.full_name, cpf, e.phone, e.email, e.cnh, e.cnh_category, e.cnh_expiry, hash]
+        );
+        if (r.rows[0]) {
+          created.push(r.rows[0]);
+          credentials.push({ full_name: e.full_name, cpf, password });
+        }
+      } catch (err) {
+        logError('sr.drivers.import-rh.one', err, { employee_id: e.id });
+      }
+    }
+    res.json({ imported: created.length, drivers: created, credentials });
+  } catch (e) { logError('sr.drivers.import-rh', e); res.status(500).json({ error: e.message }); }
+});
+
 // ============ PDVs CRUD ============
 router.get('/pdvs', async (req, res) => {
   try { const r = await query(`SELECT * FROM smartroute_pdvs WHERE organization_id=$1 ORDER BY name`, [orgId(req)]); res.json(r.rows); }
