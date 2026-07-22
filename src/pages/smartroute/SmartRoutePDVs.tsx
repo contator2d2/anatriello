@@ -10,11 +10,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Edit, Trash2, Store, UserPlus, X, Share2 } from "lucide-react";
+import { Plus, Edit, Trash2, Store, UserPlus, X, Share2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { useSRPdvs, useSRSavePdv, useSRDeletePdv } from "@/hooks/use-smartroute";
 import { useSRChecklistTemplates, useSRTemplates } from "@/hooks/use-smartroute-daily";
 import { useSRGeocodeDepot } from "@/hooks/use-smartroute-depots";
+import { PDVImportDialog } from "@/components/smartroute/PDVImportDialog";
 
 const WEEKDAYS = [
   { n: 0, l: "Dom" }, { n: 1, l: "Seg" }, { n: 2, l: "Ter" },
