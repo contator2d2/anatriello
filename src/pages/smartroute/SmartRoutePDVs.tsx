@@ -10,11 +10,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Edit, Trash2, Store, UserPlus, X, Share2 } from "lucide-react";
+import { Plus, Edit, Trash2, Store, UserPlus, X, Share2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { useSRPdvs, useSRSavePdv, useSRDeletePdv } from "@/hooks/use-smartroute";
 import { useSRChecklistTemplates, useSRTemplates } from "@/hooks/use-smartroute-daily";
 import { useSRGeocodeDepot } from "@/hooks/use-smartroute-depots";
+import { PDVImportDialog } from "@/components/smartroute/PDVImportDialog";
 
 const WEEKDAYS = [
   { n: 0, l: "Dom" }, { n: 1, l: "Seg" }, { n: 2, l: "Ter" },
@@ -28,6 +29,7 @@ export default function SmartRoutePDVs() {
   const save = useSRSavePdv();
   const del = useSRDeletePdv();
   const [open, setOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [form, setForm] = useState<any>({});
   const geocode = useSRGeocodeDepot();
   const [cepLoading, setCepLoading] = useState(false);
@@ -96,8 +98,13 @@ export default function SmartRoutePDVs() {
             <h1 className="text-2xl font-bold flex items-center gap-2"><Store className="w-6 h-6" /> PDVs / Clientes</h1>
             <p className="text-sm text-muted-foreground">Cadastro de pontos de entrega com regras: janela preferencial, dias permitidos, tempo de descarga e checklist.</p>
           </div>
-          <Button onClick={() => openForm()}><Plus className="w-4 h-4 mr-1" /> Novo PDV</Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setImportOpen(true)}><Upload className="w-4 h-4 mr-1" /> Importar planilha</Button>
+            <Button onClick={() => openForm()}><Plus className="w-4 h-4 mr-1" /> Novo PDV</Button>
+          </div>
         </div>
+
+        <PDVImportDialog open={importOpen} onOpenChange={setImportOpen} />
 
         <Card><CardContent className="p-0">
           <Table>
