@@ -44,9 +44,25 @@ export const FaceVerifyDialog = ({ open, onOpenChange, storedDescriptor, storedP
   const startCamera = useCallback(async () => {
     setStatus("starting_camera");
 
+    // Pré-checagem de suporte
+    if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      setError(
+        "Este navegador não suporta acesso à câmera. Abra o app em um navegador atualizado (Chrome, Safari) e via HTTPS."
+      );
+      setStatus("error");
+      return;
+    }
+
+    // HTTPS é obrigatório para getUserMedia (exceto localhost)
+    if (typeof window !== "undefined" && window.location.protocol !== "https:" && window.location.hostname !== "localhost") {
+      setError("A câmera exige conexão segura (HTTPS). Acesse o app pelo endereço oficial https://…");
+      setStatus("error");
+      return;
+    }
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
+        video: { facingMode: "user", width: { ideal: 480 }, height: { ideal: 360 } },
       });
 
       streamRef.current = stream;
@@ -60,8 +76,21 @@ export const FaceVerifyDialog = ({ open, onOpenChange, storedDescriptor, storedP
       videoRef.current.srcObject = stream;
       await videoRef.current.play();
       setStatus("detecting");
-    } catch {
-      setError("Câmera não disponível. Verifique as permissões do navegador.");
+    } catch (err: any) {
+      const name = err?.name || "";
+      if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+        setError(
+          "Permissão da câmera negada. Toque no ícone de cadeado ao lado da URL, ative 'Câmera' e tente novamente. No iPhone: Ajustes › Safari › Câmera › Permitir."
+        );
+      } else if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+        setError("Nenhuma câmera frontal encontrada neste dispositivo.");
+      } else if (name === "NotReadableError" || name === "TrackStartError") {
+        setError("A câmera está sendo usada por outro app. Feche outros apps que estejam usando a câmera e tente novamente.");
+      } else if (name === "OverconstrainedError") {
+        setError("A câmera não suporta a resolução solicitada. Tente novamente.");
+      } else {
+        setError("Câmera não disponível. Verifique as permissões do navegador.");
+      }
       setStatus("error");
     }
   }, []);
