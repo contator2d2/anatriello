@@ -25,6 +25,9 @@ export const FaceVerifyDialog = ({ open, onOpenChange, storedDescriptor, storedP
   const animFrameRef = useRef<number>(0);
   const detectTimeoutRef = useRef<number>(0);
   const detectSessionRef = useRef(0);
+  const detectStartRef = useRef<number>(0);
+  const slowHintRef = useRef<number>(0);
+  const [slowHint, setSlowHint] = useState(false);
 
   const [status, setStatus] = useState<Status>("loading");
   const [score, setScore] = useState<number | null>(null);
@@ -44,9 +47,25 @@ export const FaceVerifyDialog = ({ open, onOpenChange, storedDescriptor, storedP
   const startCamera = useCallback(async () => {
     setStatus("starting_camera");
 
+    // Pré-checagem de suporte
+    if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      setError(
+        "Este navegador não suporta acesso à câmera. Abra o app em um navegador atualizado (Chrome, Safari) e via HTTPS."
+      );
+      setStatus("error");
+      return;
+    }
+
+    // HTTPS é obrigatório para getUserMedia (exceto localhost)
+    if (typeof window !== "undefined" && window.location.protocol !== "https:" && window.location.hostname !== "localhost") {
+      setError("A câmera exige conexão segura (HTTPS). Acesse o app pelo endereço oficial https://…");
+      setStatus("error");
+      return;
+    }
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
+        video: { facingMode: "user", width: { ideal: 480 }, height: { ideal: 360 } },
       });
 
       streamRef.current = stream;
@@ -60,8 +79,21 @@ export const FaceVerifyDialog = ({ open, onOpenChange, storedDescriptor, storedP
       videoRef.current.srcObject = stream;
       await videoRef.current.play();
       setStatus("detecting");
-    } catch {
-      setError("Câmera não disponível. Verifique as permissões do navegador.");
+    } catch (err: any) {
+      const name = err?.name || "";
+      if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+        setError(
+          "Permissão da câmera negada. Toque no ícone de cadeado ao lado da URL, ative 'Câmera' e tente novamente. No iPhone: Ajustes › Safari › Câmera › Permitir."
+        );
+      } else if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+        setError("Nenhuma câmera frontal encontrada neste dispositivo.");
+      } else if (name === "NotReadableError" || name === "TrackStartError") {
+        setError("A câmera está sendo usada por outro app. Feche outros apps que estejam usando a câmera e tente novamente.");
+      } else if (name === "OverconstrainedError") {
+        setError("A câmera não suporta a resolução solicitada. Tente novamente.");
+      } else {
+        setError("Câmera não disponível. Verifique as permissões do navegador.");
+      }
       setStatus("error");
     }
   }, []);
@@ -149,7 +181,7 @@ export const FaceVerifyDialog = ({ open, onOpenChange, storedDescriptor, storedP
       animFrameRef.current = requestAnimationFrame(() => {
         detectTimeoutRef.current = window.setTimeout(() => {
           void detectLoop(sessionId);
-        }, 300);
+        }, 150);
       });
     } catch {
       if (detectSessionRef.current !== sessionId) return;
@@ -165,11 +197,16 @@ export const FaceVerifyDialog = ({ open, onOpenChange, storedDescriptor, storedP
     if (status !== "detecting") return;
 
     const sessionId = ++detectSessionRef.current;
+    detectStartRef.current = Date.now();
+    setSlowHint(false);
+    if (slowHintRef.current) window.clearTimeout(slowHintRef.current);
+    slowHintRef.current = window.setTimeout(() => setSlowHint(true), 8000);
     void detectLoop(sessionId);
 
     return () => {
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
       if (detectTimeoutRef.current) window.clearTimeout(detectTimeoutRef.current);
+      if (slowHintRef.current) window.clearTimeout(slowHintRef.current);
     };
   }, [status, detectLoop]);
 
@@ -224,6 +261,13 @@ export const FaceVerifyDialog = ({ open, onOpenChange, storedDescriptor, storedP
                   {faceDetected ? "Rosto detectado" : "Procurando..."}
                 </Badge>
               </div>
+              {status === "detecting" && slowHint && !faceDetected && (
+                <div className="absolute bottom-2 left-2 right-2">
+                  <div className="rounded-md bg-black/60 text-white text-[11px] px-2 py-1.5 text-center">
+                    Está demorando? Aproxime o rosto, aumente a luz e mantenha-se parado. Em celulares antigos pode levar alguns segundos.
+                  </div>
+                </div>
+              )}
               {status === "starting_camera" && (
                 <div className="absolute inset-0 flex items-center justify-center bg-background/60">
                   <div className="flex flex-col items-center gap-2">
