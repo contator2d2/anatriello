@@ -1,9 +1,9 @@
 import { useState, useMemo } from "react";
 import { ColaboradorLayout } from "./ColaboradorLayout";
-import { usePromotorPunches, useDownloadPunchReceipt, useDownloadMirror } from "@/hooks/use-promotor";
+import { usePromotorPunches, useDownloadPunchReceipt, useDownloadMirror, useColabMirrors } from "@/hooks/use-promotor";
 import { format, subDays, addDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { ChevronLeft, ChevronRight, Loader2, Download, FileText, MapPin, WifiOff } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2, Download, FileText, MapPin, WifiOff, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 
