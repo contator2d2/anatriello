@@ -153,6 +153,7 @@ export async function loadFaceModels(): Promise<void> {
   modelsLoadingPromise = (async () => {
     await ensureFaceBackend(getPreferredFaceBackends(['webgl', 'cpu']));
     await Promise.all([
+      faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
       faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
       faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
       faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
