@@ -1,9 +1,9 @@
 import { useState, useMemo } from "react";
 import { ColaboradorLayout } from "./ColaboradorLayout";
-import { usePromotorPunches, useDownloadPunchReceipt, useDownloadMirror } from "@/hooks/use-promotor";
+import { usePromotorPunches, useDownloadPunchReceipt, useDownloadMirror, useColabMirrors } from "@/hooks/use-promotor";
 import { format, subDays, addDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { ChevronLeft, ChevronRight, Loader2, Download, FileText, MapPin, WifiOff } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2, Download, FileText, MapPin, WifiOff, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 
@@ -45,7 +45,13 @@ export default function ColaboradorJornada() {
   const [date, setDate] = useState(new Date());
   const dlReceipt = useDownloadPunchReceipt();
   const dlMirror = useDownloadMirror();
+  const { data: mirrors } = useColabMirrors();
   const { toast } = useToast();
+
+  // Verifica se o RH já liberou o espelho do mês selecionado
+  const currentMonthRef = format(date, "yyyy-MM");
+  const monthMirror = (mirrors || []).find((m: any) => m.reference_month === currentMonthRef);
+  const mirrorReleased = !!monthMirror;
 
   const range = useMemo(() => {
     if (tab === "dia") return { start: date, end: date };
@@ -86,6 +92,14 @@ export default function ColaboradorJornada() {
   };
 
   const handleMirror = async () => {
+    if (!mirrorReleased) {
+      toast({
+        title: "Espelho ainda não liberado",
+        description: "O RH libera o espelho após o fechamento da folha do mês.",
+        variant: "destructive",
+      });
+      return;
+    }
     try {
       await dlMirror.mutateAsync({
         start: format(startOfMonth(date), "yyyy-MM-dd"),
@@ -130,19 +144,28 @@ export default function ColaboradorJornada() {
         </div>
 
         {/* Summary */}
-        <div className="bg-white rounded-2xl shadow-sm p-3 flex items-center justify-between">
-          <div>
+        <div className="bg-white rounded-2xl shadow-sm p-3 flex items-center justify-between gap-3">
+          <div className="min-w-0">
             <p className="text-xs text-slate-500">Total de registros</p>
             <p className="text-2xl font-bold text-slate-800 tabular-nums">{rows.length}</p>
           </div>
-          <button
-            onClick={handleMirror}
-            disabled={dlMirror.isPending}
-            className="bg-[#0a1128] hover:bg-[#0d1a3d] text-white rounded-xl px-4 py-2.5 flex items-center gap-2 text-xs font-semibold disabled:opacity-60"
-          >
-            {dlMirror.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
-            Espelho do mês
-          </button>
+          {tab === "mes" && (
+            mirrorReleased ? (
+              <button
+                onClick={handleMirror}
+                disabled={dlMirror.isPending}
+                className="bg-[#0a1128] hover:bg-[#0d1a3d] text-white rounded-xl px-4 py-2.5 flex items-center gap-2 text-xs font-semibold disabled:opacity-60"
+              >
+                {dlMirror.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+                Espelho do mês
+              </button>
+            ) : (
+              <div className="flex items-center gap-2 text-[11px] text-slate-500 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 max-w-[60%]">
+                <Lock className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                <span className="leading-tight">Espelho do mês será liberado pelo RH após o fechamento da folha.</span>
+              </div>
+            )
+          )}
         </div>
 
         {/* Table */}
