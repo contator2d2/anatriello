@@ -261,6 +261,13 @@ export const FaceVerifyDialog = ({ open, onOpenChange, storedDescriptor, storedP
                   {faceDetected ? "Rosto detectado" : "Procurando..."}
                 </Badge>
               </div>
+              {status === "detecting" && slowHint && !faceDetected && (
+                <div className="absolute bottom-2 left-2 right-2">
+                  <div className="rounded-md bg-black/60 text-white text-[11px] px-2 py-1.5 text-center">
+                    Está demorando? Aproxime o rosto, aumente a luz e mantenha-se parado. Em celulares antigos pode levar alguns segundos.
+                  </div>
+                </div>
+              )}
               {status === "starting_camera" && (
                 <div className="absolute inset-0 flex items-center justify-center bg-background/60">
                   <div className="flex flex-col items-center gap-2">
