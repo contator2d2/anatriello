@@ -25,6 +25,9 @@ export const FaceVerifyDialog = ({ open, onOpenChange, storedDescriptor, storedP
   const animFrameRef = useRef<number>(0);
   const detectTimeoutRef = useRef<number>(0);
   const detectSessionRef = useRef(0);
+  const detectStartRef = useRef<number>(0);
+  const slowHintRef = useRef<number>(0);
+  const [slowHint, setSlowHint] = useState(false);
 
   const [status, setStatus] = useState<Status>("loading");
   const [score, setScore] = useState<number | null>(null);
