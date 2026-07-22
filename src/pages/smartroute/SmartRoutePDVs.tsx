@@ -98,8 +98,13 @@ export default function SmartRoutePDVs() {
             <h1 className="text-2xl font-bold flex items-center gap-2"><Store className="w-6 h-6" /> PDVs / Clientes</h1>
             <p className="text-sm text-muted-foreground">Cadastro de pontos de entrega com regras: janela preferencial, dias permitidos, tempo de descarga e checklist.</p>
           </div>
-          <Button onClick={() => openForm()}><Plus className="w-4 h-4 mr-1" /> Novo PDV</Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setImportOpen(true)}><Upload className="w-4 h-4 mr-1" /> Importar planilha</Button>
+            <Button onClick={() => openForm()}><Plus className="w-4 h-4 mr-1" /> Novo PDV</Button>
+          </div>
         </div>
+
+        <PDVImportDialog open={importOpen} onOpenChange={setImportOpen} />
 
         <Card><CardContent className="p-0">
           <Table>
