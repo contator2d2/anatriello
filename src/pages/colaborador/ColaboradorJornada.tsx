@@ -45,7 +45,13 @@ export default function ColaboradorJornada() {
   const [date, setDate] = useState(new Date());
   const dlReceipt = useDownloadPunchReceipt();
   const dlMirror = useDownloadMirror();
+  const { data: mirrors } = useColabMirrors();
   const { toast } = useToast();
+
+  // Verifica se o RH já liberou o espelho do mês selecionado
+  const currentMonthRef = format(date, "yyyy-MM");
+  const monthMirror = (mirrors || []).find((m: any) => m.reference_month === currentMonthRef);
+  const mirrorReleased = !!monthMirror;
 
   const range = useMemo(() => {
     if (tab === "dia") return { start: date, end: date };
