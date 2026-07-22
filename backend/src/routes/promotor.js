@@ -2443,10 +2443,29 @@ router.get('/punch/:id/receipt.pdf', authenticatePromotor, async (req, res) => {
 });
 
 // ==== ESPELHO DE PONTO MENSAL (PDF) ====
+// Só disponível após o RH gerar/liberar o espelho do mês (time_mirror_acceptances).
 router.get('/mirror.pdf', authenticatePromotor, async (req, res) => {
   try {
     const { start, end } = req.query;
     if (!start || !end) return res.status(400).json({ error: 'Informe start e end' });
+
+    // Exige que exista um espelho liberado pelo RH cobrindo o período.
+    const released = await query(
+      `SELECT id, status FROM time_mirror_acceptances
+        WHERE employee_id = $1
+          AND period_start <= $2::date
+          AND period_end   >= $3::date
+        ORDER BY generated_at DESC
+        LIMIT 1`,
+      [req.employeeId, start, end]
+    ).catch(() => ({ rowCount: 0, rows: [] }));
+
+    if (!released.rowCount) {
+      return res.status(403).json({
+        error: 'Espelho ainda não liberado pelo RH. Aguarde o fechamento da folha para conferir e assinar seu espelho de ponto.',
+      });
+    }
+
     const { generateMirrorPDF } = await import('../services/receipt-pdf.js');
     const bytes = await generateMirrorPDF({ organizationId: req.organizationId, employeeId: req.employeeId, startDate: start, endDate: end });
     res.setHeader('Content-Type', 'application/pdf');
