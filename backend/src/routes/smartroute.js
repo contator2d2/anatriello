@@ -674,37 +674,106 @@ router.get('/drivers', async (req, res) => {
     res.json(r.rows.map(({ password_hash, ...rest }) => rest));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
+// Cria/atualiza o colaborador correspondente no RH e devolve o employee_id
+async function upsertRhEmployeeForDriver(org, b) {
+  try {
+    const cpfDigits = (b.cpf || '').replace(/\D/g, '') || null;
+    // 1) tenta encontrar existente por CPF
+    let empId = null;
+    if (cpfDigits) {
+      const found = await query(
+        `SELECT id FROM employees
+          WHERE organization_id=$1
+            AND REGEXP_REPLACE(COALESCE(cpf,''),'\\D','','g') = $2
+          LIMIT 1`,
+        [org, cpfDigits]
+      );
+      empId = found.rows[0]?.id || null;
+    }
+
+    if (empId) {
+      // atualiza dados básicos sem sobrescrever com nulos
+      await query(
+        `UPDATE employees SET
+           full_name = COALESCE($2, full_name),
+           phone = COALESCE($3, phone),
+           email = COALESCE($4, email),
+           cnh = COALESCE($5, cnh),
+           cnh_category = COALESCE($6, cnh_category),
+           cnh_expiry = COALESCE($7, cnh_expiry),
+           position = COALESCE(NULLIF(position,''), 'Motorista'),
+           worker_profile = COALESCE(worker_profile, 'operacional'),
+           updated_at = NOW()
+         WHERE id = $1`,
+        [empId, b.full_name || null, b.phone || null, b.email || null,
+         b.license_number || null, b.license_category || null, b.license_expires_at || null]
+      );
+      return empId;
+    }
+
+    // 2) cria novo colaborador mínimo
+    const ins = await query(
+      `INSERT INTO employees
+         (organization_id, full_name, cpf, phone, email,
+          cnh, cnh_category, cnh_expiry,
+          position, worker_profile, employment_type, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'Motorista','operacional','clt','ativo')
+       RETURNING id`,
+      [org, b.full_name, cpfDigits, b.phone || null, b.email || null,
+       b.license_number || null, b.license_category || null, b.license_expires_at || null]
+    );
+    return ins.rows[0]?.id || null;
+  } catch (e) {
+    logError('sr.drivers.upsertRhEmployee', e);
+    return null;
+  }
+}
+
 router.post('/drivers', async (req, res) => {
   try {
+    await query(`ALTER TABLE smartroute_drivers ADD COLUMN IF NOT EXISTS employee_id UUID`);
     const b = req.body || {};
+    const org = orgId(req);
     const cpf = (b.cpf || '').replace(/\D/g, '') || null;
     const password = b.password || Math.random().toString(36).slice(2, 8);
     const hash = await bcrypt.hash(password, 10);
+
+    // Espelha no RH (cria ou atualiza colaborador)
+    const employeeId = await upsertRhEmployeeForDriver(org, b);
+
     const r = await query(
-      `INSERT INTO smartroute_drivers (organization_id, full_name, cpf, phone, email, license_number, license_category, license_expires_at, vehicle_id, password_hash, active)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,COALESCE($11,true)) RETURNING *`,
-      [orgId(req), b.full_name, cpf, b.phone, b.email, b.license_number, b.license_category, b.license_expires_at || null, b.vehicle_id || null, hash, b.active]
+      `INSERT INTO smartroute_drivers (organization_id, employee_id, full_name, cpf, phone, email, license_number, license_category, license_expires_at, vehicle_id, password_hash, active)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,COALESCE($12,true)) RETURNING *`,
+      [org, employeeId, b.full_name, cpf, b.phone, b.email, b.license_number, b.license_category, b.license_expires_at || null, b.vehicle_id || null, hash, b.active]
     );
     const { password_hash, ...safe } = r.rows[0];
-    res.json({ ...safe, generated_password: b.password ? undefined : password });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+    res.json({ ...safe, generated_password: b.password ? undefined : password, rh_synced: !!employeeId });
+  } catch (e) { logError('sr.drivers.create', e); res.status(500).json({ error: e.message }); }
 });
 router.put('/drivers/:id', async (req, res) => {
   try {
+    await query(`ALTER TABLE smartroute_drivers ADD COLUMN IF NOT EXISTS employee_id UUID`);
     const b = req.body || {};
+    const org = orgId(req);
     let hash = null;
     if (b.password) hash = await bcrypt.hash(b.password, 10);
+
+    // Garante espelho no RH também em edição
+    const employeeId = await upsertRhEmployeeForDriver(org, b);
+
     const r = await query(
       `UPDATE smartroute_drivers SET full_name=COALESCE($3,full_name), cpf=COALESCE($4,cpf), phone=COALESCE($5,phone),
         email=COALESCE($6,email), license_number=COALESCE($7,license_number), license_category=COALESCE($8,license_category),
         license_expires_at=COALESCE($9,license_expires_at), vehicle_id=$10, active=COALESCE($11,active),
-        password_hash=COALESCE($12,password_hash), updated_at=NOW()
+        password_hash=COALESCE($12,password_hash),
+        employee_id=COALESCE(employee_id, $13),
+        updated_at=NOW()
        WHERE id=$1 AND organization_id=$2 RETURNING *`,
-      [req.params.id, orgId(req), b.full_name, (b.cpf || '').replace(/\D/g, '') || null, b.phone, b.email, b.license_number, b.license_category, b.license_expires_at || null, b.vehicle_id || null, b.active, hash]
+      [req.params.id, org, b.full_name, (b.cpf || '').replace(/\D/g, '') || null, b.phone, b.email, b.license_number, b.license_category, b.license_expires_at || null, b.vehicle_id || null, b.active, hash, employeeId]
     );
     const { password_hash, ...safe } = r.rows[0] || {};
-    res.json(safe);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+    res.json({ ...safe, rh_synced: !!employeeId });
+  } catch (e) { logError('sr.drivers.update', e); res.status(500).json({ error: e.message }); }
 });
 router.delete('/drivers/:id', async (req, res) => {
   try { await query(`DELETE FROM smartroute_drivers WHERE id=$1 AND organization_id=$2`, [req.params.id, orgId(req)]); res.json({ ok: true }); }
