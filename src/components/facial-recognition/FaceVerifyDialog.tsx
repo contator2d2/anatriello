@@ -197,11 +197,16 @@ export const FaceVerifyDialog = ({ open, onOpenChange, storedDescriptor, storedP
     if (status !== "detecting") return;
 
     const sessionId = ++detectSessionRef.current;
+    detectStartRef.current = Date.now();
+    setSlowHint(false);
+    if (slowHintRef.current) window.clearTimeout(slowHintRef.current);
+    slowHintRef.current = window.setTimeout(() => setSlowHint(true), 8000);
     void detectLoop(sessionId);
 
     return () => {
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
       if (detectTimeoutRef.current) window.clearTimeout(detectTimeoutRef.current);
+      if (slowHintRef.current) window.clearTimeout(slowHintRef.current);
     };
   }, [status, detectLoop]);
 
