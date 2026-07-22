@@ -181,7 +181,7 @@ export const FaceVerifyDialog = ({ open, onOpenChange, storedDescriptor, storedP
       animFrameRef.current = requestAnimationFrame(() => {
         detectTimeoutRef.current = window.setTimeout(() => {
           void detectLoop(sessionId);
-        }, 300);
+        }, 150);
       });
     } catch {
       if (detectSessionRef.current !== sessionId) return;
