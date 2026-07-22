@@ -92,6 +92,14 @@ export default function ColaboradorJornada() {
   };
 
   const handleMirror = async () => {
+    if (!mirrorReleased) {
+      toast({
+        title: "Espelho ainda não liberado",
+        description: "O RH libera o espelho após o fechamento da folha do mês.",
+        variant: "destructive",
+      });
+      return;
+    }
     try {
       await dlMirror.mutateAsync({
         start: format(startOfMonth(date), "yyyy-MM-dd"),
