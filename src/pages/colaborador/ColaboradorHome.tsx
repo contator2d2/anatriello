@@ -452,7 +452,7 @@ export default function ColaboradorHome() {
           <p className="text-[15px] font-bold text-slate-800 mb-3">Acesso rápido</p>
           <div className="grid grid-cols-4 gap-3">
             {can("documents.view") && (
-              <BigAction icon={FileText} label="Documentos" sub="Meus documentos" onClick={() => nav("/colaborador/documentos")} />
+              <BigAction icon={FileText} label="Enviar ao RH" sub="Atestados, comprovantes" onClick={() => nav("/colaborador/documentos")} />
             )}
             {can("journey.view") && (
               <BigAction icon={Calendar} label="Agenda" sub="Compromissos" onClick={() => nav("/colaborador/jornada")} />

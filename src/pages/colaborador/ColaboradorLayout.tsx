@@ -22,7 +22,7 @@ const tabs: { to: string; label: string; icon: any; cap?: string }[] = [
   { to: "/colaborador/home", label: "Início", icon: Home },
   { to: "/colaborador/jornada", label: "Ponto", icon: Clock, cap: "journey.view" },
   { to: "/colaborador/perfil?tab=comunicados", label: "Comunicados", icon: Megaphone },
-  { to: "/colaborador/documentos", label: "Documentos", icon: FileText, cap: "documents.view" },
+  { to: "/colaborador/documentos", label: "Enviar ao RH", icon: FileText, cap: "documents.view" },
   { to: "/colaborador/perfil", label: "Perfil", icon: User, cap: "profile.view" },
 ];
 
