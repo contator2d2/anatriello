@@ -14,6 +14,7 @@ import {
 } from "@/hooks/use-smartroute-daily";
 import { useSRDrivers, useSRVehicles } from "@/hooks/use-smartroute";
 import { Sparkles, Send } from "lucide-react";
+import { PageAssistant, ASSISTANT_CONTENT } from "@/components/smartroute/PageAssistant";
 
 const WIN_META: Record<string, { label: string; icon: any; color: string }> = {
   manha: { label: "Manhã", icon: Sun, color: "bg-amber-100 text-amber-700" },
