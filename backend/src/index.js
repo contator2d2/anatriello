@@ -735,6 +735,11 @@ app.listen(PORT, () => {
     }, { timezone: 'America/Sao_Paulo' });
     console.log('🌙 SmartRoute IA nightly optimizer started - runs at 20:00 (America/Sao_Paulo)');
 
+    // SmartRoute IA - catch-up no startup (cobre downtime durante o horário do cron)
+    setTimeout(() => {
+      runCatchupOptimizer().catch((e) => console.error('🔁 [CATCHUP] Erro:', e?.message || e));
+    }, 15000);
+
   }).catch((error) => {
     databaseInitError = error?.message || 'Database initialization failed';
     console.error('🛑 Database initialization crashed. API remains online in degraded mode:', error);
