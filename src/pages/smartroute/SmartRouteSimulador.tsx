@@ -619,6 +619,7 @@ export default function SmartRouteSimulador() {
         open={simOpen}
         onDone={() => { setSimOpen(false); setShowResult(true); }}
       />
+      <PageAssistant content={ASSISTANT_CONTENT.simulador} />
     </div>
   );
 }
