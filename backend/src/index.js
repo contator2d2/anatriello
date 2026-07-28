@@ -67,7 +67,7 @@ import pdvBlocksRoutes from './routes/pdv-blocks.js';
 import networkPortalRoutes from './routes/network-portal.js';
 import agencyNetworkRequestsRoutes from './routes/agency-network-requests.js';
 import promoterAccessRoutes from './routes/promoter-access.js';
-import smartrouteRoutes, { runNightlyOptimizer } from './routes/smartroute.js';
+import smartrouteRoutes, { runNightlyOptimizer, runCatchupOptimizer } from './routes/smartroute.js';
 import smartrouteDriverRoutes from './routes/smartroute-driver.js';
 
 import smartrouteAIRoutes from './routes/smartroute-ai.js';
@@ -734,6 +734,11 @@ app.listen(PORT, () => {
       catch (error) { console.error('🌙 [CRON] Erro na otimização noturna SmartRoute:', error); }
     }, { timezone: 'America/Sao_Paulo' });
     console.log('🌙 SmartRoute IA nightly optimizer started - runs at 20:00 (America/Sao_Paulo)');
+
+    // SmartRoute IA - catch-up no startup (cobre downtime durante o horário do cron)
+    setTimeout(() => {
+      runCatchupOptimizer().catch((e) => console.error('🔁 [CATCHUP] Erro:', e?.message || e));
+    }, 15000);
 
   }).catch((error) => {
     databaseInitError = error?.message || 'Database initialization failed';
