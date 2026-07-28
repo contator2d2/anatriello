@@ -67,6 +67,7 @@ export default function RotaDoDia() {
       {routeId ? <DayDetails routeId={routeId} date={date} /> : (
         <div className="text-center py-12 text-sm text-muted-foreground">Escolha uma rota acima.</div>
       )}
+      <PageAssistant content={ASSISTANT_CONTENT.rotaDoDia} />
     </div>
   );
 }
