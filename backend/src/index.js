@@ -67,7 +67,7 @@ import pdvBlocksRoutes from './routes/pdv-blocks.js';
 import networkPortalRoutes from './routes/network-portal.js';
 import agencyNetworkRequestsRoutes from './routes/agency-network-requests.js';
 import promoterAccessRoutes from './routes/promoter-access.js';
-import smartrouteRoutes, { runNightlyOptimizer } from './routes/smartroute.js';
+import smartrouteRoutes, { runNightlyOptimizer, runCatchupOptimizer } from './routes/smartroute.js';
 import smartrouteDriverRoutes from './routes/smartroute-driver.js';
 
 import smartrouteAIRoutes from './routes/smartroute-ai.js';
