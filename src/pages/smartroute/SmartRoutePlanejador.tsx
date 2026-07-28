@@ -271,6 +271,7 @@ export default function SmartRoutePlanejador() {
           <b>Algoritmo:</b> Sweep (clusterização angular a partir do CD) + Bin-packing por capacidade (kg/m³) + Nearest-Neighbor com janelas de entrega e prioridade. Após publicar, use <b>Re-otimizar</b> em cada rota para reordenar paradas pendentes em tempo real.
         </div>
       </div>
+      <PageAssistant content={ASSISTANT_CONTENT.planejador} />
     </MainLayout>
   );
 }
