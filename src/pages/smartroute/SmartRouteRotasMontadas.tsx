@@ -75,6 +75,7 @@ export default function RotasMontadas() {
 
       <TemplateDialog open={creating} onOpenChange={setCreating} />
       {selected && <TemplateEditor template={selected} onClose={() => setSelected(null)} />}
+      <PageAssistant content={ASSISTANT_CONTENT.rotasMontadas} />
     </div>
   );
 }
