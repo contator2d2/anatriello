@@ -18,6 +18,7 @@ import { useSRReoptimize } from "@/hooks/use-smartroute-planner";
 import { useSRDepots } from "@/hooks/use-smartroute-depots";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { PageAssistant, ASSISTANT_CONTENT } from "@/components/smartroute/PageAssistant";
 
 
 const statusColor: Record<string, string> = { planejada: "bg-slate-200", em_andamento: "bg-blue-200", concluida: "bg-emerald-200", cancelada: "bg-red-200" };
