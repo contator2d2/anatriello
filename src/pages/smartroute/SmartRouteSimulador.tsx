@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import { useSRTemplates, useSRRouteDay, useSRSaveDaySequence } from "@/hooks/use-smartroute-daily";
 import { useSRDepots } from "@/hooks/use-smartroute-depots";
 import { SimulationRunnerDialog } from "@/components/smartroute/SimulationRunnerDialog";
+import { PageAssistant, ASSISTANT_CONTENT } from "@/components/smartroute/PageAssistant";
 import { api } from "@/lib/api";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -618,6 +619,7 @@ export default function SmartRouteSimulador() {
         open={simOpen}
         onDone={() => { setSimOpen(false); setShowResult(true); }}
       />
+      <PageAssistant content={ASSISTANT_CONTENT.simulador} />
     </div>
   );
 }

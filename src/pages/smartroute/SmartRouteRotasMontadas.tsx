@@ -17,6 +17,7 @@ import {
 } from "@/hooks/use-smartroute-daily";
 import { useSRDrivers, useSRVehicles, useSRPdvs } from "@/hooks/use-smartroute";
 import { useSRDepots } from "@/hooks/use-smartroute-depots";
+import { PageAssistant, ASSISTANT_CONTENT } from "@/components/smartroute/PageAssistant";
 
 const WINDOWS = [
   { value: "manha", label: "Manhã", icon: Sun },
@@ -74,6 +75,7 @@ export default function RotasMontadas() {
 
       <TemplateDialog open={creating} onOpenChange={setCreating} />
       {selected && <TemplateEditor template={selected} onClose={() => setSelected(null)} />}
+      <PageAssistant content={ASSISTANT_CONTENT.rotasMontadas} />
     </div>
   );
 }
