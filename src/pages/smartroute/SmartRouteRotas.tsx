@@ -249,6 +249,7 @@ export default function SmartRouteRotas() {
           </DialogContent>
         </Dialog>
       </div>
+      <PageAssistant content={ASSISTANT_CONTENT.rotasLegado} />
     </MainLayout>
   );
 }
