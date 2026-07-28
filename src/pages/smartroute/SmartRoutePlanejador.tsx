@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { useSROrders, useSRVehicles, useSRDrivers } from "@/hooks/use-smartroute";
 import { useSRDepots } from "@/hooks/use-smartroute-depots";
 import { useSRAutoPlan, useSRCommitPlan } from "@/hooks/use-smartroute-planner";
+import { PageAssistant, ASSISTANT_CONTENT } from "@/components/smartroute/PageAssistant";
 
 export default function SmartRoutePlanejador() {
   const today = new Date().toISOString().slice(0, 10);
