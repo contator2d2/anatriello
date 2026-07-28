@@ -108,14 +108,35 @@ router.post('/auto-plan', async (req, res) => {
     // depósito
     let depot = null;
     if (depot_id) {
-      const d = await query(`SELECT id, name, lat, lng FROM smartroute_depots WHERE id=$1 AND organization_id=$2`, [depot_id, org]);
+      const d = await query(`SELECT id, name, address, city, state, zip, lat, lng FROM smartroute_depots WHERE id=$1 AND organization_id=$2`, [depot_id, org]);
       depot = d.rows[0];
     }
     if (!depot) {
-      const d = await query(`SELECT id, name, lat, lng FROM smartroute_depots WHERE organization_id=$1 AND is_default=true LIMIT 1`, [org]);
+      const d = await query(`SELECT id, name, address, city, state, zip, lat, lng FROM smartroute_depots WHERE organization_id=$1 AND is_default=true LIMIT 1`, [org]);
       depot = d.rows[0];
     }
-    if (!depot || depot.lat == null) return res.status(400).json({ error: 'Depósito sem coordenadas — cadastre um CD com lat/lng.' });
+    if (!depot) {
+      const any = await query(`SELECT id, name, address, city, state, zip, lat, lng FROM smartroute_depots WHERE organization_id=$1 AND active=true ORDER BY created_at LIMIT 1`, [org]);
+      depot = any.rows[0];
+    }
+    if (!depot) return res.status(400).json({ error: 'Nenhum CD cadastrado. Cadastre um depósito em SmartRoute → CDs.' });
+    // normaliza (pg pode devolver numeric como string)
+    depot.lat = depot.lat != null ? Number(depot.lat) : null;
+    depot.lng = depot.lng != null ? Number(depot.lng) : null;
+    // tenta geocodificar sob demanda se faltar coordenada
+    if ((depot.lat == null || depot.lng == null || Number.isNaN(depot.lat) || Number.isNaN(depot.lng)) && (depot.address || depot.city || depot.zip)) {
+      try {
+        const { geocodeNominatim } = await import('./smartroute.js').then(m => m).catch(() => ({}));
+        const g = geocodeNominatim ? await geocodeNominatim(depot) : null;
+        if (g?.lat && g?.lng) {
+          depot.lat = Number(g.lat); depot.lng = Number(g.lng);
+          await query(`UPDATE smartroute_depots SET lat=$2, lng=$3, updated_at=NOW() WHERE id=$1`, [depot.id, depot.lat, depot.lng]);
+        }
+      } catch {}
+    }
+    if (depot.lat == null || depot.lng == null || Number.isNaN(depot.lat) || Number.isNaN(depot.lng)) {
+      return res.status(400).json({ error: `Depósito "${depot.name}" sem coordenadas. Abra SmartRoute → CDs, edite este depósito e clique em "Rebuscar coordenadas" (ou informe o CEP).` });
+    }
 
     // pedidos elegíveis (pendentes + geolocalizados)
     const ords = await query(
