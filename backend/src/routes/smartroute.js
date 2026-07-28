@@ -2481,6 +2481,41 @@ export async function runNightlyOptimizer() {
   return { date: tomorrow, ok, err };
 }
 
+// =====================================================================
+// Catch-up: roda no startup do backend. Cobre casos em que o servidor
+// estava fora do ar às 20h e o cron noturno foi pulado.
+// Otimiza D+1 e também o dia atual se ainda houver rotas não otimizadas.
+// =====================================================================
+export async function runCatchupOptimizer() {
+  await ensureSmartRouteTables();
+  const now = new Date();
+  const today = new Date(now.getTime() - 3*60*60*1000).toISOString().slice(0,10); // GMT-3
+  const tomorrow = new Date(now.getTime() + 24*60*60*1000 - 3*60*60*1000).toISOString().slice(0,10);
+  const dates = [today, tomorrow];
+  let total = 0, ok = 0, err = 0;
+  for (const date of dates) {
+    const targets = await query(
+      `SELECT DISTINCT o.organization_id, o.route_id
+         FROM smartroute_orders o
+         LEFT JOIN smartroute_route_days d
+           ON d.route_id=o.route_id AND d.date=o.delivery_date
+        WHERE o.delivery_date=$1
+          AND o.route_id IS NOT NULL
+          AND o.status IN ('pendente','planejado')
+          AND (d.id IS NULL OR d.status='aberta' OR d.optimized_at IS NULL)`,
+      [date]
+    );
+    for (const t of targets.rows) {
+      total++;
+      try { await optimizeRouteDay(t.organization_id, t.route_id, date, 'startup-catchup'); ok++; }
+      catch (e) { err++; console.error('[smartroute-catchup] falhou rota', t.route_id, date, e.message); }
+    }
+  }
+  if (total > 0) console.log(`🔁 [SmartRoute IA] Catch-up no startup: ${ok}/${total} rotas otimizadas (${err} erros)`);
+  else console.log('🔁 [SmartRoute IA] Catch-up no startup: nada pendente');
+  return { ok, err, total };
+}
+
 export default router;
 
 
