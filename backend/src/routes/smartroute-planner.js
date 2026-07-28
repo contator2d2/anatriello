@@ -123,13 +123,15 @@ router.post('/auto-plan', async (req, res) => {
     // normaliza (pg pode devolver numeric como string)
     depot.lat = depot.lat != null ? Number(depot.lat) : null;
     depot.lng = depot.lng != null ? Number(depot.lng) : null;
-    // tenta geocodificar sob demanda se faltar coordenada
+    // tenta geocodificar sob demanda se faltar coordenada (Nominatim)
     if ((depot.lat == null || depot.lng == null || Number.isNaN(depot.lat) || Number.isNaN(depot.lng)) && (depot.address || depot.city || depot.zip)) {
       try {
-        const { geocodeNominatim } = await import('./smartroute.js').then(m => m).catch(() => ({}));
-        const g = geocodeNominatim ? await geocodeNominatim(depot) : null;
-        if (g?.lat && g?.lng) {
-          depot.lat = Number(g.lat); depot.lng = Number(g.lng);
+        const q = [depot.address, depot.city, depot.state, depot.zip, 'Brasil'].filter(Boolean).join(', ');
+        const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(q)}`;
+        const r = await fetch(url, { headers: { 'User-Agent': 'ayratech-smartroute/1.0' } });
+        const j = await r.json();
+        if (Array.isArray(j) && j[0]?.lat && j[0]?.lon) {
+          depot.lat = Number(j[0].lat); depot.lng = Number(j[0].lon);
           await query(`UPDATE smartroute_depots SET lat=$2, lng=$3, updated_at=NOW() WHERE id=$1`, [depot.id, depot.lat, depot.lng]);
         }
       } catch {}
