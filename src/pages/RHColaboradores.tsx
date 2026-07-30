@@ -369,12 +369,12 @@ export default function RHColaboradores() {
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
-            { label: "Total", value: stats.total, color: "text-foreground" },
-            { label: "Ativos", value: stats.ativos, color: "text-green-600" },
-            { label: "Afastados", value: stats.afastados, color: "text-yellow-600" },
-            { label: "Desligados", value: stats.desligados, color: "text-red-600" },
+            { label: "Total (sem desligados)", value: stats.total, color: "text-foreground", filter: "sem_desligados" },
+            { label: "Ativos", value: stats.ativos, color: "text-green-600", filter: "ativo" },
+            { label: "Afastados", value: stats.afastados, color: "text-yellow-600", filter: "afastado" },
+            { label: "Desligados", value: stats.desligados, color: "text-red-600", filter: "desligado" },
           ].map(s => (
-            <Card key={s.label}>
+            <Card key={s.label} className="cursor-pointer hover:border-primary transition-colors" onClick={() => setStatusFilter(s.filter)}>
               <CardContent className="p-4 text-center">
                 <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
                 <p className="text-xs text-muted-foreground">{s.label}</p>
