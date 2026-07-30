@@ -942,9 +942,23 @@ router.delete('/employees/:id', async (req, res) => {
       await query(`DELETE FROM hour_bank WHERE employee_id = $1`, [req.params.id]).catch(() => {});
       await query(`DELETE FROM employee_absences WHERE employee_id = $1`, [req.params.id]).catch(() => {});
       await query(`DELETE FROM payslips WHERE employee_id = $1`, [req.params.id]).catch(() => {});
+      await query(`DELETE FROM rh_employee_history WHERE employee_id = $1`, [req.params.id]).catch(() => {});
+      await query(`DELETE FROM rh_employment_periods WHERE employee_id = $1`, [req.params.id]).catch(() => {});
       await query(`DELETE FROM employees WHERE id = $1`, [req.params.id]);
     } else {
-      await query(`UPDATE employees SET status = 'desligado', termination_date = NOW(), updated_at = NOW() WHERE id = $1`, [req.params.id]);
+      const before = await query(`SELECT * FROM employees WHERE id = $1`, [req.params.id]);
+      const upd = await query(
+        `UPDATE employees SET status = 'desligado', termination_date = NOW(), updated_at = NOW() WHERE id = $1 RETURNING *`,
+        [req.params.id]
+      );
+      if (before.rows[0] && upd.rows[0] && before.rows[0].status !== 'desligado') {
+        await trackEmployeeChanges({
+          before: before.rows[0],
+          after: upd.rows[0],
+          changes: [{ field: 'status', oldVal: before.rows[0].status, newVal: 'desligado' }],
+          userId: req.userId,
+        });
+      }
     }
     res.json({ ok: true });
   } catch (err) {
@@ -952,6 +966,175 @@ router.delete('/employees/:id', async (req, res) => {
     res.status(500).json({ error: 'Erro ao apagar colaborador' });
   }
 });
+
+// ===== TRILHA / HISTÓRICO DO COLABORADOR =====
+
+// Timeline completa: vínculos (períodos) + eventos
+router.get('/employees/:id/history', async (req, res) => {
+  try {
+    await ensureHistoryTables();
+    const empRes = await query(`SELECT * FROM employees WHERE id = $1`, [req.params.id]);
+    const emp = empRes.rows[0];
+    if (!emp) return res.status(404).json({ error: 'Colaborador não encontrado' });
+
+    // Backfill para colaboradores criados antes da trilha
+    const periodCount = await query(`SELECT COUNT(*)::int AS n FROM rh_employment_periods WHERE employee_id = $1`, [req.params.id]);
+    if (!periodCount.rows[0]?.n) {
+      const isTerminated = String(emp.status || '') === 'desligado';
+      const period = await openPeriod(emp, { start_date: emp.admission_date, userId: req.userId });
+      await recordEvent({
+        organization_id: emp.organization_id,
+        employee_id: emp.id,
+        period_id: period?.id,
+        event_type: 'admissao',
+        title: 'Admissão',
+        effective_date: emp.admission_date ? String(emp.admission_date).slice(0, 10) : null,
+        source: 'auto',
+        created_by: req.userId,
+      });
+      if (isTerminated) {
+        const end = emp.termination_date ? String(emp.termination_date).slice(0, 10) : null;
+        await closePeriod(emp.id, { end_date: end, reason: emp.termination_reason, userId: req.userId });
+        await recordEvent({
+          organization_id: emp.organization_id,
+          employee_id: emp.id,
+          event_type: 'desligamento',
+          title: 'Desligamento',
+          description: emp.termination_reason || null,
+          effective_date: end,
+          created_by: req.userId,
+        });
+      }
+    }
+
+    const [periods, events] = await Promise.all([
+      query(
+        `SELECT p.*, d.name AS department_name, c.name AS company_name
+         FROM rh_employment_periods p
+         LEFT JOIN rh_departments d ON d.id = p.department_id
+         LEFT JOIN companies c ON c.id = p.company_id
+         WHERE p.employee_id = $1
+         ORDER BY COALESCE(p.start_date, p.created_at::date) ASC, p.sequence ASC`,
+        [req.params.id]
+      ),
+      query(
+        `SELECT h.*, u.name AS created_by_name
+         FROM rh_employee_history h
+         LEFT JOIN users u ON u.id = h.created_by
+         WHERE h.employee_id = $1
+         ORDER BY h.effective_date DESC, h.created_at DESC`,
+        [req.params.id]
+      ),
+    ]);
+
+    res.json({
+      employee: {
+        id: emp.id, full_name: emp.full_name, status: emp.status,
+        position: emp.position, employment_type: emp.employment_type,
+        admission_date: emp.admission_date, termination_date: emp.termination_date,
+      },
+      periods: periods.rows,
+      events: events.rows,
+    });
+  } catch (err) {
+    logError('rh.employees.history.list', err, { employee_id: req.params.id });
+    res.status(500).json({ error: err?.message || 'Erro ao carregar trilha do colaborador' });
+  }
+});
+
+// Evento manual na trilha
+router.post('/employees/:id/history', async (req, res) => {
+  try {
+    await ensureHistoryTables();
+    const emp = await query(`SELECT id, organization_id FROM employees WHERE id = $1`, [req.params.id]);
+    if (!emp.rows[0]) return res.status(404).json({ error: 'Colaborador não encontrado' });
+    const { event_type, title, description, effective_date, old_value, new_value, field_name } = req.body || {};
+    if (!title && !event_type) return res.status(400).json({ error: 'Informe o tipo ou o título do evento' });
+    const row = await recordEvent({
+      organization_id: emp.rows[0].organization_id,
+      employee_id: req.params.id,
+      event_type: event_type || 'outro',
+      title: title || null,
+      description: description || null,
+      field_name: field_name || null,
+      old_value, new_value,
+      effective_date: effective_date || null,
+      source: 'manual',
+      created_by: req.userId,
+    });
+    res.json(row);
+  } catch (err) {
+    logError('rh.employees.history.create', err, { employee_id: req.params.id });
+    res.status(400).json({ error: err?.message || 'Erro ao registrar evento' });
+  }
+});
+
+// Remove evento manual
+router.delete('/employees/:id/history/:eventId', async (req, res) => {
+  try {
+    await ensureHistoryTables();
+    await query(`DELETE FROM rh_employee_history WHERE id = $1 AND employee_id = $2 AND source = 'manual'`,
+      [req.params.eventId, req.params.id]);
+    res.json({ ok: true });
+  } catch (err) {
+    logError('rh.employees.history.delete', err);
+    res.status(500).json({ error: 'Erro ao remover evento' });
+  }
+});
+
+// Readmissão: encerra vínculo anterior e abre um novo
+router.post('/employees/:id/readmit', async (req, res) => {
+  try {
+    await ensureHistoryTables();
+    const empRes = await query(`SELECT * FROM employees WHERE id = $1`, [req.params.id]);
+    const emp = empRes.rows[0];
+    if (!emp) return res.status(404).json({ error: 'Colaborador não encontrado' });
+
+    const admissionDate = req.body?.admission_date || new Date().toISOString().slice(0, 10);
+    const employmentType = req.body?.employment_type || emp.employment_type;
+    const position = req.body?.position || emp.position;
+    const salary = req.body?.salary != null && req.body.salary !== '' ? Number(req.body.salary) : emp.salary;
+    const companyId = req.body?.company_id || emp.company_id;
+
+    await closePeriod(emp.id, {
+      end_date: emp.termination_date ? String(emp.termination_date).slice(0, 10) : admissionDate,
+      reason: emp.termination_reason,
+      userId: req.userId,
+    });
+
+    const updated = await query(
+      `UPDATE employees
+       SET status = 'ativo', termination_date = NULL, termination_reason = NULL,
+           admission_date = $2, employment_type = COALESCE($3, employment_type),
+           position = COALESCE($4, position), salary = COALESCE($5, salary),
+           company_id = COALESCE($6, company_id), updated_at = NOW()
+       WHERE id = $1 RETURNING *`,
+      [emp.id, admissionDate, employmentType, position, salary, companyId]
+    );
+
+    const period = await openPeriod(updated.rows[0], { start_date: admissionDate, userId: req.userId });
+    await recordEvent({
+      organization_id: emp.organization_id,
+      employee_id: emp.id,
+      period_id: period?.id,
+      event_type: 'readmissao',
+      title: 'Readmissão',
+      description: req.body?.notes || null,
+      effective_date: admissionDate,
+      source: 'manual',
+      created_by: req.userId,
+    });
+    await auditLog(emp.organization_id, 'employee', emp.id, 'readmit',
+      [{ field: 'status', oldVal: emp.status, newVal: 'ativo' }], req.userId);
+
+    res.json({ ok: true, employee: updated.rows[0], period });
+  } catch (err) {
+    logError('rh.employees.readmit', err, { employee_id: req.params.id });
+    res.status(400).json({ error: err?.message || 'Erro ao readmitir colaborador' });
+  }
+});
+
+
 
 // ===== TIME RECORDS (PONTO) =====
 
