@@ -341,10 +341,10 @@ export default function RHColaboradores() {
   const setField = (key: string, val: any) => setForm((p: any) => ({ ...p, [key]: val }));
 
   const stats = {
-    total: employees.length,
-    ativos: employees.filter((e: any) => e.status === "ativo").length,
-    afastados: employees.filter((e: any) => e.status === "afastado" || e.status === "ferias").length,
-    desligados: employees.filter((e: any) => e.status === "desligado").length,
+    total: allEmployees.filter((e: any) => e.status !== "desligado").length,
+    ativos: allEmployees.filter((e: any) => e.status === "ativo").length,
+    afastados: allEmployees.filter((e: any) => e.status === "afastado" || e.status === "ferias").length,
+    desligados: allEmployees.filter((e: any) => e.status === "desligado").length,
   };
 
   return (
