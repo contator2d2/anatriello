@@ -345,6 +345,11 @@ export default function RHRelogioPonto({ kiosk = false }: { kiosk?: boolean } = 
               <Camera className="h-8 w-8 mr-3" />
               Bater Ponto
             </Button>
+            {camWarning && (
+              <p className="mt-6 text-sm text-amber-300/90 bg-amber-500/10 border border-amber-400/20 rounded-xl px-4 py-3">
+                {camWarning}
+              </p>
+            )}
           </div>
         )}
 
