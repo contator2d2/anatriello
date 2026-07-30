@@ -844,7 +844,17 @@ router.put('/employees/:id', async (req, res) => {
       } catch (e) { /* table may not exist yet - it's created on first call to rh-management */ }
     }
 
+    // Trilha do colaborador (promoção, mudança de contrato, desligamento, readmissão...)
+    await trackEmployeeChanges({
+      before: old.rows[0],
+      after: result.rows[0],
+      changes,
+      userId: req.userId,
+      effective_date: req.body.effective_date || null,
+    });
+
     res.json(result.rows[0]);
+
   } catch (err) {
     logError('rh.employees.update', err, { body: req.body, employee_id: req.params.id });
     const message = err?.detail || err?.message || 'Erro ao atualizar colaborador';
