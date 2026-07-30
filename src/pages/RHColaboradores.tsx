@@ -590,7 +590,7 @@ export default function RHColaboradores() {
                   </div>
                   <Select value={form.position || ""} onValueChange={v => setField("position", v)}>
                     <SelectTrigger><SelectValue placeholder="Selecionar cargo" /></SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="max-h-[50vh] overflow-y-auto">
                       {positions.map((p: any) => <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>)}
                       {positions.length === 0 && <p className="text-xs text-muted-foreground text-center py-2">Nenhum cargo cadastrado</p>}
                     </SelectContent>

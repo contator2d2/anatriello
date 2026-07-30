@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Shirt, HardHat, Key, Package, RotateCcw, Trash2, Edit } from "lucide-react";
+import { Plus, Shirt, HardHat, Key, Package, RotateCcw, Trash2, Edit, ChevronDown, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import {
   useItemCatalog, useCreateCatalogItem, useUpdateCatalogItem, useDeleteCatalogItem,
@@ -80,7 +80,9 @@ function SummaryCards() {
 }
 
 function AssignmentsPanel() {
-  const [filter, setFilter] = useState<{ status?: string; kind?: string }>({ status: 'ativo' });
+  const [filter, setFilter] = useState<{ status?: string; kind?: string; employee_id?: string }>({ status: 'ativo' });
+  const [search, setSearch] = useState("");
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const { data: assignments = [], isLoading } = useItemAssignments(filter);
   const { data: catalog = [] } = useItemCatalog();
   const { data: employees = [] } = useEmployees();
@@ -109,9 +111,32 @@ function AssignmentsPanel() {
     } catch (e: any) { toast.error(e.message); }
   };
 
+  // Agrupamento por colaborador
+  const term = search.trim().toLowerCase();
+  const groups = (() => {
+    const map = new Map<string, { id: string; name: string; rows: any[] }>();
+    assignments.forEach((a: any) => {
+      const id = a.employee_id || 'sem';
+      const name = a.employee_name || 'Sem colaborador';
+      if (term && !name.toLowerCase().includes(term)) return;
+      if (!map.has(id)) map.set(id, { id, name, rows: [] });
+      map.get(id)!.rows.push(a);
+    });
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  })();
+
+  const toggle = (id: string) => setExpanded(p => ({ ...p, [id]: !p[id] }));
+
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
+        <Select value={filter.employee_id || '__all__'} onValueChange={v => setFilter({ ...filter, employee_id: v === '__all__' ? undefined : v })}>
+          <SelectTrigger className="w-56"><SelectValue placeholder="Colaborador" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all__">Todos colaboradores</SelectItem>
+            {employees.map((e: any) => <SelectItem key={e.id} value={e.id}>{e.full_name}</SelectItem>)}
+          </SelectContent>
+        </Select>
         <Select value={filter.status || '__all__'} onValueChange={v => setFilter({ ...filter, status: v === '__all__' ? undefined : v })}>
           <SelectTrigger className="w-40"><SelectValue placeholder="Status" /></SelectTrigger>
           <SelectContent>
@@ -129,67 +154,84 @@ function AssignmentsPanel() {
             {Object.entries(KIND_META).map(([k, m]) => <SelectItem key={k} value={k}>{m.label}</SelectItem>)}
           </SelectContent>
         </Select>
+        <Input className="w-52" placeholder="Buscar colaborador…" value={search} onChange={e => setSearch(e.target.value)} />
         <div className="flex-1" />
         <Button onClick={() => setOpen(true)}><Plus className="h-4 w-4 mr-1" /> Nova entrega</Button>
       </div>
 
-      <Card>
-        <CardContent className="p-0 overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Colaborador</TableHead>
-                <TableHead>Item</TableHead>
-                <TableHead>Tipo</TableHead>
-                <TableHead>Qtd</TableHead>
-                <TableHead>Custo</TableHead>
-                <TableHead>Entrega</TableHead>
-                <TableHead>Devolução</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading && <TableRow><TableCell colSpan={9} className="text-center py-6 text-muted-foreground">Carregando…</TableCell></TableRow>}
-              {!isLoading && assignments.length === 0 && (
-                <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">Nenhuma entrega</TableCell></TableRow>
-              )}
-              {assignments.map((a: any) => {
-                const meta = KIND_META[a.kind_snapshot || a.catalog_kind || 'outro'];
-                return (
-                  <TableRow key={a.id}>
-                    <TableCell>{a.employee_name || '—'}</TableCell>
-                    <TableCell>{a.item_name_snapshot || a.catalog_name || '—'}</TableCell>
-                    <TableCell><Badge variant="outline" style={{ color: meta.color }}>{meta.label}</Badge></TableCell>
-                    <TableCell>{a.quantity}</TableCell>
-                    <TableCell>{brl(a.cost_cents_snapshot)}</TableCell>
-                    <TableCell className="text-xs">{a.delivered_at || '—'}</TableCell>
-                    <TableCell className="text-xs">{a.returned_at || '—'}</TableCell>
-                    <TableCell>
-                      <Badge variant={a.status === 'ativo' ? 'default' : 'secondary'}>{a.status}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-1">
-                        {a.status === 'ativo' && (
-                          <Button variant="ghost" size="icon" title="Devolver" onClick={() => { setReturning(a); setReturnData({}); }}>
-                            <RotateCcw className="h-4 w-4" />
-                          </Button>
-                        )}
-                        <Button variant="ghost" size="icon" title="Excluir" onClick={async () => {
-                          if (!confirm('Excluir esta entrega?')) return;
-                          try { await delAsg.mutateAsync(a.id); toast.success('Excluído'); } catch (e: any) { toast.error(e.message); }
-                        }}>
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      {isLoading && <Card><CardContent className="py-6 text-center text-muted-foreground">Carregando…</CardContent></Card>}
+      {!isLoading && groups.length === 0 && (
+        <Card><CardContent className="py-8 text-center text-muted-foreground">Nenhuma entrega encontrada</CardContent></Card>
+      )}
+
+      {groups.map(g => {
+        const isOpen = expanded[g.id] ?? true;
+        const ativos = g.rows.filter(r => r.status === 'ativo');
+        const total = ativos.reduce((s, r) => s + (Number(r.cost_cents_snapshot) || 0) * (r.quantity || 1), 0);
+        return (
+          <Card key={g.id}>
+            <CardHeader className="py-3 cursor-pointer" onClick={() => toggle(g.id)}>
+              <div className="flex items-center gap-2">
+                {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                <CardTitle className="text-base flex-1">{g.name}</CardTitle>
+                <Badge variant="outline">{g.rows.length} entrega(s)</Badge>
+                <Badge variant="secondary">{ativos.length} ativo(s)</Badge>
+                <span className="text-xs text-muted-foreground">Custo ativo: {brl(total)}</span>
+              </div>
+            </CardHeader>
+            {isOpen && (
+              <CardContent className="p-0 overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Item</TableHead>
+                      <TableHead>Tipo</TableHead>
+                      <TableHead>Qtd</TableHead>
+                      <TableHead>Custo</TableHead>
+                      <TableHead>Entrega</TableHead>
+                      <TableHead>Devolução</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead />
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {g.rows.map((a: any) => {
+                      const meta = KIND_META[a.kind_snapshot || a.catalog_kind || 'outro'] || KIND_META.outro;
+                      return (
+                        <TableRow key={a.id}>
+                          <TableCell className="font-medium">{a.item_name_snapshot || a.catalog_name || '—'}</TableCell>
+                          <TableCell><Badge variant="outline" style={{ color: meta.color }}>{meta.label}</Badge></TableCell>
+                          <TableCell>{a.quantity}</TableCell>
+                          <TableCell>{brl(a.cost_cents_snapshot)}</TableCell>
+                          <TableCell className="text-xs">{a.delivered_at || '—'}</TableCell>
+                          <TableCell className="text-xs">{a.returned_at || '—'}</TableCell>
+                          <TableCell><Badge variant={a.status === 'ativo' ? 'default' : 'secondary'}>{a.status}</Badge></TableCell>
+                          <TableCell>
+                            <div className="flex gap-1">
+                              {a.status === 'ativo' && (
+                                <Button variant="ghost" size="icon" title="Devolver" onClick={() => { setReturning(a); setReturnData({}); }}>
+                                  <RotateCcw className="h-4 w-4" />
+                                </Button>
+                              )}
+                              <Button variant="ghost" size="icon" title="Excluir" onClick={async () => {
+                                if (!confirm('Excluir esta entrega?')) return;
+                                try { await delAsg.mutateAsync(a.id); toast.success('Excluído'); } catch (e: any) { toast.error(e.message); }
+                              }}>
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            )}
+          </Card>
+        );
+      })}
+
 
       {/* New assignment */}
       <Dialog open={open} onOpenChange={setOpen}>
