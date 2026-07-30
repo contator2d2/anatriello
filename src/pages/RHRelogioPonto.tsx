@@ -212,13 +212,19 @@ export default function RHRelogioPonto({ kiosk = false }: { kiosk?: boolean } = 
         return;
       }
       setStatusMsg("Abrindo câmera…");
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
-        audio: false,
-      });
-      streamRef.current = stream;
+      // Reaproveita o stream já autorizado (quiosque) — evita novo pedido de permissão
+      let stream = streamRef.current;
+      const alive = stream?.getVideoTracks().some((t) => t.readyState === "live");
+      if (!stream || !alive) {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: false,
+        });
+        streamRef.current = stream;
+      }
+      setCamWarning(null);
       if (videoRef.current) {
-        videoRef.current.srcObject = stream;
+        if (videoRef.current.srcObject !== stream) videoRef.current.srcObject = stream;
         await videoRef.current.play();
       }
       setPhase("detecting");
