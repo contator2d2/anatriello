@@ -399,7 +399,8 @@ export default function RHColaboradores() {
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Todos</SelectItem>
+              <SelectItem value="sem_desligados">Ativos e afastados</SelectItem>
+              <SelectItem value="all">Todos (incl. desligados)</SelectItem>
               <SelectItem value="ativo">Ativo</SelectItem>
               <SelectItem value="afastado">Afastado</SelectItem>
               <SelectItem value="ferias">Férias</SelectItem>
