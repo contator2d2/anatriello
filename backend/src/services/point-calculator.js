@@ -140,32 +140,58 @@ export function calculateDay({ punches = [], schedule, isHoliday = false, isSund
   });
 
   // Minutos trabalhados e minutos noturnos.
-  // Café (saida_cafe → retorno_cafe) é intervalo remunerado (CLT até 15min):
-  // somamos como se fosse tempo trabalhado, mesmo estando entre um par.
-  const coffeeMaxPaidMin = rules.coffee_max_paid_min ?? 15;
+  // Regra: somamos SEMPRE os pares entrada→saída do dia.
+  // O café (saida_cafe → retorno_cafe) NÃO é descontado e NÃO tem limite fixo:
+  // seja 15, 20 ou 25 minutos, conta integralmente como tempo trabalhado.
+  const IN_TYPES = new Set(['entrada', 'retorno_intervalo', 'retorno_cafe', 'retorno', 'entrada_extra']);
+  const OUT_TYPES = new Set(['saida', 'saida_intervalo', 'saida_cafe', 'saida_extra']);
+
+  // Intervalos "abertos" = pares (in → out). Café conta como trabalhado (integral).
+  const segments = [];
+  const typed = sorted.every(p => IN_TYPES.has(p.punch_type) || OUT_TYPES.has(p.punch_type));
+
+  if (typed && sorted.length > 1) {
+    let openAt = null;
+    for (const p of sorted) {
+      const t = toMin(toHHMMSS(p.punched_at));
+      if (t == null) continue;
+      if (IN_TYPES.has(p.punch_type)) {
+        if (openAt == null) openAt = t;
+      } else if (openAt != null) {
+        segments.push([openAt, t]);
+        openAt = null;
+      }
+    }
+    // Café: soma integralmente o tempo entre saida_cafe e o próximo retorno_cafe
+    for (let i = 0; i < sorted.length - 1; i++) {
+      if (sorted[i].punch_type === 'saida_cafe' && sorted[i + 1]?.punch_type === 'retorno_cafe') {
+        const a = toMin(toHHMMSS(sorted[i].punched_at));
+        const b = toMin(toHHMMSS(sorted[i + 1].punched_at));
+        if (a != null && b != null) segments.push([a, b]);
+      }
+    }
+  } else {
+    // Fallback: alterna par a par pela ordem das batidas
+    for (let i = 0; i < times.length - 1; i += 2) {
+      const a = toMin(times[i]);
+      const b = toMin(times[i + 1]);
+      if (a == null || b == null) continue;
+      segments.push([a, b]);
+    }
+  }
+
   let workedMin = 0;
   let nightMin = 0;
-  for (let i = 0; i < times.length - 1; i += 2) {
-    let a = toMin(times[i]);
-    let b = toMin(times[i + 1]);
-    if (a == null || b == null) continue;
-    if (b <= a) b += 24 * 60; // turno noturno
+  for (const [start, rawEnd] of segments) {
+    let a = start;
+    let b = rawEnd;
+    if (b <= a) b += 24 * 60; // turno cruzando meia-noite
     if (b > a) {
       workedMin += (b - a);
       nightMin += nightMinutesInRange(a, b);
     }
   }
-  // Re-somar as pausas de café (par saida_cafe → retorno_cafe) até o limite legal
-  for (let i = 0; i < sorted.length - 1; i++) {
-    if (sorted[i].punch_type === 'saida_cafe' && sorted[i + 1]?.punch_type === 'retorno_cafe') {
-      let a = toMin(toHHMMSS(sorted[i].punched_at));
-      let b = toMin(toHHMMSS(sorted[i + 1].punched_at));
-      if (a != null && b != null) {
-        if (b <= a) b += 24 * 60;
-        workedMin += Math.min(b - a, coffeeMaxPaidMin);
-      }
-    }
-  }
+
 
   const oddPunch = times.length % 2 === 1;
   const expectedMin = schedule?.expectedMin || 0;
