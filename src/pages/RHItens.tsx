@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Shirt, HardHat, Key, Package, RotateCcw, Trash2, Edit } from "lucide-react";
+import { Plus, Shirt, HardHat, Key, Package, RotateCcw, Trash2, Edit, ChevronDown, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import {
   useItemCatalog, useCreateCatalogItem, useUpdateCatalogItem, useDeleteCatalogItem,
