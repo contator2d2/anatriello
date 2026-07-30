@@ -171,6 +171,8 @@ export default function RHColaboradores() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifEmployee, setNotifEmployee] = useState<{ id: string; name: string } | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyEmployee, setHistoryEmployee] = useState<{ id: string; name: string } | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<any>({ ...EMPTY_FORM });
   const [showSensitive, setShowSensitive] = useState(false);
