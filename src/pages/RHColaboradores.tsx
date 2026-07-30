@@ -164,7 +164,7 @@ function calcAge(birthDate: string): string {
 
 export default function RHColaboradores() {
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("sem_desligados");
   const [companyFilter, setCompanyFilter] = useState("all");
   const [profileFilter, setProfileFilter] = useState("all");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -181,16 +181,22 @@ export default function RHColaboradores() {
 
   const { data: rawEmployees = [], isLoading } = useEmployees({
     search: search || undefined,
-    status: statusFilter !== "all" ? statusFilter : undefined,
+    status: !["all", "sem_desligados"].includes(statusFilter) ? statusFilter : undefined,
+    company_id: companyFilter !== "all" ? companyFilter : undefined,
+  });
+  // Base para os cards (sem depender do filtro de status)
+  const { data: allEmployees = [] } = useEmployees({
     company_id: companyFilter !== "all" ? companyFilter : undefined,
   });
   const { companies } = useCompanies();
 
   const employees = useMemo(() => {
-    if (profileFilter === "all") return rawEmployees;
-    if (profileFilter === "promotor_access") return rawEmployees.filter((e: any) => e.promotor_access);
-    return rawEmployees.filter((e: any) => e.worker_profile === profileFilter);
-  }, [rawEmployees, profileFilter]);
+    let list = rawEmployees;
+    if (statusFilter === "sem_desligados") list = list.filter((e: any) => e.status !== "desligado");
+    if (profileFilter === "all") return list;
+    if (profileFilter === "promotor_access") return list.filter((e: any) => e.promotor_access);
+    return list.filter((e: any) => e.worker_profile === profileFilter);
+  }, [rawEmployees, profileFilter, statusFilter]);
   const { data: departments = [] } = useRhDepartments();
   const { data: branches = [] } = useBranches();
   const { data: positions = [] } = useRhPositions();
@@ -335,10 +341,10 @@ export default function RHColaboradores() {
   const setField = (key: string, val: any) => setForm((p: any) => ({ ...p, [key]: val }));
 
   const stats = {
-    total: employees.length,
-    ativos: employees.filter((e: any) => e.status === "ativo").length,
-    afastados: employees.filter((e: any) => e.status === "afastado" || e.status === "ferias").length,
-    desligados: employees.filter((e: any) => e.status === "desligado").length,
+    total: allEmployees.filter((e: any) => e.status !== "desligado").length,
+    ativos: allEmployees.filter((e: any) => e.status === "ativo").length,
+    afastados: allEmployees.filter((e: any) => e.status === "afastado" || e.status === "ferias").length,
+    desligados: allEmployees.filter((e: any) => e.status === "desligado").length,
   };
 
   return (
@@ -363,12 +369,12 @@ export default function RHColaboradores() {
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
-            { label: "Total", value: stats.total, color: "text-foreground" },
-            { label: "Ativos", value: stats.ativos, color: "text-green-600" },
-            { label: "Afastados", value: stats.afastados, color: "text-yellow-600" },
-            { label: "Desligados", value: stats.desligados, color: "text-red-600" },
+            { label: "Total (sem desligados)", value: stats.total, color: "text-foreground", filter: "sem_desligados" },
+            { label: "Ativos", value: stats.ativos, color: "text-green-600", filter: "ativo" },
+            { label: "Afastados", value: stats.afastados, color: "text-yellow-600", filter: "afastado" },
+            { label: "Desligados", value: stats.desligados, color: "text-red-600", filter: "desligado" },
           ].map(s => (
-            <Card key={s.label}>
+            <Card key={s.label} className="cursor-pointer hover:border-primary transition-colors" onClick={() => setStatusFilter(s.filter)}>
               <CardContent className="p-4 text-center">
                 <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
                 <p className="text-xs text-muted-foreground">{s.label}</p>
@@ -393,7 +399,8 @@ export default function RHColaboradores() {
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Todos</SelectItem>
+              <SelectItem value="sem_desligados">Ativos e afastados</SelectItem>
+              <SelectItem value="all">Todos (incl. desligados)</SelectItem>
               <SelectItem value="ativo">Ativo</SelectItem>
               <SelectItem value="afastado">Afastado</SelectItem>
               <SelectItem value="ferias">Férias</SelectItem>
