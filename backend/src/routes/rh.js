@@ -4,6 +4,10 @@ import { query } from '../db.js';
 import { authenticate } from '../middleware/auth.js';
 import { callAI } from '../lib/ai-caller.js';
 import { logInfo, logError } from '../logger.js';
+import {
+  ensureHistoryTables, recordEvent, openPeriod, closePeriod, getOpenPeriod, trackEmployeeChanges,
+} from '../lib/rh-history.js';
+
 
 
 const router = express.Router();
