@@ -164,7 +164,7 @@ function calcAge(birthDate: string): string {
 
 export default function RHColaboradores() {
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("sem_desligados");
   const [companyFilter, setCompanyFilter] = useState("all");
   const [profileFilter, setProfileFilter] = useState("all");
   const [dialogOpen, setDialogOpen] = useState(false);
