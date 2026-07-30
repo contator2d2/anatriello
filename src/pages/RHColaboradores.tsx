@@ -1171,6 +1171,12 @@ export default function RHColaboradores() {
         employeeId={notifEmployee?.id}
         employeeName={notifEmployee?.name}
       />
+      <EmployeeHistoryDialog
+        open={historyOpen}
+        onOpenChange={setHistoryOpen}
+        employeeId={historyEmployee?.id}
+        employeeName={historyEmployee?.name}
+      />
 
       <EmployeeImportExportDialog
         open={importExportOpen}
