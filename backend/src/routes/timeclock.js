@@ -302,32 +302,100 @@ router.get('/work-schedules', async (req, res) => {
   } catch (err) { logError('timeclock.ws.list', err); res.status(500).json({ error: 'Erro' }); }
 });
 
+// Garante a tabela de jornadas mesmo que o ensureSchema geral tenha falhado
+async function ensureWorkSchedulesTable() {
+  await query(`
+    CREATE TABLE IF NOT EXISTS work_schedules (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id UUID NOT NULL,
+      company_id UUID,
+      name VARCHAR(120) NOT NULL,
+      kind VARCHAR(30) NOT NULL DEFAULT 'fixa',
+      schedule_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+      cycle_pattern JSONB,
+      cycle_start_date DATE,
+      tolerance_minutes INTEGER DEFAULT 10,
+      night_bonus_pct INTEGER DEFAULT 20,
+      sunday_bonus_pct INTEGER DEFAULT 100,
+      holiday_bonus_pct INTEGER DEFAULT 100,
+      overtime_weekday_pct INTEGER DEFAULT 50,
+      dsr_enabled BOOLEAN DEFAULT TRUE,
+      night_reduced_hour BOOLEAN DEFAULT TRUE,
+      active BOOLEAN DEFAULT TRUE,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+  await query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS work_schedule_id UUID`);
+}
+
+// Normaliza o schedule_json: aceita "8:00-17:00", "08h00 as 17h00", "folga", etc.
+function normalizeScheduleJson(input) {
+  const src = (input && typeof input === 'object') ? input : {};
+  const out = {};
+  for (const [k, v] of Object.entries(src)) {
+    const raw = String(v ?? '').trim();
+    if (!raw) { out[k] = 'folga'; continue; }
+    if (/^(folga|off|-)$/i.test(raw)) { out[k] = 'folga'; continue; }
+    const parts = raw.split(/[,;]/).map(p => p.trim()).filter(Boolean).map(p => {
+      const m = p.replace(/h/gi, ':').match(/^(\d{1,2}):?(\d{2})?\s*(?:-|–|as|às|a)\s*(\d{1,2}):?(\d{2})?$/i);
+      if (!m) return null;
+      const pad = (n) => String(Number(n)).padStart(2, '0');
+      return `${pad(m[1])}:${m[2] || '00'}-${pad(m[3])}:${m[4] || '00'}`;
+    }).filter(Boolean);
+    out[k] = parts.length ? parts.join(',') : 'folga';
+  }
+  return out;
+}
+
+// cycle_pattern pode chegar como array, string JSON ou texto inválido (digitação em curso)
+function normalizeCyclePattern(input) {
+  if (!input) return null;
+  if (Array.isArray(input)) return input;
+  if (typeof input === 'string') {
+    try {
+      const parsed = JSON.parse(input);
+      return Array.isArray(parsed) ? parsed : null;
+    } catch { return null; }
+  }
+  return null;
+}
+
+const intOr = (v, d) => (v === '' || v == null || Number.isNaN(Number(v))) ? d : Math.trunc(Number(v));
+
 router.post('/work-schedules', async (req, res) => {
   try {
     const orgId = await resolveOrgId(req);
+    if (!orgId) return res.status(400).json({ error: 'Organização não identificada' });
     const b = req.body || {};
-    if (!b.name) return res.status(400).json({ error: 'Nome obrigatório' });
+    if (!b.name || !String(b.name).trim()) return res.status(400).json({ error: 'Nome obrigatório' });
+    await ensureWorkSchedulesTable();
+    const cycle = normalizeCyclePattern(b.cycle_pattern);
     const r = await query(
       `INSERT INTO work_schedules
        (organization_id, company_id, name, kind, schedule_json, cycle_pattern, cycle_start_date,
         tolerance_minutes, night_bonus_pct, sunday_bonus_pct, holiday_bonus_pct,
         overtime_weekday_pct, dsr_enabled, night_reduced_hour, active)
        VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
-      [orgId, b.company_id || null, b.name, b.kind || 'fixa',
-        JSON.stringify(b.schedule_json || {}),
-        b.cycle_pattern ? JSON.stringify(b.cycle_pattern) : null,
+      [orgId, b.company_id || null, String(b.name).trim(), b.kind || 'fixa',
+        JSON.stringify(normalizeScheduleJson(b.schedule_json)),
+        cycle ? JSON.stringify(cycle) : null,
         b.cycle_start_date || null,
-        b.tolerance_minutes ?? 10, b.night_bonus_pct ?? 20,
-        b.sunday_bonus_pct ?? 100, b.holiday_bonus_pct ?? 100,
-        b.overtime_weekday_pct ?? 50, b.dsr_enabled !== false,
+        intOr(b.tolerance_minutes, 10), intOr(b.night_bonus_pct, 20),
+        intOr(b.sunday_bonus_pct, 100), intOr(b.holiday_bonus_pct, 100),
+        intOr(b.overtime_weekday_pct, 50), b.dsr_enabled !== false,
         b.night_reduced_hour !== false, b.active !== false]);
     res.json(r.rows[0]);
-  } catch (err) { logError('timeclock.ws.post', err); res.status(500).json({ error: 'Erro' }); }
+  } catch (err) {
+    logError('timeclock.ws.post', err);
+    res.status(500).json({ error: err?.message || 'Erro ao salvar jornada' });
+  }
 });
 
 router.put('/work-schedules/:id', async (req, res) => {
   try {
     const b = req.body || {};
+    await ensureWorkSchedulesTable();
+    const cycle = normalizeCyclePattern(b.cycle_pattern);
     const r = await query(
       `UPDATE work_schedules SET
          name=COALESCE($2,name), kind=COALESCE($3,kind),
@@ -343,16 +411,25 @@ router.put('/work-schedules/:id', async (req, res) => {
          active=COALESCE($14,active), company_id=$15,
          updated_at=NOW()
        WHERE id=$1 RETURNING *`,
-      [req.params.id, b.name, b.kind,
-        b.schedule_json ? JSON.stringify(b.schedule_json) : null,
-        b.cycle_pattern ? JSON.stringify(b.cycle_pattern) : null,
+      [req.params.id, b.name ? String(b.name).trim() : null, b.kind,
+        b.schedule_json ? JSON.stringify(normalizeScheduleJson(b.schedule_json)) : null,
+        cycle ? JSON.stringify(cycle) : null,
         b.cycle_start_date || null,
-        b.tolerance_minutes, b.night_bonus_pct, b.sunday_bonus_pct, b.holiday_bonus_pct,
-        b.overtime_weekday_pct, b.dsr_enabled, b.night_reduced_hour, b.active,
+        intOr(b.tolerance_minutes, null), intOr(b.night_bonus_pct, null),
+        intOr(b.sunday_bonus_pct, null), intOr(b.holiday_bonus_pct, null),
+        intOr(b.overtime_weekday_pct, null),
+        typeof b.dsr_enabled === 'boolean' ? b.dsr_enabled : null,
+        typeof b.night_reduced_hour === 'boolean' ? b.night_reduced_hour : null,
+        typeof b.active === 'boolean' ? b.active : null,
         b.company_id || null]);
+    if (!r.rows[0]) return res.status(404).json({ error: 'Jornada não encontrada' });
     res.json(r.rows[0]);
-  } catch (err) { logError('timeclock.ws.put', err); res.status(500).json({ error: 'Erro' }); }
+  } catch (err) {
+    logError('timeclock.ws.put', err);
+    res.status(500).json({ error: err?.message || 'Erro ao salvar jornada' });
+  }
 });
+
 
 router.delete('/work-schedules/:id', async (req, res) => {
   try {
