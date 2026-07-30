@@ -181,16 +181,22 @@ export default function RHColaboradores() {
 
   const { data: rawEmployees = [], isLoading } = useEmployees({
     search: search || undefined,
-    status: statusFilter !== "all" ? statusFilter : undefined,
+    status: !["all", "sem_desligados"].includes(statusFilter) ? statusFilter : undefined,
+    company_id: companyFilter !== "all" ? companyFilter : undefined,
+  });
+  // Base para os cards (sem depender do filtro de status)
+  const { data: allEmployees = [] } = useEmployees({
     company_id: companyFilter !== "all" ? companyFilter : undefined,
   });
   const { companies } = useCompanies();
 
   const employees = useMemo(() => {
-    if (profileFilter === "all") return rawEmployees;
-    if (profileFilter === "promotor_access") return rawEmployees.filter((e: any) => e.promotor_access);
-    return rawEmployees.filter((e: any) => e.worker_profile === profileFilter);
-  }, [rawEmployees, profileFilter]);
+    let list = rawEmployees;
+    if (statusFilter === "sem_desligados") list = list.filter((e: any) => e.status !== "desligado");
+    if (profileFilter === "all") return list;
+    if (profileFilter === "promotor_access") return list.filter((e: any) => e.promotor_access);
+    return list.filter((e: any) => e.worker_profile === profileFilter);
+  }, [rawEmployees, profileFilter, statusFilter]);
   const { data: departments = [] } = useRhDepartments();
   const { data: branches = [] } = useBranches();
   const { data: positions = [] } = useRhPositions();
