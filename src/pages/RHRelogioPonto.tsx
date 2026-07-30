@@ -54,6 +54,7 @@ export default function RHRelogioPonto({ kiosk = false }: { kiosk?: boolean } = 
   const [clock, setClock] = useState(new Date());
   const [confirmation, setConfirmation] = useState<{ name: string; type: string; time: string } | null>(null);
   const [statusMsg, setStatusMsg] = useState<string>("");
+  const [camWarning, setCamWarning] = useState<string | null>(null);
 
   // live clock
   useEffect(() => {
@@ -61,11 +62,12 @@ export default function RHRelogioPonto({ kiosk = false }: { kiosk?: boolean } = 
     return () => clearInterval(t);
   }, []);
 
-  const stopCamera = useCallback(() => {
-    if (detectLoopRef.current) {
-      window.clearTimeout(detectLoopRef.current);
-      detectLoopRef.current = null;
-    }
+  // Em modo quiosque mantemos o mesmo MediaStream vivo durante toda a sessão:
+  // parar as tracks faz alguns navegadores (Android/Chrome com "Permitir desta vez")
+  // pedirem permissão de câmera novamente a cada batida.
+  const keepAlive = kiosk;
+
+  const releaseStream = useCallback(() => {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
@@ -73,7 +75,65 @@ export default function RHRelogioPonto({ kiosk = false }: { kiosk?: boolean } = 
     if (videoRef.current) videoRef.current.srcObject = null;
   }, []);
 
-  useEffect(() => () => stopCamera(), [stopCamera]);
+  const stopCamera = useCallback(() => {
+    if (detectLoopRef.current) {
+      window.clearTimeout(detectLoopRef.current);
+      detectLoopRef.current = null;
+    }
+    if (keepAlive && streamRef.current) {
+      // apenas pausa o preview, mantém a permissão/stream ativos
+      try { videoRef.current?.pause(); } catch {}
+      return;
+    }
+    releaseStream();
+  }, [keepAlive, releaseStream]);
+
+  useEffect(() => () => releaseStream(), [releaseStream]);
+
+  // Aquece a câmera uma única vez no quiosque (pede permissão só na abertura da tela)
+  useEffect(() => {
+    if (!kiosk) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        if (!navigator.mediaDevices?.getUserMedia) return;
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: false,
+        });
+        if (cancelled) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        streamRef.current = stream;
+        setCamWarning(null);
+      } catch {
+        setCamWarning(
+          "Permita o acesso à câmera e escolha a opção de lembrar/permitir sempre neste site para não pedir a cada ponto."
+        );
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [kiosk]);
+
+  // Avisa quando a permissão não está persistida (fica em "perguntar")
+  useEffect(() => {
+    const perms: any = (navigator as any).permissions;
+    if (!perms?.query) return;
+    perms.query({ name: "camera" as PermissionName }).then((st: any) => {
+      const apply = () => {
+        if (st.state === "denied") {
+          setCamWarning("Câmera bloqueada neste navegador. Libere nas permissões do site e marque 'Permitir'.");
+        } else if (st.state === "prompt") {
+          setCamWarning("Ao permitir a câmera, escolha 'Permitir sempre neste site' para não pedir a cada batida.");
+        } else {
+          setCamWarning(null);
+        }
+      };
+      apply();
+      st.onchange = apply;
+    }).catch(() => {});
+  }, []);
 
   const loadEnrollments = useCallback(async () => {
     const res = await api<{ items: Enrollment[] }>(`/api/rh/kiosk/enrollments`);
@@ -152,13 +212,19 @@ export default function RHRelogioPonto({ kiosk = false }: { kiosk?: boolean } = 
         return;
       }
       setStatusMsg("Abrindo câmera…");
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
-        audio: false,
-      });
-      streamRef.current = stream;
+      // Reaproveita o stream já autorizado (quiosque) — evita novo pedido de permissão
+      let stream = streamRef.current;
+      const alive = stream?.getVideoTracks().some((t) => t.readyState === "live");
+      if (!stream || !alive) {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: false,
+        });
+        streamRef.current = stream;
+      }
+      setCamWarning(null);
       if (videoRef.current) {
-        videoRef.current.srcObject = stream;
+        if (videoRef.current.srcObject !== stream) videoRef.current.srcObject = stream;
         await videoRef.current.play();
       }
       setPhase("detecting");
@@ -279,6 +345,11 @@ export default function RHRelogioPonto({ kiosk = false }: { kiosk?: boolean } = 
               <Camera className="h-8 w-8 mr-3" />
               Bater Ponto
             </Button>
+            {camWarning && (
+              <p className="mt-6 text-sm text-amber-300/90 bg-amber-500/10 border border-amber-400/20 rounded-xl px-4 py-3">
+                {camWarning}
+              </p>
+            )}
           </div>
         )}
 
