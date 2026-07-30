@@ -722,7 +722,25 @@ router.post('/employees', async (req, res) => {
     await applyExtendedEmployeeCols(result.rows[0].id, req.body);
     await auditLog(orgId, 'employee', result.rows[0].id, 'create', [{ field: 'full_name', oldVal: null, newVal: d.full_name }], req.userId);
     const fresh = await query(`SELECT * FROM employees WHERE id = $1`, [result.rows[0].id]);
+    // Trilha: abre o primeiro vínculo e registra a admissão
+    try {
+      const created = fresh.rows[0] || result.rows[0];
+      const period = await openPeriod(created, { start_date: created.admission_date, userId: req.userId });
+      await recordEvent({
+        organization_id: orgId,
+        employee_id: created.id,
+        period_id: period?.id,
+        event_type: 'admissao',
+        title: 'Admissão',
+        description: created.position ? `Cargo: ${created.position}` : null,
+        effective_date: created.admission_date ? String(created.admission_date).slice(0, 10) : null,
+        created_by: req.userId,
+      });
+    } catch (histErr) {
+      logError('rh.employees.create.historySafeSkip', histErr);
+    }
     res.json(fresh.rows[0] || result.rows[0]);
+
   } catch (err) {
     logError('rh.employees.create', err, { body: req.body });
     const message = err?.detail || err?.message || 'Erro ao criar colaborador';
