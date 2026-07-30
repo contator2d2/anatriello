@@ -15,9 +15,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { Switch } from "@/components/ui/switch";
-import { Plus, Search, UserCircle, Building2, FileText, Edit, Trash2, Eye, EyeOff, Users, Loader2, Calendar, Briefcase, X, MapPin, UserCog, DollarSign, Gift, Smartphone, KeyRound, Copy, RefreshCw, FileSpreadsheet, Bell } from "lucide-react";
+import { Plus, Search, UserCircle, Building2, FileText, Edit, Trash2, Eye, EyeOff, Users, Loader2, Calendar, Briefcase, X, MapPin, UserCog, DollarSign, Gift, Smartphone, KeyRound, Copy, RefreshCw, FileSpreadsheet, Bell, History as HistoryIcon } from "lucide-react";
 import { EmployeeImportExportDialog } from "@/components/rh/EmployeeImportExportDialog";
 import { EmployeeNotificationsDialog } from "@/components/rh/EmployeeNotificationsDialog";
+import { EmployeeHistoryDialog } from "@/components/rh/EmployeeHistoryDialog";
 import { useUpload } from "@/hooks/use-upload";
 import { format, differenceInYears, differenceInMonths, differenceInDays, addYears, addMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -170,6 +171,8 @@ export default function RHColaboradores() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifEmployee, setNotifEmployee] = useState<{ id: string; name: string } | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyEmployee, setHistoryEmployee] = useState<{ id: string; name: string } | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<any>({ ...EMPTY_FORM });
   const [showSensitive, setShowSensitive] = useState(false);
@@ -473,7 +476,9 @@ export default function RHColaboradores() {
                     <TableCell><Badge className={STATUS_COLORS[emp.status] || ""}>{emp.status}</Badge></TableCell>
                     <TableCell>
                       <div className="flex gap-1">
+                        <Button variant="ghost" size="icon" title="Trilha / histórico do colaborador" onClick={e => { e.stopPropagation(); setHistoryEmployee({ id: emp.id, name: emp.full_name }); setHistoryOpen(true); }}><HistoryIcon className="h-4 w-4" /></Button>
                         <Button variant="ghost" size="icon" title="Histórico de notificações" onClick={e => { e.stopPropagation(); setNotifEmployee({ id: emp.id, name: emp.full_name }); setNotifOpen(true); }}><Bell className="h-4 w-4" /></Button>
+
                         <Button variant="ghost" size="icon" onClick={e => { e.stopPropagation(); openEdit(emp); }}><Edit className="h-4 w-4" /></Button>
                         <Button variant="ghost" size="icon" onClick={e => { e.stopPropagation(); handleDelete(emp.id); }}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                       </div>
@@ -1165,6 +1170,12 @@ export default function RHColaboradores() {
         onOpenChange={setNotifOpen}
         employeeId={notifEmployee?.id}
         employeeName={notifEmployee?.name}
+      />
+      <EmployeeHistoryDialog
+        open={historyOpen}
+        onOpenChange={setHistoryOpen}
+        employeeId={historyEmployee?.id}
+        employeeName={historyEmployee?.name}
       />
 
       <EmployeeImportExportDialog
