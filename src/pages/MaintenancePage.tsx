@@ -35,11 +35,7 @@ export default function MaintenancePage() {
             Servidor Indisponível
           </h1>
           <p className="text-slate-600 text-lg leading-relaxed">
-            Precisei reiniciar o servidor e agora ele aparece assim: servidor indisponível. 
-            Tente novamente mais tarde.
-          </p>
-          <p className="text-slate-500 text-sm">
-            Todos os demais serviços que estão no servidor já voltaram.
+            precisei reiniciar o servidor e agora ele aparece assim servidor indisponivel tente novamente mais tarde. todo os demais serviços eque estao no servidor ja voltou com posso verificar o
           </p>
         </div>
 
