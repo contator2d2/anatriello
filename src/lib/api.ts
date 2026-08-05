@@ -377,6 +377,10 @@ export const api = async <T>(endpoint: string, options: ApiOptions = {}): Promis
           throw requestError;
         }
 
+        if (response.status >= 502 && response.status <= 504 && isBrowser && !endpoint.includes('/auth/login')) {
+          window.location.href = '/maintenance';
+        }
+
         return data as T;
       } catch (error: any) {
         if (typeof error?.status === 'number') {
