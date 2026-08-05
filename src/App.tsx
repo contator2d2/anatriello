@@ -151,6 +151,7 @@ import RequireCap from "./components/ColabRequireCap";
 import AccessLogin from "./pages/promotor/AccessLogin";
 import AccessOnlyHome from "./pages/promotor/AccessOnlyHome";
 import NotFound from "./pages/NotFound";
+import MaintenancePage from "./pages/MaintenancePage";
 import SupermarketLandingPage from "./pages/SupermarketLandingPage";
 import TotemAccess from "./pages/TotemAccess";
 import AccessControlAdmin from "./pages/AccessControlAdmin";
