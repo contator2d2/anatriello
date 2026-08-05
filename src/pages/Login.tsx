@@ -61,6 +61,7 @@ const Login = () => {
       } else if (errorMessage.includes('502') || errorMessage.includes('504') || errorMessage.toLowerCase().includes('gateway')) {
         title = 'Servidor indisponível';
         description = 'O servidor está temporariamente indisponível. Tente novamente em alguns minutos.';
+        navigate('/maintenance');
       } else if (errorMessage.includes('500') || errorMessage.toLowerCase().includes('internal')) {
         title = 'Erro no servidor';
         description = 'Ocorreu um erro interno. Por favor, tente novamente mais tarde.';
